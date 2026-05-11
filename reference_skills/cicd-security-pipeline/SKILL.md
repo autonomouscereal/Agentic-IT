@@ -34,12 +34,34 @@ The gate fails when high or critical findings exist. Tool errors produce
 `needs_review`. Missing optional DAST targets skip ZAP/Nuclei but still record
 that decision.
 
+## Deploy Scanner Tools
+
+Portable Docker Compose bundle:
+
+```bash
+bash scripts/cicd_security_tools.sh pull
+bash scripts/cicd_security_tools.sh gate --repo /path/to/repo --output ./scan-output
+bash scripts/cicd_security_tools.sh gate --repo /path/to/repo --target-url http://app-under-test.local --output ./scan-output
+```
+
+Images:
+
+- `semgrep/semgrep:latest`
+- `aquasec/trivy:latest`
+- `ghcr.io/zaproxy/zaproxy:stable`
+- `projectdiscovery/nuclei:latest`
+
+The Python normalizer supports `--execution auto`, `local`, `docker`, and
+`artifacts`. GitLab jobs can either run scanner images directly or run the
+wrapper and publish `security-gate-result.json`.
+
 ## Dashboard API
 
 Record results with:
 
 ```bash
 python scripts/run_cicd_security_pipeline.py \
+  --execution auto \
   --provider gitlab \
   --repo "$CI_PROJECT_DIR" \
   --repo-ref "$CI_PROJECT_PATH" \
@@ -74,9 +96,9 @@ Fetch the dashboard-provided template:
 curl -sS "$SOC_DASHBOARD_URL/api/cicd/gitlab/template"
 ```
 
-The template includes unit tests, Semgrep, Trivy, and Nuclei. ZAP should be
-added when the application has a reachable `DAST_TARGET_URL`, usually with
-`zap-baseline.py` or a controlled ZAP service image.
+The template includes unit tests, Semgrep, Trivy, OWASP ZAP, and Nuclei. ZAP
+and Nuclei are optional when no reachable `DAST_TARGET_URL` exists, but their
+skip/result state must still be recorded in the dashboard gate evidence.
 
 Production deploy jobs should depend on the security stage and a dashboard
 change approval. A deployment agent must not push production changes until the

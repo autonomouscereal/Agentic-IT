@@ -23,7 +23,7 @@ from routes import (
     intake,
     cicd,
 )
-from services import itop_sync, health_check, task_tracker
+from services import itop_sync, health_check, task_tracker, agent_auditor
 from services.event_logger import log_event
 
 APP_TITLE = "SOC Dashboard API"
@@ -66,7 +66,8 @@ async def lifespan(application: FastAPI):
         await log_event("sync", "info", "app", "itop_sync_disabled", "ITOP_SYNC_ENABLED=false")
     health_task = asyncio.create_task(health_check.health_loop())
     tracker_task = asyncio.create_task(task_tracker.track_loop())
-    _background_tasks = [task for task in (sync_task, health_task, tracker_task) if task]
+    auditor_task = asyncio.create_task(agent_auditor.audit_loop())
+    _background_tasks = [task for task in (sync_task, health_task, tracker_task, auditor_task) if task]
     print(f"Started {len(_background_tasks)} background services")
     await log_event("system", "info", "app", "background_services_started",
                     str(len(_background_tasks)))

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T18:59:55.357486+00:00",
+  "generated_at": "2026-05-11T19:15:42.082023+00:00",
   "config": "C:\\Users\\cereal\\Documents\\Codex\\2026-05-11\\i-have-been-working-on-creating\\soc-dashboard\\platform\\skill_sync_config.json",
   "skills": [
     {
@@ -21,8 +21,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 3695,
-          "sha256": "cac3e3384e1964c3f7254362f7c2bc26c8e4afc6a1903d22ee35d1a153fec540"
+          "size": 4394,
+          "sha256": "5049ced28872a13dfb3c78b8f444840562a2a0438e02ba686b90da24f0046390"
         }
       ],
       "copied_files": 1,
@@ -474,6 +474,32 @@
       "skipped_paths": 14889
     },
     {
+      "name": "nuclei-scanner",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\nuclei-scanner",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 939,
+          "sha256": "7093cab39ad4603bc4019d0b748ed5ed54acd1108ff1f3aa7f5cca5d1cc1325f"
+        }
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
+    },
+    {
+      "name": "owasp-zap-scanner",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\owasp-zap-scanner",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 1012,
+          "sha256": "5d8ac8b348698bbbf5c669d554bd3351683149ca1edac8b04c9002530be28c2e"
+        }
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
+    },
+    {
       "name": "platform-credentials",
       "source": "C:\\Users\\cereal\\.agents\\skills\\platform-credentials",
       "files": [
@@ -601,6 +627,19 @@
       ],
       "copied_files": 19,
       "skipped_paths": 1723
+    },
+    {
+      "name": "semgrep-scanner",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\semgrep-scanner",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 1129,
+          "sha256": "b19d4092edc1ae49c25cf6ffaab2455f6495d60e730fa2147a32925151bc1008"
+        }
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "siem-ticket-bridge",
@@ -780,6 +819,19 @@
           "path": "SKILL.md",
           "size": 2624,
           "sha256": "3df591a06d6abcfeaa47625b1f70c6dd4135eab2df0c41da221e2af988267057"
+        }
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
+    },
+    {
+      "name": "trivy-scanner",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\trivy-scanner",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 1033,
+          "sha256": "45cd8a46151e68656b9013e20f3fa811675254544b1745ff8193944be45fe51c"
         }
       ],
       "copied_files": 1,

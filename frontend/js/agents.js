@@ -6,6 +6,7 @@ const finishedStatuses = ['finished', 'failed', 'stopped', 'terminated', 'resolv
 
 async function loadAgents() {
     loadRunnerHealth();
+    loadAgentAuditor();
     const data = await apiGet("/api/agents");
     if (!data) return;
 
@@ -48,6 +49,28 @@ async function loadAgents() {
 
     // Update badge
     setText("agent-count", active.length);
+}
+
+async function loadAgentAuditor() {
+    const el = document.getElementById("agent-auditor-health");
+    if (!el) return;
+    const data = await apiGet("/api/agents/audits?limit=5");
+    if (!data) return;
+    const audits = data.audits || [];
+    const latest = audits[0];
+    const warningCount = audits.filter(a => a.severity === "warning" || a.severity === "error").length;
+    el.innerHTML = `
+        <span class="status-dot ${warningCount ? "" : "connected"}"></span>
+        <span>Auditor: ${audits.length} recent reviews${latest ? ` / latest ${escHtml(latest.finding)} on agent ${latest.agent_id || "-"}` : ""}</span>
+        <button class="btn btn-sm" onclick="runAgentAuditOnce()">Run Audit</button>
+    `;
+}
+
+async function runAgentAuditOnce() {
+    const result = await apiPost("/api/agents/audits/run", {});
+    if (result?.error) alert(result.error);
+    await loadAgentAuditor();
+    await loadAgents();
 }
 
 function renderAgentCard(a, isStalled) {

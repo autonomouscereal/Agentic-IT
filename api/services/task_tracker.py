@@ -28,6 +28,51 @@ async def _read_checkpoint(work_dir):
         return None
 
 
+def _is_agent_process_alive(pid):
+    if not pid:
+        return False
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    proc_cmdline = f"/proc/{pid}/cmdline"
+    try:
+        with open(proc_cmdline, "rb") as handle:
+            cmdline = handle.read().replace(b"\x00", b" ").decode("utf-8", errors="replace").lower()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+    return "claude" in cmdline or "anthropic-ai" in cmdline or "node" in cmdline
+
+
+async def _mark_orphaned(task, reason):
+    await execute(
+        "UPDATE agent_tasks SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
+        reason,
+        task["id"],
+    )
+    await execute(
+        "UPDATE agents SET status = 'failed', heartbeat = NOW(), error_message = $1, finished_at = NOW() WHERE id = $2",
+        reason,
+        task["agent_id"],
+    )
+    await log_event("agent", "warning", f"agent_{task['agent_id']}",
+                    "task_orphaned", f"task_{task['id']}", {
+                        "ticket_id": task["ticket_id"],
+                        "pid": task.get("pid"),
+                        "reason": reason,
+                    })
+    if broadcast_fn:
+        await broadcast_fn({
+            "type": "agent_failed",
+            "agent_id": task["agent_id"],
+            "ticket_id": task["ticket_id"],
+            "task_id": task["id"],
+            "reason": reason,
+        })
+
+
 async def _sync_task_status(task):
     """Poll checkpoint and update task + agent status."""
     work_dir = task.get("work_dir")
@@ -207,10 +252,13 @@ async def track_loop():
             # Get all running tasks
             tasks = await fetchall(
                 "SELECT id, agent_id, ticket_id, task_type, status, work_dir, checkpoints, pid "
-                "FROM agent_tasks WHERE status IN ('queued', 'running')"
+            "FROM agent_tasks WHERE status IN ('queued', 'running')"
             )
             for task in (tasks or []):
                 if task["status"] == "running":
+                    if task.get("pid") and not _is_agent_process_alive(task.get("pid")):
+                        await _mark_orphaned(task, "Agent process is no longer running in the API container")
+                        continue
                     await _sync_task_status(task)
 
             # Periodically check for stuck tasks

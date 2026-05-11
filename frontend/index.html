@@ -238,6 +238,11 @@
                         <span class="status-dot"></span>
                         <span>Checking runner...</span>
                     </div>
+                    <div class="runner-health" id="agent-auditor-health">
+                        <span class="status-dot connected"></span>
+                        <span>Agent auditor loading...</span>
+                        <button class="btn btn-sm" onclick="runAgentAuditOnce()">Run Audit</button>
+                    </div>
                     <div class="agent-create-controls">
                         <textarea id="agent-prompt-input" placeholder="Create an agent from a prompt..." rows="3"></textarea>
                         <button class="btn" onclick="createAgentFromPrompt()">Spawn Agent</button>

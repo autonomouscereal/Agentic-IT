@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Body
 from datetime import datetime
-from database import fetchall, fetchrow, execute, fetchval, json_dumps
+from database import fetchall, fetchrow, execute, fetchval, json_dumps, json_loads
 from services.event_logger import log_event
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -219,6 +219,47 @@ async def list_tasks(
     wh = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
     rows = await fetchall(f"SELECT * FROM agent_tasks{wh} ORDER BY created_at DESC", *params)
     return {"tasks": rows, "total": len(rows)}
+
+
+@router.get("/audits")
+async def list_agent_audits(
+    agent_id: int = Query(None),
+    ticket_id: int = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    where = []
+    params = []
+    idx = 1
+    if agent_id:
+        where.append(f"r.agent_id = ${idx}")
+        params.append(agent_id)
+        idx += 1
+    if ticket_id:
+        where.append(f"r.ticket_id = ${idx}")
+        params.append(ticket_id)
+        idx += 1
+    wh = " WHERE " + " AND ".join(where) if where else ""
+    params.append(limit)
+    rows = await fetchall(f"""
+        SELECT r.*, t.title AS ticket_title, a.status AS agent_status
+        FROM agent_audit_reviews r
+        LEFT JOIN tickets t ON t.id = r.ticket_id
+        LEFT JOIN agents a ON a.id = r.agent_id
+        {wh}
+        ORDER BY r.created_at DESC
+        LIMIT ${idx}
+    """, *params)
+    for row in rows:
+        if isinstance(row.get("details"), str):
+            row["details"] = json_loads(row["details"]) or {}
+    return {"audits": rows, "total": len(rows)}
+
+
+@router.post("/audits/run")
+async def run_agent_audit_once():
+    from services import agent_auditor
+    result = await agent_auditor.audit_once()
+    return {"status": "ok", **result}
 
 
 @router.get("/tasks/{task_id}/logs")

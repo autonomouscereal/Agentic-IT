@@ -62,8 +62,17 @@ def load_json_from_stdout(result: dict):
         return None
 
 
+def load_json_file(path: Path):
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def normalize_semgrep(result: dict) -> list[dict]:
-    data = load_json_from_stdout(result) or {}
+    data = result if "results" in result else (load_json_from_stdout(result) or {})
     findings = []
     for item in data.get("results", []):
         extra = item.get("extra", {})
@@ -81,7 +90,7 @@ def normalize_semgrep(result: dict) -> list[dict]:
 
 
 def normalize_trivy(result: dict) -> list[dict]:
-    data = load_json_from_stdout(result) or {}
+    data = result if "Results" in result else (load_json_from_stdout(result) or {})
     findings = []
     for target in data.get("Results", []):
         for vuln in target.get("Vulnerabilities", []) or []:
@@ -124,6 +133,15 @@ def normalize_nuclei(result: dict) -> list[dict]:
     return findings
 
 
+def normalize_nuclei_file(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    try:
+        return normalize_nuclei({"stdout": path.read_text(encoding="utf-8", errors="replace")})
+    except OSError:
+        return []
+
+
 def normalize_zap(result: dict, output_file: Path) -> list[dict]:
     if not output_file.exists():
         return []
@@ -162,6 +180,25 @@ def gate_status(findings: list[dict], tool_results: dict) -> str:
     return "passed"
 
 
+def docker_available() -> bool:
+    return shutil.which("docker") is not None
+
+
+def run_docker_scanner(name: str, image: str, command: list[str], volumes: list[tuple[Path, str, str]], timeout: int = 1800) -> dict:
+    argv = ["docker", "run", "--rm"]
+    for host_path, container_path, mode in volumes:
+        argv.extend(["-v", f"{host_path}:{container_path}:{mode}"])
+    argv.append(image)
+    argv.extend(command)
+    return run_command(name, argv, timeout=timeout)
+
+
+def artifact_result(path: Path, kind: str) -> dict:
+    if path.exists():
+        return {"status": "completed", "artifact": str(path), "duration_seconds": 0}
+    return {"status": "skipped", "reason": f"{kind} artifact not found", "duration_seconds": 0}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Semgrep, Trivy, OWASP ZAP, and Nuclei as a modular security gate.")
     parser.add_argument("--repo", default=".", help="Repository path to scan.")
@@ -171,6 +208,8 @@ def main() -> int:
     parser.add_argument("--commit-sha", default=os.getenv("CI_COMMIT_SHA") or os.getenv("GITHUB_SHA"))
     parser.add_argument("--target-url", default=os.getenv("DAST_TARGET_URL"), help="Optional web app URL for ZAP/Nuclei.")
     parser.add_argument("--output", default=None, help="Write canonical JSON result to this path.")
+    parser.add_argument("--execution", choices=["auto", "local", "docker", "artifacts"], default="auto", help="Scanner execution mode.")
+    parser.add_argument("--artifact-dir", default=None, help="Directory containing semgrep.json, trivy.json, zap.json, nuclei.jsonl.")
     parser.add_argument("--safe-demo", action="store_true", help="Do not fail when scanners are missing; useful for dashboard smoke tests.")
     args = parser.parse_args()
 
@@ -181,29 +220,80 @@ def main() -> int:
 
     tool_results = {}
     findings: list[dict] = []
+    artifact_dir = Path(args.artifact_dir).resolve() if args.artifact_dir else None
+    execution = args.execution
+    if execution == "auto" and not shutil.which("semgrep") and docker_available():
+        execution = "docker"
+    elif execution == "auto":
+        execution = "local"
 
-    semgrep = run_command("semgrep", ["semgrep", "--config", "auto", "--json", str(repo)])
-    tool_results["semgrep"] = {key: semgrep.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if semgrep.get(key) is not None}
-    findings.extend(normalize_semgrep(semgrep))
+    if execution == "artifacts":
+        artifact_dir = artifact_dir or repo
+        semgrep_file = artifact_dir / "semgrep.json"
+        trivy_file = artifact_dir / "trivy.json"
+        zap_file = artifact_dir / "zap.json"
+        nuclei_file = artifact_dir / "nuclei.jsonl"
+        tool_results["semgrep"] = artifact_result(semgrep_file, "semgrep")
+        tool_results["trivy"] = artifact_result(trivy_file, "trivy")
+        tool_results["owasp_zap"] = artifact_result(zap_file, "zap") if args.target_url else {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
+        tool_results["nuclei"] = artifact_result(nuclei_file, "nuclei") if args.target_url else {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
+        findings.extend(normalize_semgrep(load_json_file(semgrep_file) or {}))
+        findings.extend(normalize_trivy(load_json_file(trivy_file) or {}))
+        findings.extend(normalize_zap({}, zap_file))
+        findings.extend(normalize_nuclei_file(nuclei_file))
+    elif execution == "docker":
+        out_dir = artifact_dir or (repo / ".cicd-security-output")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        semgrep_file = out_dir / "semgrep.json"
+        trivy_file = out_dir / "trivy.json"
+        zap_file = out_dir / "zap.json"
+        nuclei_file = out_dir / "nuclei.jsonl"
+        semgrep = run_docker_scanner("semgrep", "semgrep/semgrep:latest",
+                                     ["semgrep", "--config", "auto", "--json", "--output", "/output/semgrep.json", "/workspace"],
+                                     [(repo, "/workspace", "ro"), (out_dir, "/output", "rw")])
+        tool_results["semgrep"] = {key: semgrep.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if semgrep.get(key) is not None}
+        findings.extend(normalize_semgrep(load_json_file(semgrep_file) or {}))
 
-    trivy = run_command("trivy", ["trivy", "fs", "--format", "json", "--quiet", str(repo)])
-    tool_results["trivy"] = {key: trivy.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if trivy.get(key) is not None}
-    findings.extend(normalize_trivy(trivy))
+        trivy = run_docker_scanner("trivy", "aquasec/trivy:latest",
+                                   ["trivy", "fs", "--format", "json", "--output", "/output/trivy.json", "/workspace"],
+                                   [(repo, "/workspace", "ro"), (out_dir, "/output", "rw")])
+        tool_results["trivy"] = {key: trivy.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if trivy.get(key) is not None}
+        findings.extend(normalize_trivy(load_json_file(trivy_file) or {}))
 
-    zap_file = repo / ".zap-baseline.json"
-    if args.target_url:
-        zap = run_command("owasp-zap", ["zap-baseline.py", "-t", args.target_url, "-J", str(zap_file)], cwd=repo, timeout=1200)
+        if args.target_url:
+            zap = run_docker_scanner("owasp-zap", "ghcr.io/zaproxy/zaproxy:stable",
+                                     ["zap-baseline.py", "-t", args.target_url, "-J", "zap.json"],
+                                     [(out_dir, "/zap/wrk", "rw")], timeout=1800)
+            nuclei = run_docker_scanner("nuclei", "projectdiscovery/nuclei:latest",
+                                        ["-u", args.target_url, "-jsonl", "-o", "/output/nuclei.jsonl"],
+                                        [(out_dir, "/output", "rw")], timeout=1800)
+        else:
+            zap = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
+            nuclei = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
+        tool_results["owasp_zap"] = {key: zap.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if zap.get(key) is not None}
+        tool_results["nuclei"] = {key: nuclei.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if nuclei.get(key) is not None}
+        findings.extend(normalize_zap(zap, zap_file))
+        findings.extend(normalize_nuclei_file(nuclei_file))
     else:
-        zap = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
-    tool_results["owasp_zap"] = {key: zap.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if zap.get(key) is not None}
-    findings.extend(normalize_zap(zap, zap_file))
+        semgrep = run_command("semgrep", ["semgrep", "--config", "auto", "--json", str(repo)])
+        tool_results["semgrep"] = {key: semgrep.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if semgrep.get(key) is not None}
+        findings.extend(normalize_semgrep(semgrep))
 
-    if args.target_url:
-        nuclei = run_command("nuclei", ["nuclei", "-u", args.target_url, "-jsonl", "-silent"], timeout=1200)
-    else:
-        nuclei = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
-    tool_results["nuclei"] = {key: nuclei.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if nuclei.get(key) is not None}
-    findings.extend(normalize_nuclei(nuclei))
+        trivy = run_command("trivy", ["trivy", "fs", "--format", "json", "--quiet", str(repo)])
+        tool_results["trivy"] = {key: trivy.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if trivy.get(key) is not None}
+        findings.extend(normalize_trivy(trivy))
+
+        zap_file = repo / ".zap-baseline.json"
+        if args.target_url:
+            zap = run_command("owasp-zap", ["zap-baseline.py", "-t", args.target_url, "-J", str(zap_file)], cwd=repo, timeout=1200)
+            nuclei = run_command("nuclei", ["nuclei", "-u", args.target_url, "-jsonl", "-silent"], timeout=1200)
+        else:
+            zap = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
+            nuclei = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
+        tool_results["owasp_zap"] = {key: zap.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if zap.get(key) is not None}
+        tool_results["nuclei"] = {key: nuclei.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if nuclei.get(key) is not None}
+        findings.extend(normalize_zap(zap, zap_file))
+        findings.extend(normalize_nuclei(nuclei))
 
     status = gate_status(findings, tool_results)
     result = {
@@ -212,6 +302,7 @@ def main() -> int:
         "branch": args.branch,
         "commit_sha": args.commit_sha,
         "target_url": args.target_url,
+        "execution": execution,
         "status": status,
         "summary": f"CI/CD security pipeline {status}: {len(findings)} findings across Semgrep, Trivy, OWASP ZAP, and Nuclei.",
         "findings": findings,

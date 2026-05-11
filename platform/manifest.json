@@ -540,12 +540,12 @@
       "deploy_strategy": "skill",
       "skill": "cicd-security-pipeline",
       "depends_on": ["soc-dashboard", "cicd-provider-adapter", "gitlab"],
-      "provides": ["security-gate", "scan-normalization", "deployment-approval-gate", "gitlab-ci-template"],
+      "provides": ["security-gate", "scanner-deployment-bundle", "scan-normalization", "deployment-approval-gate", "gitlab-ci-template"],
       "required_secrets": ["SOC_DASHBOARD_URL", "provider token only when provider API mutation is enabled"],
       "ports": [],
-      "health_checks": ["/api/cicd/gitlab/template", "/api/cicd/runs"],
-      "test_commands": ["python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480"],
-      "notes": "Runs Semgrep, Trivy, OWASP ZAP, and Nuclei after unit tests. GitLab Runner is the default execution target in the reference platform."
+      "health_checks": ["/api/cicd/gitlab/template", "/api/cicd/runs", "docker compose config for deploy/cicd-security-tools"],
+      "test_commands": ["python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480", "bash scripts/cicd_security_tools.sh pull"],
+      "notes": "Runs Semgrep, Trivy, OWASP ZAP, and Nuclei after unit tests. GitLab Runner is the default execution target, and deploy/cicd-security-tools provides a portable Docker Compose scanner bundle."
     },
     {
       "id": "semgrep",
@@ -554,13 +554,13 @@
       "status": "implemented",
       "deployable": true,
       "deploy_strategy": "skill",
-      "skill": "cicd-security-pipeline",
+      "skill": "semgrep-scanner",
       "depends_on": ["cicd-security-pipeline"],
       "provides": ["sast-findings", "code-security-tickets"],
       "required_secrets": [],
       "ports": [],
       "health_checks": ["semgrep --version and sample scan"],
-      "test_commands": ["python3 scripts/run_cicd_security_pipeline.py --provider gitlab --repo . --safe-demo"],
+      "test_commands": ["python3 scripts/run_cicd_security_pipeline.py --provider gitlab --repo . --execution auto --safe-demo"],
       "notes": "First-class SAST module in the GitLab-default CI/CD security gate."
     },
     {
@@ -570,13 +570,13 @@
       "status": "implemented",
       "deployable": true,
       "deploy_strategy": "skill",
-      "skill": "cicd-security-pipeline",
+      "skill": "trivy-scanner",
       "depends_on": ["cicd-security-pipeline"],
       "provides": ["container-scan", "dependency-scan", "sbom"],
       "required_secrets": [],
       "ports": [],
       "health_checks": ["trivy --version and sample scan"],
-      "test_commands": ["python3 scripts/run_cicd_security_pipeline.py --provider gitlab --repo . --safe-demo"],
+      "test_commands": ["python3 scripts/run_cicd_security_pipeline.py --provider gitlab --repo . --execution auto --safe-demo"],
       "notes": "First-class filesystem, dependency, container, and IaC scanner in the CI/CD security gate."
     },
     {
@@ -586,13 +586,13 @@
       "status": "implemented",
       "deployable": true,
       "deploy_strategy": "skill",
-      "skill": "cicd-security-pipeline",
+      "skill": "owasp-zap-scanner",
       "depends_on": ["cicd-security-pipeline"],
       "provides": ["dast-findings", "web-app-security-tickets"],
       "required_secrets": [],
       "ports": ["provider-defined"],
       "health_checks": ["ZAP API version"],
-      "test_commands": ["Run with DAST_TARGET_URL and verify dashboard CI/CD run record."],
+      "test_commands": ["Run scripts/cicd_security_tools.sh gate with --target-url in a test environment and verify dashboard CI/CD run record."],
       "notes": "Optional DAST module in the CI/CD security gate; skipped when no target URL is configured."
     },
     {
@@ -602,13 +602,13 @@
       "status": "implemented",
       "deployable": true,
       "deploy_strategy": "skill",
-      "skill": "cicd-security-pipeline",
+      "skill": "nuclei-scanner",
       "depends_on": ["cicd-security-pipeline"],
       "provides": ["exposure-scan", "template-driven-findings"],
       "required_secrets": [],
       "ports": [],
       "health_checks": ["nuclei -version and sample target"],
-      "test_commands": ["Run with DAST_TARGET_URL and verify dashboard CI/CD run record."],
+      "test_commands": ["Run scripts/cicd_security_tools.sh gate with --target-url in a test environment and verify dashboard CI/CD run record."],
       "notes": "Template-driven exposure scanning module in the CI/CD security gate; skipped when no target URL is configured."
     },
     {

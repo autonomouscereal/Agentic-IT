@@ -23,6 +23,7 @@ High or critical findings fail the gate. Scanner errors are marked
 
 ```bash
 python3 scripts/run_cicd_security_pipeline.py \
+  --execution auto \
   --provider gitlab \
   --repo . \
   --repo-ref group/project \
@@ -31,6 +32,30 @@ python3 scripts/run_cicd_security_pipeline.py \
   --target-url "$DAST_TARGET_URL" \
   --output cicd-security-result.json
 ```
+
+Execution modes:
+
+- `auto`: use local CLIs when present, otherwise Docker if available.
+- `local`: require locally installed scanner CLIs.
+- `docker`: run reference scanner images directly.
+- `artifacts`: normalize existing `semgrep.json`, `trivy.json`, `zap.json`, and `nuclei.jsonl`.
+
+## Deployable Scanner Bundle
+
+Portable Docker Compose deployment lives in `deploy/cicd-security-tools`.
+
+```bash
+bash scripts/cicd_security_tools.sh pull
+bash scripts/cicd_security_tools.sh gate --repo /path/to/repo --output ./scan-output
+bash scripts/cicd_security_tools.sh gate --repo /path/to/repo --target-url http://app-under-test.local --output ./scan-output
+```
+
+The bundle uses scanner images instead of host installs:
+
+- `semgrep/semgrep:latest`
+- `aquasec/trivy:latest`
+- `ghcr.io/zaproxy/zaproxy:stable`
+- `projectdiscovery/nuclei:latest`
 
 The script outputs canonical JSON suitable for:
 
@@ -69,5 +94,5 @@ python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480
 ```
 
 Expected: the smoke test confirms the GitLab template, runs the local pipeline
-script in safe mode, records the run, creates a dashboard ticket, and creates a
-pending deployment approval gate.
+script in artifact mode, records the run, creates a dashboard ticket, and
+creates a pending deployment approval gate.

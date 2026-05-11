@@ -202,6 +202,16 @@ trivy_fs:
     paths: [trivy.json]
   allow_failure: true
 
+zap_baseline_optional:
+  stage: security
+  image: ghcr.io/zaproxy/zaproxy:stable
+  script:
+    - test -n "$DAST_TARGET_URL" && zap-baseline.py -t "$DAST_TARGET_URL" -J zap.json || echo "DAST_TARGET_URL not set"
+  artifacts:
+    when: always
+    paths: [zap.json]
+  allow_failure: true
+
 nuclei_optional:
   stage: security
   image: projectdiscovery/nuclei:latest

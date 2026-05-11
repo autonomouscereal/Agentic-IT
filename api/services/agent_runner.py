@@ -13,7 +13,7 @@ from services.agent_harness import get_harness, list_harnesses
 
 AGENT_WORK_BASE = os.getenv("AGENT_WORK_BASE", "/app/agent_work")
 MAX_CONCURRENT_AGENTS = int(os.getenv("MAX_CONCURRENT_AGENTS", "3"))
-AGENT_TIMEOUT_MINUTES = int(os.getenv("AGENT_TIMEOUT_MINUTES", "60"))
+AGENT_TIMEOUT_MINUTES = int(os.getenv("AGENT_TIMEOUT_MINUTES", "0"))
 MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "/app/agent_models.json")
 AGENT_PERMISSION_MODE = os.getenv("AGENT_PERMISSION_MODE", "acceptEdits")
 AGENT_ALLOWED_TOOLS = os.getenv("AGENT_ALLOWED_TOOLS", "Read,Write,Bash(curl *)").strip()
@@ -158,26 +158,6 @@ async def _mirror_checkpoint_to_task(task_id, agent_id, work_dir):
     )
     await execute("UPDATE agents SET heartbeat = NOW() WHERE id = $1", agent_id)
     return checkpoint
-
-
-async def _runner_heartbeat(work_dir, task_id, agent_id, stop_event):
-    """Update process heartbeat without touching the agent-owned checkpoint file."""
-    while not stop_event.is_set():
-        try:
-            await execute(
-                "UPDATE agent_tasks SET progress_pct = GREATEST(progress_pct, 10) WHERE id = $1",
-                task_id,
-            )
-            await execute(
-                "UPDATE agents SET heartbeat = NOW() WHERE id = $1",
-                agent_id,
-            )
-        except Exception:
-            pass
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=20)
-        except asyncio.TimeoutError:
-            pass
 
 
 def _load_model_config():
@@ -348,11 +328,7 @@ async def _run_agent(work_dir, prompt, task_id):
             task_id,
         )
 
-        # Wait with timeout
-        timeout = timedelta(minutes=AGENT_TIMEOUT_MINUTES).total_seconds()
         chunks = []
-        stop_event = asyncio.Event()
-        heartbeat_task = asyncio.create_task(_runner_heartbeat(work_dir, task_id, agent_id, stop_event))
         stdout_task = asyncio.create_task(
             _stream_reader(process.stdout, "stdout", output_path, task_id, agent_id, chunks)
         )
@@ -360,9 +336,11 @@ async def _run_agent(work_dir, prompt, task_id):
             _stream_reader(process.stderr, "stderr", output_path, task_id, agent_id, chunks)
         )
         try:
-            await asyncio.wait_for(process.wait(), timeout=timeout)
-            stop_event.set()
-            await heartbeat_task
+            if AGENT_TIMEOUT_MINUTES > 0:
+                timeout = timedelta(minutes=AGENT_TIMEOUT_MINUTES).total_seconds()
+                await asyncio.wait_for(process.wait(), timeout=timeout)
+            else:
+                await process.wait()
             await asyncio.gather(stdout_task, stderr_task)
             output = "".join(chunks)
             return {
@@ -371,12 +349,10 @@ async def _run_agent(work_dir, prompt, task_id):
                 "stderr": "",
             }
         except asyncio.TimeoutError:
-            stop_event.set()
             process.kill()
             await process.wait()
             stdout_task.cancel()
             stderr_task.cancel()
-            heartbeat_task.cancel()
             return {
                 "exit_code": -1,
                 "stdout": _tail_text("".join(chunks)),

@@ -34,11 +34,18 @@ def main():
     require(template.get("provider") == "gitlab", "GitLab should be default CI/CD provider")
     require("semgrep_sast" in template.get("template", ""), "GitLab template missing Semgrep job")
     require("trivy_fs" in template.get("template", ""), "GitLab template missing Trivy job")
+    require("zap_baseline_optional" in template.get("template", ""), "GitLab template missing ZAP job")
     require("nuclei_optional" in template.get("template", ""), "GitLab template missing Nuclei job")
 
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp)
         (repo / "app.py").write_text("print('safe demo')\n", encoding="utf-8")
+        artifacts = repo / "scan-output"
+        artifacts.mkdir()
+        (artifacts / "semgrep.json").write_text(json.dumps({"results": []}), encoding="utf-8")
+        (artifacts / "trivy.json").write_text(json.dumps({"Results": []}), encoding="utf-8")
+        (artifacts / "nuclei.jsonl").write_text("", encoding="utf-8")
+        (artifacts / "zap.json").write_text(json.dumps({"site": []}), encoding="utf-8")
         proc = subprocess.run(
             [
                 sys.executable,
@@ -47,6 +54,8 @@ def main():
                 "--repo", str(repo),
                 "--repo-ref", "gitlab/smoke/security-pipeline",
                 "--branch", "main",
+                "--execution", "artifacts",
+                "--artifact-dir", str(artifacts),
                 "--safe-demo",
             ],
             text=True,

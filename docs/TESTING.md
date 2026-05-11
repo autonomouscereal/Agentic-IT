@@ -12,7 +12,7 @@ node --check .\soc-dashboard\frontend\js\dashboard.js
 node --check .\soc-dashboard\frontend\js\agents.js
 node --check .\soc-dashboard\frontend\js\charts.js
 node --check .\soc-dashboard\frontend\js\websocket.js
-python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py
+python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py
 ```
 
 ## Prohibited Pattern Sweep
@@ -114,11 +114,24 @@ python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480
 Covers:
 
 - GitLab-default pipeline template
-- Semgrep, Trivy, Nuclei job definitions
+- Semgrep, Trivy, OWASP ZAP, and Nuclei job definitions
 - local canonical scanner output
 - `/api/cicd/runs` persistence
 - evidence ticket creation
 - production deployment approval gate
+
+## Agent Auditor Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_agent_auditor.py http://localhost:25480
+```
+
+Covers:
+
+- manual auditor poll
+- audit review listing
+- non-blocking progress/recovery supervision path
 
 ## Local Model Agent Smoke
 
@@ -142,9 +155,9 @@ Covers:
 Latest verified result:
 
 ```text
-ticket_id=28
-agent_id=26
-task_id=24
+ticket_id=66
+agent_id=43
+task_id=41
 status=completed
 progress=100
 note_written=true
