@@ -1,0 +1,214 @@
+<!-- Wazuh Sysmon Detection Rules -->
+<!-- Rule IDs: 100200-100299 -->
+<group name="sysmon,windows,edr">
+
+  <!-- BASE SYSMON RULE -->
+  <rule id="100200" level="0">
+    <decoded_as>sysmon</decoded_as>
+    <description>Sysmon: event received</description>
+    <group>sysmon</group>
+  </rule>
+
+  <!-- LOLBin process execution -->
+  <rule id="100201" level="10">
+    <if_sid>100200</if_sid>
+    <match>1</match>
+    <regex>Image.*(?:certutil|bits|mshta|regsvr32|rundll32|cscript|wscript|esentutl|forfiles|makecab|msiexec|ntdsutil|pnputil|regasm|regedit|sc)\.(?:exe|dll|bat|cmd)</regex>
+    <description>Sysmon: Suspicious LOLBin process execution detected</description>
+    <group>sysmon,process_creation,mitre_t1202,mitre_t1218</group>
+  </rule>
+
+  <!-- Suspicious PowerShell -->
+  <rule id="100202" level="10">
+    <if_sid>100200</if_sid>
+    <match>1</match>
+    <regex>Image.*powershell\.(?:exe|dll)</regex>
+    <regex>CommandLine.*-(?:enc|encodedcommand|nop|w\s+hidden)</regex>
+    <description>Sysmon: Suspicious PowerShell execution encoded/hidden</description>
+    <group>sysmon,process_creation,mitre_t1059</group>
+  </rule>
+
+  <!-- Recon/credential dumping in cmd -->
+  <rule id="100203" level="8">
+    <if_sid>100200</if_sid>
+    <match>1</match>
+    <regex>Image.*cmd\.exe</regex>
+    <regex>CommandLine.*(?:whoami|ipconfig|net\s+user|net\s+group|netstat|tasklist|systeminfo|wmic|procdump|mimikatz|lazagne|sekurlsa)</regex>
+    <description>Sysmon: Reconnaissance or credential dumping command in cmd</description>
+    <group>sysmon,process_creation,mitre_t1003,mitre_t1018</group>
+  </rule>
+
+  <!-- Known credential dumping tools -->
+  <rule id="100213" level="15">
+    <if_sid>100200</if_sid>
+    <match>1</match>
+    <regex>Image.*(?:mimikatz|procdump|lazagne|pwdump|dumpert|nanodump|cerberus|sharpdump)\.(?:exe|dll|ps1|py)</regex>
+    <description>Sysmon: Known credential dumping tool execution</description>
+    <group>sysmon,process_creation,mitre_t1003</group>
+  </rule>
+
+  <!-- LSASS access -->
+  <rule id="100204" level="12">
+    <if_sid>100200</if_sid>
+    <match>10</match>
+    <regex>TargetImage.*lsass\.exe</regex>
+    <description>Sysmon: Process access to LSASS potential credential dumping</description>
+    <group>sysmon,process_access,mitre_t1003</group>
+  </rule>
+
+  <!-- Network from suspicious binary -->
+  <rule id="100205" level="9">
+    <if_sid>100200</if_sid>
+    <match>3</match>
+    <regex>Image.*(?:certutil|bits|mshta|wget|curl|powershell|cmd)\.(?:exe|dll)</regex>
+    <description>Sysmon: Network connection from suspicious binary</description>
+    <group>sysmon,network_connection,mitre_t1105</group>
+  </rule>
+
+  <!-- Suspicious port connection -->
+  <rule id="100206" level="10">
+    <if_sid>100200</if_sid>
+    <match>3</match>
+    <regex>DestinationPort:(?:4444|5555|6666|7777|8888|9999|1337|31337)</regex>
+    <description>Sysmon: Connection to suspicious port potential C2</description>
+    <group>sysmon,network_connection,mitre_t1071</group>
+  </rule>
+
+  <!-- Suspicious file creation -->
+  <rule id="100207" level="10">
+    <if_sid>100200</if_sid>
+    <match>11</match>
+    <regex>TargetFilename.*(\\Temp\\|\\AppData\\|\\Startup\\|\\System32\\|\\SysWOW64\\|\\Windows\\).*(?:exe|dll|bat|cmd|ps1|vbs|scr)</regex>
+    <description>Sysmon: Suspicious file creation in system/temp directory</description>
+    <group>sysmon,file_creation,mitre_t1036</group>
+  </rule>
+
+  <!-- Registry persistence -->
+  <rule id="100208" level="12">
+    <if_sid>100200</if_sid>
+    <match>13</match>
+    <regex>TargetObject.*(?:Run|RunOnce|Services|Winlogon|Shell|Userinit|AppInit_DLLs)</regex>
+    <description>Sysmon: Registry persistence mechanism detected</description>
+    <group>sysmon,registry_persistence,mitre_t1547</group>
+  </rule>
+
+  <!-- Process injection -->
+  <rule id="100209" level="13">
+    <if_sid>100200</if_sid>
+    <match>8</match>
+    <description>Sysmon: CreateRemoteThread process injection detected</description>
+    <group>sysmon,process_injection,mitre_t1055</group>
+  </rule>
+
+  <!-- Raw disk access -->
+  <rule id="100210" level="12">
+    <if_sid>100200</if_sid>
+    <match>9</match>
+    <description>Sysmon: Raw disk access detected</description>
+    <group>sysmon,raw_access,mitre_t1003</group>
+  </rule>
+
+  <!-- Driver loading -->
+  <rule id="100211" level="8">
+    <if_sid>100200</if_sid>
+    <match>6</match>
+    <description>Sysmon: Driver loaded</description>
+    <group>sysmon,driver_load,mitre_t1546</group>
+  </rule>
+
+  <!-- DLL loading into legitimate process -->
+  <rule id="100212" level="11">
+    <if_sid>100200</if_sid>
+    <match>7</match>
+    <regex>Image.*(?:explorer|svchost|chrome|firefox|outlook|winword|excel)\.(?:exe|dll)</regex>
+    <description>Sysmon: DLL loaded into legitimate process potential hijacking</description>
+    <group>sysmon,image_load,mitre_t1574</group>
+  </rule>
+
+  <!-- WMI activity -->
+  <rule id="100214" level="10">
+    <if_sid>100200</if_sid>
+    <match>(?:19|20|21)</match>
+    <description>Sysmon: WMI event activity detected</description>
+    <group>sysmon,wmi,mitre_t1047</group>
+  </rule>
+
+  <!-- LOTL binaries -->
+  <rule id="100215" level="11">
+    <if_sid>100200</if_sid>
+    <match>1</match>
+    <regex>Image.*(?:msiexec|esentutl|forfiles|makecab|mc|ntdsutil|pnputil)\.(?:exe|dll)</regex>
+    <description>Sysmon: Living-off-the-land binary execution</description>
+    <group>sysmon,lotl,mitre_t1127</group>
+  </rule>
+
+  <!-- Defense evasion -->
+  <rule id="100216" level="12">
+    <if_sid>100200</if_sid>
+    <match>1</match>
+    <regex>Image.*(?:wevtutil|cmd|powershell)\.(?:exe|dll)</regex>
+    <regex>CommandLine.*(?:clear-log|wevtutil\s+cl|amsi|bypass|executionpolicy)</regex>
+    <description>Sysmon: Defense evasion technique log clearing or AMSI bypass</description>
+    <group>sysmon,defense_evasion,mitre_t1070</group>
+  </rule>
+
+</group>
+
+<!-- SYSMONFORLINUX RULES -->
+<group name="sysmon,linux">
+
+  <rule id="100220" level="0">
+    <decoded_as>sysmon_linux</decoded_as>
+    <description>SysmonForLinux: event received</description>
+    <group>sysmon,linux</group>
+  </rule>
+
+  <!-- Suspicious process from temp -->
+  <rule id="100221" level="10">
+    <if_sid>100220</if_sid>
+    <regex>(?:/tmp/|/dev/shm/|/var/tmp/)</regex>
+    <description>SysmonForLinux: Suspicious process execution from temp directory</description>
+    <group>sysmon,linux,process_creation,mitre_t1036</group>
+  </rule>
+
+  <!-- Suspicious port connection -->
+  <rule id="100222" level="11">
+    <if_sid>100220</if_sid>
+    <regex>(?:Destination|Remote)\S*:(?:4444|5555|6666|7777|8888|9999|1337|31337)</regex>
+    <description>SysmonForLinux: Connection to suspicious port potential C2</description>
+    <group>sysmon,linux,network_connection,mitre_t1071</group>
+  </rule>
+
+  <!-- Exploitation tools -->
+  <rule id="100223" level="9">
+    <if_sid>100220</if_sid>
+    <regex>(?:nmap|nikto|sqlmap|metasploit|msfconsole|msfvenom|hydra|john|hashcat)</regex>
+    <description>SysmonForLinux: Security testing/exploitation tool execution</description>
+    <group>sysmon,linux,process_creation,mitre_t1190</group>
+  </rule>
+
+  <!-- Reverse shell -->
+  <rule id="100224" level="12">
+    <if_sid>100220</if_sid>
+    <regex>(?:wget|curl).*\|.*(?:bash|sh)</regex>
+    <description>SysmonForLinux: Reverse shell via download pipe execution</description>
+    <group>sysmon,linux,process_creation,mitre_t1059</group>
+  </rule>
+
+  <!-- Persistence file creation -->
+  <rule id="100225" level="10">
+    <if_sid>100220</if_sid>
+    <regex>(?:/etc/cron|/etc/systemd|/etc/init\.d|\.bashrc|\.profile|/etc/rc\.local)</regex>
+    <description>SysmonForLinux: Persistence mechanism file creation</description>
+    <group>sysmon,linux,file_creation,mitre_t1543</group>
+  </rule>
+
+  <!-- Sensitive file access -->
+  <rule id="100226" level="13">
+    <if_sid>100220</if_sid>
+    <regex>(?:passwd|shadow|sudoers|authorized_keys|sshd_config)</regex>
+    <description>SysmonForLinux: Sensitive system file access/modification</description>
+    <group>sysmon,linux,process_creation,mitre_t1098</group>
+  </rule>
+
+</group>

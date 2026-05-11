@@ -1,0 +1,8 @@
+# Server Manager Dependencies
+# Virtual Environment: .venv/Scripts/python.exe
+
+# SSH and Remote Execution
+paramiko>=3.0.0
+
+# For older scripts using pexpect (deprecated)
+pexpect>=4.8,<4.9

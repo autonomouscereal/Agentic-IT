@@ -1,0 +1,478 @@
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Body
+from datetime import datetime
+from database import fetchall, fetchrow, execute, fetchval, json_dumps
+from services.event_logger import log_event
+
+router = APIRouter(prefix="/api/agents", tags=["agents"])
+
+_connected_ws = []
+
+
+@router.get("")
+async def list_agents(
+    status: str = Query(None, description="Filter by status"),
+    ticket_id: int = Query(None, description="Filter by ticket"),
+):
+    where_clauses = []
+    params = []
+    param_idx = 1
+
+    if status:
+        where_clauses.append(f"status = ${param_idx}")
+        params.append(status)
+        param_idx += 1
+    if ticket_id:
+        where_clauses.append(f"ticket_id = ${param_idx}")
+        params.append(ticket_id)
+        param_idx += 1
+
+    where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+    rows = await fetchall(f"""
+        SELECT a.*, t.title AS ticket_title, t.status AS ticket_status,
+               t.itop_ref AS ticket_itop_ref,
+               task.id AS current_task_id,
+               task.status AS task_status,
+               task.progress_pct AS task_progress_pct,
+               task.task_type AS task_type,
+               task.work_dir AS task_work_dir,
+               task.error_message AS task_error_message
+        FROM agents a
+        LEFT JOIN tickets t ON a.ticket_id = t.id
+        LEFT JOIN LATERAL (
+            SELECT id, status, progress_pct, task_type, work_dir, error_message
+            FROM agent_tasks
+            WHERE agent_id = a.id
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) task ON true
+        {where_sql}
+        ORDER BY a.started_at DESC
+    """, *params)
+
+    return {"agents": rows, "total": len(rows)}
+
+
+@router.get("/active")
+async def active_agents():
+    rows = await fetchall("""
+        SELECT a.*, t.title AS ticket_title, t.itop_ref AS ticket_itop_ref,
+               task.id AS current_task_id, task.status AS task_status,
+               task.progress_pct AS task_progress_pct
+        FROM agents a
+        LEFT JOIN tickets t ON a.ticket_id = t.id
+        LEFT JOIN LATERAL (
+            SELECT id, status, progress_pct
+            FROM agent_tasks
+            WHERE agent_id = a.id
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) task ON true
+        WHERE a.status IN ('spawned', 'running', 'working')
+        ORDER BY a.started_at DESC
+    """)
+    return {"agents": rows, "count": len(rows)}
+
+
+@router.get("/stats")
+async def agent_stats():
+    total = await fetchval("SELECT COUNT(*) FROM agents") or 0
+    active = await fetchval("SELECT COUNT(*) FROM agents WHERE status IN ('spawned', 'running', 'working')") or 0
+    finished = await fetchval("SELECT COUNT(*) FROM agents WHERE status IN ('finished', 'resolved')") or 0
+    failed = await fetchval("SELECT COUNT(*) FROM agents WHERE status IN ('failed', 'stopped', 'terminated')") or 0
+
+    avg_duration = await fetchval("""
+        SELECT EXTRACT(EPOCH FROM AVG(finished_at - started_at))
+        FROM agents WHERE finished_at IS NOT NULL
+    """)
+
+    return {
+        "total": total,
+        "active": active,
+        "finished": finished,
+        "failed": failed,
+        "avg_duration_seconds": round(avg_duration, 1) if avg_duration else None,
+    }
+
+
+@router.get("/models")
+async def list_models():
+    """Return available models for agent selection."""
+    from services.agent_runner import get_available_models
+    models = await get_available_models()
+    return {"models": models}
+
+
+@router.get("/runner-health")
+async def runner_health():
+    """Return Claude Code runner diagnostics."""
+    from services.agent_runner import get_runner_health
+    return await get_runner_health()
+
+
+@router.get("/processes")
+async def runner_processes():
+    """Return current runner process diagnostics from inside the API container."""
+    from services.agent_runner import get_process_snapshot
+    return await get_process_snapshot()
+
+
+@router.post("/heartbeat/{agent_id}")
+async def agent_heartbeat(agent_id: int):
+    """Legacy heartbeat endpoint - still accepts heartbeats but doesn't drive monitoring."""
+    agent = await fetchrow("SELECT id, status FROM agents WHERE id = $1", agent_id)
+    if not agent:
+        return {"error": "Agent not found", "valid": False}
+    if agent["status"] in ("stopped", "terminated", "failed"):
+        return {"error": "Agent is stopped", "valid": False}
+
+    await execute("UPDATE agents SET heartbeat = NOW() WHERE id = $1", agent_id)
+    return {"status": "ok", "agent_id": agent_id, "valid": True}
+
+
+@router.get("/ws")
+async def get_ws_info():
+    return {"connected": len(_connected_ws), "note": "Use WebSocket at /api/agents/ws"}
+
+
+@router.post("/spawn")
+async def spawn_agent(
+    ticket_id: int = Body(...),
+    model: str = Body("qwen/qwen3.6-27b"),
+    prompt: str = Body(None),
+    task_type: str = Body("ticket_resolution"),
+):
+    """Spawn a Claude Code agent to work on a ticket."""
+    from services import agent_runner
+
+    # Default prompt if not provided
+    if not prompt:
+        ticket = await fetchrow("SELECT title, description, itop_class FROM tickets WHERE id = $1", ticket_id)
+        if ticket:
+            prompt = f"Investigate and resolve this ticket: {ticket['title']}. Class: {ticket['itop_class']}. Description: {ticket['description'] or 'N/A'}"
+        else:
+            prompt = f"Investigate and resolve ticket #{ticket_id}"
+
+    result = await agent_runner.spawn_agent(ticket_id, model, prompt, task_type)
+    await log_event("agent", "info", "dashboard", "agent_spawned",
+                    f"ticket_{ticket_id}", {"model": model, "task_type": task_type})
+    return result
+
+
+@router.post("/create-from-prompt")
+async def create_from_prompt(
+    prompt: str = Body(...),
+    model: str = Body("qwen/qwen3.6-27b"),
+):
+    """Create a ticket from a prompt and spawn an agent to work it."""
+    from services import ticket_service
+    ticket = await ticket_service.create_ticket(
+        title=prompt[:500],
+        description=prompt[:2000],
+        ticket_class="UserRequest",
+        status="in_progress",
+        provider="local",
+        created_by="dashboard",
+    )
+    ticket_id = ticket["id"]
+
+    # Build agent prompt
+    agent_prompt = (
+        f"You have been assigned to investigate and resolve the following request:\n\n"
+        f"{prompt}\n\n"
+        f"Use your available skills to research, investigate, and resolve this issue. "
+        f"Write checkpoints as you work."
+    )
+
+    # Spawn agent
+    from services import agent_runner
+    result = await agent_runner.spawn_agent(ticket_id, model, agent_prompt, "ad_hoc")
+    await log_event("agent", "info", "dashboard", "create_from_prompt",
+                    f"ticket_{ticket_id}", {"prompt_preview": prompt[:200]})
+    return result
+
+
+@router.get("/tasks")
+async def list_tasks(
+    status: str = Query(None),
+    agent_id: int = Query(None),
+    ticket_id: int = Query(None),
+):
+    """List agent tasks with optional filters."""
+    where_clauses = []
+    params = []
+    idx = 1
+
+    if status:
+        where_clauses.append(f"status = ${idx}")
+        params.append(status)
+        idx += 1
+    if agent_id:
+        where_clauses.append(f"agent_id = ${idx}")
+        params.append(agent_id)
+        idx += 1
+    if ticket_id:
+        where_clauses.append(f"ticket_id = ${idx}")
+        params.append(ticket_id)
+        idx += 1
+
+    wh = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+    rows = await fetchall(f"SELECT * FROM agent_tasks{wh} ORDER BY created_at DESC", *params)
+    return {"tasks": rows, "total": len(rows)}
+
+
+@router.get("/tasks/{task_id}/logs")
+async def get_task_logs(task_id: int, lines: int = Query(200, ge=1, le=2000)):
+    """Return output.log tail for a task."""
+    task = await fetchrow("SELECT id, work_dir, output FROM agent_tasks WHERE id = $1", task_id)
+    if not task:
+        return {"error": "Task not found"}
+
+    log_path = None
+    content = ""
+    if task.get("work_dir"):
+        import os
+        log_path = os.path.join(task["work_dir"], "output.log")
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                all_lines = f.readlines()
+            content = "".join(all_lines[-lines:])
+        except FileNotFoundError:
+            content = task.get("output") or ""
+    else:
+        content = task.get("output") or ""
+
+    return {"task_id": task_id, "log_path": log_path, "content": content}
+
+
+@router.get("/{agent_id}")
+async def get_agent(agent_id: int):
+    agent = await fetchrow("""
+        SELECT a.*, t.title AS ticket_title, t.status AS ticket_status,
+               t.itop_ref AS ticket_itop_ref, t.description AS ticket_description
+        FROM agents a
+        LEFT JOIN tickets t ON a.ticket_id = t.id
+        WHERE a.id = $1
+    """, agent_id)
+    if not agent:
+        return {"error": "Agent not found"}
+
+    # Get current task info
+    task = await fetchrow("""
+        SELECT * FROM agent_tasks WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 1
+    """, agent_id)
+    if task:
+        agent["current_task"] = task
+
+    changes = await fetchall("""
+        SELECT * FROM change_requests WHERE agent_id = $1 ORDER BY requested_at DESC
+    """, agent_id)
+    agent["change_requests"] = changes
+
+    audit = await fetchall("""
+        SELECT * FROM audit_log WHERE details->>'agent_id' = $1
+        ORDER BY created_at DESC LIMIT 50
+    """, str(agent_id))
+    agent["audit"] = audit
+
+    return agent
+
+
+@router.get("/{agent_id}/task")
+async def get_agent_task(agent_id: int):
+    """Get the latest task for an agent."""
+    task = await fetchrow("""
+        SELECT * FROM agent_tasks WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 1
+    """, agent_id)
+    if not task:
+        return {"error": "No tasks for this agent"}
+    return task
+
+
+@router.get("/{agent_id}/logs")
+async def get_agent_logs(agent_id: int, lines: int = Query(200, ge=1, le=2000)):
+    """Return latest task logs for an agent."""
+    task = await fetchrow(
+        "SELECT id FROM agent_tasks WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 1",
+        agent_id,
+    )
+    if not task:
+        return {"error": "No tasks for this agent"}
+    return await get_task_logs(task["id"], lines)
+
+
+@router.post("/{agent_id}/stop")
+async def stop_agent(agent_id: int, body: dict = Body(None)):
+    from services import agent_runner
+    reason = "manual_stop"
+    if isinstance(body, dict) and body.get("reason"):
+        reason = str(body["reason"])
+
+    # Try to stop the running task first
+    task_result = await agent_runner.stop_agent_task(agent_id)
+
+    # Also update agent status if no task was found
+    if "error" in task_result:
+        agent = await fetchrow("SELECT * FROM agents WHERE id = $1", agent_id)
+        if agent:
+            await execute("""
+                UPDATE agents SET status = 'stopped', finished_at = NOW(),
+                                 error_message = $1 WHERE id = $2
+            """, reason, agent_id)
+
+    await log_event("agent", "info", "dashboard", "agent_stopped",
+                    f"agent_{agent_id}", {"reason": reason})
+    return {"status": "stopped", "agent_id": agent_id}
+
+
+@router.post("/{agent_id}/wake")
+async def wake_agent(agent_id: int):
+    """Wake a stalled agent by spawning a replacement for its latest task."""
+    agent = await fetchrow("SELECT * FROM agents WHERE id = $1", agent_id)
+    if not agent:
+        return {"error": "Agent not found"}
+
+    active_task = await fetchrow("""
+        SELECT id, status, pid FROM agent_tasks
+        WHERE agent_id = $1 AND status IN ('queued', 'running')
+        ORDER BY created_at DESC LIMIT 1
+    """, agent_id)
+    if active_task:
+        await execute("UPDATE agents SET heartbeat = NOW() WHERE id = $1", agent_id)
+        await log_event("agent", "info", "dashboard", "agent_wake_noop_active",
+                        f"agent_{agent_id}", {"task_id": active_task["id"], "status": active_task["status"]})
+        return {
+            "status": "already_active",
+            "agent_id": agent_id,
+            "task_id": active_task["id"],
+            "message": "Agent already has an active task; heartbeat refreshed.",
+        }
+
+    if agent["status"] in ("stopped", "terminated"):
+        return {"error": f"Cannot wake agent in status: {agent['status']}. Use restart for a replacement run."}
+
+    latest_task = await fetchrow("""
+        SELECT prompt, task_type FROM agent_tasks
+        WHERE agent_id = $1
+        ORDER BY created_at DESC LIMIT 1
+    """, agent_id)
+    if not latest_task:
+        return {"error": "No previous task prompt found for this agent"}
+
+    from services import agent_runner
+    model = agent.get("selected_model") or agent.get("model") or "qwen/qwen3.6-27b"
+    result = await agent_runner.spawn_agent(
+        agent["ticket_id"],
+        model,
+        latest_task["prompt"],
+        latest_task.get("task_type") or "ticket_resolution",
+    )
+
+    await log_event("agent", "info", "dashboard", "agent_wake_spawned",
+                    f"agent_{agent_id}", {"replacement_agent_id": result.get("agent_id"), "model": model})
+    return {"status": "replacement_spawned", "source_agent_id": agent_id, **result}
+
+
+@router.post("/{agent_id}/restart")
+async def restart_agent(agent_id: int):
+    """Terminate current agent and spawn a new one for the same ticket."""
+    agent = await fetchrow("SELECT ticket_id, selected_model, model FROM agents WHERE id = $1", agent_id)
+    if not agent:
+        return {"error": "Agent not found"}
+
+    model = agent.get("selected_model") or agent.get("model", "qwen/qwen3.6-27b")
+    ticket_id = agent["ticket_id"]
+
+    from services import agent_runner
+    stop_result = await agent_runner.stop_agent_task(agent_id)
+
+    latest_task = await fetchrow("""
+        SELECT prompt, task_type FROM agent_tasks
+        WHERE agent_id = $1
+        ORDER BY created_at DESC LIMIT 1
+    """, agent_id)
+
+    # Terminate old agent if it did not have an active task to stop.
+    await execute("""
+        UPDATE agents SET status = 'terminated', finished_at = NOW(),
+                         error_message = 'restarted via dashboard' WHERE id = $1
+    """, agent_id)
+
+    if latest_task and latest_task.get("prompt"):
+        prompt = latest_task["prompt"]
+        task_type = latest_task.get("task_type") or "ticket_resolution"
+    else:
+        from services.task_prompts import build_ticket_resolution_prompt
+        ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
+        if not ticket:
+            return {"error": "Ticket not found for restart"}
+        prompt = build_ticket_resolution_prompt(ticket)
+        task_type = "ticket_resolution"
+
+    # Spawn new agent
+    result = await agent_runner.spawn_agent(ticket_id, model, prompt, task_type)
+    await log_event("agent", "info", "dashboard", "agent_restarted",
+                    f"agent_{agent_id}", {"new_task_id": result.get("task_id"), "stop_result": stop_result})
+    return result
+
+
+@router.post("/{agent_id}/update")
+async def update_agent_status(
+    agent_id: int,
+    status: str = Body(...),
+    error_message: str = Body(None),
+):
+    agent = await fetchrow("SELECT id FROM agents WHERE id = $1", agent_id)
+    if not agent:
+        return {"error": "Agent not found"}
+
+    if error_message:
+        await execute("""
+            UPDATE agents SET status = $1, heartbeat = NOW(),
+                             error_message = $2, updated_at = NOW()
+            WHERE id = $3
+        """, status, error_message, agent_id)
+    else:
+        await execute("""
+            UPDATE agents SET status = $1, heartbeat = NOW(),
+                             updated_at = NOW() WHERE id = $2
+        """, status, agent_id)
+
+    await execute("""
+        INSERT INTO audit_log (actor, action, target, details)
+        VALUES ($1, $2, $3, $4)
+    """, "orchestrator", "agent_updated", f"agent_{agent_id}", json_dumps({
+        "agent_id": agent_id, "status": status, "error_message": error_message
+    }))
+
+    await log_event("agent", "info", "orchestrator", "agent_updated",
+                    f"agent_{agent_id}", {"status": status})
+
+    return {"status": "updated", "agent_id": agent_id, "new_status": status}
+
+
+@router.websocket("/ws")
+async def agent_ws(websocket: WebSocket):
+    await websocket.accept()
+    _connected_ws.append(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        _connected_ws.remove(websocket)
+
+
+async def broadcast_agent_update(message: dict):
+    import json
+    text = json.dumps(message, default=str)
+    disconnected = []
+    for ws in _connected_ws:
+        try:
+            await ws.send_text(text)
+        except:
+            disconnected.append(ws)
+    for ws in disconnected:
+        if ws in _connected_ws:
+            _connected_ws.remove(ws)

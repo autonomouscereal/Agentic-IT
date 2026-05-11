@@ -1,0 +1,26 @@
+services:
+  nginx-proxy:
+    image: nginx:1.27-alpine
+    container_name: keycloak-nginx
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs/server-cert.pem:/etc/nginx/certs/server-cert.pem:ro
+      - ./certs/server-key.pem:/etc/nginx/certs/server-key.pem:ro
+      - ./certs/ca-cert.pem:/etc/nginx/certs/ca-cert.pem:ro
+      - nginx-logs:/var/log/nginx
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --timeout=5 --no-check-certificate https://localhost:8443/nginx-health -O /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  nginx-logs:

@@ -1,0 +1,23 @@
+{
+    "servers": {
+        "media": {
+            "host": "192.168.50.250",
+            "port": 22,
+            "user": "cereal",
+            "password_env": "SERVER_MEDIA_PASSWORD",
+            "ssh_key_path": "~/.ssh/id_ed25519_server_manager",
+            "label": "Media Server",
+            "base_directory": "/mnt/plex_media/tv shows"
+        },
+        "ai": {
+            "host": "192.168.50.222",
+            "port": 22,
+            "user": "cereal",
+            "password_env": "SERVER_AI_PASSWORD",
+            "ssh_key_path": "~/.ssh/id_ed25519_server_manager",
+            "label": "AI Server",
+            "base_directory": "/home/cereal"
+        }
+    },
+    "default_server": "media"
+}

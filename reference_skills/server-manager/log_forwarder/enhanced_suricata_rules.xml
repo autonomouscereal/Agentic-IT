@@ -1,0 +1,67 @@
+<!-- Enhanced Suricata Rules for Wazuh -->
+<!-- Uses IDs 86700+ to avoid conflicts with built-in 86600 rules -->
+<!-- Chains off built-in 86601 (alert), 86602 (http), 86603 (dns), 86604 (tls) -->
+
+<group name="ids,suricata,">
+
+  <rule id="86710" level="7">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">4</field>
+    <description>Suricata: HIGH severity - $(alert.signature)</description>
+  </rule>
+
+  <rule id="86711" level="12">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">5</field>
+    <description>Suricata: CRITICAL severity - $(alert.signature)</description>
+  </rule>
+
+  <rule id="86712" level="15">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">6</field>
+    <description>Suricata: EMERGENCY severity - $(alert.signature)</description>
+  </rule>
+
+  <rule id="86720" level="5">
+    <if_sid>86601</if_sid>
+    <field name="alert.action">dropped</field>
+    <description>Suricata: Dropped packet - $(alert.signature)</description>
+  </rule>
+
+  <rule id="86721" level="5">
+    <if_sid>86601</if_sid>
+    <field name="alert.action">rejected</field>
+    <description>Suricata: Rejected connection - $(alert.signature)</description>
+  </rule>
+
+  <rule id="86730" level="5">
+    <if_sid>86602</if_sid>
+    <field name="http.status_code" type="pcre2">^(4\d{2}|5\d{2})$</field>
+    <description>Suricata: HTTP error $(http.status_code) from $(src_ip)</description>
+  </rule>
+
+  <rule id="86740" level="7">
+    <if_sid>86603</if_sid>
+    <field name="dns.response_code">NXDOMAIN</field>
+    <description>Suricata: DNS NXDOMAIN - query $(dns.query) from $(src_ip)</description>
+  </rule>
+
+  <rule id="86750" level="7">
+    <if_sid>86604</if_sid>
+    <field name="tls.version">TLS 1.0</field>
+    <description>Suricata: Deprecated TLS 1.0 from $(src_ip)</description>
+  </rule>
+
+  <rule id="86751" level="5">
+    <if_sid>86604</if_sid>
+    <field name="tls.subject">selfsigned</field>
+    <description>Suricata: Self-signed TLS cert from $(src_ip)</description>
+  </rule>
+
+  <rule id="86770" level="3">
+    <if_sid>86600</if_sid>
+    <field name="event_type">^ssh$</field>
+    <description>Suricata: SSH session from $(src_ip) to $(dest_ip)</description>
+  </rule>
+
+</group>

@@ -1,0 +1,97 @@
+<!-- ============================================================
+     Wazuh Agent Configuration - Linux with SysmonForLinux
+     Template - replace WAZUH_SERVER_IP before deployment
+     ============================================================ -->
+<ossec_config>
+  <client>
+    <server>
+      <address>WAZUH_SERVER_IP</address>
+      <port>1514</port>
+      <protocol>tcp</protocol>
+    </server>
+    <crypto_method>aes</crypto_method>
+    <notify_time>5</notify_time>
+    <time-reconnect>60</time-reconnect>
+    <max_retries>5</max_retries>
+    <exponential_backoff_multiplier>2</exponential_backoff_multiplier>
+    <exponential_backoff_delay>5</exponential_backoff_delay>
+    <disable_notify>no</disable_notify>
+    <auto_fim>yes</auto_fim>
+    <ciphers>HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH</ciphers>
+    <ssl_ciphers>HIGH</ssl_ciphers>
+  </client>
+
+  <client_buffer>
+    <disabled>no</disabled>
+    <queue_size>5000</queue_size>
+    <events_per_second>500</events_per_second>
+  </client_buffer>
+
+  <!-- Syslog collection -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/syslog</location>
+  </localfile>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+
+  <!-- SysmonForLinux JSON log collection -->
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/log/sysmon.log</location>
+  </localfile>
+
+  <!-- FIM monitoring -->
+  <rootcheck>
+    <disabled>no</disabled>
+    <check_files>yes</check_files>
+    <check_trojans>yes</check_trojans>
+    <check_dev>yes</check_dev>
+    <check_sys>yes</check_sys>
+    <check_pids>yes</check_pids>
+    <check_ports>yes</check_ports>
+    <check_if>yes</check_if>
+    <frequency>43200</frequency>
+  </rootcheck>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <frequency>43200</frequency>
+    <scan_on_start>yes</scan_on_start>
+    <alert_new_files>yes</alert_new_files>
+    <directories>/etc,/usr/bin,/usr/sbin</directories>
+    <directories>/bin,/sbin</directories>
+    <skip_nfs>yes</skip_nfs>
+    <skip_dev>yes</skip_dev>
+    <skip_proc>yes</skip_proc>
+    <skip_sys>yes</skip_sys>
+  </syscheck>
+
+  <!-- Active Response -->
+  <active-response>
+    <disabled>no</disabled>
+    <ca_store>/var/ossec/etc/certs/ca.crt</ca_store>
+    <ca_verification>yes</ca_verification>
+  </active-response>
+
+  <!-- Localfile for command monitoring -->
+  <localfile>
+    <log_format>command</log_format>
+    <command>df -P</command>
+    <frequency>360</frequency>
+  </localfile>
+
+  <localfile>
+    <log_format>full_command</log_format>
+    <command>last -n 20</command>
+    <frequency>360</frequency>
+  </localfile>
+
+  <!-- Vulnerability detection -->
+  <vulnerability-detection>
+    <disabled>no</disabled>
+  </vulnerability-detection>
+</ossec_config>

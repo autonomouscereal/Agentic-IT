@@ -1,0 +1,73 @@
+<!-- Zeek Detection Rules for Wazuh -->
+<!-- Rule IDs: 100900-100999 -->
+<!-- Zeek logs use "ts" (Unix timestamp) not "timestamp" and lack "event_type" -->
+
+<group name="zeek,">
+
+  <rule id="100900" level="0">
+    <match>"ts":</match>
+    <description>Zeek: Network activity baseline</description>
+  </rule>
+
+  <rule id="100901" level="5">
+    <if_sid>100900</if_sid>
+    <field name="dnsquery">\w+</field>
+    <dstport type="pcre2">^53$</dstport>
+    <description>Zeek: DNS query $(dnsquery) from $(id.orig_h):$(id.orig_p)</description>
+  </rule>
+
+  <rule id="100902" level="0">
+    <if_sid>100900</if_sid>
+    <field name="id.orig_p">5353</field>
+    <description>Zeek: Normal mDNS traffic from $(id.orig_h)</description>
+  </rule>
+
+  <rule id="100903" level="7">
+    <if_sid>100900</if_sid>
+    <field name="conn_state">REJ</field>
+    <description>Zeek: Rejected connection from $(id.orig_h) to $(id.resp_h):$(id.resp_p)</description>
+  </rule>
+
+  <rule id="100904" level="10" frequency="5" timeframe="20">
+    <if_matched_sid>100903</if_matched_sid>
+    <description>Zeek: Possible port scan - multiple rejected connections from $(id.orig_h)</description>
+  </rule>
+
+  <rule id="100905" level="0">
+    <if_sid>100900</if_sid>
+    <field name="dnsquery">cti\.wazuh\.com</field>
+    <description>Zeek: DNS query to CTI domain - excluded</description>
+  </rule>
+
+  <rule id="100906" level="8">
+    <if_sid>100900</if_sid>
+    <field name="validation_status">self signed certificate</field>
+    <description>Zeek: Self-signed certificate - $(id.orig_h) connected to $(id.resp_h)</description>
+  </rule>
+
+  <rule id="100907" level="12">
+    <if_sid>100900</if_sid>
+    <field name="validation_status">certificate has expired</field>
+    <description>Zeek: Expired certificate - $(id.orig_h) connected to $(id.resp_h)</description>
+  </rule>
+
+  <rule id="100908" level="6">
+    <if_sid>100900</if_sid>
+    <field name="conn_state">SF</field>
+    <field name="resp_bytes" type="pcre2">^\d{4,}$</field>
+    <description>Zeek: Large data transfer from $(id.resp_h) to $(id.orig_h)</description>
+  </rule>
+
+  <rule id="100909" level="9">
+    <if_sid>100900</if_sid>
+    <field name="rcode_name">NXDOMAIN</field>
+    <description>Zeek: DNS NXDOMAIN response for $(dnsquery) from $(id.orig_h)</description>
+  </rule>
+
+  <rule id="100910" level="10">
+    <if_sid>100900</if_sid>
+    <field name="validation_status">revoked certificate</field>
+    <description>Zeek: Revoked certificate - $(id.orig_h) connected to $(id.resp_h)</description>
+  </rule>
+
+</group>

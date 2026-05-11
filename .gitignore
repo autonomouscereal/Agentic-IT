@@ -1,0 +1,43 @@
+# Runtime configuration and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+.credentials.json
+token.json
+
+# Python/runtime caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node/runtime caches
+node_modules/
+
+# Dashboard runtime state
+data/
+agent_work/
+install_state/
+.tmp-install-*/
+
+# Skill bundle exclusions
+reference_skills/**/.cred_key
+reference_skills/**/.cred_vault.json
+reference_skills/**/.env
+reference_skills/**/.env.*
+reference_skills/**/.venv/
+reference_skills/**/venv/
+reference_skills/**/__pycache__/
+reference_skills/**/node_modules/
+reference_skills/**/logs/
+reference_skills/**/.playwright-cli/
+reference_skills/**/*.log
+reference_skills/**/*.pyc

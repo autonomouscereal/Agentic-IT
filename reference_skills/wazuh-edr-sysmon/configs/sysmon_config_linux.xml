@@ -1,0 +1,106 @@
+<!-- ============================================================
+     SysmonForLinux Configuration
+     Optimized for Wazuh SIEM integration
+     Events: 1 (ProcessCreate), 3 (NetworkConnect), 6 (DriverLoad),
+             11 (FileCreate), 24 (FileDelete)
+     ============================================================ -->
+<Sysmon schemaversion="5.00">
+
+  <DnsLookup>False</DnsLookup>
+  <CheckRevocation>False</CheckRevocation>
+  <ArchiveDirectory>Sysmon</ArchiveDirectory>
+
+  <!-- Process Creation -->
+  <EventFiltering>
+    <ProcessCreate onchannel="System" oneventid="1">
+      <onprocesschange>true</onprocesschange>
+      <onprocessterminate>false</onprocessterminate>
+      <include>Create</include>
+
+      <!-- Capture command line and parent info -->
+      <captureCommandLine>true</captureCommandLine>
+      <captureLogonId>true</captureLogonId>
+      <captureUser>true</captureUser>
+      <captureToken>true</captureToken>
+      <captureProcessToken>true</captureProcessToken>
+      <captureThread>false</captureThread>
+      <captureFileHash>false</captureFileHash>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <!-- Include suspicious process patterns -->
+      <IncludeProcessFiltering>
+        <Image condition="begin with">/tmp/</Image>
+        <Image condition="begin with">/dev/shm/</Image>
+        <Image condition="begin with">/var/tmp/</Image>
+        <CommandLine condition="contains">wget</CommandLine>
+        <CommandLine condition="contains">curl</CommandLine>
+        <CommandLine condition="contains">nmap</CommandLine>
+        <CommandLine condition="contains">sqlmap</CommandLine>
+        <CommandLine condition="contains">metasploit</CommandLine>
+        <CommandLine condition="contains">msfconsole</CommandLine>
+        <CommandLine condition="contains">hydra</CommandLine>
+        <CommandLine condition="contains">john</CommandLine>
+        <CommandLine condition="contains">hashcat</CommandLine>
+        <CommandLine condition="contains">/bin/bash -c</CommandLine>
+        <CommandLine condition="contains">/bin/sh -c</CommandLine>
+      </IncludeProcessFiltering>
+
+    </ProcessCreate>
+
+    <!-- Network Connections -->
+    <NetworkConnect onchannel="System" oneventid="3">
+      <onprocesschange>true</onprocesschange>
+      <include>All</include>
+
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <!-- Capture all connections for analysis -->
+      <IncludeNetworkFiltering>
+        <DestinationPort condition="is">4444</DestinationPort>
+        <DestinationPort condition="is">5555</DestinationPort>
+        <DestinationPort condition="is">6666</DestinationPort>
+        <DestinationPort condition="is">7777</DestinationPort>
+        <DestinationPort condition="is">8888</DestinationPort>
+        <DestinationPort condition="is">9999</DestinationPort>
+        <DestinationPort condition="is">1337</DestinationPort>
+        <DestinationPort condition="is">31337</DestinationPort>
+      </IncludeNetworkFiltering>
+
+    </NetworkConnect>
+
+    <!-- Driver Load -->
+    <DriverLoad onchannel="System" oneventid="6">
+      <onprocesschange>true</onprocesschange>
+      <include>Driver</include>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+    </DriverLoad>
+
+    <!-- File Creation -->
+    <FileCreate onchannel="System" oneventid="11">
+      <onprocesschange>true</onprocesschange>
+      <include>Create</include>
+
+      <FileCreateFiltering>
+        <TargetFilename condition="begin with">/etc/cron</TargetFilename>
+        <TargetFilename condition="begin with">/etc/systemd</TargetFilename>
+        <TargetFilename condition="begin with">/etc/init.d</TargetFilename>
+        <TargetFilename condition="end with">.bashrc</TargetFilename>
+        <TargetFilename condition="end with">.profile</TargetFilename>
+        <TargetFilename condition="is">/etc/rc.local</TargetFilename>
+        <TargetFilename condition="end with">.sh</TargetFilename>
+        <TargetFilename condition="end with">.py</TargetFilename>
+        <TargetFilename condition="end with">.pl</TargetFilename>
+        <TargetFilename condition="end with">.rb</TargetFilename>
+        <TargetFilename condition="end with">.elf</TargetFilename>
+      </FileCreateFiltering>
+
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+    </FileCreate>
+
+  </EventFiltering>
+
+</Sysmon>
