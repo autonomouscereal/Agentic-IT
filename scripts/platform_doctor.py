@@ -115,6 +115,16 @@ def check_dashboard(doctor, base):
     except Exception as exc:
         doctor.record("Ticket API sorting", "fail", str(exc))
 
+    try:
+        _status, providers = json_request(base, "/api/providers")
+        names = {item.get("name") for item in providers.get("providers", [])}
+        required = {"local", "itop", "servicenow", "jira", "generic-webhook"}
+        missing = sorted(required - names)
+        doctor.record("Ticket provider adapters", "pass" if not missing else "fail",
+                      f"providers={sorted(names)}" if not missing else "missing " + ", ".join(missing))
+    except Exception as exc:
+        doctor.record("Ticket provider adapters", "fail", str(exc))
+
 
 def check_itop_ui(doctor, env):
     host = os.environ.get("ITOP_HOST") or env.get("ITOP_HOST") or "127.0.0.1"

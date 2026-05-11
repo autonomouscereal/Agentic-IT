@@ -101,6 +101,24 @@ async def create_ticket(
                 WHERE id = $2
             """, json_dumps(provider_result), ticket_id)
         else:
+            await execute("""
+                UPDATE tickets
+                SET provider = $1,
+                    provider_ref = COALESCE($2, provider_ref),
+                    provider_class = COALESCE($3, provider_class),
+                    provider_url = COALESCE($4, provider_url),
+                    provider_sync_status = 'synced',
+                    provider_last_error = NULL,
+                    provider_payload = $5,
+                    synced_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = $6
+            """, provider_result.get("provider") or provider,
+                provider_result.get("provider_ref"),
+                provider_result.get("provider_class"),
+                provider_result.get("provider_url"),
+                json_dumps(provider_result),
+                ticket_id)
             await log_event("sync", "info", created_by, "provider_create_complete",
                             f"ticket_{ticket_id}", provider_result)
     return await get_ticket(ticket_id)
@@ -151,6 +169,25 @@ async def push_to_provider(ticket_id, provider=None):
                 updated_at = NOW()
             WHERE id = $3
         """, target_provider, json_dumps(result), ticket_id)
+    else:
+        await execute("""
+            UPDATE tickets
+            SET provider = $1,
+                provider_ref = COALESCE($2, provider_ref),
+                provider_class = COALESCE($3, provider_class),
+                provider_url = COALESCE($4, provider_url),
+                provider_sync_status = 'synced',
+                provider_last_error = NULL,
+                provider_payload = $5,
+                synced_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $6
+        """, result.get("provider") or target_provider,
+            result.get("provider_ref"),
+            result.get("provider_class"),
+            result.get("provider_url"),
+            json_dumps(result),
+            ticket_id)
 
     await log_event("sync", "info", "dashboard", "provider_push_complete",
                     f"ticket_{ticket_id}", result)

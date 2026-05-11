@@ -33,6 +33,7 @@
     "wazuh-manager",
     "searxng-deployment",
     "service-desk-intake",
+    "ticket-provider-adapters",
     "web_research"
   ],
   "default_source_roots": [

@@ -23,6 +23,27 @@ The dashboard must work with iTop now and ServiceNow/Jira/other ticket systems l
 - supports guarded outbound create
 - supports basic update/close methods already present in adapter
 
+`servicenow`
+
+- env-driven outbound create adapter
+- supports incidents, requests, and changes through ServiceNow table API
+- fails closed with a clear `not configured` error until `SERVICENOW_INSTANCE_URL` and an auth method are provided
+- sets `provider_ref`, `provider_class`, `provider_url`, `provider_payload`, and `provider_sync_status=synced` after a successful provider response
+
+`jira`
+
+- env-driven outbound create adapter for Jira Cloud REST API v3
+- requires `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, and `JIRA_PROJECT_KEY`
+- fails closed when unset
+- stores the Jira issue key as `provider_ref` and the browse URL as `provider_url`
+
+`generic-webhook`
+
+- env-driven outbound webhook adapter for products that can receive a normalized JSON ticket payload
+- requires `GENERIC_TICKETING_WEBHOOK_URL`
+- optional `GENERIC_TICKETING_WEBHOOK_TOKEN` is sent as `X-Webhook-Token`
+- useful for early integrations with Jira Service Management, custom portals, SOAR tools, or a customer's middleware before a dedicated adapter exists
+
 ## Provider Interface
 
 File:
@@ -76,32 +97,60 @@ A provider adapter should always populate:
 
 If the provider has a direct browser URL, set `provider_url`. If not, `ticket_links.external_ticket_url()` may generate provider-specific links for supported providers.
 
-## Adding ServiceNow
+## Configuring ServiceNow
 
-Recommended shape:
+Environment:
 
-1. Create `api/services/servicenow_sync.py`.
-2. Implement `TicketProvider`.
-3. Read config from env only:
-   - `SERVICENOW_INSTANCE_URL`
-   - `SERVICENOW_USER`
-   - `SERVICENOW_PASSWORD` or token reference from env
-4. Add provider to `provider_registry.py`.
-5. Map incidents/requests/changes to canonical fields.
-6. Store raw provider payload in `provider_payload`.
-7. Add docs and a smoke test using mocked/local-safe calls first.
+```text
+SERVICENOW_INSTANCE_URL=https://example.service-now.com
+SERVICENOW_TOKEN=<from vault>
+SERVICENOW_USER=
+SERVICENOW_PASSWORD=<from vault, only if token is not used>
+SERVICENOW_ASSIGNMENT_GROUP=<optional sys_id/name accepted by customer instance>
+SERVICENOW_REQUEST_TABLE=sc_request
+```
 
 Do not change the frontend to become ServiceNow-aware. The frontend should continue using canonical APIs.
 
-## Adding Jira
+## Configuring Jira
 
-Recommended shape:
+Environment:
 
-1. Create `api/services/jira_sync.py`.
-2. Implement `TicketProvider`.
-3. Map project/issue type/status/priority/assignee to canonical ticket fields.
-4. Store `provider_url` as the issue browse URL.
-5. Use dashboard notes for agent notes, then optionally push comments to Jira through adapter update methods.
+```text
+JIRA_BASE_URL=https://example.atlassian.net
+JIRA_EMAIL=<service-account-email>
+JIRA_API_TOKEN=<from vault>
+JIRA_PROJECT_KEY=SOC
+JIRA_ISSUE_TYPE=Task
+```
+
+Use dashboard notes for agent notes, then optionally add provider-specific comment push in a dedicated adapter method once the customer's Jira workflow is known.
+
+## Configuring Generic Webhook
+
+Environment:
+
+```text
+GENERIC_TICKETING_WEBHOOK_URL=https://customer-middleware.example/tickets
+GENERIC_TICKETING_WEBHOOK_TOKEN=<from vault>
+GENERIC_TICKETING_DRY_RUN=false
+```
+
+Payload shape:
+
+```json
+{
+  "ticket_id": 123,
+  "title": "Suspicious email",
+  "description": "...",
+  "ticket_class": "Incident",
+  "priority": "P2",
+  "created_by": "service-desk-intake",
+  "dry_run": false
+}
+```
+
+Expected response fields are flexible. The adapter prefers `provider_ref`, then `id`, then `key`; `provider_url` is optional.
 
 ## Outbound Create Policy
 
@@ -125,7 +174,9 @@ The smoke test verifies the provider contract without external dependencies:
 
 ```bash
 python3 scripts/smoke_agentic_system.py http://localhost:25480
+python3 scripts/smoke_provider_adapters.py http://localhost:25480
 ```
 
 It creates a local ticket with `sync_provider=true`, then pushes it through `/api/tickets/{id}/push-provider`, expecting `local_only`.
 
+`smoke_provider_adapters.py` also verifies that ServiceNow and Jira are registered and fail closed when not configured, recording `provider_sync_status=create_failed` and `provider_last_error` on the canonical ticket.

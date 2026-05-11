@@ -56,7 +56,7 @@ function initTicketSorting() {
                 ticketSort.dir = ticketSort.dir === "asc" ? "desc" : "asc";
             } else {
                 ticketSort.by = by;
-                ticketSort.dir = by === "id" ? "desc" : "asc";
+                ticketSort.dir = "asc";
             }
             updateTicketSortIndicators();
             loadTickets();

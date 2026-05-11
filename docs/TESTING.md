@@ -12,7 +12,7 @@ node --check .\soc-dashboard\frontend\js\dashboard.js
 node --check .\soc-dashboard\frontend\js\agents.js
 node --check .\soc-dashboard\frontend\js\charts.js
 node --check .\soc-dashboard\frontend\js\websocket.js
-python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py .\soc-dashboard\scripts\platform_doctor.py .\soc-dashboard\scripts\repair_agent_supervision_env.py
+python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\smoke_provider_adapters.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py .\soc-dashboard\scripts\platform_doctor.py .\soc-dashboard\scripts\repair_agent_supervision_env.py
 ```
 
 ## Prohibited Pattern Sweep
@@ -49,7 +49,7 @@ Expected:
 Latest verified result on 2026-05-11:
 
 ```text
-platform_doctor.py: PASS 15, WARN 0, FAIL 0
+platform_doctor.py: PASS 16, WARN 0, FAIL 0
 runner timeout_minutes: 0
 default_model: qwen/qwen3.6-27b
 effective_anthropic_base_url: http://192.168.50.222:4001
@@ -116,6 +116,29 @@ Covers:
 - approval gate creation
 - ticket context and intake session visibility
 
+## Provider Adapter Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_provider_adapters.py http://localhost:25480
+```
+
+Covers:
+
+- provider registry lists `local`, `itop`, `servicenow`, `jira`, and `generic-webhook`
+- local outbound push remains `local_only`
+- ServiceNow/Jira adapters fail closed when not configured
+- failed external push records `provider_sync_status=create_failed` and `provider_last_error`
+
+Latest verified result on 2026-05-11:
+
+```text
+providers: generic-webhook, itop, jira, local, servicenow
+local_push: local_only
+servicenow: fail-closed not configured
+jira: fail-closed not configured
+```
+
 ## CI/CD Security Pipeline Smoke
 
 ```bash
@@ -152,6 +175,20 @@ iTop test incident creation: PASS
 Active Response enabled in config: PASS
 EDR AR script configured: PASS
 Bridge state file valid: PASS
+```
+
+## Full Workflow Verification Snapshot
+
+Latest verified result on 2026-05-11:
+
+```text
+smoke_setup_platform.py: PASS setup_ticket_id=78
+smoke_agentic_system.py: PASS ticket_id=76 local_push_ticket_id=77
+smoke_service_desk_intake.py: PASS ticket_id=71 change_id=30 intent=phishing
+smoke_phishing_workflow_lifecycle.py: PASS ticket_id=74 workflow_id=4 postmortem_id=18
+smoke_cicd_security_pipeline.py: PASS provider=gitlab run_id=4 ticket_id=73 change_id=31
+smoke_agent_auditor.py: PASS audited=3 recent=25
+smoke_local_model_agent.py: PASS ticket_id=75 agent_id=44 task_id=42 completed note_written=true active_process_count=0
 ```
 
 ## Agent Auditor Smoke

@@ -90,14 +90,14 @@
       "status": "implemented",
       "deployable": false,
       "deploy_strategy": "dashboard",
-      "skill": null,
+      "skill": "ticket-provider-adapters",
       "depends_on": ["provider-contracts"],
-      "provides": ["servicenow-adapter-contract", "jira-adapter-contract", "itop-adapter-contract", "local-ticketing-contract"],
+      "provides": ["servicenow-adapter", "jira-adapter", "generic-webhook-adapter", "itop-adapter-contract", "local-ticketing-contract"],
       "required_secrets": ["provider API credential when external ITSM is enabled"],
       "ports": [],
-      "health_checks": ["provider-specific ticket create/read/update/link test"],
-      "test_commands": ["python3 scripts/smoke_setup_platform.py http://localhost:25480"],
-      "notes": "Normalizes incidents, service requests, changes, notes, attachments, external links, approvals, and status transitions across ITSM products."
+      "health_checks": ["/api/providers", "provider-specific ticket create/read/update/link test"],
+      "test_commands": ["python3 scripts/smoke_provider_adapters.py http://localhost:25480", "python3 scripts/smoke_setup_platform.py http://localhost:25480"],
+      "notes": "Normalizes incidents, service requests, changes, notes, attachments, external links, approvals, and status transitions across ITSM products. ServiceNow, Jira, and generic webhook adapters are env-driven and fail closed when not configured."
     },
     {
       "id": "siem-provider-adapter",

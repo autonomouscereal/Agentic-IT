@@ -5,6 +5,11 @@ provider names and canonical tickets, so iTop can be swapped with ServiceNow,
 Jira, or a local-only provider without changing the frontend contract.
 """
 from services import itop_sync
+from services.external_ticket_adapters import (
+    GenericWebhookProvider,
+    JiraProvider,
+    ServiceNowProvider,
+)
 
 
 class LocalProvider:
@@ -35,15 +40,22 @@ class LocalProvider:
 
 _providers = {
     "local": LocalProvider(),
+    "servicenow": ServiceNowProvider(),
+    "jira": JiraProvider(),
+    "generic-webhook": GenericWebhookProvider(),
 }
 
 
 def list_providers():
     providers = [
-        {"name": name, "ticket_classes": getattr(provider, "ticket_classes", [])}
+        {
+            "name": name,
+            "ticket_classes": getattr(provider, "ticket_classes", []),
+            "configured": bool(getattr(provider, "configured", True)),
+        }
         for name, provider in sorted(_providers.items())
     ]
-    providers.append({"name": "itop", "ticket_classes": itop_sync.TICKET_CLASSES})
+    providers.append({"name": "itop", "ticket_classes": itop_sync.TICKET_CLASSES, "configured": True})
     return providers
 
 
