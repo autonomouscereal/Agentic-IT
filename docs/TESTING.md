@@ -12,7 +12,7 @@ node --check .\soc-dashboard\frontend\js\dashboard.js
 node --check .\soc-dashboard\frontend\js\agents.js
 node --check .\soc-dashboard\frontend\js\charts.js
 node --check .\soc-dashboard\frontend\js\websocket.js
-python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py
+python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py .\soc-dashboard\scripts\platform_doctor.py .\soc-dashboard\scripts\repair_agent_supervision_env.py
 ```
 
 ## Prohibited Pattern Sweep
@@ -33,6 +33,7 @@ The database cleanup text may intentionally mention ComfyUI in `init_db.sql` onl
 curl -sS http://localhost:25480/health
 curl -sS http://localhost:25480/api/agents/runner-health
 curl -sS http://localhost:25480/api/agents/processes
+python3 scripts/platform_doctor.py --base http://localhost:25480
 ```
 
 Expected:
@@ -42,6 +43,17 @@ Expected:
 - model API reachable
 - `ps_path` present
 - no active processes after completed smoke tests
+
+`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, iTop UI reachability, Mailcow HTTP API shim status, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence.
+
+Latest verified result on 2026-05-11:
+
+```text
+platform_doctor.py: PASS 15, WARN 0, FAIL 0
+runner timeout_minutes: 0
+default_model: qwen/qwen3.6-27b
+effective_anthropic_base_url: http://192.168.50.222:4001
+```
 
 ## Cross-Platform Demo Credential Smoke
 
@@ -119,6 +131,28 @@ Covers:
 - `/api/cicd/runs` persistence
 - evidence ticket creation
 - production deployment approval gate
+
+## Wazuh EDR/Sysmon E2E
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard/reference_skills/wazuh-edr-sysmon
+bash scripts/test-edr-e2e.sh
+```
+
+Latest verified result on 2026-05-11:
+
+```text
+14/14 passed
+Wazuh Manager API authentication: PASS
+Wazuh Manager processes running: PASS
+Wazuh Indexer cluster healthy: PASS
+Alert search works: PASS
+iTop API authentication: PASS
+iTop test incident creation: PASS
+Active Response enabled in config: PASS
+EDR AR script configured: PASS
+Bridge state file valid: PASS
+```
 
 ## Agent Auditor Smoke
 

@@ -142,6 +142,44 @@ Verified:
 - GitLab Rails `valid_password?` passes and the account is active/admin.
 - Mailcow mailbox exists.
 
+### Agent timeout default could kill valid local-model runs
+
+Problem:
+
+- Local 256k-context runs can legitimately take a long time, and a fixed harness timeout can kill useful work while the model is still generating.
+
+Fix:
+
+- Installer, compose defaults, and `.env.example` now default `AGENT_TIMEOUT_MINUTES=0`.
+- The agent auditor is the supervision path and defaults to `AGENT_AUDITOR_AUTO_RECOVER=false` so recovery is auditable before being made automatic.
+- Existing deployments can run `python3 scripts/repair_agent_supervision_env.py --env-file .env`, then recreate the API container.
+
+### Mailcow HTTP API shim missing compatibility pieces
+
+Problem:
+
+- The optional Mailcow HTTP API shim could reject valid API keys or return empty bodies because nginx did not forward `X-API-Key` into FastCGI and the mounted web code expected an `identity_provider` table.
+
+Fix:
+
+- `deploy_mailcow_api.py` now forwards `HTTP_X_API_KEY`, sets `HTTP_SEC_FETCH_DEST=empty`, preserves content type, creates the `identity_provider` compatibility table, and stops printing API keys.
+- Invalid keys must return HTTP 401 during verification.
+- Existing deployments that have shim containers but no restricted key file can run `bash scripts/repair_mailcow_api_keyfile.sh`.
+
+Current note:
+
+- Direct MySQL remains the canonical Mailcow bridge for the reference deployment. Treat HTTP API warnings as shim-specific unless dashboard Mailcow workflows fail.
+
+### Sysmon EDR test required manual secret injection
+
+Problem:
+
+- The EDR/Sysmon E2E test defaulted secret fields to empty strings and used POST for read-only Wazuh Indexer endpoints.
+
+Fix:
+
+- The test now reads deployed container/env-file values when explicit environment variables are absent, does not print secrets, uses GET for read-only indexer checks, and fixes the iTop REST URL encoding path.
+
 ## Current Limitations
 
 ### iTop outbound creation needs environment-specific defaults

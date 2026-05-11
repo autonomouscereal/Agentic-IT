@@ -118,12 +118,27 @@ def setup_api_table():
         # Delete any stale rows and insert fresh key
         run_sql("DELETE FROM api WHERE LENGTH(api_key) <= 10")
         run_sql(f"INSERT INTO api (api_key, access, active) VALUES ('{api_key}', 'rw', 1)")
-        print(f"  Seeded new API key: {api_key}")
+        print("  Seeded new API key.")
         return api_key
     else:
         key = existing.strip().split("\n")[-1].strip()
-        print(f"  Existing API key found: {key}")
+        print("  Existing API key found.")
         return key
+
+
+def setup_identity_provider_table():
+    """Create compatibility table required by mounted Mailcow web code."""
+    print("\n--- Step 1b: Ensuring identity_provider table ---")
+    run_sql("""
+        CREATE TABLE IF NOT EXISTS identity_provider (
+            `key` VARCHAR(255) NOT NULL,
+            `value` TEXT NOT NULL,
+            `created` DATETIME(0) NOT NULL DEFAULT NOW(0),
+            `modified` DATETIME ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+    """)
+    print("  identity_provider table: OK")
 
 
 # ─── Step 2: Deploy php-fpm-mailcow-api ────────────────────────────────
@@ -304,6 +319,9 @@ http {{
             include /etc/nginx/fastcgi_params;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
             fastcgi_param PATH_INFO $fastcgi_path_info;
+            fastcgi_param HTTP_X_API_KEY $http_x_api_key;
+            fastcgi_param HTTP_SEC_FETCH_DEST empty;
+            fastcgi_param HTTP_CONTENT_TYPE $content_type;
             fastcgi_read_timeout 3600;
             fastcgi_send_timeout 3600;
         }}
@@ -469,6 +487,7 @@ def main():
 
     # Deploy
     api_key = setup_api_table()
+    setup_identity_provider_table()
     deploy_php_fpm()
     deploy_nginx()
 
@@ -483,7 +502,7 @@ def main():
         print("\n" + "=" * 60)
         print("DEPLOYMENT SUCCESSFUL")
         print(f"  API URL: http://127.0.0.1:{API_PORT}/api/v1/")
-        print(f"  API Key: {api_key}")
+        print("  API Key: written to restricted local file")
         print(f"  php-fpm: port {PHPFPM_PORT}")
         print(f"  nginx:   port {API_PORT}")
         print("=" * 60)

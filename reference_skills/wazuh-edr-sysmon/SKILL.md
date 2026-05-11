@@ -37,14 +37,14 @@ This skill packages endpoint telemetry and response assets for the modular SOC p
 1. Read the assigned ticket and identify the target OS, Wazuh manager, network path, and approval policy.
 2. Create or confirm a change request before touching endpoints or manager rules.
 3. Stage configs in a test environment first.
-4. Run `scripts/edr-status.sh` and `scripts/test-edr-e2e.sh` where available.
+4. Run `scripts/edr-status.sh` and `bash scripts/test-edr-e2e.sh` where available.
 5. Document event IDs, Wazuh rule IDs, endpoint coverage, gaps, rollback steps, and test results in the ticket.
 6. After completion, run a postmortem if the deployment created reusable process improvements.
 
 ## Test Entry Points
 
 ```bash
-sh scripts/test-edr-e2e.sh
+bash scripts/test-edr-e2e.sh
 python tests/test_edr_sysmon_e2e.py
 ```
 

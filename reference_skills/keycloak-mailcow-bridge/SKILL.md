@@ -23,7 +23,7 @@ argument-hint: "--deploy --test --status --sync --setup-keycloak --setup-mailcow
 
 Complete integration between Keycloak 26.x (Identity Provider) and Mailcow (Email Server) via OIDC on Linux servers.
 
-**CRITICAL ARCHITECTURE NOTE:** This deployment uses direct MySQL communication for Mailcow operations via `docker exec mysql-mailcow`. The HTTP REST API is unavailable because the custom Mailcow deployment runs with `network_mode: host` and has no nginx web server (only php-fpm). Port 80 is occupied by GitLab's nginx.
+**CRITICAL ARCHITECTURE NOTE:** The reference deployment uses direct MySQL communication for canonical Mailcow operations via `docker exec mysql-mailcow`. The optional HTTP API shim can be deployed on a nonstandard port for environments that need API-compatible tooling, but direct MySQL remains the supported fallback because custom Mailcow deployments may not expose the stock nginx REST surface.
 
 ## Architecture
 
@@ -34,6 +34,7 @@ Complete integration between Keycloak 26.x (Identity Provider) and Mailcow (Emai
 | Mailcow IDP Config | `scripts/mailcow_idp_config.py` | Domain, distribution groups, shared mailboxes via direct MySQL |
 | Sync Engine | `scripts/sync_engine.py` | Bidirectional sync: Keycloak users <-> Mailcow mailboxes via MySQL |
 | E2E Test Suite | `scripts/test_integration.py` | 48 tests across 10 categories |
+| Optional HTTP API Shim | `scripts/deploy_mailcow_api.py` | Nonstandard-port nginx/php-fpm API shim; direct MySQL remains canonical |
 | Environment Template | `.env.example` | Secret template - copy to `.env` before deploying |
 
 ## System Diagram
@@ -70,6 +71,19 @@ docker exec mysql-mailcow mysql -uroot -p"$MYSQL_PASSWORD" \
 
 **Database:** `mailcow` (not `mailcow_dockerized`)
 **MySQL credentials:** Stored in `.env` file (never hardcoded)
+
+## Optional HTTP API Shim
+
+Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Mailcow HTTP API compatibility. The shim must:
+
+- listen on a nonstandard port, normally `8081`
+- forward `X-API-Key` to FastCGI as `HTTP_X_API_KEY`
+- set `HTTP_SEC_FETCH_DEST=empty`
+- create the Mailcow `identity_provider` compatibility table if missing
+- reject invalid API keys with HTTP 401
+- never print API keys in logs
+
+If the shim returns empty bodies or degraded responses, keep the direct MySQL bridge as canonical and treat the shim as optional until the site-specific Mailcow web code is fixed.
 
 ## Dovecot Auth Configuration
 

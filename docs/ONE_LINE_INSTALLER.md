@@ -64,3 +64,14 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
 The setup ticket becomes the auditable deployment record. Agents must request changes before modifying infrastructure.
 
 Multiple installs can run on the same host when different `--target`, `--dashboard-port`, `--db-port`, and optionally `--project-name` values are used. The compose file does not use fixed container names.
+
+## Post-Install Doctor
+
+After the first start, run:
+
+```bash
+cd /path/to/soc-platform
+python3 scripts/platform_doctor.py --base http://localhost:25480
+```
+
+The doctor is read-only. It validates the dashboard, setup manifest, ticket sorting API, iTop UI when configured, optional Mailcow HTTP API shim, CI/CD scanner bundle, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle. Warnings on the optional Mailcow HTTP shim do not block the direct MySQL Mailcow bridge, which remains the reference deployment's canonical Mailcow path.
