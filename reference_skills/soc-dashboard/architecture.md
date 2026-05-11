@@ -258,7 +258,7 @@ Allows swapping iTop for any other ticketing system (ServiceNow, Jira, etc.) by 
 - Monitored via health checks
 
 ### Other Monitored Services
-- Zeek IDS, Suricata IDS, Mailcow, SOC Bridge, SIEM-Ticket Bridge, SearXNG, TheHive
+- Zeek IDS, Suricata IDS, Mailcow, SOC Bridge, SIEM-Ticket Bridge, SearXNG, and TheHive
 
 ## Environment Configuration
 

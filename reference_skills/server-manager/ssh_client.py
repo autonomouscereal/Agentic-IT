@@ -8,7 +8,7 @@ Passes commands via file to avoid shell escaping issues.
 
 Usage via CLI:
     # Test connection to a server by name
-    python ssh_client.py --server media --test
+    python ssh_client.py --server ai --test
     python ssh_client.py --server ai --test
 
     # Execute a simple command (no special chars)
@@ -161,7 +161,7 @@ class ServerConfig:
     def __init__(self, path: str = None):
         self._path = path
         self._servers: Dict[str, Dict[str, Any]] = {}
-        self._default: str = "media"
+        self._default: str = "ai"
 
         if self._path is None:
             # Default: servers.json next to this script
@@ -183,7 +183,7 @@ class ServerConfig:
             sys.exit(1)
 
         self._servers = data.get("servers", {})
-        self._default = data.get("default_server", "media")
+        self._default = data.get("default_server", "ai")
 
         if not self._servers:
             print("[FATAL] No servers defined in config.")
@@ -581,7 +581,7 @@ Examples:
         "--server", "-s",
         type=str,
         default=None,
-        help="Server name from servers.json (e.g. media, ai). Defaults to config default.",
+        help="Server name from servers.json (e.g. ai, staging, prod). Defaults to config default.",
     )
 
     # List servers

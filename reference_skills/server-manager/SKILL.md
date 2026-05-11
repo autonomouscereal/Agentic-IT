@@ -7,7 +7,7 @@ description: >-
 when_to_use: >-
   Use when connecting to remote servers via SSH, executing commands, uploading
   or downloading files, running scripts on remote hosts, or managing server
-  infrastructure. Trigger on asks to SSH into media server, AI server, or any
+  infrastructure. Trigger on asks to SSH into a managed server, AI server, or any
   server defined in servers.json.
 allowed-tools:
   - Read
@@ -60,9 +60,8 @@ This generates `.cred_key` (master encryption key) with restricted permissions.
 python "${CLAUDE_SKILL_DIR}/credman.py" set <server-name> "<password>"
 ```
 
-For example, with the default config (media and ai servers):
+For example, with a configured AI server:
 ```bash
-python "${CLAUDE_SKILL_DIR}/credman.py" set media "the-media-server-password"
 python "${CLAUDE_SKILL_DIR}/credman.py" set ai "the-ai-server-password"
 ```
 
@@ -71,7 +70,6 @@ python "${CLAUDE_SKILL_DIR}/credman.py" set ai "the-ai-server-password"
 ### Step 3: Verify connection
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server media --test
 python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --test
 ```
 
@@ -96,7 +94,7 @@ Edit `servers.json` to add a new server entry, then store its password:
             "base_directory": "/home/admin"
         }
     },
-    "default_server": "media"
+    "default_server": "ai"
 }
 ```
 
@@ -115,7 +113,7 @@ That's it. Use `--server my-new-server` from then on.
 
 | Flag | Description |
 |---|---|
-| `--server <name>` / `-s <name>` | Server key from `servers.json` (e.g. `media`, `ai`). Defaults to `default_server` in config. |
+| `--server <name>` / `-s <name>` | Server key from `servers.json` (e.g. `ai`, `staging`, `prod`). Defaults to `default_server` in config. |
 | `--list-servers` | Show all configured server names. |
 
 ### Actions (mutually exclusive)
@@ -276,7 +274,7 @@ if ssh.connect():
 ## Migration from v1
 
 1. Run `python credman.py setup` to create the encryption key.
-2. Run `python credman.py set media "<pw>"` and `python credman.py set ai "<pw>"`.
+2. Run `python credman.py set ai "<pw>"` for each configured server key.
 3. Replace `--ai` flag with `--server ai`.
 4. For complex commands, use `--script` or `--command-file` instead of `--execute`.
 

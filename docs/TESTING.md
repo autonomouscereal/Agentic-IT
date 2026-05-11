@@ -12,7 +12,7 @@ node --check .\soc-dashboard\frontend\js\dashboard.js
 node --check .\soc-dashboard\frontend\js\agents.js
 node --check .\soc-dashboard\frontend\js\charts.js
 node --check .\soc-dashboard\frontend\js\websocket.js
-python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py
+python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py
 ```
 
 ## Prohibited Pattern Sweep
@@ -86,6 +86,39 @@ Covers:
 - workflows and review
 - context bundle
 - process diagnostics
+
+## Service Desk Intake Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_service_desk_intake.py http://localhost:25480
+```
+
+Covers:
+
+- seeded service groups
+- seeded RACI rules
+- phishing classification
+- canonical ticket creation
+- attachment metadata
+- approval gate creation
+- ticket context and intake session visibility
+
+## CI/CD Security Pipeline Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480
+```
+
+Covers:
+
+- GitLab-default pipeline template
+- Semgrep, Trivy, Nuclei job definitions
+- local canonical scanner output
+- `/api/cicd/runs` persistence
+- evidence ticket creation
+- production deployment approval gate
 
 ## Local Model Agent Smoke
 

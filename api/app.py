@@ -20,6 +20,8 @@ from routes import (
     knowledge,
     setup,
     access,
+    intake,
+    cicd,
 )
 from services import itop_sync, health_check, task_tracker
 from services.event_logger import log_event
@@ -95,6 +97,8 @@ app.include_router(providers.router)
 app.include_router(knowledge.router)
 app.include_router(setup.router)
 app.include_router(access.router)
+app.include_router(intake.router)
+app.include_router(cicd.router)
 
 frontend_dir = "/frontend"
 

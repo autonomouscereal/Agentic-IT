@@ -15,6 +15,7 @@ function connectWebSocket() {
         };
 
         ws.onmessage = (event) => {
+            if (event.data === "pong") return;
             try {
                 const data = JSON.parse(event.data);
                 handleWebSocketMessage(data);
@@ -114,6 +115,9 @@ function refreshCurrentPage() {
         case "tickets": loadTickets(); break;
         case "agents": loadAgents(); break;
         case "changes": loadChanges(); break;
+        case "workflows": loadWorkflows(); break;
+        case "intake": loadIntake(); break;
+        case "cicd": loadCicd(); break;
         case "tools": loadTools(); break;
         case "audit": loadAudit(); break;
     }

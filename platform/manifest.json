@@ -5,17 +5,17 @@
     "minimal": {
       "name": "Control Plane Only",
       "description": "Dashboard, raw PostgreSQL, local tickets, agent harness, audit logging, approvals, and setup workflow.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "local-ticketing", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "local-ticketing", "service-desk-intake", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research"]
     },
     "soc": {
       "name": "SOC Replacement Baseline",
       "description": "Control plane plus ITSM, SIEM, phishing, network telemetry, IAM, and bridge services.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "local-ticketing", "itop", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge"]
     },
     "full-it": {
       "name": "Full IT Automation Platform",
       "description": "SOC baseline plus GitLab/DevSecOps, auth bridges, CI/CD security gates, postmortem learning, and workflow generation.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "cicd-provider-adapter", "local-ticketing", "itop", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge", "gitlab", "gitlab-keycloak-integration", "keycloak-mailcow-bridge", "semgrep", "trivy", "owasp-zap", "nuclei", "misp"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "cicd-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge", "gitlab", "gitlab-keycloak-integration", "keycloak-mailcow-bridge", "cicd-security-pipeline", "semgrep", "trivy", "owasp-zap", "nuclei", "misp"]
     }
   },
   "modules": [
@@ -50,6 +50,22 @@
       "health_checks": ["/api/tickets"],
       "test_commands": ["python3 scripts/smoke_agentic_system.py http://localhost:25480"],
       "notes": "Used when no external ITSM exists yet or when running fully isolated demos."
+    },
+    {
+      "id": "service-desk-intake",
+      "name": "Service Desk Intake And RACI Router",
+      "category": "ticketing",
+      "status": "implemented",
+      "deployable": true,
+      "deploy_strategy": "dashboard",
+      "skill": "service-desk-intake",
+      "depends_on": ["soc-dashboard", "ticketing-provider-adapter"],
+      "provides": ["plain-language-intake", "raci-routing", "approval-routing", "knowledge-correlation", "provider-ticket-creation"],
+      "required_secrets": ["provider API credential only when sync_provider is enabled"],
+      "ports": [],
+      "health_checks": ["/api/intake/raci", "/api/intake/classify"],
+      "test_commands": ["python3 scripts/smoke_service_desk_intake.py http://localhost:25480"],
+      "notes": "Simple service portal surface that classifies requests/incidents/changes and creates complete routed tickets for agents or humans."
     },
     {
       "id": "provider-contracts",
@@ -151,7 +167,7 @@
       "id": "cicd-provider-adapter",
       "name": "CI/CD Provider Adapter",
       "category": "provider-contract",
-      "status": "blueprint",
+      "status": "implemented",
       "deployable": false,
       "deploy_strategy": "dashboard",
       "skill": null,
@@ -159,9 +175,9 @@
       "provides": ["github-contract", "gitlab-contract", "azure-devops-contract", "jenkins-contract"],
       "required_secrets": ["provider API credential when external CI/CD is enabled"],
       "ports": [],
-      "health_checks": ["provider-specific branch/MR/PR/status check dry-run"],
-      "test_commands": ["Verify AI-created change branch, scan gate, approval, and merge workflow in a test repo."],
-      "notes": "Normalizes code-change automation, scan findings, merge approvals, and deploy gates."
+      "health_checks": ["/api/cicd/gitlab/template", "/api/cicd/runs"],
+      "test_commands": ["python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480"],
+      "notes": "Normalizes code-change automation, scan findings, merge approvals, and deploy gates. GitLab is the reference provider; other providers post the same canonical run payload."
     },
     {
       "id": "itop",
@@ -516,68 +532,84 @@
       "notes": "Synchronizes email identities and groups from IAM."
     },
     {
+      "id": "cicd-security-pipeline",
+      "name": "CI/CD Security Pipeline",
+      "category": "devsecops",
+      "status": "implemented",
+      "deployable": true,
+      "deploy_strategy": "skill",
+      "skill": "cicd-security-pipeline",
+      "depends_on": ["soc-dashboard", "cicd-provider-adapter", "gitlab"],
+      "provides": ["security-gate", "scan-normalization", "deployment-approval-gate", "gitlab-ci-template"],
+      "required_secrets": ["SOC_DASHBOARD_URL", "provider token only when provider API mutation is enabled"],
+      "ports": [],
+      "health_checks": ["/api/cicd/gitlab/template", "/api/cicd/runs"],
+      "test_commands": ["python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480"],
+      "notes": "Runs Semgrep, Trivy, OWASP ZAP, and Nuclei after unit tests. GitLab Runner is the default execution target in the reference platform."
+    },
+    {
       "id": "semgrep",
       "name": "Semgrep SAST",
       "category": "devsecops",
-      "status": "blueprint",
+      "status": "implemented",
       "deployable": true,
-      "deploy_strategy": "planned",
-      "skill": null,
-      "depends_on": ["gitlab"],
+      "deploy_strategy": "skill",
+      "skill": "cicd-security-pipeline",
+      "depends_on": ["cicd-security-pipeline"],
       "provides": ["sast-findings", "code-security-tickets"],
       "required_secrets": [],
       "ports": [],
       "health_checks": ["semgrep --version and sample scan"],
-      "test_commands": ["semgrep --config auto <repo>"],
-      "notes": "Planned first-class module for CI/CD security automation."
+      "test_commands": ["python3 scripts/run_cicd_security_pipeline.py --provider gitlab --repo . --safe-demo"],
+      "notes": "First-class SAST module in the GitLab-default CI/CD security gate."
     },
     {
       "id": "trivy",
       "name": "Trivy Container And Dependency Scanning",
       "category": "devsecops",
-      "status": "blueprint",
+      "status": "implemented",
       "deployable": true,
-      "deploy_strategy": "planned",
-      "skill": null,
-      "depends_on": ["gitlab"],
+      "deploy_strategy": "skill",
+      "skill": "cicd-security-pipeline",
+      "depends_on": ["cicd-security-pipeline"],
       "provides": ["container-scan", "dependency-scan", "sbom"],
       "required_secrets": [],
       "ports": [],
       "health_checks": ["trivy --version and sample scan"],
-      "test_commands": ["trivy fs ."],
-      "notes": "Planned first-class module for vulnerability ticket creation and remediation."
+      "test_commands": ["python3 scripts/run_cicd_security_pipeline.py --provider gitlab --repo . --safe-demo"],
+      "notes": "First-class filesystem, dependency, container, and IaC scanner in the CI/CD security gate."
     },
     {
       "id": "owasp-zap",
       "name": "OWASP ZAP DAST",
       "category": "devsecops",
-      "status": "blueprint",
+      "status": "implemented",
       "deployable": true,
-      "deploy_strategy": "planned",
-      "skill": null,
-      "depends_on": ["gitlab"],
+      "deploy_strategy": "skill",
+      "skill": "cicd-security-pipeline",
+      "depends_on": ["cicd-security-pipeline"],
       "provides": ["dast-findings", "web-app-security-tickets"],
       "required_secrets": [],
       "ports": ["provider-defined"],
       "health_checks": ["ZAP API version"],
-      "test_commands": ["zap baseline scan against test app"],
-      "notes": "Planned module for web application security workflows."
+      "test_commands": ["Run with DAST_TARGET_URL and verify dashboard CI/CD run record."],
+      "notes": "Optional DAST module in the CI/CD security gate; skipped when no target URL is configured."
     },
     {
       "id": "nuclei",
       "name": "Nuclei Exposure Scanning",
       "category": "devsecops",
-      "status": "blueprint",
+      "status": "implemented",
       "deployable": true,
-      "deploy_strategy": "planned",
-      "skill": null,
-      "depends_on": [],
+      "deploy_strategy": "skill",
+      "skill": "cicd-security-pipeline",
+      "depends_on": ["cicd-security-pipeline"],
       "provides": ["exposure-scan", "template-driven-findings"],
       "required_secrets": [],
       "ports": [],
       "health_checks": ["nuclei -version and sample target"],
-      "test_commands": ["nuclei -u http://example.invalid"],
-      "notes": "Planned module for recon and exposure management with approval-gated remediation."
+      "test_commands": ["Run with DAST_TARGET_URL and verify dashboard CI/CD run record."],
+      "notes": "Template-driven exposure scanning module in the CI/CD security gate; skipped when no target URL is configured."
     },
     {
       "id": "misp",

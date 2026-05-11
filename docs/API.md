@@ -333,6 +333,20 @@ Workflows:
 - `POST /api/workflows/{id}/runs`
 - `POST /api/workflows/runs/{run_id}/complete`
 
+Service desk intake:
+
+- `GET /api/intake/raci`
+- `POST /api/intake/classify`
+- `POST /api/intake/submit`
+- `GET /api/intake/sessions`
+
+CI/CD security:
+
+- `GET /api/cicd/gitlab/template`
+- `GET /api/cicd/runs`
+- `GET /api/cicd/runs/{run_id}`
+- `POST /api/cicd/runs`
+
 Knowledge:
 
 - `GET /api/knowledge`
@@ -381,4 +395,3 @@ Merges `audit_log` and `event_log`.
 - `GET /api/tools/{id}/history`
 - `POST /api/tools/{id}/check`
 - `POST /api/tools/check-all`
-

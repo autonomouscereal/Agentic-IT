@@ -3,6 +3,7 @@
   "description": "Production-relevant skills that belong in the portable platform bundle. Media, torrenting, ComfyUI, and unrelated creative skills are intentionally excluded.",
   "skills": [
     "ai-proxy",
+    "cicd-security-pipeline",
     "gitlab-keycloak-integration",
     "gitlab-manager",
     "iam-bridge",
@@ -27,6 +28,7 @@
     "wazuh-edr-sysmon",
     "wazuh-manager",
     "searxng-deployment",
+    "service-desk-intake",
     "web_research"
   ],
   "default_source_roots": [
@@ -77,6 +79,31 @@
     ".env.production",
     "credentials.json",
     ".credentials.json",
-    "token.json"
+    "token.json",
+    "servers.json",
+    "server_config.json",
+    "session.expect",
+    "persistent_ssh_session.py",
+    "ServerManagerSkill.md",
+    "ssh_session.exp",
+    "media-server.md",
+    "COMPLETE_GUIDE.md",
+    "IMPLEMENTATION_SUMMARY.md",
+    "SHELL_EXECUTION_GUIDE.md",
+    "download_torrents.log",
+    "jackett_search.log",
+    "check_seasons.py",
+    "extract_anw.py",
+    "extract_magnet.py",
+    "extract_torrents.py",
+    "organize_plex_media.py",
+    "parse_anw.py",
+    "remove_empty_s_folders.py",
+    "search_anw.py",
+    "torrent_downloads.jsonl",
+    "torrent_info.js",
+    "torrent_results.txt",
+    "consolidate_amazing_race.py",
+    "fix_nested_movies.py"
   ]
 }

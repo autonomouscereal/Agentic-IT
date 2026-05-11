@@ -33,9 +33,11 @@ function navigateTo(page) {
     switch (page) {
         case "overview": loadDashboardStats(); break;
         case "tickets": loadTickets(); break;
+        case "intake": loadIntake(); break;
         case "agents": loadAgents(); break;
         case "changes": loadChanges(); break;
         case "workflows": loadWorkflows(); break;
+        case "cicd": loadCicd(); break;
         case "learning": loadLearning(); break;
         case "tools": loadTools(); break;
         case "setup": loadSetup(); break;
@@ -81,9 +83,11 @@ function startAutoRefresh() {
             switch (pageId) {
                 case "overview": loadDashboardStats(); break;
                 case "tickets": loadTickets(); break;
+                case "intake": loadIntake(); break;
                 case "agents": loadAgents(); break;
                 case "changes": loadChanges(); break;
                 case "workflows": loadWorkflows(); break;
+                case "cicd": loadCicd(); break;
             }
         }
     }, 30000);
@@ -278,6 +282,158 @@ async function loadWorkflows() {
             </td>
         </tr>
     `).join("");
+}
+
+async function loadIntake() {
+    const [raci, sessions] = await Promise.all([
+        apiGet("/api/intake/raci"),
+        apiGet("/api/intake/sessions?limit=25"),
+    ]);
+    const raciList = document.getElementById("intake-raci-list");
+    if (raciList && raci) {
+        const rules = raci.rules || [];
+        raciList.innerHTML = rules.slice(0, 10).map(rule => `
+            <div class="learning-item">
+                <div><strong>${escHtml(rule.name)}</strong> <span class="source-badge local">${escHtml(rule.ticket_class)}</span></div>
+                <div>${escHtml(rule.assignment_group)} &middot; ${rule.approval_required ? "approval required" : "no approval gate"}</div>
+                <div class="learning-meta">R: ${escHtml(rule.responsible)} / A: ${escHtml(rule.accountable)}</div>
+            </div>
+        `).join("");
+    }
+    const tbody = document.getElementById("intake-sessions-tbody");
+    if (tbody && sessions) {
+        const rows = sessions.sessions || [];
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">No intake sessions yet</td></tr>';
+        } else {
+            tbody.innerHTML = rows.map(row => {
+                const classification = row.classification || {};
+                return `
+                    <tr>
+                        <td>${row.id}</td>
+                        <td>${escHtml(row.requester_name || "-")}<div class="module-meta">${escHtml(row.requester_email || "")}</div></td>
+                        <td>${escHtml(classification.intent || "-")}</td>
+                        <td>${row.ticket_id ? `<button class="btn btn-sm" onclick="viewTicket(${row.ticket_id})">#${row.ticket_id}</button>` : "-"}</td>
+                        <td><span class="status-badge ${statusClass(row.status)}">${escHtml(row.status)}</span></td>
+                        <td>${formatTime(row.created_at)}</td>
+                    </tr>
+                `;
+            }).join("");
+        }
+    }
+}
+
+function collectIntakeBody(syncProvider) {
+    const attachment = document.getElementById("intake-attachment")?.value.trim() || "";
+    return {
+        requester_name: document.getElementById("intake-requester-name")?.value || "Demo User",
+        requester_email: document.getElementById("intake-requester-email")?.value || "",
+        title: document.getElementById("intake-title")?.value || "",
+        message: document.getElementById("intake-message")?.value || "",
+        channel: "dashboard",
+        attachments: attachment ? [{ filename: attachment, storage_ref: "dashboard-metadata" }] : [],
+        sync_provider: !!syncProvider,
+    };
+}
+
+function renderIntakeClassification(classification) {
+    const el = document.getElementById("intake-classification");
+    if (!el || !classification) return;
+    const raci = classification.raci || {};
+    el.innerHTML = `
+        <div class="intake-summary">
+            <div><strong>${escHtml(classification.rule_name || classification.intent)}</strong> <span class="status-badge ${statusClass(classification.risk_level)}">${escHtml(classification.risk_level || "low")}</span></div>
+            <div>${escHtml(classification.ticket_class)} &middot; ${escHtml(classification.priority)} &middot; ${escHtml(classification.assignment_group)}</div>
+            <div class="learning-meta">Confidence ${Math.round((classification.confidence || 0) * 100)}% / approval ${classification.approval_required ? "required" : "not required"}</div>
+        </div>
+        <div class="intake-raci-grid">
+            <div><span>Responsible</span><strong>${escHtml(raci.responsible || "-")}</strong></div>
+            <div><span>Accountable</span><strong>${escHtml(raci.accountable || "-")}</strong></div>
+            <div><span>Consulted</span><strong>${escHtml((raci.consulted || []).join(", ") || "-")}</strong></div>
+            <div><span>Informed</span><strong>${escHtml((raci.informed || []).join(", ") || "-")}</strong></div>
+        </div>
+        ${classification.approval_action ? `<div class="setup-help">${escHtml(classification.approval_action)}</div>` : ""}
+        <div class="setup-help">${classification.related_tickets?.length || 0} related tickets, ${classification.knowledge_articles?.length || 0} knowledge articles</div>
+    `;
+}
+
+async function classifyIntake() {
+    const result = await apiPost("/api/intake/classify", collectIntakeBody(false));
+    if (result?.error) {
+        alert(result.error);
+        return;
+    }
+    renderIntakeClassification(result?.classification);
+}
+
+async function submitIntake(syncProvider) {
+    const body = collectIntakeBody(syncProvider);
+    const result = await apiPost("/api/intake/submit", body);
+    if (result?.error) {
+        alert(result.error);
+        return;
+    }
+    renderIntakeClassification(result?.classification);
+    alert(`Created ticket ${result?.ticket?.id}${result?.change_id ? ` and approval ${result.change_id}` : ""}.`);
+    await loadIntake();
+    loadDashboardStats();
+}
+
+async function loadCicd() {
+    const data = await apiGet("/api/cicd/runs?limit=50");
+    const tbody = document.getElementById("cicd-runs-tbody");
+    if (!tbody || !data) return;
+    const rows = data.runs || [];
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">No CI/CD security runs yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(row => `
+        <tr>
+            <td>${row.id}</td>
+            <td>${escHtml(row.provider || "gitlab")}</td>
+            <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(row.repo_ref)}">${escHtml(row.repo_ref)}</td>
+            <td><span class="status-badge ${statusClass(row.status)}">${escHtml(row.status)}</span></td>
+            <td>${row.ticket_id ? `<button class="btn btn-sm" onclick="viewTicket(${row.ticket_id})">#${row.ticket_id}</button>` : "-"}</td>
+            <td>${row.change_id ? `<button class="btn btn-sm" onclick="navigateTo('changes')">#${row.change_id}</button>` : "-"}</td>
+            <td>${formatTime(row.created_at)}</td>
+        </tr>
+    `).join("");
+}
+
+async function showGitlabTemplate() {
+    const data = await apiGet("/api/cicd/gitlab/template");
+    const el = document.getElementById("cicd-template");
+    if (el && data) el.textContent = data.template || "";
+}
+
+async function recordDemoCicdRun() {
+    const repoRef = document.getElementById("cicd-repo-ref")?.value || "gitlab/demo/security-pipeline";
+    const branch = document.getElementById("cicd-branch")?.value || "main";
+    const targetUrl = document.getElementById("cicd-target-url")?.value || "";
+    const createTicket = !!document.getElementById("cicd-create-ticket")?.checked;
+    const requireChange = !!document.getElementById("cicd-require-change")?.checked;
+    const result = await apiPost("/api/cicd/runs", {
+        provider: "gitlab",
+        repo_ref: repoRef,
+        branch,
+        target_url: targetUrl || null,
+        deployment_target: "production",
+        create_ticket: createTicket,
+        require_change: requireChange,
+        status: "passed",
+        summary: "Demo GitLab CI/CD security gate recorded from dashboard. Replace this with scripts/run_cicd_security_pipeline.py output in real pipelines.",
+        findings: [],
+        tool_results: {
+            semgrep: { status: "completed" },
+            trivy: { status: "completed" },
+            owasp_zap: targetUrl ? { status: "completed" } : { status: "skipped", reason: "target URL not provided" },
+            nuclei: targetUrl ? { status: "completed" } : { status: "skipped", reason: "target URL not provided" },
+        },
+    });
+    if (result?.error) alert(result.error);
+    await loadCicd();
+    loadDashboardStats();
 }
 
 async function loadLearning() {

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SOC Dashboard</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
@@ -34,6 +35,10 @@
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     <span>Tickets</span>
                 </li>
+                <li class="nav-item" data-page="intake">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
+                    <span>Intake</span>
+                </li>
                 <li class="nav-item" data-page="agents">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                     <span>Agents</span>
@@ -47,6 +52,10 @@
                 <li class="nav-item" data-page="workflows">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v6M6 15v6M18 3v6M18 15v6M6 9h12M6 15h12"/></svg>
                     <span>Workflows</span>
+                </li>
+                <li class="nav-item" data-page="cicd">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="19" y1="12" x2="5" y2="12"/></svg>
+                    <span>CI/CD</span>
                 </li>
                 <li class="nav-item" data-page="learning">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/></svg>
@@ -239,6 +248,51 @@
                 </div>
             </div>
 
+            <!-- Intake Page -->
+            <div class="page" id="page-intake">
+                <div class="page-header">
+                    <h2>Service Desk Intake</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="loadIntake()">Refresh</button>
+                    </div>
+                </div>
+                <div class="setup-layout">
+                    <div class="setup-panel">
+                        <div class="setup-section-title">Requester</div>
+                        <label class="setup-label">Name</label>
+                        <input id="intake-requester-name" class="filter-input wide-input" value="Demo User">
+                        <label class="setup-label">Email</label>
+                        <input id="intake-requester-email" class="filter-input wide-input" value="demo@example.local">
+                        <label class="setup-label">Short title</label>
+                        <input id="intake-title" class="filter-input wide-input" placeholder="Suspicious email, access request, outage...">
+                        <label class="setup-label">What do you need?</label>
+                        <textarea id="intake-message" class="setup-textarea" rows="9" placeholder="Paste the user's request, phishing report, error, screenshot notes, or deployment ask here."></textarea>
+                        <label class="setup-label">Attachment metadata</label>
+                        <input id="intake-attachment" class="filter-input wide-input" placeholder="optional filename or evidence reference">
+                        <div class="modal-actions-bar inline-actions">
+                            <button class="btn btn-sm" onclick="classifyIntake()">Classify</button>
+                            <button class="btn btn-sm btn-success" onclick="submitIntake(false)">Create Ticket</button>
+                            <button class="btn btn-sm btn-warning" onclick="submitIntake(true)">Create + Sync Provider</button>
+                        </div>
+                    </div>
+                    <div class="setup-panel wide">
+                        <div class="setup-section-title">Routing Preview</div>
+                        <div id="intake-classification" class="intake-preview">No classification yet.</div>
+                        <div class="setup-section-title">Sample RACI Rules</div>
+                        <div id="intake-raci-list" class="learning-list">Loading RACI...</div>
+                    </div>
+                </div>
+                <div class="chart-card wide">
+                    <div class="chart-header"><h3>Recent Intake Sessions</h3></div>
+                    <div class="table-container compact">
+                        <table class="data-table">
+                            <thead><tr><th>ID</th><th>Requester</th><th>Intent</th><th>Ticket</th><th>Status</th><th>Created</th></tr></thead>
+                            <tbody id="intake-sessions-tbody"><tr><td colspan="6" class="loading">Loading intake sessions...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- Changes Page -->
             <div class="page" id="page-changes">
                 <div class="page-header">
@@ -307,6 +361,53 @@
                             <tr><td colspan="7" class="loading">Loading workflows...</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- CI/CD Page -->
+            <div class="page" id="page-cicd">
+                <div class="page-header">
+                    <h2>CI/CD Security Gates</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="loadCicd()">Refresh</button>
+                    </div>
+                </div>
+                <div class="setup-layout">
+                    <div class="setup-panel">
+                        <div class="setup-section-title">Reference Provider</div>
+                        <div class="setup-help">GitLab is the default deployable CI/CD provider for this platform. Other providers should post the same canonical run payload.</div>
+                        <label class="setup-label">Repository reference</label>
+                        <input id="cicd-repo-ref" class="filter-input wide-input" value="gitlab/demo/security-pipeline">
+                        <label class="setup-label">Branch</label>
+                        <input id="cicd-branch" class="filter-input wide-input" value="main">
+                        <label class="setup-label">Target URL</label>
+                        <input id="cicd-target-url" class="filter-input wide-input" placeholder="optional DAST target URL">
+                        <label class="setup-check">
+                            <input type="checkbox" id="cicd-create-ticket" checked>
+                            <span>Create a dashboard ticket for the scan evidence</span>
+                        </label>
+                        <label class="setup-check">
+                            <input type="checkbox" id="cicd-require-change" checked>
+                            <span>Create an approval gate before production deployment</span>
+                        </label>
+                        <div class="modal-actions-bar inline-actions">
+                            <button class="btn btn-sm" onclick="showGitlabTemplate()">GitLab Template</button>
+                            <button class="btn btn-sm btn-success" onclick="recordDemoCicdRun()">Record Demo Run</button>
+                        </div>
+                    </div>
+                    <div class="setup-panel wide">
+                        <div class="setup-section-title">GitLab CI Template</div>
+                        <pre id="cicd-template" class="task-output">Load the GitLab template to view the default pipeline.</pre>
+                    </div>
+                </div>
+                <div class="chart-card wide">
+                    <div class="chart-header"><h3>Recent Security Runs</h3></div>
+                    <div class="table-container compact">
+                        <table class="data-table">
+                            <thead><tr><th>ID</th><th>Provider</th><th>Repo</th><th>Status</th><th>Ticket</th><th>Change</th><th>Created</th></tr></thead>
+                            <tbody id="cicd-runs-tbody"><tr><td colspan="7" class="loading">Loading CI/CD runs...</td></tr></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
