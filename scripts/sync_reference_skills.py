@@ -154,7 +154,7 @@ def copy_skill(src, dest, config):
 def write_bundle_manifest(bundle, records):
     manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "config": str(CONFIG_PATH),
+        "config": CONFIG_PATH.relative_to(ROOT).as_posix(),
         "skills": records,
     }
     bundle.mkdir(parents=True, exist_ok=True)
