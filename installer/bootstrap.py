@@ -90,6 +90,7 @@ def write_env(target, args, dry_run=False):
     if env_path.exists():
         return "existing"
     db_password = secrets.token_urlsafe(32)
+    agent_memory_db_password = secrets.token_urlsafe(32)
     compose_project = project_name(target, args.project_name)
     env = {
         "COMPOSE_PROJECT_NAME": compose_project,
@@ -97,6 +98,12 @@ def write_env(target, args, dry_run=False):
         "SOC_DB_PORT": args.db_port,
         "SOC_DB_USER": "soc_user",
         "SOC_DB_PASSWORD": db_password,
+        "AGENT_MEMORY_DB_PASSWORD": agent_memory_db_password,
+        "AGENT_MEMORY_DB_PORT": "25490",
+        "MEMORY_DB_HOST": "agent-memory-db",
+        "MEMORY_DB_PORT": "5432",
+        "MEMORY_DB_NAME": "agent_memory",
+        "MEMORY_DB_USER": "agent_memory",
         "ITOP_SYNC_ENABLED": args.itop_sync_enabled,
         "ITOP_HOST": "",
         "ITOP_PORT": "25432",

@@ -507,6 +507,14 @@ VALUES
         'For code or deployment work, run the modular CI/CD security pipeline in test first. Record Semgrep, Trivy, OWASP ZAP, and Nuclei results with /api/cicd/runs. Create or update a change request before production deployment and do not proceed until approval is granted.',
         true,
         true
+    ),
+    (
+        'agent-memory',
+        'Search and write durable shared agent memory through the PostgreSQL memory service.',
+        'memory',
+        'Before substantial work, search shared memory for relevant prior context with the agent-memory skill or scripts/agent_memory.py. After meaningful completion, store a concise durable note with the outcome, test evidence, changed files, and any caveats. Do not store secrets; use redacted placeholders or vault references.',
+        true,
+        true
     )
 ON CONFLICT (name) DO UPDATE SET
     description = EXCLUDED.description,

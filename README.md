@@ -56,6 +56,8 @@ Installer entrypoints:
 
 The installer starts the control plane and writes `install_state/last-plan.json`; product-specific integration continues in the dashboard Setup page.
 
+The default profiles include the `agent-memory` module. The installer deploys a PostgreSQL/pgvector memory service, seeds the global agent-memory dashboard skill, and wires spawned Claude Code agents with prompt/tool/session hooks so their work is searchable and auditable across agents.
+
 Side-by-side installs are supported by passing unique `--target`, `--dashboard-port`, `--db-port`, and optional `--project-name` values. Docker Compose service names are project-scoped instead of hardcoded.
 
 Production skills are synchronized into the portable `reference_skills/` bundle with:

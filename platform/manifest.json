@@ -5,17 +5,17 @@
     "minimal": {
       "name": "Control Plane Only",
       "description": "Dashboard, raw PostgreSQL, local tickets, agent harness, audit logging, approvals, and setup workflow.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "local-ticketing", "service-desk-intake", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "local-ticketing", "service-desk-intake", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research"]
     },
     "soc": {
       "name": "SOC Replacement Baseline",
       "description": "Control plane plus ITSM, SIEM, phishing, network telemetry, IAM, and bridge services.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge"]
     },
     "full-it": {
       "name": "Full IT Automation Platform",
       "description": "SOC baseline plus GitLab/DevSecOps, auth bridges, CI/CD security gates, postmortem learning, and workflow generation.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "cicd-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "mempalace", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge", "gitlab", "gitlab-keycloak-integration", "keycloak-mailcow-bridge", "cicd-security-pipeline", "semgrep", "trivy", "owasp-zap", "nuclei", "misp"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "cicd-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge", "gitlab", "gitlab-keycloak-integration", "keycloak-mailcow-bridge", "cicd-security-pipeline", "semgrep", "trivy", "owasp-zap", "nuclei", "misp"]
     }
   },
   "modules": [
@@ -228,20 +228,36 @@
       "notes": "Backs up encrypted vault artifacts without exposing plaintext secrets."
     },
     {
-      "id": "mempalace",
-      "name": "MemPalace Memory System",
+      "id": "agent-memory",
+      "name": "Agent Memory Postgres Service",
       "category": "core",
       "status": "implemented",
       "deployable": true,
-      "deploy_strategy": "skill",
-      "skill": "mempalace-mcp",
+      "deploy_strategy": "compose",
+      "skill": "agent-memory",
       "depends_on": ["soc-dashboard"],
-      "provides": ["agent-memory", "verbatim-audit-ingestion", "knowledge-graph", "diary"],
+      "provides": ["agent-memory", "verbatim-audit-ingestion", "semantic-search", "full-text-search", "tool-call-audit", "prompt-audit"],
+      "required_secrets": ["AGENT_MEMORY_DB_PASSWORD"],
+      "ports": ["25490/tcp by default"],
+      "health_checks": ["agent-memory-db pg_isready", "python reference_skills/agent-memory/scripts/agent_memory.py --json status"],
+      "test_commands": ["python3 reference_skills/agent-memory/scripts/agent_memory.py --json self-test", "python3 scripts/smoke_local_model_agent.py http://localhost:25480 qwen/qwen3.6-27b"],
+      "notes": "Primary shared memory service for dashboard agents. Uses raw asyncpg with PostgreSQL, pgvector, JSONB metadata, full-text search, trigram search, and hook ingestion."
+    },
+    {
+      "id": "mempalace",
+      "name": "MemPalace Memory System",
+      "category": "optional-legacy",
+      "status": "optional",
+      "deployable": false,
+      "deploy_strategy": "external",
+      "skill": "mempalace-mcp",
+      "depends_on": [],
+      "provides": ["legacy-agent-memory", "knowledge-graph", "diary"],
       "required_secrets": [],
       "ports": ["MCP transport"],
-      "health_checks": ["mempalace_status"],
-      "test_commands": ["mempalace_status"],
-      "notes": "Stores high-context session history and learned operational context."
+      "health_checks": ["mempalace_status when explicitly configured"],
+      "test_commands": ["Use only when an environment explicitly keeps MemPalace."],
+      "notes": "Legacy/secondary memory path. The default platform memory module is agent-memory."
     },
     {
       "id": "ai-proxy",

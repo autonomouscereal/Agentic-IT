@@ -23,6 +23,22 @@ Every module should describe the capability it provides, not just the product na
 
 Provider-contract modules are intentionally separate from reference products. Mark a provider contract as existing when the customer already has a product for that capability, then either exclude the matching reference module or leave it as a test/sandbox deployment.
 
+## Agent Memory Module
+
+`agent-memory` is the default shared memory service for platform agents. It deploys PostgreSQL with pgvector, mounts the `agent-memory` skill into spawned agent workspaces, and wires prompt/tool/session hooks into each dashboard agent.
+
+Important boundaries:
+
+- Use generated environment values or vault references for `AGENT_MEMORY_DB_PASSWORD`.
+- Store durable operational notes, user prompts, tool-call audit records, and test evidence.
+- Do not store plaintext secrets; hook metadata redacts obvious secret fields.
+- MemPalace is now optional legacy/secondary memory and is not part of default platform profiles.
+
+Reference docs:
+
+- `reference_skills/agent-memory/SKILL.md`
+- `reference_skills/agent-memory/references/deployment.md`
+
 ## Mailcow Reference Email Module
 
 The Mailcow module is a reference implementation of the email-provider capability. It can be deployed when an environment has no email system or when the platform needs an open-source sandbox for demos and tests.

@@ -46,6 +46,7 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
 ## Generated Files
 
 - `.env`: local runtime config. The installer generates a random PostgreSQL password at install time. Product credentials must be added through environment management or vault references.
+- `AGENT_MEMORY_DB_PASSWORD`: generated in `.env` for the shared PostgreSQL/pgvector agent memory service.
 - `docker-compose.override.yml`: reserved for site-specific overrides.
 - `runtime/empty_credentials.json`: empty placeholder so the control plane can start before Claude Code OAuth credentials are configured.
 - `runtime/claude_settings.json`: generated model/proxy settings for the runner.
@@ -62,6 +63,8 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
 6. Assign an agent only after the AI endpoint and approval policy are ready.
 
 The setup ticket becomes the auditable deployment record. Agents must request changes before modifying infrastructure.
+
+The installer also deploys `agent-memory-db` and wires spawned dashboard agents to the `agent-memory` skill. Agent prompts, tool calls, session stops, deliberate notes, and smoke-test sentinels are stored in the shared memory service with async PostgreSQL writes, JSONB metadata, full-text search, trigram search, and pgvector retrieval.
 
 Multiple installs can run on the same host when different `--target`, `--dashboard-port`, `--db-port`, and optionally `--project-name` values are used. The compose file does not use fixed container names.
 
@@ -111,6 +114,7 @@ python3 scripts/smoke_agent_auditor.py "$BASE"
 docker compose exec -T api python smoke_change_auto_completion.py http://localhost:8000
 python3 scripts/smoke_local_model_agent.py "$BASE" qwen/qwen3.6-27b
 python3 scripts/smoke_setup_agent.py "$BASE" qwen/qwen3.6-27b
+docker compose exec -T api python /root/.claude/skills/agent-memory/scripts/agent_memory.py --json status
 ```
 
 Run the real local-model CI/CD remediation demo:

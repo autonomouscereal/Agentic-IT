@@ -1,0 +1,3 @@
+display_name: Agent Memory
+short_description: Shared PostgreSQL agent memory.
+default_prompt: Use the agent-memory skill to install, test, search, audit, and integrate the shared PostgreSQL memory system for local agents.

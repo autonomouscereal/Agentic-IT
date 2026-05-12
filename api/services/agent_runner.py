@@ -373,6 +373,7 @@ The runner always creates `checkpoint.json` before you start. Read `checkpoint.j
 
 Do not hardcode passwords, API keys, tokens, or plaintext secrets. Use the credential vault or environment variables.
 Do not use ORM, Pydantic models, or SQLAlchemy for database work. Use raw PostgreSQL with parameterized queries.
+Shared agent memory is enabled through the agent-memory skill and workspace hooks. Before substantial work, search memory for relevant prior context. After meaningful completion, store a concise durable note with outcome, test evidence, changed files, and caveats. Never store secrets; use redacted placeholders or vault references.
 Before updating `checkpoint.json`, read it first, then write the updated JSON. Do not use Bash to check or update `checkpoint.json`.
 
 ## Instructions
@@ -380,22 +381,69 @@ Before updating `checkpoint.json`, read it first, then write the updated JSON. D
 """
 
 
-def _build_settings(model):
+def _build_settings(model, agent_id=None):
     """Build minimal settings.json for agent workspace."""
     env = {
         "PYTHONIOENCODING": "utf-8",
         "DASHBOARD_API_BASE": DASHBOARD_API_BASE,
+        "MEMORY_DB_HOST": os.getenv("MEMORY_DB_HOST", "agent-memory-db"),
+        "MEMORY_DB_PORT": os.getenv("MEMORY_DB_PORT", "5432"),
+        "MEMORY_DB_NAME": os.getenv("MEMORY_DB_NAME", "agent_memory"),
+        "MEMORY_DB_USER": os.getenv("MEMORY_DB_USER", "agent_memory"),
+        "MEMORY_DB_PASSWORD": os.getenv("MEMORY_DB_PASSWORD", os.getenv("AGENT_MEMORY_DB_PASSWORD", "")),
+        "AGENT_MEMORY_AGENT": f"SOC-Dashboard-Agent-{agent_id}" if agent_id else "SOC-Dashboard-Agent",
     }
     if AGENT_LLM_BASE_URL:
         env["ANTHROPIC_BASE_URL"] = AGENT_LLM_BASE_URL
     if AGENT_LLM_AUTH_TOKEN:
         env["ANTHROPIC_AUTH_TOKEN"] = AGENT_LLM_AUTH_TOKEN
 
+    hook_base = "/root/.claude/skills/agent-memory/scripts/agent_memory_hook.py"
+    hook_agent = f"SOC-Dashboard-Agent-{agent_id}" if agent_id else "SOC-Dashboard-Agent"
+
     return {
         "env": {
             **env,
         },
         "model": model,
+        "hooks": {
+            "UserPromptSubmit": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"python {hook_base} --event UserPromptSubmit --agent {hook_agent} --source soc_dashboard_agent_hook || true",
+                            "statusMessage": "Filing prompt into shared agent memory...",
+                        }
+                    ],
+                }
+            ],
+            "PostToolUse": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"python {hook_base} --event PostToolUse --agent {hook_agent} --source soc_dashboard_agent_hook || true",
+                            "statusMessage": "Filing tool call into shared agent memory...",
+                        }
+                    ],
+                }
+            ],
+            "Stop": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"python {hook_base} --event Stop --agent {hook_agent} --source soc_dashboard_agent_hook || true",
+                            "statusMessage": "Finalizing shared agent memory...",
+                        }
+                    ],
+                }
+            ],
+        },
     }
 
 
@@ -408,7 +456,7 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt):
     # Write settings
     settings_path = os.path.join(claude_dir, "settings.json")
     with open(settings_path, "w") as f:
-        json.dump(_build_settings(model), f)
+        json.dump(_build_settings(model, agent_id), f)
 
     # Write CLAUDE.md
     claude_md_path = os.path.join(claude_dir, "CLAUDE.md")

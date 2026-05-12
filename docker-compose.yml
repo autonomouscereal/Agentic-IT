@@ -17,6 +17,23 @@ services:
       timeout: 3s
       retries: 10
 
+  agent-memory-db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agent_memory
+      POSTGRES_USER: agent_memory
+      POSTGRES_PASSWORD: ${AGENT_MEMORY_DB_PASSWORD:?AGENT_MEMORY_DB_PASSWORD must be set}
+    ports:
+      - "${AGENT_MEMORY_DB_PORT:-25490}:5432"
+    volumes:
+      - agent-memory-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_memory -d agent_memory"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build: ./api
     restart: unless-stopped
@@ -70,8 +87,15 @@ services:
       STUCK_TIMEOUT_MINUTES: ${STUCK_TIMEOUT_MINUTES:-60}
       MODEL_CONFIG_PATH: /app/agent_models.json
       PLATFORM_MANIFEST_PATH: /app/platform/manifest.json
+      MEMORY_DB_HOST: ${MEMORY_DB_HOST:-agent-memory-db}
+      MEMORY_DB_PORT: ${MEMORY_DB_PORT:-5432}
+      MEMORY_DB_NAME: ${MEMORY_DB_NAME:-agent_memory}
+      MEMORY_DB_USER: ${MEMORY_DB_USER:-agent_memory}
+      MEMORY_DB_PASSWORD: ${AGENT_MEMORY_DB_PASSWORD:?AGENT_MEMORY_DB_PASSWORD must be set}
     depends_on:
       db:
+        condition: service_healthy
+      agent-memory-db:
         condition: service_healthy
     volumes:
       - ./data/agent_logs:/app/data/agent_logs
@@ -88,3 +112,4 @@ services:
 
 volumes:
   db-data:
+  agent-memory-db-data:
