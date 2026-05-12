@@ -494,6 +494,105 @@ Verified:
   returns HTTP `200`.
 - `platform_doctor.py` validates ascending and descending ticket sort order.
 
+### SOC bridge daemon fails when launched from its package directory
+
+Status: fixed during the 2026-05-12 real agentic bridge acceptance pass.
+
+Problem:
+
+- The documented SOC bridge health check was run from
+  `/home/cereal/SOC_TESTING/soc_bridge` with:
+
+```bash
+python3 daemon.py --config production_config.json --check
+```
+
+- It failed before checking iTop/Mailcow with:
+
+```text
+ModuleNotFoundError: No module named 'soc_bridge'
+```
+
+Impact:
+
+- This blocks reliable verification of the iTop-Mailcow notification bridge
+  from the documented quick-operation command.
+- It does not currently block the SIEM-ticket bridge; Wazuh-to-iTop bridge
+  status and connection checks passed with `siem_connected=true` and
+  `ticketing_connected=true`.
+
+Next action:
+
+- Completed.
+
+Fix:
+
+- Updated `/home/cereal/SOC_TESTING/soc_bridge/daemon.py` and `cli.py` so direct
+  script execution adds the package parent directory to `sys.path` before
+  importing `soc_bridge.*`.
+- Kept module-style execution working; the change only applies when
+  `__package__` is empty.
+
+Verified:
+
+- `python3 -m py_compile daemon.py cli.py`: PASS
+- `python3 daemon.py --config production_config.json --check`: PASS,
+  iTop and Mailcow both connected.
+- `python3 cli.py --config production_config.json status`: PASS, iTop and
+  Mailcow both connected.
+- `python3 daemon.py --config production_config.json --poll-once`: PASS,
+  completed a poll and delivered notifications.
+
+### SOC bridge poll-once can catch up old tickets as new notifications
+
+Status: fixed during the 2026-05-12 real agentic bridge acceptance pass.
+
+Problem:
+
+- After the direct-invocation import fix, the first successful
+  `python3 daemon.py --config production_config.json --poll-once` loaded only
+  one tracked ticket from state and then sent `created` notifications for 28
+  existing iTop tickets.
+
+Impact:
+
+- This proves the Mailcow notification path works, but it also shows that a
+  repaired/restarted bridge with stale or empty state can notify old tickets as
+  if they were newly created.
+- For customer demos and first production use, this can look noisy or
+  unprofessional if baseline state is not initialized deliberately.
+
+Next action:
+
+- Completed.
+
+Fix:
+
+- Added `TicketNotificationEngine.baseline_state()` to record current watched
+  tickets without sending notifications.
+- Added daemon flag:
+
+```bash
+python3 daemon.py --config production_config.json --baseline-state
+```
+
+- Added CLI flag:
+
+```bash
+python3 cli.py --config production_config.json poll --baseline
+```
+
+Verified:
+
+- With an empty temporary state file,
+  `python3 daemon.py --config production_config.json --state-file "$TMP_STATE" --baseline-state`
+  tracked 28 tickets and sent 0 notifications.
+- A subsequent
+  `python3 daemon.py --config production_config.json --state-file "$TMP_STATE" --poll-once`
+  fetched 28 tickets, found 0 changes, and sent 0 notifications.
+- `python3 cli.py --config production_config.json poll --baseline` completed
+  successfully and sent 0 notifications.
+
 ## Current Limitations
 
 ### iTop outbound creation needs environment-specific defaults
