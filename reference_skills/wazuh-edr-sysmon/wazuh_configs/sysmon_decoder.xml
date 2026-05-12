@@ -1,0 +1,11 @@
+<!--
+  Minimal Sysmon decoder for the reference Wazuh EDR deployment.
+
+  Wazuh's built-in syslog decoder extracts the envelope for SysmonForLinux
+  events written to /var/log/sysmon/sysmon.log. The custom rules in
+  sysmon_rules.xml intentionally match against the raw full_log payload, so this
+  decoder only identifies Sysmon payloads and avoids unsupported decoder fields.
+-->
+<decoder name="sysmon-reference">
+  <prematch>Linux-Sysmon|Microsoft-Windows-Sysmon/Operational|CODEX_SYSMON</prematch>
+</decoder>

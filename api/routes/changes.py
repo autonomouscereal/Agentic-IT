@@ -1,0 +1,369 @@
+from fastapi import APIRouter, Query, Body
+from datetime import datetime, timedelta
+from database import fetchall, fetchrow, execute, fetchval, json_dumps
+from services.event_logger import log_event
+
+router = APIRouter(prefix="/api/changes", tags=["changes"])
+
+
+def _is_auto_approver(actor):
+    value = (actor or "").lower()
+    return "auto" in value or "demo" in value or "smoke" in value
+
+
+async def _add_gate_note(ticket_id, change_id, title, body, actor="approval-gate", source="approval-gate"):
+    if not ticket_id:
+        return None
+    note_id = await fetchval("""
+        INSERT INTO ticket_notes (ticket_id, source, author, body, visibility)
+        VALUES ($1, $2, $3, $4, 'internal')
+        RETURNING id
+    """, ticket_id, source, actor, f"{title}\n\n{body}".strip())
+    await execute("UPDATE tickets SET updated_at = NOW() WHERE id = $1", ticket_id)
+    await log_event("ticket", "info", actor, "approval_gate_note_added",
+                    f"ticket_{ticket_id}", {
+                        "note_id": note_id,
+                        "change_id": change_id,
+                        "title": title,
+                    })
+    return note_id
+
+
+async def _resume_agent_after_approval(change, approved_by):
+    """Spawn a continuation agent when an approval gate opens.
+
+    This keeps approval-driven recovery inside the control plane instead of
+    requiring a fragile model-side heartbeat loop. If the original agent still
+    has an active task, do nothing and let it observe the approval itself.
+    """
+    agent_id = change.get("agent_id")
+    ticket_id = change.get("ticket_id")
+    if not agent_id or not ticket_id:
+        return {"status": "not_applicable", "reason": "change has no agent_id"}
+
+    active_task = await fetchrow("""
+        SELECT id, status FROM agent_tasks
+        WHERE agent_id = $1 AND status IN ('queued', 'running')
+        ORDER BY created_at DESC LIMIT 1
+    """, agent_id)
+    if active_task:
+        return {"status": "already_active", "task_id": active_task["id"]}
+
+    agent = await fetchrow("SELECT model, selected_model FROM agents WHERE id = $1", agent_id)
+    latest_task = await fetchrow("""
+        SELECT prompt, task_type FROM agent_tasks
+        WHERE agent_id = $1
+        ORDER BY created_at DESC LIMIT 1
+    """, agent_id)
+    if not agent or not latest_task:
+        return {"status": "not_resumed", "reason": "missing source agent/task"}
+
+    continuation = "\n\nApproval update:\n"
+    continuation += f"- Change request {change['id']} was approved by {approved_by}.\n"
+    continuation += "- Continue from the approval gate, perform only the approved safe/test action, document the result as a ticket note, mark the change complete with compile/test/diff or operational evidence, and update checkpoint.json to done.\n"
+
+    from services import agent_runner
+    result = await agent_runner.spawn_agent(
+        ticket_id,
+        agent.get("selected_model") or agent.get("model") or "qwen/qwen3.6-27b",
+        (latest_task.get("prompt") or "") + continuation,
+        latest_task.get("task_type") or "ticket_resolution",
+    )
+    await log_event("agent", "info", approved_by, "agent_resumed_after_approval",
+                    f"agent_{agent_id}", {
+                        "change_id": change["id"],
+                        "ticket_id": ticket_id,
+                        "agent_id": agent_id,
+                        "replacement_agent_id": result.get("agent_id"),
+                        "replacement_task_id": result.get("task_id"),
+                    })
+    return {"status": "resumed", **result}
+
+@router.get("")
+async def list_changes(
+    status: str = Query(None, description="Filter by status"),
+    agent_id: int = Query(None, description="Filter by agent"),
+    ticket_id: int = Query(None, description="Filter by ticket"),
+):
+    where_clauses = []
+    params = []
+    param_idx = 1
+
+    if status:
+        where_clauses.append(f"cr.status = ${param_idx}")
+        params.append(status)
+        param_idx += 1
+    if agent_id:
+        where_clauses.append(f"cr.agent_id = ${param_idx}")
+        params.append(agent_id)
+        param_idx += 1
+    if ticket_id:
+        where_clauses.append(f"cr.ticket_id = ${param_idx}")
+        params.append(ticket_id)
+        param_idx += 1
+
+    where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+    rows = await fetchall(f"""
+        SELECT cr.*, a.model AS agent_model, t.title AS ticket_title
+        FROM change_requests cr
+        LEFT JOIN agents a ON cr.agent_id = a.id
+        LEFT JOIN tickets t ON cr.ticket_id = t.id
+        {where_sql}
+        ORDER BY cr.requested_at DESC
+    """, *params)
+
+    pending = await fetchval(
+        "SELECT COUNT(*) FROM change_requests WHERE status = 'pending'"
+    ) or 0
+
+    return {"changes": rows, "total": len(rows), "pending": pending}
+
+@router.post("/request")
+async def request_change(
+    agent_id: int = Body(None),
+    ticket_id: int = Body(...),
+    action: str = Body(...),
+    target: str = Body(...),
+    reason: str = Body(""),
+    command: str = Body(None),
+    risk_level: str = Body("unknown"),
+    approval_policy: dict = Body({}),
+):
+    change_id = await fetchval("""
+        INSERT INTO change_requests (agent_id, ticket_id, action, target,
+                                     reason, command, risk_level, approval_policy,
+                                     status, requested_by,
+                                     requested_at, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9,
+                NOW(), NOW() + INTERVAL '300 seconds')
+        RETURNING id
+    """, agent_id, ticket_id, action, target, reason, command, risk_level,
+        json_dumps(approval_policy or {}), f"agent_{agent_id}" if agent_id else "dashboard")
+
+    actor = f"agent_{agent_id}" if agent_id else "dashboard"
+    await execute("""
+        INSERT INTO audit_log (actor, action, target, details)
+        VALUES ($1, $2, $3, $4)
+    """, actor, "change_requested", f"change_{change_id}", json_dumps({
+        "change_id": change_id, "action": action, "target": target,
+        "agent_id": agent_id, "ticket_id": ticket_id, "risk_level": risk_level
+    }))
+    await log_event("change", "info", actor, "change_requested",
+                    f"change_{change_id}", {
+                        "ticket_id": ticket_id,
+                        "agent_id": agent_id,
+                        "risk_level": risk_level,
+                        "approval_gate": True,
+                        "gate_status": "pending",
+                    })
+    await _add_gate_note(
+        ticket_id,
+        change_id,
+        f"Approval gate opened: change {change_id}",
+        (
+            f"A change approval gate was created before `{action}` on `{target}`.\n"
+            f"Risk level: `{risk_level}`.\n"
+            f"Requested by: `{actor}`.\n"
+            f"Reason: {reason or 'No reason provided.'}\n\n"
+            "The agent must wait here until this gate is approved or rejected."
+        ),
+        actor,
+    )
+
+    return {"change_id": change_id, "status": "pending"}
+
+@router.get("/pending")
+async def pending_changes():
+    rows = await fetchall("""
+        SELECT cr.*, a.model AS agent_model, t.title AS ticket_title,
+               EXTRACT(EPOCH FROM (NOW() - cr.requested_at)) AS waiting_seconds
+        FROM change_requests cr
+        LEFT JOIN agents a ON cr.agent_id = a.id
+        LEFT JOIN tickets t ON cr.ticket_id = t.id
+        WHERE cr.status = 'pending'
+        AND (cr.expires_at IS NULL OR cr.expires_at > NOW())
+        ORDER BY cr.requested_at ASC
+    """)
+    return {"changes": rows, "count": len(rows)}
+
+@router.get("/stats")
+async def change_stats():
+    pending = await fetchval("SELECT COUNT(*) FROM change_requests WHERE status = 'pending'") or 0
+    approved = await fetchval("SELECT COUNT(*) FROM change_requests WHERE status = 'approved'") or 0
+    rejected = await fetchval("SELECT COUNT(*) FROM change_requests WHERE status = 'rejected'") or 0
+    completed = await fetchval("SELECT COUNT(*) FROM change_requests WHERE status = 'completed'") or 0
+
+    return {"pending": pending, "approved": approved, "rejected": rejected, "completed": completed}
+
+@router.get("/{change_id}")
+async def get_change(change_id: int):
+    change = await fetchrow("""
+        SELECT cr.*, a.model AS agent_model, a.status AS agent_status,
+               t.title AS ticket_title, t.itop_ref AS ticket_itop_ref
+        FROM change_requests cr
+        LEFT JOIN agents a ON cr.agent_id = a.id
+        LEFT JOIN tickets t ON cr.ticket_id = t.id
+        WHERE cr.id = $1
+    """, change_id)
+    if not change:
+        return {"error": "Change request not found"}
+    return change
+
+
+@router.get("/{change_id}/status")
+async def change_status(change_id: int):
+    change = await fetchrow("""
+        SELECT id, status, approved_by, approved_at, rejected_reason, result,
+               action, target, risk_level, requested_at, expires_at
+        FROM change_requests WHERE id = $1
+    """, change_id)
+    if not change:
+        return {"error": "Change request not found"}
+    return change
+
+@router.post("/{change_id}/approve")
+async def approve_change(change_id: int, body: dict = Body({})):
+    approved_by = (body or {}).get("approved_by", "dashboard")
+    approval_reason = (body or {}).get("reason") or (body or {}).get("approval_reason") or ""
+    change = await fetchrow("SELECT * FROM change_requests WHERE id = $1", change_id)
+    if not change:
+        return {"error": "Change request not found"}
+    if change["status"] != "pending":
+        return {"error": f"Change request is {change['status']}, not pending"}
+
+    await execute("""
+        UPDATE change_requests SET status = 'approved', approved_by = $1,
+                                  approved_at = NOW() WHERE id = $2
+    """, approved_by, change_id)
+
+    auto_approved = _is_auto_approver(approved_by)
+    approval_mode = "demo_auto_approval" if auto_approved else "manual_approval"
+    await execute("""
+        INSERT INTO audit_log (actor, action, target, details)
+        VALUES ($1, $2, $3, $4)
+    """, approved_by, "change_approved", f"change_{change_id}", json_dumps({
+        "change_id": change_id,
+        "action": change["action"],
+        "target": change["target"],
+        "agent_id": change["agent_id"],
+        "ticket_id": change["ticket_id"],
+        "risk_level": change["risk_level"],
+        "approval_gate": True,
+        "approval_mode": approval_mode,
+        "auto_approved": auto_approved,
+        "approval_reason": approval_reason,
+    }))
+    await log_event("change", "info", approved_by, "change_approved",
+                    f"change_{change_id}", {
+                        "ticket_id": change["ticket_id"],
+                        "agent_id": change["agent_id"],
+                        "risk_level": change["risk_level"],
+                        "approval_gate": True,
+                        "approval_mode": approval_mode,
+                        "auto_approved": auto_approved,
+                    })
+    note_title = (
+        f"Approval gate AUTO-APPROVED: change {change_id}"
+        if auto_approved else
+        f"Approval gate approved: change {change_id}"
+    )
+    note_body = (
+        f"Gate `{change_id}` for `{change['action']}` on `{change['target']}` was approved by `{approved_by}`.\n"
+        f"Approval mode: `{approval_mode}`.\n"
+        f"Risk level: `{change['risk_level']}`.\n"
+        f"Agent: `{change['agent_id'] or 'none'}`.\n"
+    )
+    if auto_approved:
+        note_body += "\nThis environment is currently configured for demo/lab auto-approval so the approval chain is visible without waiting for a human click. In production this same gate would wait for an authorized approver."
+    if approval_reason:
+        note_body += f"\nApproval reason: {approval_reason}"
+    await _add_gate_note(change["ticket_id"], change_id, note_title, note_body, approved_by, "approval-gate")
+
+    resume = await _resume_agent_after_approval({**change, "id": change_id}, approved_by)
+    return {"status": "approved", "change_id": change_id, "resume": resume}
+
+@router.post("/{change_id}/reject")
+async def reject_change(
+    change_id: int,
+    body: dict = Body({}),
+):
+    rejected_by = (body or {}).get("rejected_by", "dashboard")
+    reason = (body or {}).get("reason", "Rejected")
+    change = await fetchrow("SELECT * FROM change_requests WHERE id = $1", change_id)
+    if not change:
+        return {"error": "Change request not found"}
+    if change["status"] != "pending":
+        return {"error": f"Change request is {change['status']}, not pending"}
+
+    await execute("""
+        UPDATE change_requests SET status = 'rejected', approved_by = $1,
+                                  approved_at = NOW(), rejected_reason = $2
+        WHERE id = $3
+    """, rejected_by, reason, change_id)
+
+    await execute("""
+        INSERT INTO audit_log (actor, action, target, details)
+        VALUES ($1, $2, $3, $4)
+    """, rejected_by, "change_rejected", f"change_{change_id}", json_dumps({
+        "change_id": change_id, "reason": reason
+    }))
+    await log_event("change", "warning", rejected_by, "change_rejected",
+                    f"change_{change_id}", {
+                        "ticket_id": change["ticket_id"],
+                        "agent_id": change["agent_id"],
+                        "approval_gate": True,
+                        "gate_status": "rejected",
+                    })
+    await _add_gate_note(
+        change["ticket_id"],
+        change_id,
+        f"Approval gate rejected: change {change_id}",
+        f"Gate `{change_id}` for `{change['action']}` on `{change['target']}` was rejected by `{rejected_by}`.\nReason: {reason}",
+        rejected_by,
+        "approval-gate",
+    )
+
+    return {"status": "rejected", "change_id": change_id}
+
+@router.post("/{change_id}/complete")
+async def complete_change(change_id: int, body: dict = Body({})):
+    result = (body or {}).get("result", "")
+    actor = (body or {}).get("completed_by") or (body or {}).get("actor") or "dashboard"
+    change = await fetchrow("SELECT * FROM change_requests WHERE id = $1", change_id)
+    if not change:
+        return {"error": "Change request not found"}
+
+    await execute("""
+        UPDATE change_requests SET status = 'completed', result = $1 WHERE id = $2
+    """, result, change_id)
+    await execute("""
+        INSERT INTO audit_log (actor, action, target, details)
+        VALUES ($1, $2, $3, $4)
+    """, actor, "change_completed", f"change_{change_id}", json_dumps({
+        "change_id": change_id,
+        "agent_id": change["agent_id"],
+        "ticket_id": change["ticket_id"],
+        "result": result[:1000] if result else "",
+    }))
+    await log_event("change", "info", actor, "change_completed",
+                    f"change_{change_id}", {
+                        "ticket_id": change["ticket_id"],
+                        "agent_id": change["agent_id"],
+                        "approval_gate": True,
+                        "gate_status": "completed",
+                        "result": result[:500] if result else "",
+                    })
+    await _add_gate_note(
+        change["ticket_id"],
+        change_id,
+        f"Approval gate completed: change {change_id}",
+        (
+            f"Gate `{change_id}` for `{change['action']}` on `{change['target']}` moved to completed by `{actor}`.\n"
+            f"Evidence/result: {result[:1200] if result else 'No result provided.'}"
+        ),
+        actor,
+        "approval-gate",
+    )
+
+    return {"status": "completed", "change_id": change_id}

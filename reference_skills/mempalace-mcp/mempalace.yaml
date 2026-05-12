@@ -1,0 +1,10 @@
+wing: mempalace_mcp
+rooms:
+- name: bin
+  description: Files from bin/
+  keywords:
+  - bin
+  - bin
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []

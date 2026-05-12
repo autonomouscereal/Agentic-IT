@@ -1,0 +1,126 @@
+<!-- ============================================================
+     Wazuh Agent Configuration - Windows with Sysmon
+     Template - replace WAZUH_SERVER_IP before deployment
+     ============================================================ -->
+<ossec_config>
+  <client>
+    <server>
+      <address>WAZUH_SERVER_IP</address>
+      <port>1514</port>
+      <protocol>tcp</protocol>
+    </server>
+    <crypto_method>aes</crypto_method>
+    <notify_time>5</notify_time>
+    <time-reconnect>60</time-reconnect>
+    <max_retries>5</max_retries>
+    <exponential_backoff_multiplier>2</exponential_backoff_multiplier>
+    <exponential_backoff_delay>5</exponential_backoff_delay>
+    <disable_notify>no</disable_notify>
+    <auto_fim>yes</auto_fim>
+    <ciphers>HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH</ciphers>
+    <ssl_ciphers>HIGH</ssl_ciphers>
+  </client>
+
+  <client_buffer>
+    <disabled>no</disabled>
+    <queue_size>5000</queue_size>
+    <events_per_second>500</events_per_second>
+  </client_buffer>
+
+  <!-- Windows Event Log: Security -->
+  <localfile>
+    <log_format>EventChannel</log_format>
+    <location>Security</location>
+  </localfile>
+
+  <!-- Windows Event Log: System -->
+  <localfile>
+    <log_format>EventChannel</log_format>
+    <location>System</location>
+  </localfile>
+
+  <!-- Windows Event Log: Application -->
+  <localfile>
+    <log_format>EventChannel</log_format>
+    <location>Application</location>
+  </localfile>
+
+  <!-- Sysmon Operational Event Channel -->
+  <localfile>
+    <log_format>EventChannel</log_format>
+    <location>Microsoft-Windows-Sysmon/Operational</location>
+  </localfile>
+
+  <!-- Windows Defender Event Channel -->
+  <localfile>
+    <log_format>EventChannel</log_format>
+    <location>Microsoft-Windows-Windows Defender/Operational</location>
+  </localfile>
+
+  <!-- PowerShell Operational Log -->
+  <localfile>
+    <log_format>EventChannel</log_format>
+    <location>Microsoft-Windows-PowerShell/Operational</location>
+  </localfile>
+
+  <!-- FIM monitoring -->
+  <rootcheck>
+    <disabled>no</disabled>
+    <check_files>yes</check_files>
+    <check_trojans>yes</check_trojans>
+    <check_dev>yes</check_dev>
+    <check_sys>yes</check_sys>
+    <check_pids>yes</check_pids>
+    <check_ports>yes</check_ports>
+    <check_if>yes</check_if>
+    <frequency>43200</frequency>
+  </rootcheck>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <frequency>43200</frequency>
+    <scan_on_start>yes</scan_on_start>
+    <alert_new_files>yes</alert_new_files>
+    <directories arch="both">C:\Windows\System32\drivers\etc</directories>
+    <directories arch="both">C:\Windows\System32\drivers</directories>
+    <directories arch="both">C:\Windows\System32\grouppolicy</directories>
+    <directories arch="both">C:\Windows\SysWOW64\drivers\etc</directories>
+    <directories arch="both">C:\Windows\System32\logfiles</directories>
+    <directories arch="both">C:\Windows\System32\tasks</directories>
+    <directories arch="both">C:\ProgramData\Microsoft\Windows\Start Menu</directories>
+    <directories arch="both">C:\Windows\win.ini</directories>
+    <directories arch="both">C:\Windows\System.ini</directories>
+    <directories arch="both">C:\Windows\System32\win.ini</directories>
+    <directories arch="both">C:\Windows\System32\cmd.exe</directories>
+    <directories arch="both">C:\Windows\System32\reg.exe</directories>
+    <directories arch="both">C:\Windows\System32\regedt32.exe</directories>
+    <directories arch="both">C:\Windows\System32\regedit.exe</directories>
+    <directories arch="both">C:\Windows\System32\regsvc.dll</directories>
+    <directories arch="both">C:\Windows\System32\userinit.exe</directories>
+    <directories arch="both">C:\Windows\System32\user32.dll</directories>
+    <directories arch="both">C:\Windows\System32\winlogon.exe</directories>
+    <directories arch="both">C:\Windows\System32\winrm.vbs</directories>
+    <directories arch="both">C:\Windows\SysWOW64\win.ini</directories>
+    <directories arch="both">C:\Windows\System32\wbem\WMIADAP.EXE</directories>
+    <directories arch="both">C:\Windows\System32\wbem\WMIPROV.HLP</directories>
+    <directories arch="both">C:\Windows\System32\wbem\WMIPrvMD.dll</directories>
+    <directories arch="both">C:\Windows\System32\wbem\wmiprvse.exe</directories>
+    <directories arch="both">C:\Windows\System32\wbem\WMISECUR.DLL</directories>
+    <directories arch="both">C:\Windows\System32\wbem\WMINet_Mapping.dll</directories>
+    <skip>NtDll.dll</skip>
+    <skip>api-ms-*</skip>
+    <skip>ext-ms-*</skip>
+  </syscheck>
+
+  <!-- Active Response -->
+  <active-response>
+    <disabled>no</disabled>
+    <ca_store>C:\Program Files (x86)\ossec-agent\redir\ca.crt</ca_store>
+    <ca_verification>yes</ca_verification>
+  </active-response>
+
+  <!-- Vulnerability detection -->
+  <vulnerability-detection>
+    <disabled>no</disabled>
+  </vulnerability-detection>
+</ossec_config>

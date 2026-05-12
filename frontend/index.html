@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Dashboard</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <svg viewBox="0 0 40 40" width="36" height="36">
+                        <circle cx="20" cy="20" r="18" fill="none" stroke="#00d4ff" stroke-width="2"/>
+                        <circle cx="20" cy="20" r="8" fill="#00d4ff" opacity="0.6"/>
+                        <circle cx="20" cy="20" r="3" fill="#00d4ff"/>
+                        <line x1="20" y1="2" x2="20" y2="12" stroke="#00d4ff" stroke-width="1.5"/>
+                        <line x1="20" y1="28" x2="20" y2="38" stroke="#00d4ff" stroke-width="1.5"/>
+                        <line x1="2" y1="20" x2="12" y2="20" stroke="#00d4ff" stroke-width="1.5"/>
+                        <line x1="28" y1="20" x2="38" y2="20" stroke="#00d4ff" stroke-width="1.5"/>
+                    </svg>
+                </div>
+                <h1>SOC COMMAND</h1>
+            </div>
+            <ul class="nav-list">
+                <li class="nav-item active" data-page="overview">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    <span>Overview</span>
+                </li>
+                <li class="nav-item" data-page="tickets">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>Tickets</span>
+                </li>
+                <li class="nav-item" data-page="intake">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
+                    <span>Intake</span>
+                </li>
+                <li class="nav-item" data-page="agents">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    <span>Agents</span>
+                    <span class="badge" id="agent-count">0</span>
+                </li>
+                <li class="nav-item" data-page="changes">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Changes</span>
+                    <span class="badge warning" id="change-count">0</span>
+                </li>
+                <li class="nav-item" data-page="workflows">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v6M6 15v6M18 3v6M18 15v6M6 9h12M6 15h12"/></svg>
+                    <span>Workflows</span>
+                </li>
+                <li class="nav-item" data-page="cicd">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="19" y1="12" x2="5" y2="12"/></svg>
+                    <span>CI/CD</span>
+                </li>
+                <li class="nav-item" data-page="learning">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/></svg>
+                    <span>Learning</span>
+                </li>
+                <li class="nav-item" data-page="tools">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                    <span>Tools</span>
+                </li>
+                <li class="nav-item" data-page="setup">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>Setup</span>
+                </li>
+                <li class="nav-item" data-page="access">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 11V7a4 4 0 0 0-8 0v4"/><rect x="5" y="11" width="14" height="10" rx="2"/></svg>
+                    <span>Access</span>
+                </li>
+                <li class="nav-item" data-page="audit">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    <span>Audit</span>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <div class="connection-status">
+                    <span class="status-dot connected"></span>
+                    <span>Connected</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Overview Page -->
+            <div class="page active" id="page-overview">
+                <div class="page-header">
+                    <h2>Operations Overview</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="refreshAll()">Refresh</button>
+                    </div>
+                </div>
+
+                <!-- Stat Cards -->
+                <div class="stat-cards">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: rgba(0,212,255,0.15); color: #00d4ff;">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="stat-ticket-total">0</div>
+                            <div class="stat-label">Total Tickets</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: rgba(255,107,53,0.15); color: #ff6b35;">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="stat-ticket-new">0</div>
+                            <div class="stat-label">New / Assigned</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: rgba(0,255,136,0.15); color: #00ff88;">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="stat-agent-active">0</div>
+                            <div class="stat-label">Active Agents</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: rgba(255,215,0,0.15); color: #ffd700;">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="stat-change-pending">0</div>
+                            <div class="stat-label">Pending Changes</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="charts-row">
+                    <div class="chart-card wide">
+                        <div class="chart-header">
+                            <h3>Ticket Volume (7 Days)</h3>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="ticket-trend-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Agent Status</h3>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="agent-dist-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Second Charts Row -->
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Tool Uptime</h3>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="tool-uptime-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card wide">
+                        <div class="chart-header">
+                            <h3>Recent Activity</h3>
+                        </div>
+                        <div class="activity-feed" id="activity-feed">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pending Changes Section -->
+                <div class="pending-changes-section" id="pending-changes-section" style="display: none;">
+                    <div class="pending-changes-header">
+                        <h3>Pending Change Requests</h3>
+                        <button class="btn btn-sm" onclick="loadPendingChanges()">Refresh</button>
+                    </div>
+                    <div class="pending-changes-list" id="pending-changes-list">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tickets Page -->
+            <div class="page" id="page-tickets">
+                <div class="page-header">
+                    <h2>Tickets</h2>
+                    <div class="header-actions">
+                        <select id="ticket-filter-status" class="filter-select">
+                            <option value="">All Statuses</option>
+                            <option value="new">New</option>
+                            <option value="assigned">Assigned</option>
+                            <option value="resolved">Resolved</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                        <button class="btn btn-sm" onclick="loadTickets()">Refresh</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="tickets-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-ticket-sort="id">ID</th>
+                                <th class="sortable" data-ticket-sort="title">Title</th>
+                                <th class="sortable" data-ticket-sort="class">Class</th>
+                                <th class="sortable" data-ticket-sort="status">Status</th>
+                                <th class="sortable" data-ticket-sort="priority">Priority</th>
+                                <th class="sortable" data-ticket-sort="assignee">Assignee</th>
+                                <th class="sortable" data-ticket-sort="agent">Agent</th>
+                                <th class="sortable" data-ticket-sort="updated_at">Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tickets-tbody">
+                            <tr><td colspan="9" class="loading">Loading tickets...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Agents Page -->
+            <div class="page" id="page-agents">
+                <div class="page-header">
+                    <h2>AI Agents</h2>
+                    <div class="header-actions">
+                        <select id="agent-model-select" class="filter-select" data-agent-model-select></select>
+                        <button class="btn btn-sm" onclick="loadAgents()">Refresh</button>
+                    </div>
+                </div>
+                <div class="agent-create-panel">
+                    <div class="runner-health" id="runner-health">
+                        <span class="status-dot"></span>
+                        <span>Checking runner...</span>
+                    </div>
+                    <div class="runner-health" id="agent-auditor-health">
+                        <span class="status-dot connected"></span>
+                        <span>Agent auditor loading...</span>
+                        <button class="btn btn-sm" onclick="runAgentAuditOnce()">Run Audit</button>
+                    </div>
+                    <div class="agent-create-controls">
+                        <textarea id="agent-prompt-input" placeholder="Create an agent from a prompt..." rows="3"></textarea>
+                        <button class="btn" onclick="createAgentFromPrompt()">Spawn Agent</button>
+                    </div>
+                </div>
+                <div class="agents-grid" id="agents-grid">
+                    <div class="agent-empty">Loading agents...</div>
+                </div>
+            </div>
+
+            <!-- Intake Page -->
+            <div class="page" id="page-intake">
+                <div class="page-header">
+                    <h2>Service Desk Intake</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="loadIntake()">Refresh</button>
+                    </div>
+                </div>
+                <div class="setup-layout">
+                    <div class="setup-panel">
+                        <div class="setup-section-title">Requester</div>
+                        <label class="setup-label">Name</label>
+                        <input id="intake-requester-name" class="filter-input wide-input" value="Demo User">
+                        <label class="setup-label">Email</label>
+                        <input id="intake-requester-email" class="filter-input wide-input" value="demo@example.local">
+                        <label class="setup-label">Short title</label>
+                        <input id="intake-title" class="filter-input wide-input" placeholder="Suspicious email, access request, outage...">
+                        <label class="setup-label">What do you need?</label>
+                        <textarea id="intake-message" class="setup-textarea" rows="9" placeholder="Paste the user's request, phishing report, error, screenshot notes, or deployment ask here."></textarea>
+                        <label class="setup-label">Attachment metadata</label>
+                        <input id="intake-attachment" class="filter-input wide-input" placeholder="optional filename or evidence reference">
+                        <div class="modal-actions-bar inline-actions">
+                            <button class="btn btn-sm" onclick="classifyIntake()">Preview</button>
+                            <button class="btn btn-sm btn-success" onclick="submitIntake()">Create Ticket</button>
+                        </div>
+                    </div>
+                    <div class="setup-panel wide">
+                        <div class="setup-section-title">Routing Preview</div>
+                        <div id="intake-classification" class="intake-preview">No classification yet.</div>
+                        <div class="setup-section-title">RACI Rules</div>
+                        <div class="modal-actions-bar inline-actions">
+                            <button class="btn btn-sm" onclick="createRaciGroup()">New Group</button>
+                            <button class="btn btn-sm" onclick="createRaciRule()">New Rule</button>
+                        </div>
+                        <div id="intake-raci-list" class="learning-list">Loading RACI...</div>
+                    </div>
+                </div>
+                <div class="chart-card wide">
+                    <div class="chart-header"><h3>Recent Intake Sessions</h3></div>
+                    <div class="table-container compact">
+                        <table class="data-table">
+                            <thead><tr><th>ID</th><th>Requester</th><th>Intent</th><th>Ticket</th><th>Status</th><th>Created</th></tr></thead>
+                            <tbody id="intake-sessions-tbody"><tr><td colspan="6" class="loading">Loading intake sessions...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Changes Page -->
+            <div class="page" id="page-changes">
+                <div class="page-header">
+                    <h2>Change Requests</h2>
+                    <div class="header-actions">
+                        <select id="change-filter-status" class="filter-select">
+                            <option value="">All</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                        <button class="btn btn-sm" onclick="loadChanges()">Refresh</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="changes-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Action</th>
+                                <th>Target</th>
+                                <th>Ticket</th>
+                                <th>Status</th>
+                                <th>Requested</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="changes-tbody">
+                            <tr><td colspan="7" class="loading">Loading changes...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Workflows Page -->
+            <div class="page" id="page-workflows">
+                <div class="page-header">
+                    <h2>Agent Workflows</h2>
+                    <div class="header-actions">
+                        <select id="workflow-filter-status" class="filter-select">
+                            <option value="">All</option>
+                            <option value="draft">Draft</option>
+                            <option value="tested">Tested</option>
+                            <option value="approved">Approved</option>
+                            <option value="active">Active</option>
+                        </select>
+                        <button class="btn btn-sm" onclick="createWorkflowFromPrompt()">New Workflow</button>
+                        <button class="btn btn-sm" onclick="loadWorkflows()">Refresh</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Class</th>
+                                <th>Status</th>
+                                <th>Version</th>
+                                <th>Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="workflows-tbody">
+                            <tr><td colspan="7" class="loading">Loading workflows...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CI/CD Page -->
+            <div class="page" id="page-cicd">
+                <div class="page-header">
+                    <h2>CI/CD Security Gates</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="loadCicd()">Refresh</button>
+                    </div>
+                </div>
+                <div class="setup-layout">
+                    <div class="setup-panel">
+                        <div class="setup-section-title">Reference Provider</div>
+                        <div class="setup-help">GitLab is the default deployable CI/CD provider for this platform. Other providers should post the same canonical run payload.</div>
+                        <label class="setup-label">Repository reference</label>
+                        <input id="cicd-repo-ref" class="filter-input wide-input" value="gitlab/demo/security-pipeline">
+                        <label class="setup-label">Branch</label>
+                        <input id="cicd-branch" class="filter-input wide-input" value="main">
+                        <label class="setup-label">Target URL</label>
+                        <input id="cicd-target-url" class="filter-input wide-input" placeholder="optional DAST target URL">
+                        <label class="setup-check">
+                            <input type="checkbox" id="cicd-create-ticket" checked>
+                            <span>Create a dashboard ticket for the scan evidence</span>
+                        </label>
+                        <label class="setup-check">
+                            <input type="checkbox" id="cicd-require-change" checked>
+                            <span>Create an approval gate before production deployment</span>
+                        </label>
+                        <div class="modal-actions-bar inline-actions">
+                            <button class="btn btn-sm" onclick="showGitlabTemplate()">GitLab Template</button>
+                            <button class="btn btn-sm btn-success" onclick="recordDemoCicdRun()">Record Demo Run</button>
+                        </div>
+                    </div>
+                    <div class="setup-panel wide">
+                        <div class="setup-section-title">GitLab CI Template</div>
+                        <pre id="cicd-template" class="task-output">Load the GitLab template to view the default pipeline.</pre>
+                    </div>
+                </div>
+                <div class="chart-card wide">
+                    <div class="chart-header"><h3>Recent Security Runs</h3></div>
+                    <div class="table-container compact">
+                        <table class="data-table">
+                            <thead><tr><th>ID</th><th>Provider</th><th>Repo</th><th>Status</th><th>Ticket</th><th>Change</th><th>Created</th></tr></thead>
+                            <tbody id="cicd-runs-tbody"><tr><td colspan="7" class="loading">Loading CI/CD runs...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Learning Page -->
+            <div class="page" id="page-learning">
+                <div class="page-header">
+                    <h2>Learning & Skills</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="createKnowledgeArticle()">New Article</button>
+                        <button class="btn btn-sm" onclick="importKnowledgeUrl()">Import URL</button>
+                        <button class="btn btn-sm" onclick="createSkill()">New Skill</button>
+                        <button class="btn btn-sm" onclick="loadLearning()">Refresh</button>
+                    </div>
+                </div>
+                <div class="charts-row">
+                    <div class="chart-card wide">
+                        <div class="chart-header"><h3>Postmortems</h3></div>
+                        <div class="table-container compact">
+                            <table class="data-table">
+                                <thead><tr><th>ID</th><th>Ticket</th><th>Status</th><th>Summary</th><th>Updated</th><th>Actions</th></tr></thead>
+                                <tbody id="postmortems-tbody"><tr><td colspan="6" class="loading">Loading postmortems...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header"><h3>Skills</h3></div>
+                        <div class="learning-list" id="skills-list">Loading skills...</div>
+                    </div>
+                </div>
+                <div class="chart-card wide">
+                    <div class="chart-header"><h3>Knowledge Articles</h3></div>
+                    <div class="learning-list" id="knowledge-list">Loading knowledge...</div>
+                </div>
+            </div>
+
+            <!-- Tools Page -->
+            <div class="page" id="page-tools">
+                <div class="page-header">
+                    <h2>SOC Tools</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="checkAllTools()">Check All</button>
+                    </div>
+                </div>
+                <div class="tools-grid" id="tools-grid">
+                    <div class="tool-empty">Loading tools...</div>
+                </div>
+            </div>
+
+            <!-- Setup Page -->
+            <div class="page" id="page-setup">
+                <div class="page-header">
+                    <h2>Platform Setup</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="loadSetup()">Refresh</button>
+                        <button class="btn btn-sm btn-success" onclick="createSetupTicket(false)">Create Ticket</button>
+                        <button class="btn btn-sm btn-warning" onclick="createSetupTicket(true)">Create + Assign Agent</button>
+                    </div>
+                </div>
+                <div class="setup-layout">
+                    <div class="setup-panel">
+                        <div class="setup-section-title">Deployment Shape</div>
+                        <label class="setup-label">Profile</label>
+                        <select id="setup-profile" class="filter-select" onchange="generateSetupPlan()">
+                            <option value="minimal">Control Plane Only</option>
+                            <option value="soc" selected>SOC Replacement Baseline</option>
+                            <option value="full-it">Full IT Automation Platform</option>
+                        </select>
+                        <label class="setup-check">
+                            <input type="checkbox" id="setup-deploy-missing" checked onchange="generateSetupPlan()">
+                            <span>Deploy missing reference modules when no existing product is selected</span>
+                        </label>
+                        <label class="setup-label">AI Endpoint</label>
+                        <input id="setup-ai-base-url" class="filter-input wide-input" placeholder="http://192.168.50.222:4001">
+                        <label class="setup-label">Agent Model</label>
+                        <select id="setup-model" class="filter-select" data-agent-model-select></select>
+                        <label class="setup-label">Operator Notes</label>
+                        <textarea id="setup-notes" class="setup-textarea" rows="6" placeholder="Existing products, deployment constraints, approval policy, network zones, tenant notes..."></textarea>
+                    </div>
+                    <div class="setup-panel wide">
+                        <div class="setup-section-title">Provider-Agnostic Modules</div>
+                        <div class="setup-help">Mark modules as existing when the customer already has an equivalent product. Leave them unmarked to deploy or blueprint the open-source reference module where appropriate.</div>
+                        <div id="setup-modules" class="module-grid">
+                            <div class="loading">Loading manifest...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="setup-panel full">
+                    <div class="setup-section-title">Generated Setup Plan</div>
+                    <div id="setup-summary" class="setup-summary">No plan generated yet.</div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Step</th>
+                                    <th>Module</th>
+                                    <th>Category</th>
+                                    <th>Action</th>
+                                    <th>Skill</th>
+                                    <th>Checks</th>
+                                </tr>
+                            </thead>
+                            <tbody id="setup-plan-tbody">
+                                <tr><td colspan="6" class="loading">Generate a plan to preview steps</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Access Page -->
+            <div class="page" id="page-access">
+                <div class="page-header">
+                    <h2>Access Management</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="createDashboardUser()">New User</button>
+                        <button class="btn btn-sm" onclick="loadAccess()">Refresh</button>
+                    </div>
+                </div>
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <div class="chart-header"><h3>Current Identity</h3></div>
+                        <div class="learning-list" id="access-me">Loading identity...</div>
+                    </div>
+                    <div class="chart-card wide">
+                        <div class="chart-header"><h3>Policy</h3></div>
+                        <div class="learning-list" id="access-policy">Loading policy...</div>
+                    </div>
+                </div>
+                <div class="chart-card wide">
+                    <div class="chart-header"><h3>Dashboard Users</h3></div>
+                    <div class="table-container compact">
+                        <table class="data-table">
+                            <thead><tr><th>ID</th><th>User</th><th>Provider</th><th>Roles</th><th>Enabled</th></tr></thead>
+                            <tbody id="access-users-tbody"><tr><td colspan="5" class="loading">Loading users...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audit Page -->
+            <div class="page" id="page-audit">
+                <div class="page-header">
+                    <h2>Audit Log</h2>
+                    <div class="header-actions">
+                        <select id="audit-filter-source" class="filter-select">
+                            <option value="">All Sources</option>
+                            <option value="event">Events</option>
+                            <option value="audit">Audit</option>
+                            <option value="note">Notes</option>
+                        </select>
+                        <select id="audit-filter-level" class="filter-select">
+                            <option value="">All Levels</option>
+                            <option value="info">Info</option>
+                            <option value="warning">Warning</option>
+                            <option value="error">Error</option>
+                        </select>
+                        <input id="audit-filter-text" class="filter-input" placeholder="Actor/action/target">
+                        <button class="btn btn-sm" onclick="loadAudit()">Refresh</button>
+                    </div>
+                </div>
+                <div class="audit-timeline" id="audit-timeline">
+                    <div class="loading">Loading audit log...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Ticket Detail Modal -->
+    <div class="modal" id="ticket-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Ticket Detail</h3>
+                <button class="modal-close" onclick="closeModal('ticket-modal')">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/charts.js"></script>
+    <script src="/static/js/agents.js"></script>
+    <script src="/static/js/websocket.js"></script>
+</body>
+</html>

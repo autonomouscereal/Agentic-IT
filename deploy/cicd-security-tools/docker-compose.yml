@@ -1,0 +1,38 @@
+services:
+  semgrep:
+    image: ${SEMGREP_IMAGE:-semgrep/semgrep:latest}
+    working_dir: /workspace
+    volumes:
+      - ${HOST_REPO:-.}:/workspace:ro
+      - ${HOST_OUTPUT:-./scan-output}:/output
+    command: ["semgrep", "--config", "auto", "--json", "--output", "/output/semgrep.json", "/workspace"]
+    profiles: ["semgrep", "gate"]
+
+  trivy:
+    image: ${TRIVY_IMAGE:-aquasec/trivy:latest}
+    working_dir: /workspace
+    volumes:
+      - ${HOST_REPO:-.}:/workspace:ro
+      - ${HOST_OUTPUT:-./scan-output}:/output
+      - trivy-cache:/root/.cache/trivy
+    command: ["fs", "--format", "json", "--output", "/output/trivy.json", "/workspace"]
+    profiles: ["trivy", "gate"]
+
+  zap:
+    image: ${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy:stable}
+    volumes:
+      - ${HOST_OUTPUT:-./scan-output}:/zap/wrk
+    command: ["zap-baseline.py", "-t", "${DAST_TARGET_URL:-http://127.0.0.1}", "-J", "zap.json"]
+    profiles: ["zap", "dast"]
+
+  nuclei:
+    image: ${NUCLEI_IMAGE:-projectdiscovery/nuclei:latest}
+    volumes:
+      - ${HOST_OUTPUT:-./scan-output}:/output
+      - nuclei-templates:/root/nuclei-templates
+    command: ["-u", "${DAST_TARGET_URL:-http://127.0.0.1}", "-jsonl", "-o", "/output/nuclei.jsonl"]
+    profiles: ["nuclei", "dast"]
+
+volumes:
+  trivy-cache:
+  nuclei-templates:

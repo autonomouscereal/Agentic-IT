@@ -1,0 +1,209 @@
+<!-- Zeek Log Decoders for Wazuh -->
+<!-- Extracts fields from Zeek JSON logs (conn.log, dns.log, ssl.log, etc.) -->
+<!-- Parent decoder: json (Wazuh built-in JSON decoder handles base parsing) -->
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"ts":\d+</regex>
+  <order>timestamp</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"uid":"(\w+)"</regex>
+  <order>uid</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"id.orig_h":"(\d+\.\d+\.\d+\.\d+)"</regex>
+  <order>srcip</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"id.orig_p":(\d+)</regex>
+  <order>srcport</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"id.resp_h":"(\d+\.\d+\.\d+\.\d+)"</regex>
+  <order>dstip</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"id.resp_p":(\d+)</regex>
+  <order>dstport</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"proto":"(\w+)"</regex>
+  <order>protocol</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"trans_id":(\d+)</regex>
+  <order>DNS_transaction_id</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"query":"(.+)"</regex>
+  <order>dnsquery</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"rcode_name":"(\w+)"</regex>
+  <order>dns_response_code</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"AA":(\w+)</regex>
+  <order>authoritative_answer</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"TC":(\w+)</regex>
+  <order>truncate_flag</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"RD":(\w+)</regex>
+  <order>recursion_desired_flag</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"RA":(\w+)</regex>
+  <order>recursion_available_flag</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"rejected":(\w+)</regex>
+  <order>query_rejected</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"service":"(\w+)"</regex>
+  <order>application_layer_protocol</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"duration":([\d.]+)</regex>
+  <order>duration_of_connection</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"orig_bytes":(\d+)</regex>
+  <order>bytes_sent_by_originator</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"resp_bytes":(\d+)</regex>
+  <order>bytes_sent_by_responder</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"conn_state":"(\w+)"</regex>
+  <order>connection_state</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"local_orig":(\w+)</regex>
+  <order>local_origin</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"local_resp":(\w+)</regex>
+  <order>local_response</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"orig_pkts":(\d+)</regex>
+  <order>packets_from_origin</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"resp_pkts":(\d+)</regex>
+  <order>packets_from_responder</order>
+</decoder>
+
+<!-- SSL/TLS Connection Decoders -->
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"version":"(.+)"</regex>
+  <order>ssl_version</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"cipher":"(.+)"</regex>
+  <order>ssl_cipher</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"curve":"(.+)"</regex>
+  <order>ssl_curve</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"validation_status":"(.+)"</regex>
+  <order>ssl_validation_status</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"server_name":"(.+)"</regex>
+  <order>ssl_server_name</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"established":(\w+)</regex>
+  <order>ssl_established</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"resumed":(\w+)</regex>
+  <order>ssl_resumed</order>
+</decoder>
+
+<!-- Software Decoders -->
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"host":"(\d+\.\d+\.\d+\.\d+)"</regex>
+  <order>host_ip</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"software_name":"(.+)"</regex>
+  <order>software_name</order>
+</decoder>
+
+<decoder name="zeek_decoder">
+  <parent>json</parent>
+  <regex>"unparsed_version":"(.+)"</regex>
+  <order>software_version</order>
+</decoder>

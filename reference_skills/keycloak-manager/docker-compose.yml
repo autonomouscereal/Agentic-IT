@@ -1,0 +1,101 @@
+# Keycloak 26.6 + PostgreSQL 16 - Production Deployment
+# network_mode: host configuration
+# ALL secrets via environment variables - NEVER hardcode
+
+services:
+  # PostgreSQL 16 - Production database backend
+  postgres:
+    image: postgres:16-alpine
+    container_name: keycloak-db
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-keycloak}
+      POSTGRES_USER: ${POSTGRES_USER:-keycloak_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Performance tuning
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-keycloak_user} -d ${POSTGRES_DB:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    # Security: run as non-root postgres user
+    user: "${POSTGRES_CONTAINER_USER:-999:999}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Keycloak 26.6 - Identity and Access Management
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.0
+    container_name: keycloak
+    network_mode: host
+    restart: unless-stopped
+    command: start
+    environment:
+      # Admin bootstrap (only works on first boot)
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+
+      # Database configuration
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://localhost:5432/${POSTGRES_DB:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-keycloak_user}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # Hostname configuration
+      KC_HOSTNAME: ${KC_HOSTNAME:-localhost}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+
+      # Proxy settings (remove if not behind proxy)
+      # KC_PROXY_HEADERS: xforwarded
+
+      # Health and metrics
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+      # Logging
+      KC_LOG_LEVEL: ${KC_LOG_LEVEL:-INFO}
+
+      # Cache configuration (local for single instance)
+      KC_CACHE: ${KC_CACHE:-local}
+
+      # Transaction settings
+      KC_TRANSACTION_XA_ENABLED: "false"
+
+      # Memory tuning
+      JAVA_OPTS_KC_HEAP: ${JAVA_OPTS_KC_HEAP:--Xms512m -Xmx1024m}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 750M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  pgdata:
+    driver: local

@@ -1,0 +1,49 @@
+<!--
+  SysmonForLinux configuration for the reference Wazuh EDR deployment.
+
+  This file intentionally uses the SysmonForLinux 4.90 schema style accepted by
+  the Microsoft v1.5.x Linux binary. Avoid Windows-only/custom wrapper elements
+  such as IncludeProcessFiltering; the binary rejects them and the service will
+  fail to start.
+-->
+<Sysmon schemaversion="4.90">
+  <EventFiltering>
+    <ProcessCreate onmatch="include">
+      <Image condition="begin with">/tmp/</Image>
+      <Image condition="begin with">/dev/shm/</Image>
+      <Image condition="begin with">/var/tmp/</Image>
+      <Image condition="contains">/curl</Image>
+      <Image condition="contains">/wget</Image>
+      <Image condition="contains">/nmap</Image>
+      <Image condition="contains">/sqlmap</Image>
+      <Image condition="contains">/hydra</Image>
+      <Image condition="contains">/john</Image>
+      <Image condition="contains">/hashcat</Image>
+      <CommandLine condition="contains">CODEX_SYSMON</CommandLine>
+      <CommandLine condition="contains">/bin/bash -c</CommandLine>
+      <CommandLine condition="contains">/bin/sh -c</CommandLine>
+    </ProcessCreate>
+
+    <NetworkConnect onmatch="include">
+      <DestinationPort condition="is">4444</DestinationPort>
+      <DestinationPort condition="is">5555</DestinationPort>
+      <DestinationPort condition="is">6666</DestinationPort>
+      <DestinationPort condition="is">7777</DestinationPort>
+      <DestinationPort condition="is">8888</DestinationPort>
+      <DestinationPort condition="is">9999</DestinationPort>
+      <DestinationPort condition="is">1337</DestinationPort>
+      <DestinationPort condition="is">31337</DestinationPort>
+    </NetworkConnect>
+
+    <FileCreate onmatch="include">
+      <TargetFilename condition="begin with">/etc/cron</TargetFilename>
+      <TargetFilename condition="begin with">/etc/systemd</TargetFilename>
+      <TargetFilename condition="begin with">/etc/init.d</TargetFilename>
+      <TargetFilename condition="begin with">/tmp/CODEX_SYSMON</TargetFilename>
+      <TargetFilename condition="end with">.bashrc</TargetFilename>
+      <TargetFilename condition="end with">.profile</TargetFilename>
+      <TargetFilename condition="end with">.sh</TargetFilename>
+      <TargetFilename condition="end with">.py</TargetFilename>
+    </FileCreate>
+  </EventFiltering>
+</Sysmon>

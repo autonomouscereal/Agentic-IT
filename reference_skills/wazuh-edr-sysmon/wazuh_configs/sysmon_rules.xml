@@ -1,0 +1,223 @@
+<!-- Wazuh Sysmon Detection Rules -->
+<!-- Rule IDs: 100200-100299 -->
+<group name="sysmon,edr">
+
+  <!-- LOLBin process execution -->
+  <rule id="100201" level="10">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*1</match>
+    <match>Image.*(certutil|bits|mshta|regsvr32|rundll32|cscript|wscript|esentutl|forfiles|makecab|msiexec|ntdsutil|pnputil|regasm|regedit|sc).(exe|dll|bat|cmd)</match>
+    <description>Sysmon: Suspicious LOLBin process execution detected</description>
+    <group>sysmon,process_creation,mitre_t1202,mitre_t1218</group>
+  </rule>
+
+  <!-- Suspicious PowerShell -->
+  <rule id="100202" level="10">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*1</match>
+    <match>Image.*powershell.(exe|dll)</match>
+    <match>CommandLine.*-(enc|encodedcommand|nop|w hidden)</match>
+    <description>Sysmon: Suspicious PowerShell execution encoded/hidden</description>
+    <group>sysmon,process_creation,mitre_t1059</group>
+  </rule>
+
+  <!-- Recon/credential dumping in cmd -->
+  <rule id="100203" level="8">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*1</match>
+    <match>Image.*cmd.exe</match>
+    <match>CommandLine.*(whoami|ipconfig|net user|net group|netstat|tasklist|systeminfo|wmic|procdump|mimikatz|lazagne|sekurlsa)</match>
+    <description>Sysmon: Reconnaissance or credential dumping command in cmd</description>
+    <group>sysmon,process_creation,mitre_t1003,mitre_t1018</group>
+  </rule>
+
+  <!-- Known credential dumping tools -->
+  <rule id="100213" level="15">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*1</match>
+    <match>Image.*(mimikatz|procdump|lazagne|pwdump|dumpert|nanodump|cerberus|sharpdump).(exe|dll|ps1|py)</match>
+    <description>Sysmon: Known credential dumping tool execution</description>
+    <group>sysmon,process_creation,mitre_t1003</group>
+  </rule>
+
+  <!-- LSASS access -->
+  <rule id="100204" level="12">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*10</match>
+    <match>TargetImage.*lsass.exe</match>
+    <description>Sysmon: Process access to LSASS potential credential dumping</description>
+    <group>sysmon,process_access,mitre_t1003</group>
+  </rule>
+
+  <!-- Network from suspicious binary -->
+  <rule id="100205" level="9">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*3</match>
+    <match>Image.*(certutil|bits|mshta|wget|curl|powershell|cmd).(exe|dll)</match>
+    <description>Sysmon: Network connection from suspicious binary</description>
+    <group>sysmon,network_connection,mitre_t1105</group>
+  </rule>
+
+  <!-- Suspicious port connection -->
+  <rule id="100206" level="10">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*3</match>
+    <match>DestinationPort.*(4444|5555|6666|7777|8888|9999|1337|31337)</match>
+    <description>Sysmon: Connection to suspicious port potential C2</description>
+    <group>sysmon,network_connection,mitre_t1071</group>
+  </rule>
+
+  <!-- Suspicious file creation -->
+  <rule id="100207" level="10">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*11</match>
+    <match>TargetFilename.*(Temp|AppData|Startup|System32|SysWOW64|Windows).(exe|dll|bat|cmd|ps1|vbs|scr)</match>
+    <description>Sysmon: Suspicious file creation in system/temp directory</description>
+    <group>sysmon,file_creation,mitre_t1036</group>
+  </rule>
+
+  <!-- Registry persistence -->
+  <rule id="100208" level="12">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*13</match>
+    <match>TargetObject.*(Run|RunOnce|Services|Winlogon|Shell|Userinit|AppInit_DLLs)</match>
+    <description>Sysmon: Registry persistence mechanism detected</description>
+    <group>sysmon,registry_persistence,mitre_t1547</group>
+  </rule>
+
+  <!-- Process injection -->
+  <rule id="100209" level="13">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*8</match>
+    <description>Sysmon: CreateRemoteThread process injection detected</description>
+    <group>sysmon,process_injection,mitre_t1055</group>
+  </rule>
+
+  <!-- Raw disk access -->
+  <rule id="100210" level="12">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*9</match>
+    <description>Sysmon: Raw disk access detected</description>
+    <group>sysmon,raw_access,mitre_t1003</group>
+  </rule>
+
+  <!-- Driver loading -->
+  <rule id="100211" level="8">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*6</match>
+    <description>Sysmon: Driver loaded</description>
+    <group>sysmon,driver_load,mitre_t1546</group>
+  </rule>
+
+  <!-- DLL loading into legitimate process -->
+  <rule id="100212" level="11">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*7</match>
+    <match>Image.*(explorer|svchost|chrome|firefox|outlook|winword|excel).(exe|dll)</match>
+    <description>Sysmon: DLL loaded into legitimate process potential hijacking</description>
+    <group>sysmon,image_load,mitre_t1574</group>
+  </rule>
+
+  <!-- WMI activity -->
+  <rule id="100214" level="10">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*(19|20|21)</match>
+    <description>Sysmon: WMI event activity detected</description>
+    <group>sysmon,wmi,mitre_t1047</group>
+  </rule>
+
+  <!-- LOTL binaries -->
+  <rule id="100215" level="11">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*1</match>
+    <match>Image.*(msiexec|esentutl|forfiles|makecab|mc|ntdsutil|pnputil).(exe|dll)</match>
+    <description>Sysmon: Living-off-the-land binary execution</description>
+    <group>sysmon,lotl,mitre_t1127</group>
+  </rule>
+
+  <!-- Defense evasion -->
+  <rule id="100216" level="12">
+    <match>Linux-Sysmon</match>
+    <match>EventID.*1</match>
+    <match>Image.*(wevtutil|cmd|powershell).(exe|dll)</match>
+    <match>CommandLine.*(clear-log|wevtutil cl|amsi|bypass|executionpolicy)</match>
+    <description>Sysmon: Defense evasion technique log clearing or AMSI bypass</description>
+    <group>sysmon,defense_evasion,mitre_t1070</group>
+  </rule>
+
+  <!-- Suspicious process from temp -->
+  <rule id="100221" level="10">
+    <match>Linux-Sysmon</match>
+    <match>/(tmp|dev/shm|var/tmp)/</match>
+    <description>SysmonForLinux: Suspicious process execution from temp directory</description>
+    <group>sysmon,linux,process_creation,mitre_t1036</group>
+  </rule>
+
+  <!-- Suspicious port connection -->
+  <rule id="100222" level="11">
+    <match>Linux-Sysmon</match>
+    <match>(Destination|Remote).</match>
+    <match>.*(4444|5555|6666|7777|8888|9999|1337|31337)</match>
+    <description>SysmonForLinux: Connection to suspicious port potential C2</description>
+    <group>sysmon,linux,network_connection,mitre_t1071</group>
+  </rule>
+
+  <!-- Exploitation tools -->
+  <rule id="100223" level="9">
+    <match>Linux-Sysmon</match>
+    <match>(nmap|nikto|sqlmap|metasploit|msfconsole|msfvenom|hydra|john|hashcat)</match>
+    <description>SysmonForLinux: Security testing/exploitation tool execution</description>
+    <group>sysmon,linux,process_creation,mitre_t1190</group>
+  </rule>
+
+  <!-- Reverse shell -->
+  <rule id="100224" level="12">
+    <match>Linux-Sysmon</match>
+    <match>(wget|curl)</match>
+    <match>(bash|sh)</match>
+    <description>SysmonForLinux: Reverse shell via download pipe execution</description>
+    <group>sysmon,linux,process_creation,mitre_t1059</group>
+  </rule>
+
+  <!-- Persistence file creation -->
+  <rule id="100225" level="10">
+    <match>Linux-Sysmon</match>
+    <match>(/etc/cron|/etc/systemd|/etc/init.d|.bashrc|.profile|/etc/rc.local)</match>
+    <description>SysmonForLinux: Persistence mechanism file creation</description>
+    <group>sysmon,linux,file_creation,mitre_t1543</group>
+  </rule>
+
+  <!-- Sensitive file access -->
+  <rule id="100226" level="13">
+    <match>Linux-Sysmon</match>
+    <match>(passwd|shadow|sudoers|authorized_keys|sshd_config)</match>
+    <description>SysmonForLinux: Sensitive system file access/modification</description>
+    <group>sysmon,linux,process_creation,mitre_t1098</group>
+  </rule>
+
+  <!-- Sysmon base catch-all (level 0, fires if no higher rule matched) -->
+  <rule id="100200" level="0">
+    <match>Linux-Sysmon</match>
+    <description>Sysmon: event received</description>
+    <group>sysmon</group>
+  </rule>
+
+  <!-- Non-destructive exact-marker rule used by the E2E test suite.
+       Real Sysmon XML first matches the base catch-all, so this child rule
+       raises the marker event to an alert while keeping production behavior
+       safe and explicit. -->
+  <rule id="100230" level="5">
+    <if_sid>100200</if_sid>
+    <match>CODEX_SYSMON_</match>
+    <description>SysmonForLinux: EDR pipeline verification marker observed</description>
+    <group>sysmon,linux,edr_test</group>
+  </rule>
+
+  <!-- Fallback for raw syslog marker injection during manager diagnostics. -->
+  <rule id="100231" level="5">
+    <match>CODEX_SYSMON_</match>
+    <description>SysmonForLinux: raw EDR pipeline verification marker observed</description>
+    <group>sysmon,linux,edr_test</group>
+  </rule>
+
+</group>

@@ -1,0 +1,19 @@
+{
+  "severity_levels": {
+    "emergency": {"min_level": 13, "impact": 3, "urgency": 5, "auto_assign": true, "notify": true},
+    "critical": {"min_level": 11, "impact": 3, "urgency": 4, "auto_assign": true, "notify": true},
+    "high": {"min_level": 7, "impact": 2, "urgency": 3, "auto_assign": true, "notify": false},
+    "medium": {"min_level": 4, "impact": 2, "urgency": 2, "auto_assign": false, "notify": false},
+    "low": {"min_level": 1, "impact": 1, "urgency": 1, "auto_assign": false, "notify": false},
+    "info": {"min_level": 0, "impact": 1, "urgency": 1, "auto_assign": false, "notify": false}
+  },
+  "rule_overrides": {
+    "100904": {"severity": "critical", "reason": "Port scan detection"},
+    "100907": {"severity": "high", "reason": "Expired certificates"},
+    "100910": {"severity": "high", "reason": "Revoked certificates"},
+    "86712": {"severity": "emergency", "reason": "Suricata emergency alert"},
+    "86711": {"severity": "critical", "reason": "Suricata critical alert"}
+  },
+  "ticket_creation_threshold": 4,
+  "auto_close_after_hours": 72
+}

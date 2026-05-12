@@ -1,0 +1,224 @@
+<!-- ============================================================
+     Sysmon Configuration for Windows Endpoints
+     Optimized for Wazuh SIEM integration
+     MITRE ATT&CK aligned | Schema 4.90
+     Events: 1,3,6,7,8,10,11,12,13,14,19,20,21
+     ============================================================ -->
+<Sysmon schemaversion="4.90">
+  <HashAlgorithms>SHA256</HashAlgorithms>
+  <CheckRevocation>False</CheckRevocation>
+  <DnsLookup>False</DnsLookup>
+  <ArchiveDirectory>Sysmon</ArchiveDirectory>
+
+  <EventFiltering>
+    <!-- Process Creation (EventID 1) -->
+    <ProcessCreate onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="1">
+      <onprocesschange>true</onprocesschange>
+      <onprocessterminate>false</onprocessterminate>
+      <include>Create</include>
+      <captureCommandLine>true</captureCommandLine>
+      <captureLogonId>true</captureLogonId>
+      <captureUser>true</captureUser>
+      <captureToken>false</captureToken>
+      <captureProcessToken>false</captureProcessToken>
+      <captureThread>false</captureThread>
+      <captureFileHash>true</captureFileHash>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <!-- Exclude system noise -->
+      <ExcludeProcessFiltering>
+        <ParentImage condition="end with">\System\csrss.exe</ParentImage>
+        <ParentImage condition="end with">\System\conhost.exe</ParentImage>
+        <ParentImage condition="end with">\System\services.exe</ParentImage>
+        <ParentImage condition="end with">\System\svchost.exe</ParentImage>
+        <Image condition="end with">\System\csrss.exe</Image>
+        <Image condition="end with">\System\conhost.exe</Image>
+        <Image condition="end with">\System\fontdrvhost.exe</Image>
+        <Image condition="end with">\System\dwm.exe</Image>
+      </ExcludeProcessFiltering>
+    </ProcessCreate>
+
+    <!-- Network Connection (EventID 3) -->
+    <NetworkConnect onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="3">
+      <onprocesschange>true</onprocesschange>
+      <include>DestinationIp</include>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <ExcludeNetworkFiltering>
+        <Image condition="end with">\System\svchost.exe</Image>
+        <Image condition="end with">\System\services.exe</Image>
+        <DestinationIp condition="is">127.0.0.1</DestinationIp>
+        <DestinationIp condition="is">0.0.0.0</DestinationIp>
+        <DestinationIp condition="begin with">169.254.</DestinationIp>
+      </ExcludeNetworkFiltering>
+    </NetworkConnect>
+
+    <!-- Driver Load (EventID 6) -->
+    <DriverLoad onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="6">
+      <onprocesschange>true</onprocesschange>
+      <include>Driver</include>
+      <captureFileHash>true</captureFileHash>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+    </DriverLoad>
+
+    <!-- Image Load (EventID 7) -->
+    <ImageLoad onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="7">
+      <onprocesschange>true</onprocesschange>
+      <include>ImageLoad</include>
+      <captureFileHash>false</captureFileHash>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <IncludeImageLoadFiltering>
+        <Image condition="end with">\explorer.exe</Image>
+        <Image condition="end with">\chrome.exe</Image>
+        <Image condition="end with">\firefox.exe</Image>
+        <Image condition="end with">\outlook.exe</Image>
+        <Image condition="end with">\winword.exe</Image>
+        <Image condition="end with">\excel.exe</Image>
+        <OriginalFileName condition="is"></OriginalFileName>
+      </IncludeImageLoadFiltering>
+    </ImageLoad>
+
+    <!-- CreateRemoteThread (EventID 8) -->
+    <CreateRemoteThread onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="8">
+      <onprocesschange>true</onprocesschange>
+      <include>Thread</include>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <ExcludeRemoteThreadFiltering>
+        <SourceImage condition="end with">\System\csrss.exe</SourceImage>
+        <SourceImage condition="end with">\System\services.exe</SourceImage>
+        <SourceImage condition="end with">\System\svchost.exe</SourceImage>
+        <SourceImage condition="end with">\System\smss.exe</SourceImage>
+        <SourceImage condition="end with">\System\wininit.exe</SourceImage>
+        <SourceImage condition="end with">\System\winlogon.exe</SourceImage>
+        <TargetImage condition="end with">\System\csrss.exe</TargetImage>
+        <TargetImage condition="end with">\System\conhost.exe</TargetImage>
+      </ExcludeRemoteThreadFiltering>
+    </CreateRemoteThread>
+
+    <!-- Process Access (EventID 10) -->
+    <ProcessAccess onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="10">
+      <onprocesschange>true</onprocesschange>
+      <include>Access</include>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <IncludeProcessAccessFiltering>
+        <SourceImage condition="end with">\AppData\</SourceImage>
+        <SourceImage condition="end with">\LocalAppData\</SourceImage>
+        <SourceImage condition="end with">\Temp\</SourceImage>
+        <TargetImage condition="end with">\System\lsass.exe</TargetImage>
+        <TargetImage condition="end with">\Windows\System32\lsass.exe</TargetImage>
+        <GrantedAccess condition="is">0x1FFFFF</GrantedAccess>
+        <GrantedAccess condition="is">0x1010</GrantedAccess>
+        <GrantedAccess condition="is">0x1410</GrantedAccess>
+        <GrantedAccess condition="is">0x1</GrantedAccess>
+      </IncludeProcessAccessFiltering>
+    </ProcessAccess>
+
+    <!-- File Creation (EventID 11) -->
+    <FileCreate onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="11">
+      <onprocesschange>true</onprocesschange>
+      <include>Create</include>
+      <captureFileHash>false</captureFileHash>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <FileCreateFiltering>
+        <TargetFilename condition="begin with">\Windows\Temp\</TargetFilename>
+        <TargetFilename condition="begin with">\Users\</TargetFilename>
+        <TargetFilename condition="end with">.exe</TargetFilename>
+        <TargetFilename condition="end with">.dll</TargetFilename>
+        <TargetFilename condition="end with">.bat</TargetFilename>
+        <TargetFilename condition="end with">.cmd</TargetFilename>
+        <TargetFilename condition="end with">.ps1</TargetFilename>
+        <TargetFilename condition="end with">.vbs</TargetFilename>
+        <TargetFilename condition="end with">.scr</TargetFilename>
+      </FileCreateFiltering>
+
+      <ExcludeFileCreateFiltering>
+        <Image condition="end with">\System\svchost.exe</Image>
+        <Image condition="end with">\System\dwm.exe</Image>
+        <TargetFilename condition="begin with">\Program Files\Windows Defender\</TargetFilename>
+      </ExcludeFileCreateFiltering>
+    </FileCreate>
+
+    <!-- Registry Event: Object Create/Delete (EventID 12) -->
+    <RegistryEvent onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="12">
+      <onprocesschange>true</onprocesschange>
+      <include>Registry</include>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <RegistryObjectFiltering>
+        <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
+        <TargetObject condition="contains">\CurrentVersion\RunOnce</TargetObject>
+        <TargetObject condition="contains">\CurrentVersion\Windows\</TargetObject>
+        <TargetObject condition="contains">\Windows\System\CurrentControlSet\Services\</TargetObject>
+        <TargetObject condition="contains">\Winlogon\</TargetObject>
+      </RegistryObjectFiltering>
+    </RegistryEvent>
+
+    <!-- Registry Event: Value Set (EventID 13) -->
+    <RegistryEvent onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="13">
+      <onprocesschange>true</onprocesschange>
+      <include>Registry</include>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <RegistryObjectFiltering>
+        <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
+        <TargetObject condition="contains">\CurrentVersion\RunOnce</TargetObject>
+        <TargetObject condition="contains">\Winlogon\Notify</TargetObject>
+        <TargetObject condition="contains">\Winlogon\Userinit</TargetObject>
+        <TargetObject condition="contains">\Winlogon\Shell</TargetObject>
+        <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+        <TargetObject condition="contains">\AppInit_DLLs</TargetObject>
+      </RegistryObjectFiltering>
+    </RegistryEvent>
+
+    <!-- Registry Event: Rename (EventID 14) -->
+    <RegistryEvent onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="14">
+      <onprocesschange>true</onprocesschange>
+      <include>Registry</include>
+      <captureXml>false</captureXml>
+      <capturePrevention>false</capturePrevention>
+
+      <RegistryObjectFiltering>
+        <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
+        <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+      </RegistryObjectFiltering>
+    </RegistryEvent>
+
+    <!-- WMI Event Filter (EventID 19) -->
+    <WmiEvent onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="19">
+      <onprocesschange>true</onprocesschange>
+      <include>All</include>
+      <captureXml>true</captureXml>
+      <capturePrevention>false</capturePrevention>
+    </WmiEvent>
+
+    <!-- WMI Event Consumer (EventID 20) -->
+    <WmiEvent onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="20">
+      <onprocesschange>true</onprocesschange>
+      <include>All</include>
+      <captureXml>true</captureXml>
+      <capturePrevention>false</capturePrevention>
+    </WmiEvent>
+
+    <!-- WMI Event Consumer to Filter (EventID 21) -->
+    <WmiEvent onchannel="Microsoft-Windows-Sysmon/Operational" oneventid="21">
+      <onprocesschange>true</onprocesschange>
+      <include>All</include>
+      <captureXml>true</captureXml>
+      <capturePrevention>false</capturePrevention>
+    </WmiEvent>
+
+  </EventFiltering>
+</Sysmon>
