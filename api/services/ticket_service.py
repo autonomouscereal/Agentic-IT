@@ -10,6 +10,59 @@ from services.event_logger import log_event
 from services.ticket_links import external_ticket_url
 
 
+def _loads_json(value):
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            import json
+            return json.loads(value)
+        except Exception:
+            return None
+    return None
+
+
+def _truncate_text(value, limit=500):
+    if value is None:
+        return value
+    text = str(value)
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"... [truncated {len(text) - limit} chars]"
+
+
+def compact_ticket_payload(ticket, include_provider_payload=False):
+    """Keep agent-facing ticket objects small while preserving useful refs."""
+    if not ticket:
+        return ticket
+    if include_provider_payload:
+        return ticket
+
+    payload = ticket.get("provider_payload")
+    loaded = _loads_json(payload)
+    summary = None
+    if isinstance(loaded, dict):
+        fields = loaded.get("fields") if isinstance(loaded.get("fields"), dict) else {}
+        summary = {
+            "key": loaded.get("key") or fields.get("id"),
+            "class": loaded.get("class") or ticket.get("provider_class"),
+            "code": loaded.get("code"),
+            "message": _truncate_text(loaded.get("message"), 240),
+            "friendlyname": fields.get("friendlyname") or fields.get("ref"),
+            "status": fields.get("status"),
+            "team_name": fields.get("team_name"),
+            "caller_name": fields.get("caller_name"),
+            "escalation_flag": fields.get("escalation_flag"),
+            "escalation_reason": _truncate_text(fields.get("escalation_reason"), 240),
+        }
+    elif payload not in (None, "", {}):
+        summary = {"raw_preview": _truncate_text(payload, 500)}
+
+    ticket["provider_payload_summary"] = summary
+    ticket.pop("provider_payload", None)
+    return ticket
+
+
 def _local_ref():
     return f"LOCAL-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 
@@ -163,6 +216,7 @@ async def get_ticket(ticket_id):
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if ticket:
         ticket["external_url"] = ticket.get("provider_url") or external_ticket_url(ticket)
+        compact_ticket_payload(ticket)
     return ticket
 
 

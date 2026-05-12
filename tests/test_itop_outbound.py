@@ -105,6 +105,52 @@ class iTopOutboundTests(unittest.TestCase):
         self.assertEqual(create_call["fields"]["urgency"], 2)
         self.assertTrue(updates)
 
+    def test_list_keys_uses_select_for_sparse_provider_ids(self):
+        module = load_itop_sync()
+        calls = []
+
+        async def fake_itop_request(operation, **fields):
+            calls.append((operation, fields))
+            self.assertEqual(operation, "core/get")
+            self.assertEqual(fields["key"], "SELECT Incident")
+            return {
+                "code": 0,
+                "objects": {
+                    "Incident::3": {"fields": {"id": "3", "title": "old"}},
+                    "Incident::198": {"fields": {"id": "198", "title": "bridge"}},
+                    "Incident::42": {"fields": {"title": "object-ref fallback"}},
+                },
+            }
+
+        module.itop_request = fake_itop_request
+        provider = module.iTopProvider()
+        keys = asyncio.run(provider._list_keys("Incident"))
+
+        self.assertEqual(keys, [3, 42, 198])
+        self.assertEqual(len(calls), 1)
+
+    def test_full_sync_imports_without_auto_assigning_historical_rows(self):
+        module = load_itop_sync()
+        provider = module.iTopProvider()
+        synced = []
+
+        async def fake_list_keys(itop_class):
+            return [198] if itop_class == "Incident" else []
+
+        async def fake_sync_ticket(itop_class, key, auto_assign=True):
+            synced.append((itop_class, key, auto_assign))
+            return {"status": "synced", "is_new": True}
+
+        provider._list_keys = fake_list_keys
+        provider.sync_ticket = fake_sync_ticket
+        module._load_max_keys = lambda: {}
+        module._save_max_keys = lambda data: None
+
+        result = asyncio.run(provider.full_sync())
+
+        self.assertEqual(result["new"], 1)
+        self.assertEqual(synced, [("Incident", 198, False)])
+
 
 if __name__ == "__main__":
     unittest.main()

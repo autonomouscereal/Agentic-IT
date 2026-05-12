@@ -655,10 +655,27 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
 async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
     """Wait for semaphore slot, then run agent."""
     async with _semaphore:
-        task_meta = await fetchrow(
-            "SELECT ticket_id, task_type FROM agent_tasks WHERE id = $1",
-            task_id,
-        )
+        task_meta = await fetchrow("""
+            SELECT at.ticket_id, at.task_type, at.status AS task_status,
+                   a.status AS agent_status
+            FROM agent_tasks at
+            JOIN agents a ON a.id = at.agent_id
+            WHERE at.id = $1 AND at.agent_id = $2
+        """, task_id, agent_id)
+        if not task_meta:
+            await log_event("agent", "warning", f"agent_{agent_id}",
+                            "agent_spawn_skipped_missing_task", f"task_{task_id}",
+                            {"work_dir": work_dir})
+            return
+
+        if task_meta.get("task_status") not in ("queued", "running") or task_meta.get("agent_status") in ("stopped", "terminated", "failed"):
+            await log_event("agent", "info", f"agent_{agent_id}",
+                            "agent_spawn_skipped_not_runnable", f"task_{task_id}", {
+                                "task_status": task_meta.get("task_status"),
+                                "agent_status": task_meta.get("agent_status"),
+                            })
+            return
+
         await log_event("agent", "info", f"agent_{agent_id}", "agent_running",
                         f"task_{task_id}", {"work_dir": work_dir})
         if task_meta:
@@ -790,7 +807,7 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
         _active_processes.pop(task_id, None)
 
 
-async def stop_agent_task(agent_id):
+async def stop_agent_task(agent_id, reason="stopped via dashboard"):
     """Stop a running agent task."""
     task = await fetchrow(
         "SELECT id, pid FROM agent_tasks WHERE agent_id = $1 AND status IN ('queued', 'running')",
@@ -821,11 +838,12 @@ async def stop_agent_task(agent_id):
     )
     await execute(
         "UPDATE agents SET status = 'stopped', finished_at = NOW(), "
-        "error_message = 'stopped via dashboard' WHERE id = $1",
+        "error_message = $1 WHERE id = $2",
+        reason,
         agent_id,
     )
     await log_event("agent", "info", f"agent_{agent_id}", "agent_stopped",
-                    f"task_{task['id']}")
+                    f"task_{task['id']}", {"reason": reason})
 
     return {"status": "stopped", "task_id": task["id"]}
 

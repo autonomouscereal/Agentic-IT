@@ -162,7 +162,7 @@ class iTopProvider(TicketProvider):
         return self._connected
 
     async def discover_new(self) -> list:
-        """Quick discovery: scan each class for new keys beyond known max.
+        """Quick discovery: list provider keys and return keys above known max.
 
         Returns list of {"class": str, "key": int} for newly found tickets.
         """
@@ -174,21 +174,12 @@ class iTopProvider(TicketProvider):
 
         for itop_class in self.ticket_classes:
             prev_max = max_keys.get(itop_class, 0)
-            scan_start = prev_max + 1 if prev_max > 0 else 1
-            consecutive_missing = 0
-
-            for k in range(scan_start, scan_start + 20):
-                result = await itop_request("core/get", **{
-                    "class": itop_class, "key": str(k), "output_fields": "title"
-                })
-                if result.get("code") == 0 and result.get("objects"):
-                    new_tickets.append({"class": itop_class, "key": k})
-                    max_keys[itop_class] = k
-                    consecutive_missing = 0
-                else:
-                    consecutive_missing += 1
-                    if consecutive_missing >= 3:
-                        break
+            found_keys = await self._list_keys(itop_class)
+            for key in found_keys:
+                if key > prev_max:
+                    new_tickets.append({"class": itop_class, "key": key})
+            if found_keys:
+                max_keys[itop_class] = max(prev_max, max(found_keys))
 
         _save_max_keys(max_keys)
         if new_tickets:
@@ -196,7 +187,7 @@ class iTopProvider(TicketProvider):
                             str(len(new_tickets)))
         return new_tickets
 
-    async def sync_ticket(self, ticket_class: str, ticket_key) -> dict:
+    async def sync_ticket(self, ticket_class: str, ticket_key, auto_assign: bool = True) -> dict:
         """Sync a single ticket to local DB."""
         result = await itop_request("core/get", **{
             "class": ticket_class, "key": str(ticket_key)
@@ -263,7 +254,7 @@ class iTopProvider(TicketProvider):
                 ticket_data["assignee_team"], json_dumps(obj_data))
 
         auto_assignment = None
-        if not exists:
+        if auto_assign and not exists:
             try:
                 from services import auto_assignment as auto_assignment_service
                 auto_assignment = await auto_assignment_service.maybe_auto_assign(ticket_id, source="itop_sync")
@@ -284,21 +275,14 @@ class iTopProvider(TicketProvider):
         max_keys = _load_max_keys()
 
         for itop_class in self.ticket_classes:
-            prev_max = max_keys.get(itop_class, 0)
-
-            if prev_max == 0:
-                found_keys = await self._scan_keys(itop_class, start=1)
-            else:
-                new_keys = await self._scan_keys(itop_class, start=prev_max + 1)
-                all_keys = list(range(1, prev_max + 1)) + new_keys
-                found_keys = all_keys
+            found_keys = await self._list_keys(itop_class)
 
             if found_keys:
                 max_keys[itop_class] = max(found_keys)
 
             for key in found_keys:
                 try:
-                    result = await self.sync_ticket(itop_class, key)
+                    result = await self.sync_ticket(itop_class, key, auto_assign=False)
                     if "error" not in result:
                         synced += 1
                         if result.get("is_new"):
@@ -487,6 +471,24 @@ class iTopProvider(TicketProvider):
                     break
         return found
 
+    async def _list_keys(self, itop_class: str) -> list:
+        """List existing keys for a class without assuming contiguous iTop IDs."""
+        result = await itop_request("core/get", **{
+            "class": itop_class,
+            "key": f"SELECT {itop_class}",
+            "output_fields": "id,title",
+        })
+        if result.get("code") != 0:
+            return []
+
+        keys = set()
+        for object_ref, obj in (result.get("objects") or {}).items():
+            key = _object_key(object_ref, obj)
+            parsed = _to_int(key)
+            if parsed is not None:
+                keys.add(parsed)
+        return sorted(keys)
+
     async def update_ticket(self, ticket_id: int, fields: dict) -> dict:
         """Push changes back to iTop."""
         ticket = await fetchrow("SELECT itop_ref, itop_class FROM tickets WHERE id = $1",
@@ -529,13 +531,31 @@ class iTopProvider(TicketProvider):
         if not ticket:
             return {"error": "Ticket not found"}
 
+        fields = {"solution": notes}
         stimulus_result = await itop_request("core/apply_stimulus", **{
             "class": ticket["itop_class"],
             "key": ticket["itop_ref"],
             "stimulus": "ev_resolve",
             "comment": notes,
-            "fields": {"solution": notes},
+            "fields": fields,
         })
+
+        if stimulus_result.get("code") != 0 and "Invalid stimulus" in str(stimulus_result.get("message", "")):
+            assign_result = await itop_request("core/apply_stimulus", **{
+                "class": ticket["itop_class"],
+                "key": ticket["itop_ref"],
+                "stimulus": "ev_assign",
+                "comment": "Assigning before dashboard-driven resolution.",
+                "fields": fields,
+            })
+            if assign_result.get("code") == 0:
+                stimulus_result = await itop_request("core/apply_stimulus", **{
+                    "class": ticket["itop_class"],
+                    "key": ticket["itop_ref"],
+                    "stimulus": "ev_resolve",
+                    "comment": notes,
+                    "fields": fields,
+                })
 
         if stimulus_result.get("code") == 0:
             await execute(

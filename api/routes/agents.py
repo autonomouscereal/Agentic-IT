@@ -343,21 +343,49 @@ async def stop_agent(agent_id: int, body: dict = Body(None)):
     reason = "manual_stop"
     if isinstance(body, dict) and body.get("reason"):
         reason = str(body["reason"])
+    agent = await fetchrow("SELECT id, ticket_id FROM agents WHERE id = $1", agent_id)
 
     # Try to stop the running task first
-    task_result = await agent_runner.stop_agent_task(agent_id)
+    task_result = await agent_runner.stop_agent_task(agent_id, reason=reason)
 
     # Also update agent status if no task was found
     if "error" in task_result:
-        agent = await fetchrow("SELECT * FROM agents WHERE id = $1", agent_id)
         if agent:
             await execute("""
                 UPDATE agents SET status = 'stopped', finished_at = NOW(),
                                  error_message = $1 WHERE id = $2
             """, reason, agent_id)
 
+    ticket_reassignment = None
+    if agent and agent.get("ticket_id"):
+        current_ticket = await fetchrow("SELECT id, agent_id FROM tickets WHERE id = $1", agent["ticket_id"])
+        if current_ticket and current_ticket.get("agent_id") == agent_id:
+            replacement = await fetchrow("""
+                SELECT id FROM agents
+                WHERE ticket_id = $1
+                  AND id <> $2
+                  AND status IN ('spawned', 'running', 'working')
+                ORDER BY started_at DESC NULLS LAST, id DESC
+                LIMIT 1
+            """, agent["ticket_id"], agent_id)
+            replacement_id = replacement["id"] if replacement else None
+            await execute("""
+                UPDATE tickets
+                SET agent_id = $1,
+                    status = CASE WHEN $1::integer IS NULL THEN status ELSE 'in_progress' END,
+                    updated_at = NOW()
+                WHERE id = $2
+            """, replacement_id, agent["ticket_id"])
+            ticket_reassignment = {
+                "ticket_id": agent["ticket_id"],
+                "old_agent_id": agent_id,
+                "replacement_agent_id": replacement_id,
+            }
+            await log_event("agent", "info", "dashboard", "ticket_agent_reassigned_after_stop",
+                            f"ticket_{agent['ticket_id']}", ticket_reassignment)
+
     await log_event("agent", "info", "dashboard", "agent_stopped",
-                    f"agent_{agent_id}", {"reason": reason})
+                    f"agent_{agent_id}", {"reason": reason, "ticket_reassignment": ticket_reassignment})
     return {"status": "stopped", "agent_id": agent_id}
 
 

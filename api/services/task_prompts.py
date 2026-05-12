@@ -58,6 +58,22 @@ Update checkpoint.json after major steps. The file already exists; read checkpoi
 """
 
 
+AUTO_ASSIGNMENT_PROMPT = """Work this auto-assigned ticket to completion with bounded context.
+
+Operational rules:
+- Read checkpoint.json directly before doing work.
+- Use API base URL http://localhost:8000 inside the runner.
+- First call GET /api/postmortems/evidence/{ticket_id}?task_log_lines=0 and use that compact evidence as the primary source of truth.
+- Then call GET /api/tickets/{ticket_id} for the current ticket, provider reference, and agent_instance_id.
+- Do not fetch full /api/tickets/{ticket_id}/context unless the compact evidence is missing a specific fact needed to finish the ticket.
+- Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful triage, blockers, approvals, actions, or resolution evidence.
+- If a potentially destructive or environment-changing action is needed, create a change request with POST /api/changes/request and poll GET /api/changes/{change_id}/status until approved before taking that action.
+- After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include lab-safe operational evidence.
+- If requester input is required, POST /api/tickets/{ticket_id}/request-info, update checkpoint.json with status waiting_for_user, and stop.
+- Update checkpoint.json after major steps. When complete, set status done and progress_pct 100.
+"""
+
+
 def build_ticket_resolution_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
@@ -67,6 +83,19 @@ def build_ticket_resolution_prompt(ticket, extra_prompt=None):
     ]
     if extra_prompt:
         body.extend(["", "Additional operator instruction:", extra_prompt])
+    return "\n".join(body)
+
+
+def build_auto_assignment_prompt(ticket, extra_prompt=None):
+    title = ticket.get("title") or f"ticket #{ticket.get('id')}"
+    body = [
+        AUTO_ASSIGNMENT_PROMPT,
+        "",
+        f"Ticket id: {ticket.get('id')}",
+        f"Ticket to resolve: {title}",
+    ]
+    if extra_prompt:
+        body.extend(["", "RACI auto-assignment instruction:", extra_prompt])
     return "\n".join(body)
 
 

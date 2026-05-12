@@ -39,10 +39,10 @@ def load_auto_assignment():
 
     task_prompts = types.ModuleType("services.task_prompts")
 
-    def build_ticket_resolution_prompt(ticket, extra_prompt=None):
-        return f"ticket={ticket.get('id')} prompt={extra_prompt or ''}"
+    def build_auto_assignment_prompt(ticket, extra_prompt=None):
+        return f"auto-ticket={ticket.get('id')} compact-evidence prompt={extra_prompt or ''}"
 
-    task_prompts.build_ticket_resolution_prompt = build_ticket_resolution_prompt
+    task_prompts.build_auto_assignment_prompt = build_auto_assignment_prompt
     sys.modules["services.task_prompts"] = task_prompts
 
     agent_runner = types.ModuleType("services.agent_runner")

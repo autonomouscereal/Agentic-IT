@@ -3,7 +3,7 @@ import json
 
 from database import fetchall, fetchrow, execute
 from services.event_logger import log_event
-from services.task_prompts import build_ticket_resolution_prompt
+from services.task_prompts import build_auto_assignment_prompt
 
 
 DEFAULT_MODEL = "qwen/qwen3.6-27b"
@@ -99,7 +99,7 @@ async def maybe_auto_assign(ticket_id, source="ticket_event"):
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
-        build_ticket_resolution_prompt(ticket, extra_prompt),
+        build_auto_assignment_prompt(ticket, extra_prompt),
     )
     if result.get("error"):
         await log_event("agent", "error", source, "auto_agent_assignment_failed", f"ticket_{ticket_id}", {

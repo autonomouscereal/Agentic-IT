@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query, Body, HTTPException
 from datetime import datetime
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services import provider_registry, ticket_service
+from services.ticket_service import compact_ticket_payload
 from services.ticket_links import external_ticket_url
 from services.task_prompts import (
     build_ticket_resolution_prompt,
@@ -75,6 +76,7 @@ async def list_tickets(
     )
     for row in rows:
         row["external_url"] = row.get("provider_url") or external_ticket_url(row)
+        compact_ticket_payload(row)
 
     return {"tickets": rows, "total": count, "limit": limit, "offset": offset}
 
@@ -91,6 +93,7 @@ async def get_ticket(ticket_id: int):
     if not ticket:
         return {"error": "Ticket not found"}
     ticket["external_url"] = external_ticket_url(ticket)
+    compact_ticket_payload(ticket)
 
     # Get change requests for this ticket
     changes = await fetchall("""

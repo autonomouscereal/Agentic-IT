@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Query
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.event_logger import log_event
 from services.postmortem_synthesizer import synthesize_postmortem
+from services.ticket_service import compact_ticket_payload
 
 router = APIRouter(prefix="/api/postmortems", tags=["postmortems"])
 
@@ -203,6 +204,7 @@ async def get_postmortem_evidence(
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
+    compact_ticket_payload(ticket)
 
     notes = await fetchall("""
         SELECT id, source, author, visibility, body, created_at

@@ -11,6 +11,26 @@ def _is_auto_approver(actor):
     return "auto" in value or "demo" in value or "smoke" in value
 
 
+def _completion_result_from_body(body):
+    body = body or {}
+    for key in ("result", "evidence", "output"):
+        value = body.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _completion_actor_from_body(body):
+    body = body or {}
+    actor = body.get("completed_by") or body.get("actor")
+    if actor:
+        return str(actor)
+    agent_id = body.get("agent_id")
+    if agent_id:
+        return f"agent_{agent_id}"
+    return "dashboard"
+
+
 async def _add_gate_note(ticket_id, change_id, title, body, actor="approval-gate", source="approval-gate"):
     if not ticket_id:
         return None
@@ -48,6 +68,32 @@ async def _resume_agent_after_approval(change, approved_by):
     """, agent_id)
     if active_task:
         return {"status": "already_active", "task_id": active_task["id"]}
+
+    active_ticket_agent = await fetchrow("""
+        SELECT a.id, a.status, a.last_task_id
+        FROM agents a
+        LEFT JOIN agent_tasks at ON at.id = a.last_task_id
+        WHERE a.ticket_id = $1
+          AND (
+              a.status IN ('spawned', 'running', 'working')
+              OR at.status IN ('queued', 'running')
+          )
+        ORDER BY a.started_at DESC NULLS LAST, a.id DESC
+        LIMIT 1
+    """, ticket_id)
+    if active_ticket_agent:
+        await log_event("agent", "info", approved_by, "approval_resume_skipped_active_ticket_agent",
+                        f"ticket_{ticket_id}", {
+                            "change_id": change["id"],
+                            "source_agent_id": agent_id,
+                            "active_agent_id": active_ticket_agent["id"],
+                            "active_task_id": active_ticket_agent.get("last_task_id"),
+                        })
+        return {
+            "status": "already_active_ticket",
+            "agent_id": active_ticket_agent["id"],
+            "task_id": active_ticket_agent.get("last_task_id"),
+        }
 
     agent = await fetchrow("SELECT model, selected_model FROM agents WHERE id = $1", agent_id)
     latest_task = await fetchrow("""
@@ -328,11 +374,13 @@ async def reject_change(
 
 @router.post("/{change_id}/complete")
 async def complete_change(change_id: int, body: dict = Body({})):
-    result = (body or {}).get("result", "")
-    actor = (body or {}).get("completed_by") or (body or {}).get("actor") or "dashboard"
+    result = _completion_result_from_body(body)
+    actor = _completion_actor_from_body(body)
     change = await fetchrow("SELECT * FROM change_requests WHERE id = $1", change_id)
     if not change:
         return {"error": "Change request not found"}
+    if not result:
+        return {"error": "Change completion requires non-empty result, evidence, or output"}
 
     await execute("""
         UPDATE change_requests SET status = 'completed', result = $1 WHERE id = $2

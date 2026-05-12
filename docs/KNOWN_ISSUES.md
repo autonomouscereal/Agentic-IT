@@ -707,6 +707,335 @@ Verified:
 
 ## Current Limitations
 
+### Change completion can silently drop agent evidence
+
+Status: fixed and deployed live on 2026-05-12.
+
+Problem:
+
+- During ticket `312`, agent `85` completed changes `83`, `84`, and `85` with
+  request bodies containing `evidence`.
+- The live `/api/changes/{id}/complete` route only reads `result`, so it marked
+  each gate `completed` while storing a blank `change_requests.result`.
+- The route also attributed those completions to `dashboard` because it ignored
+  the submitted `agent_id`.
+
+Impact:
+
+- Change gates can look completed in the UI/API while losing the evidence needed
+  for audit, demo explanation, and postmortem learning.
+
+Fix:
+
+- Accept `result`, `evidence`, or `output` as completion evidence and store the
+  selected value in `change_requests.result`.
+- Reject blank completion evidence instead of recording an empty result.
+- Attribute completion to `completed_by`, `actor`, or `agent_<agent_id>` before
+  falling back to `dashboard`.
+
+Verification:
+
+- Added unittest coverage for `evidence` alias handling and blank evidence
+  rejection in `tests/test_change_approval_resume.py`.
+- Live API rejected blank evidence for change completion.
+- Live ticket `312` result rows for changes `83`, `84`, and `85` were repaired
+  through the hardened API route using the evidence agent `85` already posted.
+
+### iTop incident resolution requires lifecycle transition before resolve
+
+Status: fixed and deployed live on 2026-05-12.
+
+Problem:
+
+- Ticket `312` was resolved by agent `85` in the dashboard, but iTop Incident
+  `199` / `I-000208` remained in state `new`.
+- A direct iTop `ev_resolve` stimulus failed with
+  `Invalid stimulus: 'ev_resolve' on the object I-000208 in state 'new'`.
+- The next iTop sync then pulled the provider's `new` status back into the
+  dashboard, hiding the completed agent work from the ticket list.
+
+Impact:
+
+- Agent-completed work can be locally complete but provider-visible tickets
+  stay open, which breaks demos and weakens the provider-sync audit trail.
+
+Fix:
+
+- Provider close now retries iTop resolution through the normal lifecycle:
+  `ev_assign` first when direct `ev_resolve` is invalid, then `ev_resolve`.
+
+Verification:
+
+- Live repair succeeded for ticket `312`: iTop accepted `ev_assign`, then
+  accepted `ev_resolve`, and the subsequent sync returned the dashboard ticket
+  to `resolved`.
+- API image was rebuilt with the iTop lifecycle fallback and passed health,
+  compile, and focused remote unittest checks.
+
+### Approval resume can fan out duplicate agents for one ticket
+
+Status: fixed and deployed live on 2026-05-12.
+
+Problem:
+
+- Approving three pending lab-no-op changes for ticket `312` caused the
+  approval resume handler to spawn continuation agents `86`, `87`, and queued
+  `88` while agent `85` was already actively working the same ticket.
+- The agent auditor correctly wrote `ticket_already_has_active_agent` audit
+  events, but it only audited and did not prevent or consolidate the duplicate
+  runners.
+- Root cause: `_resume_agent_after_approval` checked active tasks only for the
+  original change agent, not for active agents on the ticket as a whole.
+
+Impact:
+
+- Approval gates can create overlapping agents for the same ticket, causing
+  duplicated notes, duplicated remediation actions, noisy demo evidence, and
+  possible cross-agent confusion.
+
+Fix:
+
+- Make approval resume ticket-scoped: if any spawned/running/working agent or
+  queued/running task exists for the ticket, return that active agent instead
+  of spawning another continuation.
+- Keep the auditor signal, but make the approval path prevent duplicates before
+  the auditor has to notice them.
+
+Verification:
+
+- Added `tests/test_change_approval_resume.py` coverage proving
+  `_resume_agent_after_approval` returns `already_active_ticket` when another
+  agent/task is active on the same ticket.
+- Live regression created approval change `86` on ticket `317`; approving it
+  returned `resume.status=already_active_ticket` and did not create another
+  agent.
+- `/api/agents/active` was clean after removing the regression fixtures.
+
+### Stopped queued agent can still start when semaphore opens
+
+Status: fixed and deployed live on 2026-05-12.
+
+Problem:
+
+- Agent `88` was stopped while its task was still queued.
+- When a semaphore slot opened, task `86` still started a Claude runner process
+  after the stop request had already set the agent status/error.
+
+Impact:
+
+- Dashboard stop is not definitive for queued tasks. A queued duplicate or
+  cancelled task can still become a real process later, which undermines agent
+  supervision and demo reliability.
+
+Fix:
+
+- Before `_spawn_with_semaphore` launches a process, reload task and agent state
+  and exit without spawning if either is `stopped`, `terminated`, `failed`, or
+  otherwise no longer queued/runnable.
+- Ensure `stop_agent_task` marks queued tasks as stopped in a way the semaphore
+  worker honors before process launch.
+
+Verification:
+
+- Added `tests/test_agent_lifecycle_guards.py` coverage proving stopped queued
+  tasks are skipped before `_run_agent` is called.
+- Live process diagnostics after deployment showed no active Claude runner
+  processes.
+
+### Stopping a duplicate agent can leave ticket assigned to the stopped agent
+
+Status: fixed and deployed live on 2026-05-12.
+
+Problem:
+
+- Duplicate agent `88` was stopped, but `tickets.agent_id` still pointed to
+  `88` while the only real active worker was agent `85`.
+- iTop/dashboard sync context then reported the wrong canonical agent for the
+  ticket, which can confuse agents, operators, and audit demos.
+
+Impact:
+
+- The dashboard can show or pass stale ownership after duplicate cleanup,
+  especially when a later duplicate spawn overwrites `tickets.agent_id`.
+
+Fix:
+
+- When stopping an agent, if that agent is the ticket's current `agent_id`,
+  reassign the ticket to another active agent for the same ticket, or clear the
+  assignment if none exists.
+- Record the reassignment/clear in audit/event history.
+
+Verification:
+
+- Added `tests/test_agent_lifecycle_guards.py` coverage for ticket reassignment
+  after stopping a duplicate agent.
+- Live regression stopped duplicate queued agent `92` on ticket `318`; the
+  ticket owner was restored to active agent `91`, then both regression fixtures
+  were cleaned up.
+
+### SOC Bridge phishing ticket creation is failing before dashboard sync
+
+Status: fixed during the 2026-05-12 real bridge phishing agent flow.
+
+Problem:
+
+- `/tmp/bridge_phish_agent_flow.py` failed in `run_bridge_report`.
+- SOC Bridge returned `ticket_creation.success=false` with
+  `No ticket key in API response`.
+- Root cause identified: phishing reports with `message_id` were mapped to
+  iTop `Incident.externalid`, but the live iTop schema has no `externalid`
+  attribute on `Incident`. iTop returned `code=100` with
+  `Unknown attribute externalid from class Incident`; the bridge did not surface
+  that response message.
+
+Impact:
+
+- The full Report Phish -> SOC Bridge -> iTop -> dashboard -> agent flow cannot
+  start because the iTop ticket is not created.
+
+Fix:
+
+- Inspect SOC Bridge production config and iTop create response handling.
+- Verify the configured security team/org/caller fields still match the live
+  iTop instance.
+- Fix the bridge connector or config, rerun the bridge phishing harness, then
+  continue to agent/approval/postmortem validation.
+
+Verification:
+
+- Acceptance log `bridge-phish-agent-20260512-125257.log` shows SOC Bridge
+  successfully created iTop Incident `198`.
+- Acceptance log `bridge-phish-agent-20260512-130312.log` shows SOC Bridge
+  successfully created iTop Incident `199` and sent the Mailcow notification.
+
+### Dashboard iTop sync is not discovering the bridge-created phishing ticket
+
+Status: fixed during the 2026-05-12 real bridge phishing agent flow.
+
+Problem:
+
+- SOC Bridge successfully created iTop Incident `198` titled
+  `Phishing Report: Bridge Agentic Phish 1778611977`.
+- The real bridge harness remained in the dashboard sync/find loop; dashboard
+  `/api/tickets` did not show the new bridge ticket after `/api/tickets/sync-all`.
+
+Impact:
+
+- The Report Phish -> SOC Bridge -> iTop leg now works, but the full iTop ->
+  dashboard -> agent auto-work leg is still blocked.
+
+Fix:
+
+- Inspect `/api/tickets/sync-all` behavior, iTop sync logs, and sync-state key
+  tracking for newly created Incident keys above the current dashboard range.
+
+Verification:
+
+- Sparse iTop key listing now uses `SELECT <Class>` instead of assuming
+  contiguous numeric IDs.
+- Full sync imports historical rows passively while live discovery can still
+  auto-assign genuinely new tickets.
+- Ticket `312` synced from iTop Incident `199` and now has
+  `provider_sync_status=synced`.
+
+### Bulk iTop catch-up sync can auto-assign historical phishing tickets
+
+Status: fixed and deployed live on 2026-05-12.
+
+Problem:
+
+- After switching discovery away from contiguous ID scanning, a full catch-up
+  sync imported historical iTop phishing tickets and auto-started agents for
+  old SOC Bridge smoke tickets (`agent_id` 78 and 79).
+
+Impact:
+
+- This is not the same broad matcher bug; the tickets are genuine phishing
+  tickets, but they are historical catch-up rows and should not spawn live
+  agents during repair, bootstrap, or bulk import.
+
+Fix:
+
+- Split sync behavior so live discovery and explicit single-ticket sync can
+  auto-assign, while `full_sync`/bootstrap catch-up imports remain passive.
+
+Verification:
+
+- Added `tests/test_itop_outbound.py` coverage proving `full_sync()` calls
+  `sync_ticket(..., auto_assign=False)` for historical/provider catch-up rows.
+- Remote unittest suite passed after deployment.
+
+### Auto-assigned bridge phishing agent stalls on broad default ticket prompt
+
+Status: fixed and deployed live on 2026-05-12 for future auto-assigned
+phishing tickets.
+
+Problem:
+
+- Live bridge run created iTop Incident `199`, dashboard ticket `312`, and
+  auto-assigned agent `81`.
+- Agent `81` remained alive with heartbeats for 10+ minutes at `45%` progress
+  after reading full ticket context/workflow evidence, but it had not created
+  triage notes or remediation approval gates.
+- The active prompt is the broad default ticket-resolution prompt plus a short
+  phishing instruction, not the tighter bridge phishing acceptance workflow.
+
+Impact:
+
+- The bridge, iTop sync, and auto-assignment chain works, but the intended
+  hands-free agentic phishing flow is not yet completing reliably with the
+  default auto-assignment prompt.
+
+Fix:
+
+- Tighten the phishing RACI `auto_agent_prompt`/prompt builder so auto-assigned
+  phishing agents use bounded postmortem/ticket evidence and concrete required
+  actions instead of broad context exploration.
+
+Verification:
+
+- Added `AUTO_ASSIGNMENT_PROMPT`, and `maybe_auto_assign()` now uses
+  `build_auto_assignment_prompt()` instead of the broad default ticket prompt.
+- Added migration `010_tighten_phishing_auto_agent_prompt.sql` and updated
+  `init_db.sql` so fresh installs and existing deployments get the compact
+  phishing instruction.
+- Live database check confirmed the phishing RACI prompt begins with
+  `Auto-work Security Operations phishing tickets end to end using compact evidence first`.
+
+### Agent task can fail after useful work with output chunk separator error
+
+Status: mitigated and deployed live on 2026-05-12.
+
+Problem:
+
+- Agent `81` wrote a meaningful phishing triage note for ticket `312`.
+- The task then failed with
+  `Separator is found, but chunk is longer than limit`.
+
+Impact:
+
+- The model can perform useful ticket work, but the runner/task-output handling
+  can mark the task failed before approval gates and final notes are complete.
+- This makes real-flow validation brittle even when the agent is taking correct
+  actions.
+
+Mitigation:
+
+- Inspect agent runner stream/chunk handling for long tool output or persisted
+  tool-result references, then bound or summarize oversized chunks before task
+  persistence.
+
+Verification:
+
+- Ticket API and postmortem evidence responses now call
+  `compact_ticket_payload()` so agents see provider payload summaries instead of
+  the full iTop payload by default.
+- The auto-assignment prompt instructs agents to use
+  `/api/postmortems/evidence/{ticket_id}?task_log_lines=0` first and avoid full
+  ticket context unless a specific fact is missing.
+- The original ticket `312` was completed by the follow-up bounded flow; changes
+  `83`, `84`, and `85` all have persisted completion evidence.
+
 ### RACI auto-assignment matched generic Incident tickets too broadly
 
 Status: fixed during the 2026-05-12 full acceptance baseline.

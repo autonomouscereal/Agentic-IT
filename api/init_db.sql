@@ -453,10 +453,7 @@ ON CONFLICT (name) DO UPDATE SET
 UPDATE service_raci_rules
 SET auto_assign_agent = true,
     auto_agent_model = COALESCE(auto_agent_model, 'qwen/qwen3.6-27b'),
-    auto_agent_prompt = COALESCE(
-        auto_agent_prompt,
-        'Auto-work Security Operations phishing tickets end to end. Read all canonical context and provider evidence, create approval gates for remediation actions, complete approved lab-safe actions with evidence, and recommend postmortem/workflow improvements.'
-    ),
+    auto_agent_prompt = 'Auto-work Security Operations phishing tickets end to end using compact evidence first. Required actions: write a triage note listing sender, recipients, URLs, clicked users, exposed credentials if any, endpoints, and provider ticket refs; create approval-gated changes for URL blocking, message quarantine/search, and endpoint scan/account containment when evidence supports them; poll approvals; complete approved lab-safe actions with evidence; write a final resolution note with residual risk and postmortem/workflow recommendations. Do not browse full ticket context unless compact evidence is missing a specific fact.',
     updated_at = NOW()
 WHERE name = 'Phishing report';
 
