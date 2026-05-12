@@ -25,9 +25,9 @@ the customer requires local, auditable search routing.
 - Log search metadata needed for audit, but do not log secrets or private query attachments.
 - Treat customer KB/wiki scraping as ticket/context data subject to access policy.
 
-## Current Lab Instance
+## Instance Configuration
 
-- URL: `http://192.168.50.222:7999`
+- URL: `http://${SEARXNG_HOST:-127.0.0.1}:7999`
 - Used by: `web_research` skill
 
 ## Deployment Pattern

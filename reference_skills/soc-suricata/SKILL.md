@@ -55,11 +55,11 @@ Common commands:
 
 ## Wazuh Integration
 
-Suricata eve.json is forwarded to Wazuh for centralized alerting. Suricata works completely standalone — if Wazuh goes down, Suricata keeps capturing.
+Suricata eve.json is forwarded to Wazuh for centralized alerting. Suricata works completely standalone - if Wazuh goes down, Suricata keeps capturing.
 
 ### How it Works
 
-1. Suricata produces JSON events at `/home/cereal/SOC_TESTING/logs/suricata/eve.json`
+1. Suricata produces JSON events at `/opt/agentic-it/SOC_TESTING/logs/suricata/eve.json`
 2. Wazuh manager monitors this file via `<localfile>` config (JSON format)
 3. Wazuh's built-in JSON decoder extracts all fields (`event_type`, `alert.severity`, `src_ip`, etc.)
 4. Enhanced rules (86700+) match on Suricata-specific fields to generate alerts
@@ -82,9 +82,9 @@ Suricata eve.json is forwarded to Wazuh for centralized alerting. Suricata works
 
 - Suricata continues capturing and writing eve.json normally
 - The log forwarder (if running) buffers and retries with backoff
-- No log loss — Wazuh reads from file positions on reconnect
+- No log loss - Wazuh reads from file positions on reconnect
 
-### Testing Suricata → Wazuh
+### Testing Suricata -> Wazuh
 
 ```bash
 # Test a Suricata alert against Wazuh rules (run on AI Server)
@@ -93,5 +93,5 @@ docker exec wazuh_deploy-wazuh.manager-1 bash -c 'echo "{\"timestamp\":\"2026-04
 # Expected: Rule 86710 fires (level 7, "Suricata: HIGH severity")
 
 # Run full integration tests
-cd /home/cereal/SOC_TESTING/log_forwarder && python3 test_integration.py
+cd /opt/agentic-it/SOC_TESTING/log_forwarder && python3 test_integration.py
 ```

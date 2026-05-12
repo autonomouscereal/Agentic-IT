@@ -1,7 +1,7 @@
 ---
 name: web_research
 description: Perform general web searches and deep research using local SearXNG + curl_cffi + trafilatura. Supports categories, time filters, and engine selection. Use this for all non-torrent web research tasks. Can fetch full clean markdown content from any URL.
-allowed-tools: Bash("C:/Users/cereal/.Codex/skills/web_research/venv/Scripts/python.exe" "C:/Users/cereal/.Codex/skills/web_research/web_research.py" "*" "--cat *" "--time *" "--url *")
+allowed-tools: Bash("C:/Users/me/.Codex/skills/web_research/venv/Scripts/python.exe" "C:/Users/me/.Codex/skills/web_research/web_research.py" "*" "--cat *" "--time *" "--url *")
 ---
 
 # Web Research Skill
@@ -22,7 +22,7 @@ The skill is executed through a dedicated virtual environment located in the ski
 ### 1. General Web Search
 Perform a standard search with optional category and time filters.
 ```bash
-"C:/Users/cereal/.Codex/skills/web_research/venv/Scripts/python.exe" "C:/Users/cereal/.Codex/skills/web_research/web_research.py" "your search query" --cat general --time month
+"C:/Users/me/.Codex/skills/web_research/venv/Scripts/python.exe" "C:/Users/me/.Codex/skills/web_research/web_research.py" "your search query" --cat general --time month
 ```
 
 **Arguments:**
@@ -30,12 +30,12 @@ Perform a standard search with optional category and time filters.
 - `--cat`: Category (`general`, `images`, `video`, `news`). Default: `general`.
 - `--engines`: Comma-separated list of SearXNG engines.
 - `--time`: Time range (`day`, `month`, `year`).
-- `--server`: Custom SearXNG URL (default: `http://192.168.50.222:7999`).
+- `--server`: Custom SearXNG URL (default: `http://127.0.0.1:7999`).
 
 ### 2. Deep Content Extraction (URL Fetch)
 Extract the full, clean Markdown content of a specific webpage.
 ```bash
-"C:/Users/cereal/.Codex/skills/web_research/venv/Scripts/python.exe" "C:/Users/cereal/.Codex/skills/web_research/web_research.py" --url "https://example.com"
+"C:/Users/me/.Codex/skills/web_research/venv/Scripts/python.exe" "C:/Users/me/.Codex/skills/web_research/web_research.py" --url "https://example.com"
 ```
 
 **Arguments:**

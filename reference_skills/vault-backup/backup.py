@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""
-Vault Backup - Versioned backup and restore for the server-manager credential vault.
+Vault Backup - versioned backup and restore for credential-vault runtime files.
 
 Creates integrity-verified, date-stamped checkpoints of .cred_key and .cred_vault.json.
 Supports listing, restoring, and cleaning up old checkpoints.

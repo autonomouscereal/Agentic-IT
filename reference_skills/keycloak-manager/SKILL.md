@@ -38,13 +38,13 @@ Complete deployment, management, and testing solution for Keycloak 26.6.0 with P
 ### Step 1: Copy files to server
 
 ```bash
-python "${CLAUDE_SKILL_DIR_SERVER_MANAGER}/ssh_client.py" --server ai --upload-dir "${CLAUDE_SKILL_DIR}" "/home/cereal/keycloak-manager"
+python "${CLAUDE_SKILL_DIR_SERVER_MANAGER}/ssh_client.py" --server ai --upload-dir "${CLAUDE_SKILL_DIR}" "/opt/agentic-it/keycloak-manager"
 ```
 
 ### Step 2: Generate secrets and deploy
 
 ```bash
-python "${CLAUDE_SKILL_DIR_SERVER_MANAGER}/ssh_client.py" --server ai --execute "cd /home/cereal/keycloak-manager && python3 scripts/deploy.py"
+python "${CLAUDE_SKILL_DIR_SERVER_MANAGER}/ssh_client.py" --server ai --execute "cd /opt/agentic-it/keycloak-manager && python3 scripts/deploy.py"
 ```
 
 This will:
@@ -59,7 +59,7 @@ This will:
 ### Step 3: Run E2E tests
 
 ```bash
-python "${CLAUDE_SKILL_DIR_SERVER_MANAGER}/ssh_client.py" --server ai --execute "cd /home/cereal/keycloak-manager && python3 scripts/test_keycloak.py"
+python "${CLAUDE_SKILL_DIR_SERVER_MANAGER}/ssh_client.py" --server ai --execute "cd /opt/agentic-it/keycloak-manager && python3 scripts/test_keycloak.py"
 ```
 
 Expected: **26/26 tests passing**.
@@ -181,16 +181,16 @@ All secrets are loaded from `.env` file. Key environment variables:
 
 ```
 keycloak-manager/
-├── SKILL.md              # This file - main skill documentation
-├── docker-compose.yml    # Docker Compose deployment config
-├── .env.example          # Environment variable template
-├── .env.windows.example  # Windows-specific environment template
-├── reference.md          # Detailed API reference
-├── troubleshooting.md    # Common issues and solutions
-└── scripts/
-    ├── deploy.py         # Deployment automation
-    ├── keycloak_admin.py # Admin REST API client
-    └── test_keycloak.py  # E2E test suite
+|-- SKILL.md              # This file - main skill documentation
+|-- docker-compose.yml    # Docker Compose deployment config
+|-- .env.example          # Environment variable template
+|-- .env.windows.example  # Windows-specific environment template
+|-- reference.md          # Detailed API reference
+|-- troubleshooting.md    # Common issues and solutions
+`-- scripts/
+    |-- deploy.py         # Deployment automation
+    |-- keycloak_admin.py # Admin REST API client
+    `-- test_keycloak.py  # E2E test suite
 ```
 
 ## Keycloak URLs

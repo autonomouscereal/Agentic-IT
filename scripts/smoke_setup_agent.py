@@ -38,7 +38,7 @@ def main():
             "identity-provider-adapter",
         ],
         "deploy_missing": False,
-        "ai_base_url": "http://192.168.50.222:4001",
+        "ai_base_url": "http://127.0.0.1:4001",
         "model": MODEL,
         "notes": "Smoke test: validate setup-ticket context and provider-agnostic plan without deploying anything.",
         "spawn_agent": False,

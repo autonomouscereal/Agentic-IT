@@ -42,7 +42,7 @@ from sync_engine import (
 )
 
 
-# ─── Test Framework ────────────────────────────────────────────────────
+# --- Test Framework ----------------------------------------------------
 
 class TestResult:
     """Simple test result tracker."""
@@ -94,7 +94,7 @@ def _mc():
     return MailcowClient(MYSQL_CONTAINER, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE)
 
 
-# ─── 1. Connectivity Tests ─────────────────────────────────────────────
+# --- 1. Connectivity Tests ---------------------------------------------
 
 def test_connectivity():
     """Test basic service connectivity."""
@@ -139,7 +139,7 @@ def test_connectivity():
         results.record("connectivity", "IMAP port 143", False, str(e))
 
 
-# ─── 2. Keycloak Setup Tests ───────────────────────────────────────────
+# --- 2. Keycloak Setup Tests -------------------------------------------
 
 def test_keycloak_setup():
     """Test Keycloak configuration."""
@@ -197,7 +197,7 @@ def test_keycloak_setup():
                        False, "alice.smith not found")
 
 
-# ─── 3. OIDC Flow Tests ────────────────────────────────────────────────
+# --- 3. OIDC Flow Tests ------------------------------------------------
 
 def test_oidc_flow():
     """Test OIDC protocol endpoints."""
@@ -228,7 +228,7 @@ def test_oidc_flow():
         results.record("oidc_flow", "Token endpoint works", False, str(e))
 
 
-# ─── 4. Mailcow IDP Tests ──────────────────────────────────────────────
+# --- 4. Mailcow IDP Tests ----------------------------------------------
 
 def test_mailcow_idp():
     """Test Mailcow configuration via MySQL."""
@@ -256,7 +256,7 @@ def test_mailcow_idp():
     results.record("mailcow_idp", "IMAP service accessible", mc.test_imap())
 
 
-# ─── 5. User Provisioning Tests ────────────────────────────────────────
+# --- 5. User Provisioning Tests ----------------------------------------
 
 def test_user_provisioning():
     """Test mailbox provisioning."""
@@ -311,7 +311,7 @@ def test_user_provisioning():
                        False, str(e))
 
 
-# ─── 6. Distribution Group Tests ───────────────────────────────────────
+# --- 6. Distribution Group Tests ---------------------------------------
 
 def test_distribution_groups():
     """Test distribution group (alias) configuration."""
@@ -344,7 +344,7 @@ def test_distribution_groups():
                        False, "alias not found")
 
 
-# ─── 7. Shared Mailbox Tests ───────────────────────────────────────────
+# --- 7. Shared Mailbox Tests -------------------------------------------
 
 def test_shared_mailboxes():
     """Test shared mailbox configuration."""
@@ -379,7 +379,7 @@ def test_shared_mailboxes():
                    soc_user is not None)
 
 
-# ─── 8. Sync Engine Tests ──────────────────────────────────────────────
+# --- 8. Sync Engine Tests ----------------------------------------------
 
 def test_sync_engine():
     """Test bidirectional sync engine."""
@@ -413,7 +413,7 @@ def test_sync_engine():
                    state2.get("last_sync") is not None)
 
 
-# ─── 9. Report Phish Workflow Tests ────────────────────────────────────
+# --- 9. Report Phish Workflow Tests ------------------------------------
 
 def test_report_phish():
     """Test report phish email delivery via SMTP."""
@@ -450,7 +450,7 @@ def test_report_phish():
                            False, err_str)
 
 
-# ─── 10. Graceful Degradation Tests ────────────────────────────────────
+# --- 10. Graceful Degradation Tests ------------------------------------
 
 def test_graceful_degradation():
     """Test service independence."""
@@ -474,7 +474,7 @@ def test_graceful_degradation():
     results.record("graceful_deg", "No shared database dependency", True)
 
 
-# ─── Test Runner ───────────────────────────────────────────────────────
+# --- Test Runner -------------------------------------------------------
 
 def run_tests(filter_category=None):
     """Run all or filtered tests."""

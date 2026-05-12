@@ -6,15 +6,15 @@
 
 set -euo pipefail
 
-DEPLOY_DIR="${DEPLOY_DIR:-/home/cereal/gitlab}"
+DEPLOY_DIR="${DEPLOY_DIR:-/opt/agentic-it/gitlab}"
 GITLAB_VERSION="${GITLAB_VERSION:-17.11.3-ce.0}"
 RUNNER_VERSION="${RUNNER_VERSION:-v17.11.0}"
-GITLAB_HOSTNAME="${GITLAB_HOSTNAME:-192.168.50.222}"
+GITLAB_HOSTNAME="${GITLAB_HOSTNAME:-127.0.0.1}"
 GITLAB_HTTP_PORT="${GITLAB_HTTP_PORT:-80}"
 GITLAB_SSH_PORT="${GITLAB_SSH_PORT:-2222}"
 GITLAB_TIMEZONE="${GITLAB_TIMEZONE:-UTC}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "${SCRIPT_DIR}/gitlab_token.sh"
+. "${SCRIPT_DIR}/../../credential-vault/scripts/load_secret.sh"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
@@ -71,7 +71,7 @@ get_root_password() {
 }
 
 get_pat() {
-    if load_gitlab_pat gitlab_manager_pat; then
+    if load_secret gitlab_manager_pat GITLAB_PAT GITLAB_PAT_FILE "${DEPLOY_DIR}/.gitlab-token"; then
         return 0
     fi
     if [ -f "${DEPLOY_DIR}/.env" ]; then
@@ -223,7 +223,7 @@ ENVEOF
     log_ok "=== GitLab Deployment Complete ==="
 }
 
-# ─── Main ─────────────────────────────────────────────────────────────────────
+# --- Main ---------------------------------------------------------------------
 case "${1:-}" in
     --fresh)         deploy_fresh ;;
     --reconfigure)

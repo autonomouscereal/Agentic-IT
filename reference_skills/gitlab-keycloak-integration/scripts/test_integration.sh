@@ -5,8 +5,8 @@ set -euo pipefail
 
 TOTAL=0; PASS=0; FAIL=0; SKIP=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "${SCRIPT_DIR}/gitlab_token.sh"
-GITLAB_PAT="$(load_gitlab_pat gitlab_oidc_setup_pat)" || {
+. "${SCRIPT_DIR}/../../credential-vault/scripts/load_secret.sh"
+GITLAB_PAT="$(load_secret gitlab_oidc_setup_pat GITLAB_PAT GITLAB_PAT_FILE /home/gitlab/.gitlab-token)" || {
     echo "ERROR: No GitLab PAT found. Set GITLAB_PAT, GITLAB_PAT_FILE, or CREDMAN_PATH/GITLAB_PAT_VAULT_KEY." >&2
     exit 1
 }

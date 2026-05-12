@@ -107,11 +107,11 @@ creates a pending deployment approval gate.
 The full local-model proof is:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/agentic_cicd_full_demo.py \
   --base http://localhost:25480 \
   --model qwen/qwen3.6-27b \
-  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs
+  --workspace /opt/agentic-it/SOC_TESTING/soc-dashboard/demo_runs
 ```
 
 This is intentionally more than a smoke test. It creates a deliberately
@@ -131,7 +131,7 @@ Latest verified run on 2026-05-11:
 - Final run `10`: `passed`
 - Deployment change `36`: approved and completed
 - Superseded failed gate `35`: rejected
-- Patch artifact: `/home/cereal/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch`
+- Patch artifact: `/opt/agentic-it/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch`
 
 The local model fixed the deterministic Semgrep findings by removing
 `subprocess(..., shell=True)` and the hardcoded password, updated
@@ -157,10 +157,10 @@ small, explainable finding set.
 The full GitLab-backed proof is:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/agentic_gitlab_cicd_demo.py \
   --dashboard http://localhost:25480 \
-  --runner-dashboard http://192.168.50.222:25480 \
+  --runner-dashboard http://127.0.0.1:25480 \
   --gitlab http://localhost \
   --model qwen/qwen3.6-27b
 ```

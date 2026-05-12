@@ -45,7 +45,7 @@ def load_config():
         "keycloak_admin": os.environ.get("KEYCLOAK_ADMIN_USER", "admin"),
         "keycloak_password": os.environ.get("KEYCLOAK_ADMIN_PASSWORD"),
         "bridge_realm": os.environ.get("BRIDGE_REALM", "wazuh"),
-        "wazuh_url": os.environ.get("WAZUH_URL", "https://192.168.50.222:26500").rstrip("/"),
+        "wazuh_url": os.environ.get("WAZUH_URL", "https://127.0.0.1:26500").rstrip("/"),
         "wazuh_username": os.environ.get("WAZUH_USERNAME", "wazuh-wui"),
         "wazuh_password": os.environ.get("WAZUH_PASSWORD"),
     }
@@ -116,7 +116,7 @@ KEYCLOAK_URL=http://localhost:8080
 KEYCLOAK_ADMIN_USER=admin
 KEYCLOAK_ADMIN_PASSWORD={kc_pw}
 
-WAZUH_URL=https://192.168.50.222:26500
+WAZUH_URL=https://127.0.0.1:26500
 WAZUH_USERNAME=wazuh-wui
 WAZUH_PASSWORD={wz_pw}
 
@@ -205,7 +205,7 @@ def main():
             print(f"\n=== Sync Results ===")
             print(f"  Keycloak reachable: {results['keycloak_reachable']}")
             print(f"  Wazuh reachable: {results['wazuh_reachable']}")
-            print(f"  KC→Wazuh: {results['kc_to_wazuh']}")
+            print(f"  KC->Wazuh: {results['kc_to_wazuh']}")
 
         print("\n=== Deployment Complete ===")
         show_status()

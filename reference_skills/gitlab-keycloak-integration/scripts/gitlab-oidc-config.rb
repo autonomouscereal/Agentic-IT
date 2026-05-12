@@ -17,7 +17,7 @@ gitlab_rails["omniauth_providers"] = [
       "client_options" => {
         "identifier" => "gitlab",
         "secret" => "Wveem5iXvZoJk49RIOJTSoxViL1FYsIV0_UMhXdvl_i_pP3Kd1T4Fev5ZmdZ2WZb",
-        "redirect_uri" => "http://192.168.50.222/users/auth/openid_connect/callback"
+        "redirect_uri" => "http://127.0.0.1/users/auth/openid_connect/callback"
       }
     }
   }

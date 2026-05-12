@@ -141,7 +141,7 @@ def check_itop_ui(doctor, env):
 
 
 def check_mailcow_api(doctor):
-    key_file = Path(os.environ.get("MAILCOW_API_KEY_FILE", "/home/cereal/Mailcow/deploy/api-nginx/.api_key"))
+    key_file = Path(os.environ.get("MAILCOW_API_KEY_FILE", "/opt/mailcow/deploy/api-nginx/.api_key"))
     base = os.environ.get("MAILCOW_API_BASE", "http://127.0.0.1:8081").rstrip("/")
     if not key_file.exists():
         doctor.record("Mailcow HTTP API key file", "warn", "optional shim not deployed")

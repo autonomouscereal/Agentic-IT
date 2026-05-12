@@ -1,10 +1,10 @@
-﻿---
+---
 name: platform-credentials
 description: >
-  Multi-platform credential management for all AI Server services (iTop, Wazuh, GitLab, Keycloak, Mailcow, SOC Dashboard).
-  Covers credential storage via encrypted vault, user management across platforms,
-  the demo_account_1 unified credentials, and the multi-platform user manager script.
-  Use when creating/deleting users, checking credentials, managing passwords, or troubleshooting login issues.
+  Multi-platform credential management for IT and SOC services such as iTop, Wazuh, GitLab, Keycloak,
+  Mailcow, and SOC Dashboard. Covers encrypted credential-vault usage, user management across
+  platforms, credential rotation, and troubleshooting login issues without hardcoded passwords,
+  personal account names, fixed private IPs, or machine-specific paths.
 allowed-tools:
   - Read
   - Bash(python *)
@@ -13,102 +13,77 @@ allowed-tools:
 
 # Platform Credentials Management
 
-All AI Server platform credentials are managed through the **Server Manager v2 encrypted credential vault**.
-**NO PASSWORDS ARE HARDCODED.** All secrets are encrypted in `.cred_vault.json`.
+Use the `credential-vault` skill for all secrets. This skill describes how platform accounts consume those secrets; it does not own vault implementation details.
 
 ## Credential Vault
 
-### Location
-- Vault script: `C:/Users/cereal/.Codex/skills/server-manager/credman.py`
-- Encrypted store: `C:/Users/cereal/.Codex/skills/server-manager/.cred_vault.json`
-- Server config: `C:/Users/cereal/.Codex/skills/server-manager/servers.json`
+Use the vault CLI from the dedicated skill:
 
-### Usage
 ```bash
-# Store a password
-python "C:/Users/cereal/.Codex/skills/server-manager/credman.py" set <server-name> "<password>"
-
-# List servers
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --list-servers
+python "<credential-vault>/scripts/credman.py" setup
+python "<credential-vault>/scripts/credman.py" set <key> "<secret>"
+python "<credential-vault>/scripts/credman.py" get <key>
+python "<credential-vault>/scripts/credman.py" list
 ```
 
-## Platform Services & Ports
+Runtime scripts should resolve credentials in this order:
 
-| Platform | URL | Port | Auth Method | Status |
-|----------|-----|------|-------------|--------|
-| SOC Dashboard | http://192.168.50.222:25480 | 25480 | Direct (FastAPI) | Operational |
-| iTop | http://192.168.50.222:25432 | 25432 | Local DB (bcrypt) | Demo REST login verified |
-| Wazuh Dashboard | https://192.168.50.222:26443 | 26443 | OpenSearch Security | Demo backend auth verified |
-| Wazuh API | https://127.0.0.1:26500 | 26500 | Native Wazuh API auth | Demo API auth verified |
-| GitLab | http://192.168.50.222:80 | 80 | Local Rails password + Keycloak OIDC | Rails password verified; OIDC routing depends on deployment |
-| Keycloak | Internal only | N/A | Master realm admin | Operational |
-| Mailcow | Internal only | N/A | Local + Keycloak bridge | Mailbox exists |
+1. Explicit environment variable.
+2. Secret file path supplied by environment.
+3. Credential-vault key.
 
-## demo_account_1 Unified Credentials
+## Service Coordinates
 
-**Username:** `demo_account_1`
-**Password:** Stored in credential vault â€” retrieve via `credman.py`
+Do not commit lab-specific private IPs or personal home paths. Use these environment variables in examples and scripts:
 
-### Current Status Per Platform
+| Variable | Purpose |
+|----------|---------|
+| `SOC_HOST` | Main platform host or load balancer |
+| `SOC_DASHBOARD_URL` | Dashboard API/UI base URL |
+| `ITOP_URL` | iTop base URL |
+| `WAZUH_URL` | Wazuh API base URL |
+| `GITLAB_URL` | GitLab base URL |
+| `KEYCLOAK_URL` | Keycloak base URL |
+| `MAILCOW_URL` | Mailcow base URL |
+| `PLATFORM_HOME` | Remote deployment root |
+| `CREDMAN_PATH` | Explicit path to `credential-vault/scripts/credman.py` |
 
-| Platform | User Exists | Password Set | Login Works | Notes |
-|----------|:-----------:|:------------:|:-----------:|-------|
-| Keycloak (all realms) | YES | YES | N/A | Central IDP, passwords set in wazuh/gitlab/itop realms |
-| iTop | YES | YES (bcrypt, 60 chars) | YES | Valid `UserLocal`, profiles `Administrator` + `REST Services User` |
-| Wazuh API | YES | YES | YES | Updated via native Wazuh API; direct SQLite is fallback only |
-| Wazuh OpenSearch Security | YES | YES | YES | Synced to `internal_users.yml`, security config reloaded |
-| GitLab | YES | YES (Rails verified) | YES | Local Rails password validation passes; browser SSO depends on routing |
-| Mailcow | YES | Delegated to Keycloak bridge | YES | Mailbox exists and active |
+## Account Policy
 
-## Multi-Platform User Manager
+- Use role-oriented account names in docs and scripts, such as `platform_demo_user` or `soc_breakglass_admin`.
+- Keep real usernames, passwords, API keys, and PATs in the vault or runtime environment.
+- Never commit generated `.env`, `.gitlab-token`, `.api_key`, `.cred_key`, or `.cred_vault.json` files.
 
-### Location
-- **Script:** `/home/cereal/multiplatform_user_manager.py` (on AI Server)
-- **Status:** patched 2026-05-11; live auth verified for `demo_account_1`
+## User Manager
 
-### Capabilities
-Unified CLI for managing users across all 5 platforms:
-- `create` â€” Create user on all platforms
-- `delete` â€” Remove user from all platforms
-- `update` â€” Modify user attributes
-- `list` â€” List users across platforms
-- `set-password` â€” Set password across platforms
+The multi-platform user manager must be location-neutral:
 
-### Platform Backends
-- **KeycloakBackend** â€” Admin REST API via `keycloak_admin.py`
-- **iTopBackend** â€” Direct MariaDB SQL (bcrypt password hashing)
-- **WazuhBackend** â€” Direct RBAC SQLite (scrypt password hashing)
-- **GitLabBackend** â€” Rails runner (Ruby code templates)
-- **MailcowBackend** â€” API or direct MySQL
+```bash
+PLATFORM_HOME=/opt/agentic-it \
+python scripts/multiplatform_user_manager.py list
+```
 
-### Fixed Bugs in User Manager
-1. **Hardcoded DB passwords removed**: iTop and Mailcow DB credentials are resolved from container environment or explicit environment variables.
-2. **Shell expansion fixed**: SQL is streamed to database clients over stdin, so bcrypt/scrypt `$` characters are not expanded by shell.
-3. **Wazuh fixed**: the manager now uses the native Wazuh API for user/password/role/run_as updates and syncs Wazuh Dashboard OpenSearch Security.
-4. **iTop fixed**: the demo user was rebuilt as a valid `UserLocal` object with initialized local-auth fields and required profiles.
-5. **GitLab fixed**: GitLab user updates use the GitLab 17-compatible `User.new` / `save(validate: false)` flow and local Rails password checks pass.
+Supported actions:
 
-## Credential Storage Locations
+- `create`: create a user on selected platforms.
+- `delete`: remove a user from selected platforms.
+- `update`: modify user attributes.
+- `list`: list users across platforms.
+- `set-password`: rotate a user password across platforms.
 
-### Where Each Platform Stores Credentials
+## Platform Backends
 
-| Platform | Storage | Format | Container/Path |
-|----------|---------|--------|----------------|
-| Keycloak | PostgreSQL DB | Encrypted | `keycloak-db-1` |
-| iTop | MariaDB `priv_user_local.password_hash` | bcrypt `$2y$12$` | `itop-deployment-db-1` |
-| Wazuh API | Wazuh REST API preferred; SQLite fallback | native API / scrypt:N:R:P$salt$hash | `wazuh_deploy-wazuh.manager-1` |
-| Wazuh Dashboard | OpenSearch Security | bcrypt `$2y$12$` | `wazuh_deploy-wazuh.indexer-1` â†’ `/usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml` |
-| GitLab | PostgreSQL | Rails encrypted | `gitlab` |
-| Mailcow | MySQL | Mailcow hash | `mysql-mailcow` |
+- Keycloak: Admin REST API.
+- iTop: direct database access only when explicitly configured; use parameterized SQL.
+- Wazuh: native Wazuh API preferred; SQLite fallback only for controlled maintenance.
+- GitLab: Rails runner or GitLab API with PAT loaded from vault.
+- Mailcow: API compatibility shim or direct MySQL when explicitly configured.
 
-## Important Notes
+## Required Hygiene
 
-- **Wazuh has TWO authentication layers**: OpenSearch Security (dashboard UI login) AND RBAC DB (API access). Both need the user created.
-- **GitLab uses Keycloak OIDC SSO**: Web login goes through Keycloak, not GitLab's own DB. The `keycloak.internal:8443` hostname is currently unreachable.
-- **Keycloak is internal-only**: No external port mapping. Services reach it via Docker network hostname resolution.
-- **iTop uses local auth**: Form login against MariaDB bcrypt hashes. No SSO configured.
-
-## Detailed Troubleshooting
+- Reference service URLs with environment variables, not fixed private IPs.
+- Reference deployment roots with `PLATFORM_HOME`, not a personal home directory.
+- Reference secrets with vault keys, not plaintext values.
+- Run `python scripts/text_hygiene.py --check-lab-values` before committing platform credential changes.
 
 For detailed login issue diagnosis and fix steps, see the [login-troubleshooting](../login-troubleshooting/SKILL.md) skill.
-

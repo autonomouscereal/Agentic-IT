@@ -6,7 +6,7 @@
 # ============================================================
 set -euo pipefail
 
-WAZUH_DIR="${1:-/home/cereal/SOC_TESTING/wazuh_deploy}"
+WAZUH_DIR="${1:-/opt/agentic-it/SOC_TESTING/wazuh_deploy}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIGS_DIR="${SCRIPT_DIR}/../wazuh_configs"
 WAZUH_MANAGER_CONTAINER="${WAZUH_MANAGER_CONTAINER:-wazuh_deploy-wazuh.manager-1}"

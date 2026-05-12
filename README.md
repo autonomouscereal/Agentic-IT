@@ -4,9 +4,9 @@ FastAPI + raw PostgreSQL + vanilla JS control plane for a modular, product-agnos
 
 ## Current Deployment
 
-- UI/API: `http://192.168.50.222:25480`
-- API health: `http://192.168.50.222:25480/health`
-- Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
+- UI/API: `http://127.0.0.1:25480`
+- API health: `http://127.0.0.1:25480/health`
+- Server path: `/opt/agentic-it/SOC_TESTING/soc-dashboard`
 - Containers: `soc-dashboard-api`, `soc-dashboard-db`
 - Database: PostgreSQL 16 only, accessed through `asyncpg` with parameterized raw SQL
 
@@ -34,7 +34,7 @@ FastAPI + raw PostgreSQL + vanilla JS control plane for a modular, product-agnos
 - No Pydantic application models.
 - No SQLAlchemy.
 - No plaintext passwords, API keys, tokens, or fallback secrets in source, examples, or docs.
-- Keep credentials in the server-manager vault or environment.
+- Keep credentials in the dedicated credential-vault skill or environment.
 
 ## Agent Runner
 
@@ -78,7 +78,7 @@ Each task gets:
 - `.claude/settings.json` with only non-secret runtime settings.
 - `checkpoint.json` that the agent updates as it works.
 - `output.log` with stdout/stderr captured for audit.
-- proxy-aware endpoint settings from `AGENT_LLM_BASE_URL`; the current AI server deployment uses `http://192.168.50.222:4001`.
+- proxy-aware endpoint settings from `AGENT_LLM_BASE_URL`; the current AI server deployment uses `http://127.0.0.1:4001`.
 - a dashboard API base, default `http://localhost:8000`, so agents can fetch ticket context, write notes, request approvals, and persist postmortems/workflows through the canonical API.
 
 Claude is invoked with:
@@ -171,13 +171,13 @@ External ticket links are built from `ITOP_WEB_BASE` when available, falling bac
 Use the server-manager skill. Do not use raw SSH.
 
 ```powershell
-C:\Users\cereal\.claude\skills\server-manager\.venv\Scripts\python.exe C:\Users\cereal\.claude\skills\server-manager\ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "/home/cereal/SOC_TESTING/soc-dashboard"
+C:\Users\me\.claude\skills\server-manager\.venv\Scripts\python.exe C:\Users\me\.claude\skills\server-manager\ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "/opt/agentic-it/SOC_TESTING/soc-dashboard"
 ```
 
 Then on the AI server:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 docker compose up -d --build api
 docker exec -i soc-dashboard-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < api/migrations/002_agent_runner_hardening.sql
 docker exec -i soc-dashboard-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < api/migrations/003_agentic_system_objects.sql
@@ -187,7 +187,7 @@ curl -sS http://localhost:25480/health
 If `agent_work` was created by an earlier root-run container, fix ownership before switching runtime users or bind mounts:
 
 ```bash
-sudo chown -R cereal:cereal /home/cereal/SOC_TESTING/soc-dashboard/agent_work
+sudo chown -R "$USER:$USER" /opt/agentic-it/SOC_TESTING/soc-dashboard/agent_work
 ```
 
 ## Test Checklist
@@ -216,7 +216,7 @@ sudo chown -R cereal:cereal /home/cereal/SOC_TESTING/soc-dashboard/agent_work
 Run these from the deployed server path after rebuild/migration:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_agentic_system.py http://localhost:25480
 python3 scripts/smoke_setup_platform.py http://localhost:25480
 python3 scripts/smoke_phishing_workflow_lifecycle.py http://localhost:25480

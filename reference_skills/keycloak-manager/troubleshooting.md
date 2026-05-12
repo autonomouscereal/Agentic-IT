@@ -209,7 +209,7 @@ docker exec keycloak-db pg_isready -U keycloak_user -d keycloak
 
 ```bash
 # Full stop and recreate (WARNING: deletes all data)
-cd /home/cereal/keycloak-manager
+cd /opt/agentic-it/keycloak-manager
 python3 scripts/deploy.py --recreate --generate-secrets
 ```
 

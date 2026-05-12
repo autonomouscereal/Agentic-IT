@@ -27,10 +27,11 @@ def load_gitlab_pat():
     vault_key = os.environ.get("GITLAB_PAT_VAULT_KEY", "gitlab_oidc_setup_pat")
     candidates = [
         os.environ.get("CREDMAN_PATH", ""),
-        "/home/cereal/.claude/skills/server-manager/credman.py",
-        "/home/cereal/.agents/skills/server-manager/credman.py",
-        "C:/Users/cereal/.claude/skills/server-manager/credman.py",
-        "C:/Users/cereal/.agents/skills/server-manager/credman.py",
+        os.path.join(os.path.dirname(__file__), "..", "..", "credential-vault", "scripts", "credman.py"),
+        os.path.expanduser("~/.claude/skills/credential-vault/scripts/credman.py"),
+        os.path.expanduser("~/.agents/skills/credential-vault/scripts/credman.py"),
+        os.path.expanduser("~/.claude/skills/server-manager/credman.py"),
+        os.path.expanduser("~/.agents/skills/server-manager/credman.py"),
     ]
     for credman in [path for path in candidates if path]:
         if not os.path.exists(credman):

@@ -1,4 +1,4 @@
-"""Platform manifest and setup planning helpers.
+﻿"""Platform manifest and setup planning helpers.
 
 The manifest is intentionally data-driven so the setup wizard can stay harness
 and provider agnostic. This module reads JSON, checks local skill availability
@@ -51,7 +51,7 @@ def _skill_roots():
     raw = os.getenv(
         "PLATFORM_SKILL_ROOTS",
         "/skills,/app/skills,/root/.claude/skills,/root/.agents/skills,"
-        "C:/Users/cereal/.agents/skills,C:/Users/cereal/.claude/skills",
+        "C:/Users/me/.agents/skills,C:/Users/me/.claude/skills",
     )
     return [Path(item.strip()) for item in raw.split(",") if item.strip()]
 
@@ -147,7 +147,7 @@ def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=N
         },
         "guardrails": [
             "Use raw PostgreSQL through parameterized SQL only.",
-            "Store secrets in environment variables or the encrypted server-manager vault, never in source.",
+            "Store secrets in environment variables or the encrypted credential-vault, never in source.",
             "Treat ticketing, SIEM, IAM, email, and CI/CD as providers behind platform contracts.",
             "Require approval records before destructive or environment-changing actions.",
             "Run module health checks and smoke tests before marking a deployment complete.",

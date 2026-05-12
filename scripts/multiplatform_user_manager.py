@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Multi-Platform User Manager
 ===========================
@@ -12,9 +12,9 @@ Usage:
     python3 multiplatform_user_manager.py status
 
 Examples:
-    python3 multiplatform_user_manager.py create demo_account_1 "<from vault: demo_account_1>" --platforms all --role administrator
-    python3 multiplatform_user_manager.py delete demo_account_1 --platforms keycloak,itop
-    python3 multiplatform_user_manager.py update demo_account_1 --new-password "NewPass123!" --platforms wazuh,gitlab
+    python3 multiplatform_user_manager.py create platform_demo_user "<from vault: platform_demo_user>" --platforms all --role administrator
+    python3 multiplatform_user_manager.py delete platform_demo_user --platforms keycloak,itop
+    python3 multiplatform_user_manager.py update platform_demo_user --new-password "NewPass123!" --platforms wazuh,gitlab
     python3 multiplatform_user_manager.py list --platform all
     python3 multiplatform_user_manager.py status
 """
@@ -54,10 +54,11 @@ def load_env_file(path):
     return config
 
 # Keycloak
-KC_ENV = load_env_file("/home/cereal/keycloak-manager/.env")
+PLATFORM_HOME = os.environ.get("PLATFORM_HOME", "/opt/agentic-it")
+KC_ENV = load_env_file(os.environ.get("KEYCLOAK_MANAGER_ENV", f"{PLATFORM_HOME}/keycloak-manager/.env"))
 KEYCLOAK_ADMIN_PASSWORD = KC_ENV.get("KC_BOOTSTRAP_ADMIN_PASSWORD", "")
 KEYCLOAK_REALMS = ["itop", "wazuh", "mailcow", "gitlab"]
-KC_ADMIN_SCRIPT = "/home/cereal/keycloak-manager/scripts/keycloak_admin.py"
+KC_ADMIN_SCRIPT = os.environ.get("KC_ADMIN_SCRIPT", f"{PLATFORM_HOME}/keycloak-manager/scripts/keycloak_admin.py")
 
 # ============================================================================
 # Helpers
@@ -250,7 +251,7 @@ class iTopBackend:
 
     def _run_sql(self, sql):
         """Run SQL against iTop MariaDB."""
-        # Pass SQL directly — callers construct the SQL strings
+        # Pass SQL directly - callers construct the SQL strings
         return run_mysql_stream(
             ITOP_DB_CONTAINER, "mariadb", ITOP_DB_USER, ITOP_DB_PASSWORD, ITOP_DB_NAME, sql
         )
@@ -803,7 +804,10 @@ class MailcowBackend:
 
     def create_user(self, username, password, email="", role="administrator"):
         # Try running the bridge sync first
-        bridge_script = "/home/cereal/keycloak-mailcow-bridge/scripts/sync_engine.py"
+        bridge_script = os.environ.get(
+            "KEYCLOAK_MAILCOW_SYNC_SCRIPT",
+            f"{PLATFORM_HOME}/keycloak-mailcow-bridge/scripts/sync_engine.py",
+        )
         code, out, err = run_remote(f"python3 {bridge_script}")
         if code == 0:
             print_ok(f"Mailcow: Bridge sync completed")
@@ -854,7 +858,7 @@ def parse_platforms(s):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Multi-Platform User Manager — manage users across Keycloak, iTop, Wazuh, GitLab, Mailcow",
+        description="Multi-Platform User Manager - manage users across Keycloak, iTop, Wazuh, GitLab, Mailcow",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

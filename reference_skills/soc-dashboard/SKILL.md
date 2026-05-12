@@ -1,7 +1,7 @@
 ---
 name: soc-dashboard
 description: >
-  SOC Dashboard — FastAPI + PostgreSQL + vanilla JS monitoring platform for the AI Server (192.168.50.222).
+  SOC Dashboard - FastAPI + PostgreSQL + vanilla JS monitoring platform for the AI Server (127.0.0.1).
   Mirrors iTop tickets via bidirectional sync, orchestrates AI agents for ticket resolution,
   manages change approvals, monitors tool health, and provides real-time WebSocket updates.
   Use when checking dashboard status, API endpoints, agent state, ticket sync, change requests,
@@ -21,10 +21,10 @@ Unified SOC monitoring platform deployed on the AI Server. Mirrors iTop tickets,
 
 | Service | URL | Port |
 |---------|-----|------|
-| Dashboard UI | http://192.168.50.222:25480 | 25480 |
-| API (programmatic) | http://192.168.50.222:25480/api | 25480 |
-| Health endpoint | http://192.168.50.222:25480/health | 25480 |
-| PostgreSQL DB | 192.168.50.222:5433 | 5433 |
+| Dashboard UI | http://127.0.0.1:25480 | 25480 |
+| API (programmatic) | http://127.0.0.1:25480/api | 25480 |
+| Health endpoint | http://127.0.0.1:25480/health | 25480 |
+| PostgreSQL DB | 127.0.0.1:5433 | 5433 |
 
 ## Docker Containers
 
@@ -37,8 +37,8 @@ Both containers use `restart: unless-stopped`. The API waits for `db` to be heal
 
 ## Project Location
 
-- **Compose file**: `/home/cereal/SOC_TESTING/soc-dashboard/docker-compose.yml`
-- **Environment**: `/home/cereal/SOC_TESTING/soc-dashboard/.env` (contains DB credentials, iTop credentials, intervals)
+- **Compose file**: `/opt/agentic-it/SOC_TESTING/soc-dashboard/docker-compose.yml`
+- **Environment**: `/opt/agentic-it/SOC_TESTING/soc-dashboard/.env` (contains DB credentials, iTop credentials, intervals)
 - **Source code**: inside `soc-dashboard-api` container at `/app/`
 - **Frontend**: mounted read-only from `./frontend/` to `/frontend/` in container
 - **Data volume**: `db-data` named volume for PostgreSQL persistence
@@ -58,7 +58,7 @@ aiohttp==3.10.0
 
 ## API Endpoints (Verified from Source)
 
-### Tickets — `/api/tickets`
+### Tickets - `/api/tickets`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -69,7 +69,7 @@ aiohttp==3.10.0
 | POST | `/api/tickets/{id}/assign-agent` | Spawn AI agent for ticket (body: `model` string, default `qwen/qwen3.6-27b`) |
 | POST | `/api/tickets/{id}/unassign-agent` | Remove agent from ticket (sets agent status to 'terminated') |
 
-### Agents — `/api/agents`
+### Agents - `/api/agents`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -85,7 +85,7 @@ aiohttp==3.10.0
 | POST | `/api/agents/{id}/update` | Update agent status + error message (body: `status`, `error_message`) |
 | GET | `/api/agents/ws` | WebSocket endpoint for real-time agent events |
 
-### Changes — `/api/changes`
+### Changes - `/api/changes`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -98,7 +98,7 @@ aiohttp==3.10.0
 | POST | `/api/changes/{id}/reject` | Reject change (body: `rejected_by`, `reason`) |
 | POST | `/api/changes/{id}/complete` | Mark change as completed (body: `result`) |
 
-### Dashboard — `/api/dashboard`
+### Dashboard - `/api/dashboard`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -108,7 +108,7 @@ aiohttp==3.10.0
 | GET | `/api/dashboard/agent-performance` | Last 50 finished agents with duration |
 | GET | `/api/dashboard/tool-uptime` | Tool uptime percentages for last N days (default 7) |
 
-### Tools — `/api/tools`
+### Tools - `/api/tools`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -130,15 +130,15 @@ aiohttp==3.10.0
 
 Three background tasks start on app startup via the FastAPI lifespan:
 
-1. **iTop Sync Loop** (`itop_sync.sync_loop`) — Runs every 2 seconds (configurable via `ITOP_DISCOVERY_INTERVAL`). Performs fast discovery for new tickets, full sync every 60 seconds. Broadcasts sync events over WebSocket.
+1. **iTop Sync Loop** (`itop_sync.sync_loop`) - Runs every 2 seconds (configurable via `ITOP_DISCOVERY_INTERVAL`). Performs fast discovery for new tickets, full sync every 60 seconds. Broadcasts sync events over WebSocket.
 
-2. **Health Check Loop** (`health_check.health_loop`) — Runs every 60 seconds (configurable via `HEALTH_CHECK_INTERVAL`). Checks all registered tools via port scan or HTTP request. Records results to `tool_checks` table.
+2. **Health Check Loop** (`health_check.health_loop`) - Runs every 60 seconds (configurable via `HEALTH_CHECK_INTERVAL`). Checks all registered tools via port scan or HTTP request. Records results to `tool_checks` table.
 
-3. **Agent Monitor Loop** (`agent_monitor.monitor_loop`) — Runs every 15 seconds (configurable via `AGENT_HEARTBEAT_INTERVAL`). Detects stalled agents (no heartbeat for 120+ seconds), marks them as 'stalled', writes audit entries, broadcasts over WebSocket.
+3. **Agent Monitor Loop** (`agent_monitor.monitor_loop`) - Runs every 15 seconds (configurable via `AGENT_HEARTBEAT_INTERVAL`). Detects stalled agents (no heartbeat for 120+ seconds), marks them as 'stalled', writes audit entries, broadcasts over WebSocket.
 
 ## Database Schema
 
-Raw PostgreSQL — **NO ORM, NO Pydantic, NO SQLAlchemy**. All queries use parameterized raw SQL via asyncpg.
+Raw PostgreSQL - **NO ORM, NO Pydantic, NO SQLAlchemy**. All queries use parameterized raw SQL via asyncpg.
 
 ### Tables
 
@@ -190,21 +190,21 @@ Six pages accessible via sidebar navigation:
 
 ```
 /frontend/
-├── index.html           # Main SPA with all 6 page sections
-├── css/
-│   └── dashboard.css   # Dark operations theme, all styles
-├── js/
-│   ├── dashboard.js    # Navigation, stats, tickets, changes, tools, audit, ticket modal
-│   ├── charts.js       # Chart.js integration (3 charts: trend, distribution, uptime)
-│   ├── agents.js       # Agent grid, stalled detection UI, wake/restart/stop
-│   └── websocket.js    # WebSocket client with auto-reconnect, notifications
+|-- index.html           # Main SPA with all 6 page sections
+|-- css/
+|   `-- dashboard.css   # Dark operations theme, all styles
+|-- js/
+|   |-- dashboard.js    # Navigation, stats, tickets, changes, tools, audit, ticket modal
+|   |-- charts.js       # Chart.js integration (3 charts: trend, distribution, uptime)
+|   |-- agents.js       # Agent grid, stalled detection UI, wake/restart/stop
+|   `-- websocket.js    # WebSocket client with auto-reconnect, notifications
 ```
 
 ### Charts (Chart.js 4.4.7)
 
-1. **Ticket Volume (7 Days)** — Line chart with cyan fill, shows daily ticket creation
-2. **Agent Status Distribution** — Doughnut chart, color-coded by status
-3. **Tool Uptime** — Horizontal bar chart, green/yellow/red by percentage
+1. **Ticket Volume (7 Days)** - Line chart with cyan fill, shows daily ticket creation
+2. **Agent Status Distribution** - Doughnut chart, color-coded by status
+3. **Tool Uptime** - Horizontal bar chart, green/yellow/red by percentage
 
 ### Real-Time Updates
 
@@ -248,22 +248,22 @@ Incident, RoutineChange, NormalChange, EmergencyChange, UserRequest
 
 ```bash
 # Check container status
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker ps --filter name=soc-dashboard"
+python "C:/Users/me/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker ps --filter name=soc-dashboard"
 
 # View API logs
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker logs soc-dashboard-api --tail 50"
+python "C:/Users/me/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker logs soc-dashboard-api --tail 50"
 
 # Restart API container (no rebuild needed for frontend changes)
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker restart soc-dashboard-api"
+python "C:/Users/me/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker restart soc-dashboard-api"
 
 # Access PostgreSQL
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker exec -it soc-dashboard-db psql -U soc_admin -d soc_dashboard"
+python "C:/Users/me/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker exec -it soc-dashboard-db psql -U soc_admin -d soc_dashboard"
 
 # Rebuild API container (after Python code changes)
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc-dashboard && docker compose up -d --build api"
+python "C:/Users/me/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "cd /opt/agentic-it/SOC_TESTING/soc-dashboard && docker compose up -d --build api"
 
 # Check sync state
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker exec soc-dashboard-api cat /app/data/.itop_max_keys.json"
+python "C:/Users/me/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker exec soc-dashboard-api cat /app/data/.itop_max_keys.json"
 ```
 
 ## Architecture Details

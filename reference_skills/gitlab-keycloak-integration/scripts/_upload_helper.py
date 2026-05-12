@@ -4,15 +4,15 @@ import sys
 import os
 
 # Add server-manager to path
-sys.path.insert(0, "C:/Users/cereal/.claude/skills/server-manager")
+sys.path.insert(0, "C:/Users/me/.claude/skills/server-manager")
 
 # Import paramiko directly to avoid the CLI wrapper
 import paramiko
 
-REMOTE_HOST = "192.168.50.222"
+REMOTE_HOST = "127.0.0.1"
 REMOTE_USER = "cereal"
 REMOTE_PASS = "root"
-REMOTE_DIR = "/home/cereal/gitlab-keycloak-integration/scripts/"
+REMOTE_DIR = "/opt/agentic-it/gitlab-keycloak-integration/scripts/"
 
 LOCAL_DIR = "/c/Users/cereal/.claude/skills/gitlab-keycloak-integration/scripts"
 

@@ -536,7 +536,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Full agentic CI/CD remediation demo")
     parser.add_argument("--base", default=DEFAULT_BASE, help="Dashboard base URL")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Agent model ID")
-    parser.add_argument("--host-ip", default=os.getenv("DEMO_HOST_IP", "192.168.50.222"), help="Host IP reachable from scanner containers")
+    parser.add_argument("--host-ip", default=os.getenv("DEMO_HOST_IP", "127.0.0.1"), help="Host IP reachable from scanner containers")
     parser.add_argument("--workspace", default=str(ROOT / "demo_runs"), help="Directory for demo runs")
     parser.add_argument("--timeout", type=int, default=1800, help="Agent wait timeout seconds")
     args = parser.parse_args()

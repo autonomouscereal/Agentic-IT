@@ -94,14 +94,14 @@ MySQL remains the canonical fallback for provisioning and write operations.
 Deploy or repair the shim:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 ```
 
 Run the deeper regression:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
 
@@ -306,19 +306,19 @@ Dovecot expects `{SSHA512}` prefixed passwords. Plain text passwords in the mail
 
 ```
 keycloak-mailcow-bridge/
-├── SKILL.md               # This file (main skill documentation)
-├── reference.md           # API reference (Keycloak + Mailcow + OIDC)
-├── troubleshooting.md     # Common issues and solutions
-├── .env.example           # Environment template
-├── .env                   # Actual credentials (git-ignored)
-└── scripts/
-    ├── deploy.py           # Deployment orchestrator
-    ├── keycloak_setup.py   # Keycloak realm, clients, groups, roles, mappers, users
-    ├── mailcow_idp_config.py  # Mailcow IDP config via MySQL
-    ├── sync_engine.py      # Bidirectional sync engine (CLI + daemon)
-    ├── test_integration.py # E2E test suite (48 tests)
-    ├── find_mailcow_creds.py  # Credential discovery helper
-    └── setup_bridge_env.py   # Environment setup helper
+|-- SKILL.md               # This file (main skill documentation)
+|-- reference.md           # API reference (Keycloak + Mailcow + OIDC)
+|-- troubleshooting.md     # Common issues and solutions
+|-- .env.example           # Environment template
+|-- .env                   # Actual credentials (git-ignored)
+`-- scripts/
+    |-- deploy.py           # Deployment orchestrator
+    |-- keycloak_setup.py   # Keycloak realm, clients, groups, roles, mappers, users
+    |-- mailcow_idp_config.py  # Mailcow IDP config via MySQL
+    |-- sync_engine.py      # Bidirectional sync engine (CLI + daemon)
+    |-- test_integration.py # E2E test suite (48 tests)
+    |-- find_mailcow_creds.py  # Credential discovery helper
+    `-- setup_bridge_env.py   # Environment setup helper
 ```
 
 ## Additional Resources

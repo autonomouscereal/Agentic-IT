@@ -20,6 +20,6 @@ else
 end
 """
 
-with open("/home/cereal/create-pat.rake", "w") as f:
+with open("/opt/agentic-it/create-pat.rake", "w") as f:
     f.write(ruby_code)
 print("Wrote create-pat.rake")

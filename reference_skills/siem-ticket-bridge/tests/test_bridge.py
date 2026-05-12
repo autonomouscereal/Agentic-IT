@@ -244,11 +244,11 @@ class TestWazuhConnectorInit(unittest.TestCase):
 
     def test_custom_init(self):
         conn = WazuhConnector({
-            "host": "192.168.50.222",
+            "host": "127.0.0.1",
             "port": 26500,
             "indexer_port": 26920,
         })
-        self.assertEqual(conn.host, "192.168.50.222")
+        self.assertEqual(conn.host, "127.0.0.1")
         self.assertEqual(conn.indexer_port, 26920)
 
     def test_normalize_alert(self):
@@ -276,7 +276,7 @@ class TestITOPConnectorInit(unittest.TestCase):
 
     def test_custom_init(self):
         conn = ITOPConnector({
-            "host": "192.168.50.222",
+            "host": "127.0.0.1",
             "port": 25432,
             "team_id": 5,
         })
@@ -301,7 +301,7 @@ class TestLiveWazuh(unittest.TestCase):
         else:
             cls.skip = False
             cls.conn = WazuhConnector({
-                "host": "192.168.50.222",
+                "host": "127.0.0.1",
                 "port": 26500,
                 "indexer_port": 26920,
                 "api_user": os.environ.get("BRIDGE_SIEM_API_USER", "wazuh-wui"),
@@ -332,7 +332,7 @@ class TestLiveITOP(unittest.TestCase):
         else:
             cls.skip = False
             cls.conn = ITOPConnector({
-                "host": "192.168.50.222",
+                "host": "127.0.0.1",
                 "port": 25432,
                 "api_user": os.environ.get("BRIDGE_TICKETING_API_USER", "admin"),
                 "api_password": os.environ.get("BRIDGE_TICKETING_API_PASSWORD", ""),

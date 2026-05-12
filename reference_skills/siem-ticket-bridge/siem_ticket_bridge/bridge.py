@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SIEM-to-Ticketing Bridge — main orchestrator.
+SIEM-to-Ticketing Bridge - main orchestrator.
 
 Polls the SIEM for new alerts, normalizes them, deduplicates,
 and creates tickets in the configured ticketing system.

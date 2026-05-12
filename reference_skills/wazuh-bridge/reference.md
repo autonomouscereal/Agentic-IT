@@ -39,7 +39,7 @@ Response: {"status": "UP"}
 ## Wazuh Security API (4.14.x)
 
 ### Base URL
-`https://192.168.50.222:26500`
+`https://127.0.0.1:26500`
 
 ### Authentication
 ```
@@ -151,9 +151,9 @@ policy:
 3. Authenticate to Keycloak (admin token)
 4. Authenticate to Wazuh (JWT token)
 5. For each Keycloak user in wazuh realm:
-   - New user → create in Wazuh
-   - Existing user → check group membership
-   - Deleted user → disable in Wazuh
+   - New user -> create in Wazuh
+   - Existing user -> check group membership
+   - Deleted user -> disable in Wazuh
 6. Save sync state
 
 ### Graceful Degradation

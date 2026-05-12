@@ -46,12 +46,12 @@ flowchart LR
 
 Live reference paths:
 
-- Mailcow deployment root: `/home/cereal/Mailcow/deploy`
-- Shim config root: `/home/cereal/Mailcow/deploy/api-nginx`
-- Restricted API key file: `/home/cereal/Mailcow/deploy/api-nginx/.api_key`
-- Compatibility PHP installed into web root: `/home/cereal/mailcow-dockerized/data/web/mailcow_compat_api.php`
-- Deployer script: `/home/cereal/Mailcow/deploy/scripts/deploy_mailcow_api.py`
-- Regression test: `/home/cereal/Mailcow/deploy/scripts/test_mailcow_api_shim.py`
+- Mailcow deployment root: `/opt/agentic-it/Mailcow/deploy`
+- Shim config root: `/opt/agentic-it/Mailcow/deploy/api-nginx`
+- Restricted API key file: `/opt/agentic-it/Mailcow/deploy/api-nginx/.api_key`
+- Compatibility PHP installed into web root: `/opt/agentic-it/mailcow-dockerized/data/web/mailcow_compat_api.php`
+- Deployer script: `/opt/agentic-it/Mailcow/deploy/scripts/deploy_mailcow_api.py`
+- Regression test: `/opt/agentic-it/Mailcow/deploy/scripts/test_mailcow_api_shim.py`
 
 Bundled reference skill paths:
 
@@ -101,7 +101,7 @@ Mailbox responses intentionally omit password hashes and other password-shaped f
 Deploy or repair the shim on a host that already has the Mailcow stack running:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 ```
 
@@ -125,7 +125,7 @@ The deployer does not require host-side `MYSQL_ROOT_PASSWORD`. SQL setup is exec
 Run the full shim regression:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
 
@@ -148,7 +148,7 @@ Current verified result on 2026-05-12:
 Run the platform doctor after any shim repair:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/platform_doctor.py
 ```
 
@@ -161,7 +161,7 @@ Current verified result on 2026-05-12:
 Run the Keycloak-Mailcow bridge E2E suite to confirm the direct MySQL bridge still works after API-side changes:
 
 ```bash
-cd /home/cereal/keycloak-mailcow-bridge
+cd /opt/agentic-it/keycloak-mailcow-bridge
 python3 scripts/test_integration.py
 ```
 
@@ -210,7 +210,7 @@ Likely cause:
 Check:
 
 ```bash
-sed -n '1,220p' /home/cereal/Mailcow/deploy/api-nginx/nginx/conf/nginx.conf
+sed -n '1,220p' /opt/agentic-it/Mailcow/deploy/api-nginx/nginx/conf/nginx.conf
 ```
 
 Required nginx behavior:
@@ -222,7 +222,7 @@ Required nginx behavior:
 Repair:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
@@ -236,7 +236,7 @@ Likely cause:
 Repair:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 ```
 
@@ -273,7 +273,7 @@ Common causes:
 Preferred repair:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 ```
 

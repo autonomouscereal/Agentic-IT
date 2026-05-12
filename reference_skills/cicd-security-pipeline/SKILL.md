@@ -149,7 +149,7 @@ Full local-model proof:
 python scripts/agentic_cicd_full_demo.py \
   --base http://localhost:25480 \
   --model qwen/qwen3.6-27b \
-  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs
+  --workspace /opt/agentic-it/SOC_TESTING/soc-dashboard/demo_runs
 ```
 
 Latest verified full run on 2026-05-11:
@@ -160,7 +160,7 @@ Latest verified full run on 2026-05-11:
 - Agent remediation change `34`: approved before edits
 - Final CI/CD run `10`: `passed`
 - Deployment change `36`: approved and completed
-- Patch artifact: `/home/cereal/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch`
+- Patch artifact: `/opt/agentic-it/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch`
 
 The agent removed command injection and a hardcoded password, updated a stale
 dependency, added a non-root container user, wrote ticket evidence, and produced
@@ -175,7 +175,7 @@ python scripts/agentic_gitlab_cicd_demo.py \
   --dashboard http://localhost:25480 \
   --gitlab http://localhost \
   --model qwen/qwen3.6-27b \
-  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs \
+  --workspace /opt/agentic-it/SOC_TESTING/soc-dashboard/demo_runs \
   --timeout 3000
 ```
 
@@ -210,6 +210,6 @@ Reference GitLab Runner requirements:
 - Attach the runner to generated demo projects, or configure it as an instance
   runner.
 - Job containers must reach GitLab and the dashboard. In the lab, use
-  `network_mode = "gitlab-net"` and `SOC_DASHBOARD_URL=http://192.168.50.222:25480`.
+  `network_mode = "gitlab-net"` and `SOC_DASHBOARD_URL=http://127.0.0.1:25480`.
 - Mount `/tmp/zap-wrk:/zap/wrk` so ZAP can write JSON output from its container.
 - Keep Nuclei bounded for demos with small template lists and explicit targets.

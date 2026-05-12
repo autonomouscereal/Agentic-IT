@@ -81,15 +81,15 @@ The doctor is read-only. It validates the dashboard, setup manifest, ticket sort
 The latest full one-line install proof used:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd ${PLATFORM_HOME}/soc-dashboard
 ./install.sh \
   --profile soc \
-  --source /home/cereal/SOC_TESTING/soc-dashboard \
-  --target /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512 \
+  --source ${PLATFORM_HOME}/soc-dashboard \
+  --target ${PLATFORM_HOME}/soc-dashboard-install-e2e \
   --dashboard-port 25482 \
   --db-port 5435 \
   --project-name soc-dashboard-e2e-20260512 \
-  --ai-base-url http://192.168.50.222:4001 \
+  --ai-base-url ${AGENT_LLM_BASE_URL} \
   --model qwen/qwen3.6-27b \
   --itop-sync-enabled false \
   --non-interactive
@@ -98,7 +98,7 @@ cd /home/cereal/SOC_TESTING/soc-dashboard
 Then run the installed-stack checks:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512
+cd ${PLATFORM_HOME}/soc-dashboard-install-e2e
 BASE=http://localhost:25482
 python3 scripts/platform_doctor.py --base "$BASE"
 python3 scripts/smoke_setup_platform.py "$BASE"
@@ -121,7 +121,7 @@ AGENT_MODEL=qwen/qwen3.6-27b \
 CICD_DOCKER_NETWORK=host \
 python3 scripts/agentic_cicd_full_demo.py \
   --base "$BASE" \
-  --host-ip 192.168.50.222 \
+  --host-ip ${SOC_HOST} \
   --timeout 2400
 ```
 
@@ -137,7 +137,7 @@ When the setup plan includes the reference Mailcow email module, the platform ca
 Reference deployment and validation:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd ${MAILCOW_DEPLOY_DIR}
 python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
@@ -147,7 +147,7 @@ The shim blueprint is documented in `docs/MAILCOW_API_SHIM.md`. It covers endpoi
 Latest dry-run proof:
 
 ```powershell
-python installer\bootstrap.py --dry-run --profile soc --target C:\Users\cereal\AppData\Local\Temp\soc-platform-dryrun --dashboard-port 25580 --db-port 55433 --ai-base-url http://192.168.50.222:4001 --model qwen/qwen3.6-27b
+python installer\bootstrap.py --dry-run --profile soc --target %TEMP%\soc-platform-dryrun --dashboard-port 25580 --db-port 55433 --ai-base-url ${AGENT_LLM_BASE_URL} --model qwen/qwen3.6-27b
 ```
 
 Expected result: JSON status `dry_run`, dashboard URL `http://localhost:25580`, and no files or containers created.

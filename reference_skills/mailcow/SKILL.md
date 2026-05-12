@@ -1,7 +1,7 @@
----
+﻿---
 name: mailcow
 description: >
-  Mailcow Email Server complete deployment blueprint for 192.168.50.222.
+  Mailcow Email Server complete deployment blueprint for 127.0.0.1.
   Covers Docker Compose configuration, custom Dovecot entrypoints, TCP MySQL connectivity,
   database seeding, startup procedures, management scripts, service interaction,
   and complete troubleshooting catalog. Use when deploying, managing, or debugging
@@ -14,7 +14,7 @@ disable-model-invocation: false
 user-invocable: true
 ---
 
-# Mailcow Email Server — Complete Deployment Blueprint
+# Mailcow Email Server - Complete Deployment Blueprint
 
 **Version:** 3.0 | **Last Updated:** 2026-04-29 | **Status:** Production-Deployed
 
@@ -29,20 +29,20 @@ This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-bui
 ### Architecture at a Glance
 
 ```
-192.168.50.222 (Ubuntu 24.04.4, Docker 29.4.0, overlay2, 251GB RAM)
-│
-├── mailcow-network (bridge, 172.23.0.0/16)
-│   ├── mysql-mailcow      (mariadb:10.6)       - Database backend
-│   ├── redis-mailcow      (redis:7-alpine)     - Cache layer
-│   ├── clamd-mailcow      (mailcow/clamd:1.70) - Antivirus scanner
-│   ├── rspamd-mailcow     (mailcow/rspamd:2.0) - Spam filter + milter
-│   ├── php-fpm-mailcow    (mailcow/phpfpm:1.92)- PHP app server
-│   ├── sogo-mailcow       (mailcow/sogo:1.129) - Webmail/CalDAV/CardDAV
-│   ├── dovecot-mailcow    (mailcow/dovecot:2.31) - IMAP/POP3/LMTP
-│   └── postfix-mailcow    (mailcow/postfix:1.80) - SMTP relay
-│
-├── Wazuh SIEM (wazuh.manager, wazuh.dashboard, wazuh.indexer)
-└── SearXNG, iTop, and other SOC/IT services
+127.0.0.1 (Ubuntu 24.04.4, Docker 29.4.0, overlay2, 251GB RAM)
+|
+|-- mailcow-network (bridge, 172.23.0.0/16)
+|   |-- mysql-mailcow      (mariadb:10.6)       - Database backend
+|   |-- redis-mailcow      (redis:7-alpine)     - Cache layer
+|   |-- clamd-mailcow      (mailcow/clamd:1.70) - Antivirus scanner
+|   |-- rspamd-mailcow     (mailcow/rspamd:2.0) - Spam filter + milter
+|   |-- php-fpm-mailcow    (mailcow/phpfpm:1.92)- PHP app server
+|   |-- sogo-mailcow       (mailcow/sogo:1.129) - Webmail/CalDAV/CardDAV
+|   |-- dovecot-mailcow    (mailcow/dovecot:2.31) - IMAP/POP3/LMTP
+|   `-- postfix-mailcow    (mailcow/postfix:1.80) - SMTP relay
+|
+|-- Wazuh SIEM (wazuh.manager, wazuh.dashboard, wazuh.indexer)
+`-- SearXNG, iTop, and other SOC/IT services
 ```
 
 ### Key Design Decisions
@@ -51,8 +51,8 @@ This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-bui
 |----------|--------|
 | TCP MySQL (not Unix socket) | overlay2 storage driver breaks socket sharing across containers |
 | Custom entrypoint for Dovecot | Official entrypoint assumes socket + DNS resolution that doesn't exist |
-| Custom docker-compose.yml | Upstream includes Unbound/netfilter/watchdog — not needed in our setup |
-| Bind mounts (not Docker volumes) | All data lives under `/home/cereal/Mailcow/deploy/data/` for easy backup |
+| Custom docker-compose.yml | Upstream includes Unbound/netfilter/watchdog - not needed in our setup |
+| Bind mounts (not Docker volumes) | All data lives under `/opt/agentic-it/Mailcow/deploy/data/` for easy backup |
 | `set +e` in entrypoint | Several upstream checks fail in our environment (missing templates, no replication) |
 
 ---
@@ -119,13 +119,13 @@ This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-bui
 Connect via the SSH skill:
 
 ```bash
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --test
+python "C:/Users/me/.Codex/skills/server-manager/ssh_client.py" --ai --test
 ```
 
 Or interactively:
 
 ```bash
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --interactive
+python "C:/Users/me/.Codex/skills/server-manager/ssh_client.py" --ai --interactive
 ```
 
 ### Verify Docker is Running
@@ -138,10 +138,10 @@ docker compose version
 ### Create Base Directories
 
 ```bash
-sudo mkdir -p /home/cereal/Mailcow/deploy
-sudo mkdir -p /home/cereal/mailcow-dockerized/data/conf
-sudo chown -R cereal:cereal /home/cereal/Mailcow
-sudo chown -R cereal:cereal /home/cereal/mailcow-dockerized
+sudo mkdir -p /opt/agentic-it/Mailcow/deploy
+sudo mkdir -p /opt/agentic-it/mailcow-dockerized/data/conf
+sudo chown -R cereal:cereal /opt/agentic-it/Mailcow
+sudo chown -R cereal:cereal /opt/agentic-it/mailcow-dockerized
 ```
 
 ---
@@ -149,62 +149,62 @@ sudo chown -R cereal:cereal /home/cereal/mailcow-dockerized
 ## 3. Directory Structure
 
 ```
-/home/cereal/
-├── Mailcow/
-│   └── deploy/                          # All orchestration files
-│       ├── .env                         # Environment variables (DB creds, hostname)
-│       ├── docker-compose.yml           # Service definitions (8 services)
-│       ├── mailcow_start.sh             # Ordered startup script (MySQL/Redis first)
-│       ├── start.sh                     # Simple docker compose start
-│       ├── stop.sh                      # docker compose down
-│       ├── restart.sh                   # docker compose restart
-│       ├── status.py                    # Python status checker
-│       ├── seed_db.py                   # Database schema creation (70+ tables)
-│       ├── write_entrypoint.py          # Generates dovecot-entrypoint.sh
-│       ├── fix_compose.py               # Writes docker-compose.yml with literal ${VAR} refs
-│       ├── dovecot-entrypoint.sh        # Custom entrypoint (generated by write_entrypoint.py)
-│       ├── dovecot-official-fixed-entrypoint.sh  # Modified official entrypoint (465 lines)
-│       ├── test_smtp.py                 # SMTP/IMAP connectivity test
-│       ├── test_email.py                # Send test email via SMTP
-│       ├── test-api.sh                  # Full service test battery
-│       ├── README.md                    # Quick reference
-│       └── data/                        # Auto-created at runtime
-│           ├── mysql/                   # MariaDB data
-│           ├── redis/                   # Redis data
-│           ├── clamav/                  # ClamAV signatures
-│           ├── rspamd/                  # Rspamd learned data
-│           ├── sogo/                    # SOGo profiles
-│           ├── postfix/                 # Postfix spool
-│           ├── acme/                    # ACME certificates
-│           ├── mailcow-data/            # Mailcow web app data
-│           ├── dovecot-mail-crypt/      # Mail crypto keys
-│           └── dovecot-ssl/             # Dovecot SSL certs
-│
-└── mailcow-dockerized/
-    └── data/
-        └── conf/
-            ├── dovecot/                 # Dovecot configuration (27 files)
-            │   ├── dovecot.conf         # Main config (protocols, SSL, auth, plugins)
-            │   ├── dovecot.folders.conf # Folder configuration
-            │   ├── ssl.crt / ssl.key    # TLS certificates
-            │   ├── dhparams.pem         # DH parameters
-            │   ├── dovecot-master.passwd / dovecot-master.userdb  # Master auth
-            │   ├── auth/                # Auth mechanisms
-            │   ├── sql/                 # SQL userdb/quota configs
-            │   ├── lua/                 # Lua scripts (passwd-verify.lua)
-            │   ├── conf.d/              # Additional configs
-            │   ├── global_sieve_before / global_sieve_after  # Sieve filters
-            │   ├── sogo-sso.conf        # SOGo SSO integration
-            │   └── sogo_trusted_ip.conf # SOGo trusted IP (disabled)
-            └── postfix/                 # Postfix configuration
-                ├── main.cf              # Main Postfix config
-                ├── master.cf            # Service definitions
-                ├── sql/                 # MySQL lookup tables
-                ├── dns_blocklists.cf    # DNSBL configuration
-                ├── postscreen_access.cidr  # Postscreen CIDR rules
-                ├── custom_transport.pcre   # Custom transport rules
-                ├── anonymize_headers.pcre  # Header anonymization
-                └── sni.map              # TLS SNI mapping
+/opt/agentic-it/
+|-- Mailcow/
+|   `-- deploy/                          # All orchestration files
+|       |-- .env                         # Environment variables (DB creds, hostname)
+|       |-- docker-compose.yml           # Service definitions (8 services)
+|       |-- mailcow_start.sh             # Ordered startup script (MySQL/Redis first)
+|       |-- start.sh                     # Simple docker compose start
+|       |-- stop.sh                      # docker compose down
+|       |-- restart.sh                   # docker compose restart
+|       |-- status.py                    # Python status checker
+|       |-- seed_db.py                   # Database schema creation (70+ tables)
+|       |-- write_entrypoint.py          # Generates dovecot-entrypoint.sh
+|       |-- fix_compose.py               # Writes docker-compose.yml with literal ${VAR} refs
+|       |-- dovecot-entrypoint.sh        # Custom entrypoint (generated by write_entrypoint.py)
+|       |-- dovecot-official-fixed-entrypoint.sh  # Modified official entrypoint (465 lines)
+|       |-- test_smtp.py                 # SMTP/IMAP connectivity test
+|       |-- test_email.py                # Send test email via SMTP
+|       |-- test-api.sh                  # Full service test battery
+|       |-- README.md                    # Quick reference
+|       `-- data/                        # Auto-created at runtime
+|           |-- mysql/                   # MariaDB data
+|           |-- redis/                   # Redis data
+|           |-- clamav/                  # ClamAV signatures
+|           |-- rspamd/                  # Rspamd learned data
+|           |-- sogo/                    # SOGo profiles
+|           |-- postfix/                 # Postfix spool
+|           |-- acme/                    # ACME certificates
+|           |-- mailcow-data/            # Mailcow web app data
+|           |-- dovecot-mail-crypt/      # Mail crypto keys
+|           `-- dovecot-ssl/             # Dovecot SSL certs
+|
+`-- mailcow-dockerized/
+    `-- data/
+        `-- conf/
+            |-- dovecot/                 # Dovecot configuration (27 files)
+            |   |-- dovecot.conf         # Main config (protocols, SSL, auth, plugins)
+            |   |-- dovecot.folders.conf # Folder configuration
+            |   |-- ssl.crt / ssl.key    # TLS certificates
+            |   |-- dhparams.pem         # DH parameters
+            |   |-- dovecot-master.passwd / dovecot-master.userdb  # Master auth
+            |   |-- auth/                # Auth mechanisms
+            |   |-- sql/                 # SQL userdb/quota configs
+            |   |-- lua/                 # Lua scripts (passwd-verify.lua)
+            |   |-- conf.d/              # Additional configs
+            |   |-- global_sieve_before / global_sieve_after  # Sieve filters
+            |   |-- sogo-sso.conf        # SOGo SSO integration
+            |   `-- sogo_trusted_ip.conf # SOGo trusted IP (disabled)
+            `-- postfix/                 # Postfix configuration
+                |-- main.cf              # Main Postfix config
+                |-- master.cf            # Service definitions
+                |-- sql/                 # MySQL lookup tables
+                |-- dns_blocklists.cf    # DNSBL configuration
+                |-- postscreen_access.cidr  # Postscreen CIDR rules
+                |-- custom_transport.pcre   # Custom transport rules
+                |-- anonymize_headers.pcre  # Header anonymization
+                `-- sni.map              # TLS SNI mapping
 ```
 
 ---
@@ -237,7 +237,7 @@ REDISPASS=<from vault: mailcow_redis>
 
 **WARNING:** These credentials are in plaintext. Do NOT commit `.env` to version control.
 
-> Credentials stored in server-manager vault. Retrieve with: `python "C:/Users/cereal/.Codex/skills/server-manager/credman.py" get <name>`
+> Credentials stored in credential-vault. Retrieve with: `python "C:/Users/me/.Codex/skills/credential-vault/scripts/credman.py" get <name>`
 
 ---
 
@@ -314,9 +314,9 @@ volumes:
 
 The official Mailcow Docker entrypoint (`/app-entrypoint.sh`) does three things that break in our environment:
 
-1. **Connects to MySQL via Unix socket** (`/var/run/mysqld/mysqld.sock`) — Docker overlay2 storage driver doesn't share sockets reliably across containers
-2. **Waits for DNS resolution** (`dig mailcow.email`) — our hostname `localhost` won't resolve externally
-3. **Generates SOGo trusted IP config** — requires `IPV4_NETWORK` env var, which we don't set, causing hostname errors like `.248`
+1. **Connects to MySQL via Unix socket** (`/var/run/mysqld/mysqld.sock`) - Docker overlay2 storage driver doesn't share sockets reliably across containers
+2. **Waits for DNS resolution** (`dig mailcow.email`) - our hostname `localhost` won't resolve externally
+3. **Generates SOGo trusted IP config** - requires `IPV4_NETWORK` env var, which we don't set, causing hostname errors like `.248`
 
 ### The Solution: Two Entrypoints
 
@@ -377,7 +377,7 @@ docker run -d --name dovecot-mailcow \
     -v mysql-socket:/var/run/mysqld:ro \
     -v mysql-socket:/run/mysqld:ro \
     -v $COMPOSE_DIR/data/dovecot-mail-crypt:/mail_crypt:ro \
-    -v /home/cereal/mailcow-dockerized/data/conf/dovecot:/etc/dovecot:rw \
+    -v /opt/agentic-it/mailcow-dockerized/data/conf/dovecot:/etc/dovecot:rw \
     -v $COMPOSE_DIR/filters:/opt/dovecot/filter:ro \
     -v $COMPOSE_DIR/logs/dovecot:/var/log/dovecot:rw \
     -v $COMPOSE_DIR/dovecot-official-fixed-entrypoint.sh:/dovecot-entrypoint.sh:ro \
@@ -400,7 +400,7 @@ docker run -d --name dovecot-mailcow \
 
 ### Main Config: `dovecot.conf`
 
-Located at `/home/cereal/mailcow-dockerized/data/conf/dovecot/dovecot.conf`
+Located at `/opt/agentic-it/mailcow-dockerized/data/conf/dovecot/dovecot.conf`
 
 **Key settings:**
 
@@ -421,13 +421,13 @@ auth_mechanisms = plain login
 - DH: `/etc/dovecot/dhparams.pem` (was `/etc/ssl/mail/dhparams.pem`)
 
 **Auth Chain (3 passdb lookups):**
-1. Lua password verification (`passwd-verify.lua`) — result `return-ok` or `continue`
-2. Master passwd file (`dovecot-master.passwd`) — skip if already authenticated
-3. Lua password verification (fallback) — mandatory final check
+1. Lua password verification (`passwd-verify.lua`) - result `return-ok` or `continue`
+2. Master passwd file (`dovecot-master.passwd`) - skip if already authenticated
+3. Lua password verification (fallback) - mandatory final check
 
 **Userdb (2 lookups):**
 1. Master userdb (`dovecot-master.userdb`)
-2. SQL userdb (`/etc/dovecot/sql/dovecot-dict-sql-userdb.conf`) — skip if found
+2. SQL userdb (`/etc/dovecot/sql/dovecot-dict-sql-userdb.conf`) - skip if found
 
 **Services Exposed:**
 - `auth-inet` on port 10001 (for Postfix SASL)
@@ -452,7 +452,7 @@ auth_mechanisms = plain login
 
 ### Main Config: `main.cf`
 
-Located at `/home/cereal/mailcow-dockerized/data/conf/postfix/main.cf`
+Located at `/opt/agentic-it/mailcow-dockerized/data/conf/postfix/main.cf`
 
 **Key settings:**
 
@@ -499,12 +499,12 @@ virtual_gid_maps = static:5000
 ```
 
 **All MySQL Lookups Use Proxy Maps:**
-- `relay_domains` → `mysql:/opt/postfix/conf/sql/mysql_virtual_relay_domain_maps.cf`
-- `virtual_alias_maps` → `mysql:/opt/postfix/conf/sql/mysql_virtual_alias_maps.cf`
-- `virtual_mailbox_domains` → `mysql:/opt/postfix/conf/sql/mysql_virtual_domains_maps.cf`
-- `virtual_mailbox_maps` → `mysql:/opt/postfix/conf/sql/mysql_virtual_mailbox_maps.cf`
-- `smtpd_sender_login_maps` → `mysql:/opt/postfix/conf/sql/mysql_virtual_sender_acl.cf`
-- `smtp_sasl_password_maps` → `mysql:/opt/postfix/conf/sql/mysql_sasl_passwd_maps_sender_dependent.cf`
+- `relay_domains` -> `mysql:/opt/postfix/conf/sql/mysql_virtual_relay_domain_maps.cf`
+- `virtual_alias_maps` -> `mysql:/opt/postfix/conf/sql/mysql_virtual_alias_maps.cf`
+- `virtual_mailbox_domains` -> `mysql:/opt/postfix/conf/sql/mysql_virtual_domains_maps.cf`
+- `virtual_mailbox_maps` -> `mysql:/opt/postfix/conf/sql/mysql_virtual_mailbox_maps.cf`
+- `smtpd_sender_login_maps` -> `mysql:/opt/postfix/conf/sql/mysql_virtual_sender_acl.cf`
+- `smtp_sasl_password_maps` -> `mysql:/opt/postfix/conf/sql/mysql_sasl_passwd_maps_sender_dependent.cf`
 
 **Postscreen (Anti-Spam):**
 - DNSBL threshold: 6
@@ -555,7 +555,7 @@ INSERT INTO domain (domain, active)
 #### Usage
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 seed_db.py
 ```
 
@@ -572,13 +572,13 @@ Mailcow services have strict dependency ordering. MySQL and Redis MUST be health
 #### Method 1: Ordered Startup Script (Recommended)
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 bash mailcow_start.sh
 ```
 
 This script:
 1. Stops any existing containers (`docker compose down`)
-2. Starts MySQL + Redis with health checks (up to 60 iterations × 2s = 120s timeout)
+2. Starts MySQL + Redis with health checks (up to 60 iterations x 2s = 120s timeout)
 3. Waits for MySQL `healthy` status
 4. Waits for Redis `healthy` status
 5. Starts auxiliary services (clamd, rspamd, php-fpm, sogo, postfix)
@@ -588,7 +588,7 @@ This script:
 #### Method 2: Simple Compose Start
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 bash start.sh
 ```
 
@@ -599,30 +599,30 @@ Uses `docker compose up -d` with built-in `depends_on` conditions. **May fail** 
 ```
 === Mailcow Email Server Startup ===
 Starting database services...
-  → mysql-mailcow (mariadb:10.6)
-  → redis-mailcow (redis:7-alpine)
+  -> mysql-mailcow (mariadb:10.6)
+  -> redis-mailcow (redis:7-alpine)
 
 Waiting for MySQL...
-  → Polls docker inspect --format='{{.State.Health.Status}}'
-  → Health check: mysqladmin ping -h localhost
-  → Healthy when InnoDB initialized
+  -> Polls docker inspect --format='{{.State.Health.Status}}'
+  -> Health check: mysqladmin ping -h localhost
+  -> Healthy when InnoDB initialized
 
 Waiting for Redis...
-  → Polls docker inspect --format='{{.State.Health.Status}}'
-  → Health check: redis-cli -a $REDISPASS ping
-  → Healthy when PONG received
+  -> Polls docker inspect --format='{{.State.Health.Status}}'
+  -> Health check: redis-cli -a $REDISPASS ping
+  -> Healthy when PONG received
 
 Starting auxiliary services...
-  → clamd-mailcow, rspamd-mailcow, php-fpm-mailcow, sogo-mailcow, postfix-mailcow
+  -> clamd-mailcow, rspamd-mailcow, php-fpm-mailcow, sogo-mailcow, postfix-mailcow
 
 Starting Dovecot...
-  → docker run with custom entrypoint
-  → Entrypoint waits for MySQL TCP + Redis TCP
-  → Creates SQL dict configs
-  → Launches supervisord
+  -> docker run with custom entrypoint
+  -> Entrypoint waits for MySQL TCP + Redis TCP
+  -> Creates SQL dict configs
+  -> Launches supervisord
 
 === Service Status ===
-  → All 8 containers running
+  -> All 8 containers running
 === Mailcow Startup Complete ===
 ```
 
@@ -759,16 +759,16 @@ docker logs sogo-mailcow | tail -50
 ### Quick Connectivity Test
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 test_smtp.py
 ```
 
 Expected output:
 ```
-Testing SMTP on 192.168.50.222:25...
+Testing SMTP on 127.0.0.1:25...
   EHLO: 250 ...
   SMTP connection: OK
-Testing IMAP on 192.168.50.222:143...
+Testing IMAP on 127.0.0.1:143...
   IMAP greeting: b'* OK ...'
   IMAP connection: OK
 Mailcow SMTP is operational!
@@ -777,7 +777,7 @@ Mailcow SMTP is operational!
 ### Full Service Test Battery
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 bash test-api.sh
 ```
 
@@ -786,7 +786,7 @@ Runs 6 tests: Container status, MySQL, Redis, Rspamd, SOGo, Postfix queue.
 ### Manual SMTP Test
 
 ```bash
-telnet 192.168.50.222 25
+telnet 127.0.0.1 25
 EHLO test.local
 MAIL FROM: <sender@localhost>
 RCPT TO: <recipient@localhost>
@@ -812,7 +812,7 @@ upstream `json_api.php` expects a `dockerapi` hostname on port 443.
 
 **Fix:**
 
-1. Recreate `php-fpm-mailcow-api` with `--env-file /home/cereal/Mailcow/deploy/.env`.
+1. Recreate `php-fpm-mailcow-api` with `--env-file /opt/agentic-it/Mailcow/deploy/.env`.
 2. Do not pass empty `-e REDISPASS=` or `-e DBPASS=` values; they override the env file.
 3. Mount `session_store.ini` containing the runtime Redis password from `.env`.
 4. Start `dockerapi-mailcow` from `ghcr.io/mailcow/dockerapi:2.12` with `/var/run/docker.sock:ro`.
@@ -842,7 +842,7 @@ fail to return useful inventory data in the sidecar context.
 `docs/MAILCOW_API_SHIM.md` and the Keycloak-Mailcow bridge skill:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
@@ -888,7 +888,7 @@ FLUSH PRIVILEGES;
 
 **Symptom:** Redis connection fails with authentication error.
 
-**Root Cause:** Typo in the custom entrypoint — used `${REDISSASS}` instead of `${REDISPASS}`.
+**Root Cause:** Typo in the custom entrypoint - used `${REDISSASS}` instead of `${REDISPASS}`.
 
 **Fix:** Corrected variable name in `dovecot-entrypoint.sh`.
 
@@ -896,9 +896,9 @@ FLUSH PRIVILEGES;
 
 **Symptom:** Bash syntax error on Redis wait loop: `bash: [[: command not found`.
 
-**Root Cause:** `[[ $(${REDIS_CMDLINE} PING 2>/dev/null) != "PONG" ]]` — missing space before `]]`.
+**Root Cause:** `[[ $(${REDIS_CMDLINE} PING 2>/dev/null) != "PONG" ]]` - missing space before `]]`.
 
-**Fix:** Added space: `]]` → ` ]]`.
+**Fix:** Added space: `]]` -> ` ]]`.
 
 ### Error 5: `chmod /templates/quarantine.tpl` Failure
 
@@ -929,7 +929,7 @@ FLUSH PRIVILEGES;
 
 ### Error 8: DNS Wait Loop Hangs Forever
 
-**Symptom:** Entrypoint hangs at "Waiting for DNS" — `dig mailcow.email` never resolves.
+**Symptom:** Entrypoint hangs at "Waiting for DNS" - `dig mailcow.email` never resolves.
 
 **Root Cause:** Our `MAILCOW_HOSTNAME=localhost` doesn't have external DNS records. The official entrypoint waits for DNS resolution that will never come.
 
@@ -997,7 +997,7 @@ docker ps --filter "name=wazuh"
 ### Report Phish Backend
 
 The `report_phish` package provides an `InternalEmailBackend` that:
-1. Connects to Mailcow SMTP at `192.168.50.222:25`
+1. Connects to Mailcow SMTP at `127.0.0.1:25`
 2. Sends formatted phishing reports to an internal security distribution group
 3. Optionally creates cases in external case management systems
 
@@ -1005,7 +1005,7 @@ The `report_phish` package provides an `InternalEmailBackend` that:
 from report_phish.backends.internal_email import InternalEmailBackend
 
 backend = InternalEmailBackend({
-    "host": "192.168.50.222",
+    "host": "127.0.0.1",
     "port": 25,
     "use_tls": False,
     "from_email": "phish-report@localhost",
@@ -1022,15 +1022,15 @@ result = backend.report({"subject": "...", "headers": {...}, "body": "..."})
 
 ```bash
 # Stop services
-bash /home/cereal/Mailcow/deploy/stop.sh
+bash /opt/agentic-it/Mailcow/deploy/stop.sh
 
 # Backup everything
 tar czf /backup/mailcow-backup-$(date +%Y%m%d).tar.gz \
-  -C /home/cereal/Mailcow/deploy data/ \
-  -C /home/cereal/mailcow-dockerized/data/conf dovecot/ postfix/
+  -C /opt/agentic-it/Mailcow/deploy data/ \
+  -C /opt/agentic-it/mailcow-dockerized/data/conf dovecot/ postfix/
 
 # Start services
-bash /home/cereal/Mailcow/deploy/mailcow_start.sh
+bash /opt/agentic-it/Mailcow/deploy/mailcow_start.sh
 ```
 
 ### Backup MySQL Only
@@ -1042,9 +1042,9 @@ docker exec mysql-mailcow mysqldump -u root -p"$DBROOT" mailcow > /backup/mailco
 ### Restore
 
 ```bash
-bash /home/cereal/Mailcow/deploy/stop.sh
+bash /opt/agentic-it/Mailcow/deploy/stop.sh
 docker exec -i mysql-mailcow mysql -u root -p"$DBROOT" mailcow < /backup/mailcow-db-20260427.sql
-bash /home/cereal/Mailcow/deploy/mailcow_start.sh
+bash /opt/agentic-it/Mailcow/deploy/mailcow_start.sh
 ```
 
 ---
@@ -1082,24 +1082,24 @@ bash /home/cereal/Mailcow/deploy/mailcow_start.sh
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-24 | Initial Mailcow Docker Compose deployment |
-| 2.0 | 2026-04-27 | Complete blueprint rewrite — full deployment guide, error catalog, service interaction, all configs documented |
+| 2.0 | 2026-04-27 | Complete blueprint rewrite - full deployment guide, error catalog, service interaction, all configs documented |
 
 ---
 
 ## Quick Reference Card
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ Mailcow Quick Commands                                  │
-├─────────────────────────────────────────────────────────┤
-│ Start:    bash /home/cereal/Mailcow/deploy/mailcow_start.sh │
-│ Stop:     bash /home/cereal/Mailcow/deploy/stop.sh          │
-│ Restart:  bash /home/cereal/Mailcow/deploy/restart.sh       │
-│ Status:   python3 /home/cereal/Mailcow/deploy/status.py     │
-│ Test:     python3 /home/cereal/Mailcow/deploy/test_smtp.py  │
-│ Seed DB:  python3 /home/cereal/Mailcow/deploy/seed_db.py    │
-│ Logs:     docker logs <container-name> --tail 50            │
-│ MySQL:    docker exec mysql-mailcow mysql -uroot -p...      │
-│ Redis:    docker exec redis-mailcow redis-cli -a ... ping   │
-└─────────────────────────────────────────────────────────┘
++---------------------------------------------------------+
+| Mailcow Quick Commands                                  |
+|---------------------------------------------------------|
+| Start:    bash /opt/agentic-it/Mailcow/deploy/mailcow_start.sh |
+| Stop:     bash /opt/agentic-it/Mailcow/deploy/stop.sh          |
+| Restart:  bash /opt/agentic-it/Mailcow/deploy/restart.sh       |
+| Status:   python3 /opt/agentic-it/Mailcow/deploy/status.py     |
+| Test:     python3 /opt/agentic-it/Mailcow/deploy/test_smtp.py  |
+| Seed DB:  python3 /opt/agentic-it/Mailcow/deploy/seed_db.py    |
+| Logs:     docker logs <container-name> --tail 50            |
+| MySQL:    docker exec mysql-mailcow mysql -uroot -p...      |
+| Redis:    docker exec redis-mailcow redis-cli -a ... ping   |
+`---------------------------------------------------------'
 ```

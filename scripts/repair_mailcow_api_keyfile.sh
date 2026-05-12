@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KEY_FILE="${MAILCOW_API_KEY_FILE:-/home/cereal/Mailcow/deploy/api-nginx/.api_key}"
+KEY_FILE="${MAILCOW_API_KEY_FILE:-/opt/mailcow/deploy/api-nginx/.api_key}"
 
 mkdir -p "$(dirname "$KEY_FILE")"
 

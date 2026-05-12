@@ -6,18 +6,19 @@
 
 set -uo pipefail
 
-GITLAB_HOST="${GITLAB_HOST:-192.168.50.222}"
+GITLAB_HOST="${GITLAB_HOST:-127.0.0.1}"
 GITLAB_URL="http://${GITLAB_HOST}"
-TOKEN_FILE="${TOKEN_FILE:-/home/cereal/gitlab/.gitlab-token}"
+TOKEN_FILE="${TOKEN_FILE:-/opt/agentic-it/gitlab/.gitlab-token}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "${SCRIPT_DIR}/gitlab_token.sh"
+. "${SCRIPT_DIR}/../../credential-vault/scripts/load_secret.sh"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
 load_token() {
-    TOKEN="$(load_gitlab_pat gitlab_manager_pat)" || {
-        if [ -f "/home/cereal/gitlab/.env" ]; then
-            TOKEN=$(grep '^GITLAB_PAT=' /home/cereal/gitlab/.env 2>/dev/null | cut -d'=' -f2-)
+    TOKEN="$(load_secret gitlab_manager_pat GITLAB_PAT GITLAB_PAT_FILE "$TOKEN_FILE")" || {
+        local env_file="${GITLAB_ENV_FILE:-/etc/gitlab-manager/.env}"
+        if [ -f "$env_file" ]; then
+            TOKEN=$(grep '^GITLAB_PAT=' "$env_file" 2>/dev/null | cut -d'=' -f2-)
         fi
     }
     if [ -z "${TOKEN:-}" ]; then
@@ -30,7 +31,7 @@ api() {
     curl -sf --max-time 15 -H "PRIVATE-TOKEN: ${TOKEN}" "$@" 2>&1
 }
 
-# ─── Group Commands ─────────────────────────────────────────────────────────
+# --- Group Commands ---------------------------------------------------------
 list_groups() {
     echo "=== Groups ==="
     # Try admin endpoint first, fall back to user-visible groups
@@ -66,7 +67,7 @@ delete_group() {
     echo -e "${GREEN}Deleted group ${group_id}${NC}"
 }
 
-# ─── Project Commands ───────────────────────────────────────────────────────
+# --- Project Commands -------------------------------------------------------
 list_projects() {
     echo "=== Projects ==="
     api "${GITLAB_URL}/api/v4/projects?per_page=50&order_by=created_at&sort=desc" | python3 -c "
@@ -94,7 +95,7 @@ delete_project() {
     echo -e "${GREEN}Deleted project ${project_id}${NC}"
 }
 
-# ─── PAT Commands ───────────────────────────────────────────────────────────
+# --- PAT Commands -----------------------------------------------------------
 create_pat() {
     local expiry="${1:-2027-01-01}"
     local resp
@@ -118,7 +119,7 @@ create_pat() {
     fi
 }
 
-# ─── Pipeline Commands ──────────────────────────────────────────────────────
+# --- Pipeline Commands ------------------------------------------------------
 list_pipelines() {
     local project_id="$1"
     echo "=== Pipelines for project ${project_id} ==="
@@ -130,7 +131,7 @@ for p in pipes:
 " 2>/dev/null || echo "  Failed to list pipelines"
 }
 
-# ─── Runner Commands ────────────────────────────────────────────────────────
+# --- Runner Commands --------------------------------------------------------
 list_runners() {
     echo "=== Registered Runners ==="
     api "${GITLAB_URL}/api/v4/runners" | python3 -c "
@@ -142,7 +143,7 @@ for r in runners:
 " 2>/dev/null || echo "  Failed to list runners"
 }
 
-# ─── Main ────────────────────────────────────────────────────────────────────
+# --- Main --------------------------------------------------------------------
 load_token
 
 case "${1:-help}" in
@@ -167,14 +168,14 @@ case "${1:-help}" in
 
     # Container shortcuts
     restart)
-        cd /home/cereal/gitlab && docker compose restart
+        cd /opt/agentic-it/gitlab && docker compose restart
         echo -e "${GREEN}Containers restarted${NC}"
         ;;
     logs)
-        cd /home/cereal/gitlab && docker compose logs --tail=50 "${2:-gitlab}"
+        cd /opt/agentic-it/gitlab && docker compose logs --tail=50 "${2:-gitlab}"
         ;;
     down)
-        cd /home/cereal/gitlab && docker compose down
+        cd /opt/agentic-it/gitlab && docker compose down
         echo -e "${GREEN}Containers stopped and removed${NC}"
         ;;
 

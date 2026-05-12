@@ -3,7 +3,7 @@
 Abstract SIEM connector base.
 
 Defines the interface all SIEM backends must implement.
-All operations are fault-tolerant — failures return False, never raise.
+All operations are fault-tolerant - failures return False, never raise.
 """
 
 import abc
@@ -20,7 +20,7 @@ logger = logging.getLogger("siem_ticket_bridge.siem")
 
 
 class SIEMConnector(abc.ABC):
-    """Abstract SIEM connector — subclass for each platform (Wazuh, Splunk, ELK, etc.)."""
+    """Abstract SIEM connector - subclass for each platform (Wazuh, Splunk, ELK, etc.)."""
 
     def __init__(self, config: Dict[str, Any]):
         self.enabled = config.get("enabled", True)
@@ -49,7 +49,7 @@ class SIEMConnector(abc.ABC):
         return self._connected
 
     def safe_fetch_alerts(self, since: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
-        """Fetch alerts — never raises. Returns empty list on failure."""
+        """Fetch alerts - never raises. Returns empty list on failure."""
         if not self.enabled:
             return []
         try:
@@ -60,7 +60,7 @@ class SIEMConnector(abc.ABC):
 
 
 class NullConnector(SIEMConnector):
-    """No-op connector — used when no SIEM is configured."""
+    """No-op connector - used when no SIEM is configured."""
 
     def _check_connectivity(self) -> bool:
         return False

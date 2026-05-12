@@ -34,11 +34,11 @@ def read_env_file(path):
     return values
 
 
-# ─── Configuration ──────────────────────────────────────────────────────
+# --- Configuration ------------------------------------------------------
 
-MAILCOW_DOCKERIZED_WEB = "/home/cereal/mailcow-dockerized/data/web"
-NGINX_CONF_DIR = "/home/cereal/Mailcow/deploy/api-nginx"
-MAILCOW_ENV_FILE = os.environ.get("MAILCOW_ENV_FILE", "/home/cereal/Mailcow/deploy/.env")
+MAILCOW_DOCKERIZED_WEB = "/opt/agentic-it/mailcow-dockerized/data/web"
+NGINX_CONF_DIR = "/opt/agentic-it/Mailcow/deploy/api-nginx"
+MAILCOW_ENV_FILE = os.environ.get("MAILCOW_ENV_FILE", "/opt/agentic-it/Mailcow/deploy/.env")
 API_PORT = 8081
 PHPFPM_PORT = 9002
 MAILCOW_ENV = read_env_file(MAILCOW_ENV_FILE)
@@ -47,7 +47,7 @@ MAILCOW_API_KEY = None  # Will be generated if not found
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-# ─── Helpers ────────────────────────────────────────────────────────────
+# --- Helpers ------------------------------------------------------------
 
 def run(cmd, check=True):
     """Run a shell command and return output."""
@@ -127,7 +127,7 @@ def wait_for_port(host, port, timeout=30):
     return False
 
 
-# ─── Step 1: Fix API table schema ──────────────────────────────────────
+# --- Step 1: Fix API table schema --------------------------------------
 
 def setup_api_table():
     """Create proper API table schema if it doesn't exist."""
@@ -216,7 +216,7 @@ def install_compat_api():
     print("  compatibility API: OK")
 
 
-# ─── Step 2: Deploy php-fpm-mailcow-api ────────────────────────────────
+# --- Step 2: Deploy php-fpm-mailcow-api --------------------------------
 
 def deploy_php_fpm():
     """Deploy parallel php-fpm container with web code on port 9002."""
@@ -323,7 +323,7 @@ exec php-fpm
         print(f"  [WARN] php-fpm port {PHPFPM_PORT} not ready after 30s")
 
 
-# ─── Step 3: Deploy nginx-mailcow-api ──────────────────────────────────
+# --- Step 3: Deploy nginx-mailcow-api ----------------------------------
 
 def deploy_nginx():
     """Deploy nginx container with FastCGI proxy on port 8081."""
@@ -447,7 +447,7 @@ http {{
         print(f"  [WARN] nginx port {API_PORT} not ready after 30s")
 
 
-# ─── Step 4: Test API ──────────────────────────────────────────────────
+# --- Step 4: Test API --------------------------------------------------
 
 def test_api(api_key):
     """Test the API endpoints."""
@@ -527,7 +527,7 @@ def test_api(api_key):
     return True
 
 
-# ─── Main ──────────────────────────────────────────────────────────────
+# --- Main --------------------------------------------------------------
 
 def main():
     print("=" * 60)

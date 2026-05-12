@@ -1,11 +1,11 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "${SCRIPT_DIR}/../scripts/gitlab_token.sh"
-TOKEN="$(load_gitlab_pat gitlab_manager_pat)" || {
+. "${SCRIPT_DIR}/../../credential-vault/scripts/load_secret.sh"
+TOKEN="$(load_secret gitlab_manager_pat GITLAB_PAT GITLAB_PAT_FILE /home/gitlab/.gitlab-token)" || {
     echo "ERROR: No GitLab PAT found. Set GITLAB_PAT, GITLAB_PAT_FILE, or CREDMAN_PATH/GITLAB_PAT_VAULT_KEY." >&2
     exit 1
 }
-URL='http://192.168.50.222'
+URL='http://127.0.0.1'
 
 echo "=== Test: Create project at root level ==="
 curl -s -w '\nHTTP_CODE:%{http_code}' -X POST "$URL/api/v4/projects" \

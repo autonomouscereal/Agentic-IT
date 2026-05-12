@@ -24,7 +24,7 @@ Modular integration bridge between iTop ITSM and Mailcow email with automatic ti
 | Component | File | Purpose |
 |-----------|------|---------|
 | Config Loader | `config.py` | JSON config with `${ENV_VAR}` interpolation |
-| iTop Connector | `connectors/itop_connector.py` | REST API v1.4 — CRUD, stimuli, polling |
+| iTop Connector | `connectors/itop_connector.py` | REST API v1.4 - CRUD, stimuli, polling |
 | Mailcow Connector | `connectors/mailcow_connector.py` | SMTP email delivery with HTML notifications |
 | Ticket Notifications | `workflows/ticket_notifications.py` | Polls iTop, detects state changes, sends emails |
 | Phishing Workflow | `workflows/phishing_workflow.py` | Phishing report -> ticket -> email pipeline |
@@ -33,7 +33,7 @@ Modular integration bridge between iTop ITSM and Mailcow email with automatic ti
 
 ### Modularity
 
-All connectors accept a config dict — no hardcoded credentials or endpoints. Swap any component by:
+All connectors accept a config dict - no hardcoded credentials or endpoints. Swap any component by:
 1. Implementing the same interface (config dict in, results out)
 2. Updating `default_config.json` with the new connector's settings
 3. No code changes required in workflows or daemon
@@ -42,7 +42,7 @@ All connectors accept a config dict — no hardcoded credentials or endpoints. S
 
 - iTop ITSM v3.2.1+ running on target host (REST API at `/webservices/rest.php`)
 - Mailcow running on target host (SMTP on port 25)
-- Python 3.8+ (stdlib only — no pip dependencies required)
+- Python 3.8+ (stdlib only - no pip dependencies required)
 - Server Manager v2 for deployment (`ssh_client.py`)
 
 ## Configuration
@@ -99,13 +99,13 @@ See `default_config.json` for the full template. Key sections:
 ```bash
 cd ~/.claude/skills/server-manager
 # Upload entire package directory
-python ssh_client.py --server ai --upload "C:/Users/cereal/soc_bridge/" "/home/cereal/SOC_TESTING/soc_bridge/"
+python ssh_client.py --server ai --upload "C:/Users/me/soc_bridge/" "/opt/agentic-it/SOC_TESTING/soc_bridge/"
 ```
 
 ### 2. Run Security Team Setup
 
 ```bash
-python ssh_client.py --server ai --execute "cd /home/cereal/SOC_TESTING/soc_bridge && python3 deploy/setup_security_team.py"
+python ssh_client.py --server ai --execute "cd /opt/agentic-it/SOC_TESTING/soc_bridge && python3 deploy/setup_security_team.py"
 ```
 
 This creates a "Security Team" in iTop if one doesn't exist, and updates `production_config.json` with the correct team key.
@@ -113,7 +113,7 @@ This creates a "Security Team" in iTop if one doesn't exist, and updates `produc
 ### 3. Run Deployment Script
 
 ```bash
-python ssh_client.py --server ai --execute "cd /home/cereal/SOC_TESTING/soc_bridge && python3 deploy/deploy.py"
+python ssh_client.py --server ai --execute "cd /opt/agentic-it/SOC_TESTING/soc_bridge && python3 deploy/deploy.py"
 ```
 
 This performs:
@@ -127,7 +127,7 @@ This performs:
 
 ```bash
 # Run all test suites
-cd /home/cereal/SOC_TESTING/soc_bridge
+cd /opt/agentic-it/SOC_TESTING/soc_bridge
 python3 tests/test_itop_connector.py     # 22 tests
 python3 tests/test_mailcow_connector.py  # 13 tests
 python3 tests/test_end_to_end.py         # 11 tests
@@ -137,7 +137,7 @@ python3 tests/test_end_to_end.py         # 11 tests
 
 ```bash
 # Full daemon mode (polls every 60s by default)
-cd /home/cereal/SOC_TESTING/soc_bridge
+cd /opt/agentic-it/SOC_TESTING/soc_bridge
 python3 daemon.py --config production_config.json
 
 # Single poll cycle
@@ -163,14 +163,14 @@ iTop uses `status` field (not `state`):
 - `new` -> `assigned` -> `resolved` -> `closed`
 
 ### Stimuli
-- `ev_assign` — transitions `new` -> `assigned` (requires `team_id` field)
-- `ev_resolve` — transitions `assigned` -> `resolved` (requires `solution` field)
-- `ev_close` — transitions `resolved` -> `closed`
+- `ev_assign` - transitions `new` -> `assigned` (requires `team_id` field)
+- `ev_resolve` - transitions `assigned` -> `resolved` (requires `solution` field)
+- `ev_close` - transitions `resolved` -> `closed`
 
 **Tickets must be assigned before they can be resolved.** The connector handles this automatically.
 
 ### Resolution Codes
-iTop uses predefined resolution codes. The default is `"assistance"`. Do not pass arbitrary strings — omit `resolution_code` to use the default.
+iTop uses predefined resolution codes. The default is `"assistance"`. Do not pass arbitrary strings - omit `resolution_code` to use the default.
 
 ## Troubleshooting
 

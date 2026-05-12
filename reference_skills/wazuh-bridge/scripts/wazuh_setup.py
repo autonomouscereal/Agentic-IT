@@ -42,7 +42,7 @@ def load_config():
             parse_env(env_path)
             break
     return {
-        "wazuh_url": os.environ.get("WAZUH_URL", "https://192.168.50.222:26500").rstrip("/"),
+        "wazuh_url": os.environ.get("WAZUH_URL", "https://127.0.0.1:26500").rstrip("/"),
         "wazuh_username": os.environ.get("WAZUH_USERNAME", "wazuh-wui"),
         "wazuh_password": os.environ.get("WAZUH_PASSWORD"),
     }

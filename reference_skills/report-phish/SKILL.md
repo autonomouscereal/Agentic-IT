@@ -46,7 +46,7 @@ Or use directly from the skill directory:
 
 ```python
 import sys
-sys.path.insert(0, "C:/Users/cereal/.Codex/skills/report-phish")
+sys.path.insert(0, "C:/Users/me/.Codex/skills/report-phish")
 from backends.internal_email import InternalEmailBackend
 ```
 
@@ -149,7 +149,7 @@ function reportPhishing(emailData) {
 
 ```powershell
 # Use Python via CLI for Outlook integration
-python "C:\Users\cereal\.Codex\skills\report-phish\cli.py" `
+python "C:\Users\me\.Codex\skills\report-phish\cli.py" `
   --host localhost `
   --port 25 `
   --dist-group security-team@company.com `

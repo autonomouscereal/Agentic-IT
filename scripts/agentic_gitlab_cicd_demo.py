@@ -45,10 +45,10 @@ from agentic_cicd_full_demo import (  # noqa: E402
 
 
 DEFAULT_DASHBOARD = os.getenv("SOC_DASHBOARD_URL", "http://localhost:25480").rstrip("/")
-DEFAULT_RUNNER_DASHBOARD = os.getenv("SOC_RUNNER_DASHBOARD_URL", "http://192.168.50.222:25480").rstrip("/")
+DEFAULT_RUNNER_DASHBOARD = os.getenv("SOC_RUNNER_DASHBOARD_URL", "http://127.0.0.1:25480").rstrip("/")
 DEFAULT_GITLAB = os.getenv("GITLAB_URL", "http://localhost").rstrip("/")
 DEFAULT_MODEL = os.getenv("AGENT_MODEL", "qwen/qwen3.6-27b")
-DEFAULT_TOKEN_FILE = os.getenv("GITLAB_PAT_FILE", "/home/cereal/gitlab/.gitlab-token")
+DEFAULT_TOKEN_FILE = os.getenv("GITLAB_PAT_FILE", "/run/secrets/gitlab_pat")
 
 
 def load_gitlab_token(token_file: str) -> str:
@@ -64,10 +64,11 @@ def load_gitlab_token(token_file: str) -> str:
     vault_key = os.getenv("GITLAB_PAT_VAULT_KEY", "gitlab_manager_pat")
     candidates = [
         os.getenv("CREDMAN_PATH", ""),
-        "/home/cereal/.claude/skills/server-manager/credman.py",
-        "/home/cereal/.agents/skills/server-manager/credman.py",
-        "C:/Users/cereal/.claude/skills/server-manager/credman.py",
-        "C:/Users/cereal/.agents/skills/server-manager/credman.py",
+        str(ROOT / "reference_skills" / "credential-vault" / "scripts" / "credman.py"),
+        os.path.expanduser("~/.claude/skills/credential-vault/scripts/credman.py"),
+        os.path.expanduser("~/.agents/skills/credential-vault/scripts/credman.py"),
+        os.path.expanduser("~/.claude/skills/server-manager/credman.py"),
+        os.path.expanduser("~/.agents/skills/server-manager/credman.py"),
     ]
     for credman in [path for path in candidates if path]:
         if not Path(credman).exists():
@@ -119,7 +120,7 @@ def write_gitlab_ci(repo: Path):
           - record
 
         variables:
-          SOC_DASHBOARD_URL: "http://192.168.50.222:25480"
+          SOC_DASHBOARD_URL: "${SOC_DASHBOARD_URL}"
           NUCLEI_TARGET_URL: "http://gitlab"
 
         unit_tests:

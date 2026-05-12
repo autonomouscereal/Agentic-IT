@@ -1,4 +1,4 @@
-# Known Issues And Fix Log
+﻿# Known Issues And Fix Log
 
 Last updated: 2026-05-12.
 
@@ -65,7 +65,7 @@ Problem:
 
 Fix:
 
-- `AGENT_LLM_BASE_URL` uses routable LAN proxy URL, currently `http://192.168.50.222:4001`.
+- `AGENT_LLM_BASE_URL` uses routable LAN proxy URL, currently `http://127.0.0.1:4001`.
 
 ### Fresh DB init missing new approval columns
 
@@ -123,8 +123,8 @@ Fix:
 
 Problem:
 
-- `/home/cereal/multiplatform_user_manager.py` had hardcoded iTop/Mailcow DB passwords, shell-expanded password hashes, a Wazuh scrypt salt mismatch, and no Wazuh Dashboard internal-user sync.
-- `demo_account_1` worked in some backing databases but failed real auth checks.
+- `/opt/agentic-it/multiplatform_user_manager.py` had hardcoded iTop/Mailcow DB passwords, shell-expanded password hashes, a Wazuh scrypt salt mismatch, and no Wazuh Dashboard internal-user sync.
+- `platform_demo_user` worked in some backing databases but failed real auth checks.
 
 Fix:
 
@@ -132,13 +132,13 @@ Fix:
 - Reworked SQL execution to stream SQL over stdin, avoiding bcrypt/scrypt `$` shell expansion.
 - Switched Wazuh to native API updates first, with RBAC SQLite as fallback, and added Wazuh Dashboard OpenSearch Security sync.
 - Rebuilt the iTop demo account as a valid `UserLocal` object with `Administrator` and `REST Services User` profiles.
-- Rotated vault key `demo_account_1` and scrubbed the old failed debug password from iTop `error.log`.
+- Rotated vault key `platform_demo_user` and scrubbed the old failed debug password from iTop `error.log`.
 
 Verified:
 
 - iTop REST login returns `code:0`.
 - Wazuh API auth returns HTTP 200.
-- Wazuh Dashboard backend auth recognizes `demo_account_1`.
+- Wazuh Dashboard backend auth recognizes `platform_demo_user`.
 - GitLab Rails `valid_password?` passes and the account is active/admin.
 - Mailcow mailbox exists.
 
@@ -334,7 +334,7 @@ Fix:
   containers can resolve and reach the GitLab container.
 - The reference runner config mounts `/tmp/zap-wrk:/zap/wrk`.
 - The demo script supports a separate runner-facing dashboard URL and defaults
-  `SOC_DASHBOARD_URL` to `http://192.168.50.222:25480` for the lab.
+  `SOC_DASHBOARD_URL` to `http://127.0.0.1:25480` for the lab.
 - ZAP writes to `/zap/wrk/zap.json` and then copies that artifact into the
   project workspace.
 
@@ -429,7 +429,7 @@ Resolution:
 - The runner writes a probe file before continuing, and fails clearly if the
   workdir is still not host-writable.
 - Verified on fresh install
-  `/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512` with real
+  `/opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e-20260512` with real
   local-model ticket `13`; remediation agent `7` completed and produced the MR
   patch artifact.
 
@@ -466,7 +466,7 @@ Resolution:
 - If a copied working tree still loses the bit, repair the source tree with:
 
 ```bash
-chmod +x /home/cereal/SOC_TESTING/soc-dashboard/install.sh
+chmod +x /opt/agentic-it/SOC_TESTING/soc-dashboard/install.sh
 ```
 
 ### Ticket sorting/filtering failed when status filters were used

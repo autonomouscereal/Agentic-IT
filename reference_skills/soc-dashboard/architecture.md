@@ -1,59 +1,59 @@
-# SOC Dashboard — Architecture & Deployment Blueprint
+﻿# SOC Dashboard - Architecture & Deployment Blueprint
 
 ## System Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│                    AI Server (192.168.50.222)                  │
-│                                                               │
-│  ┌─────────────────────────────────────────────────────┐      │
-│  │  soc-dashboard-api (FastAPI :8000 → host :25480)    │      │
-│  │                                                     │      │
-│  │  Routes:                                            │      │
-│  │  /api/tickets    — CRUD + iTop sync + agent assign  │      │
-│  │  /api/agents     — lifecycle + wake/restart/stop    │      │
-│  │  /api/changes    — request/approve/reject/complete  │      │
-│  │  /api/dashboard  — stats + audit + charts           │      │
-│  │  /api/tools      — health checks + status           │      │
-│  │  /ws             — WebSocket real-time events       │      │
-│  │  /               — serve frontend static files      │      │
-│  │  /health         — health check endpoint            │      │
-│  │                                                     │      │
-│  │  Services:                                          │      │
-│  │  itop_sync.py      — bidirectional iTop sync loop   │      │
-│  │  agent_monitor.py  — agent heartbeat monitoring     │      │
-│  │  health_check.py   — tool health checking           │      │
-│  │  ticket_provider.py — abstract provider interface   │      │
-│  │                                                     │      │
-│  │  Frontend (mounted read-only):                       │      │
-│  │  index.html, dashboard.css,                         │      │
-│  │  dashboard.js, charts.js, agents.js, websocket.js   │      │
-│  └──────────────┬──────────────────────────────────────┘      │
-│                 │                                             │
-│                 │ asyncpg (raw SQL, no ORM)                    │
-│                 ▼                                             │
-│  ┌─────────────────────────────────────────────────────┐      │
-│  │  soc-dashboard-db (PostgreSQL 16 :5432 → host :5433)│      │
-│  │                                                     │      │
-│  │  Tables: tools, tool_checks, tickets, agents,       │      │
-│  │          change_requests, audit_log, dashboard_settings │      │
-│  └─────────────────────────────────────────────────────┘      │
-│                                                               │
-│  External services (monitored + integrated):                   │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌────────┐         │
-│  │ iTop     │  │ Wazuh    │  │ GitLab │  │Keycloak│         │
-│  │ :25432   │  │ :26443   │  │ :80    │  │ :8443  │         │
-│  └──────────┘  └──────────┘  └────────┘  └────────┘         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                   │
-│  │ Mailcow  │  │ Zeek     │  │ Suricata │                   │
-│  │ :25      │  │ IDS      │  │ IDS/IPS  │                   │
-│  └──────────┘  └──────────┘  └──────────┘                   │
-└───────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|                    AI Server (127.0.0.1)                  |
+|                                                               |
+|  +-----------------------------------------------------+      |
+|  |  soc-dashboard-api (FastAPI :8000 -> host :25480)    |      |
+|  |                                                     |      |
+|  |  Routes:                                            |      |
+|  |  /api/tickets    - CRUD + iTop sync + agent assign  |      |
+|  |  /api/agents     - lifecycle + wake/restart/stop    |      |
+|  |  /api/changes    - request/approve/reject/complete  |      |
+|  |  /api/dashboard  - stats + audit + charts           |      |
+|  |  /api/tools      - health checks + status           |      |
+|  |  /ws             - WebSocket real-time events       |      |
+|  |  /               - serve frontend static files      |      |
+|  |  /health         - health check endpoint            |      |
+|  |                                                     |      |
+|  |  Services:                                          |      |
+|  |  itop_sync.py      - bidirectional iTop sync loop   |      |
+|  |  agent_monitor.py  - agent heartbeat monitoring     |      |
+|  |  health_check.py   - tool health checking           |      |
+|  |  ticket_provider.py - abstract provider interface   |      |
+|  |                                                     |      |
+|  |  Frontend (mounted read-only):                       |      |
+|  |  index.html, dashboard.css,                         |      |
+|  |  dashboard.js, charts.js, agents.js, websocket.js   |      |
+|  `--------------+--------------------------------------'      |
+|                 |                                             |
+|                 | asyncpg (raw SQL, no ORM)                    |
+|                 v                                             |
+|  +-----------------------------------------------------+      |
+|  |  soc-dashboard-db (PostgreSQL 16 :5432 -> host :5433)|      |
+|  |                                                     |      |
+|  |  Tables: tools, tool_checks, tickets, agents,       |      |
+|  |          change_requests, audit_log, dashboard_settings |      |
+|  `-----------------------------------------------------'      |
+|                                                               |
+|  External services (monitored + integrated):                   |
+|  +----------+  +----------+  +--------+  +--------+         |
+|  | iTop     |  | Wazuh    |  | GitLab |  |Keycloak|         |
+|  | :25432   |  | :26443   |  | :80    |  | :8443  |         |
+|  `----------'  `----------'  `--------'  `--------'         |
+|  +----------+  +----------+  +----------+                   |
+|  | Mailcow  |  | Zeek     |  | Suricata |                   |
+|  | :25      |  | IDS      |  | IDS/IPS  |                   |
+|  `----------'  `----------'  `----------'                   |
+`---------------------------------------------------------------'
 ```
 
 ## Data Flow
 
-### Ticket Sync (iTop → Dashboard)
+### Ticket Sync (iTop -> Dashboard)
 
 1. `itop_sync.py` runs a continuous loop with two modes:
    - **Fast discovery** (every 2s): Scans each iTop class for new keys beyond the last-known maximum. Stops after 3 consecutive misses per class. Results cached in `.itop_max_keys.json`.
@@ -97,21 +97,21 @@
 ## Technology Stack
 
 ### Backend
-- **FastAPI 0.115.0** — Async web framework with lifespan lifecycle
-- **uvicorn + uvloop** — ASGI server with libuv event loop
-- **PostgreSQL 16** — Raw SQL only via asyncpg driver (NO ORM, NO Pydantic, NO SQLAlchemy)
-- **Python 3.11-slim** — Container base image
-- **aiohttp 3.10.0** — Async HTTP client for iTop API and health checks
+- **FastAPI 0.115.0** - Async web framework with lifespan lifecycle
+- **uvicorn + uvloop** - ASGI server with libuv event loop
+- **PostgreSQL 16** - Raw SQL only via asyncpg driver (NO ORM, NO Pydantic, NO SQLAlchemy)
+- **Python 3.11-slim** - Container base image
+- **aiohttp 3.10.0** - Async HTTP client for iTop API and health checks
 
 ### Frontend
-- **Vanilla JavaScript** — No framework, no build step
-- **CSS custom properties** — Dark operations theme with CSS variables
-- **Chart.js 4.4.7** — Three charts (line, doughnut, horizontal bar)
-- **WebSocket** — Real-time event streaming with auto-reconnect
-- **No package manager** — All JS served as static files from mounted volume
+- **Vanilla JavaScript** - No framework, no build step
+- **CSS custom properties** - Dark operations theme with CSS variables
+- **Chart.js 4.4.7** - Three charts (line, doughnut, horizontal bar)
+- **WebSocket** - Real-time event streaming with auto-reconnect
+- **No package manager** - All JS served as static files from mounted volume
 
 ### Database Rules (CRITICAL)
-- **NO ORM, NO Pydantic, NO SQLAlchemy** — raw SQL only
+- **NO ORM, NO Pydantic, NO SQLAlchemy** - raw SQL only
 - Manual connection pooling with asyncpg (min 2, max 10 connections)
 - Proper parameterized queries with `$1`, `$2` placeholders to prevent SQL injection
 - JSONB columns for flexible metadata storage
@@ -181,8 +181,8 @@ CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "uvl
 
 - Docker network: `soc-dashboard_default` (bridge, auto-created by compose)
 - API binds to `0.0.0.0:8000` inside container
-- Host port mapping: `25480 → 8000`
-- DB port mapping: `5433 → 5432`
+- Host port mapping: `25480 -> 8000`
+- DB port mapping: `5433 -> 5432`
 - Frontend served as static files from mounted volume (read-only)
 
 ### Startup Sequence
@@ -194,7 +194,7 @@ CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "uvl
    - Verifies DB connection
    - Wires up WebSocket broadcast function
    - Starts 3 background tasks (iTop sync, health check, agent monitor)
-5. Frontend becomes available at `http://192.168.50.222:25480`
+5. Frontend becomes available at `http://127.0.0.1:25480`
 
 ## Service Layer Details
 
@@ -238,7 +238,7 @@ Allows swapping iTop for any other ticketing system (ServiceNow, Jira, etc.) by 
 
 ## Integration Points
 
-### iTop (192.168.50.222:25432)
+### iTop (127.0.0.1:25432)
 - iTop v3.2.1 with MariaDB backend
 - REST API v1.4 at `/webservices/rest.php`
 - Authentication via BasicAuth + API credentials in request payload
@@ -249,11 +249,11 @@ Allows swapping iTop for any other ticketing system (ServiceNow, Jira, etc.) by 
 - Realms: itop, wazuh, mailcow, gitlab, master
 - Monitored via health checks (port 8443)
 
-### Wazuh (192.168.50.222:26443)
+### Wazuh (127.0.0.1:26443)
 - Wazuh 4.14.4 SIEM platform
 - Monitored via health checks (dashboard port 26443, API port 26500, indexer port 26920)
 
-### GitLab (192.168.50.222:80)
+### GitLab (127.0.0.1:80)
 - GitLab 17.x with Keycloak OIDC SSO
 - Monitored via health checks
 
@@ -262,4 +262,4 @@ Allows swapping iTop for any other ticketing system (ServiceNow, Jira, etc.) by 
 
 ## Environment Configuration
 
-All sensitive values are supplied by `.env`, environment management, or the server-manager vault. Compose files must not contain usable default passwords. iTop credentials are passed to the API container for sync operations at runtime only.
+All sensitive values are supplied by `.env`, environment management, or the credential-vault. Compose files must not contain usable default passwords. iTop credentials are passed to the API container for sync operations at runtime only.

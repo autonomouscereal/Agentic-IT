@@ -6,11 +6,11 @@
 
 set -euo pipefail
 
-# ─── Configuration ──────────────────────────────────────────────────────────
-GITLAB_HOST="${GITLAB_HOST:-192.168.50.222}"
+# --- Configuration ----------------------------------------------------------
+GITLAB_HOST="${GITLAB_HOST:-127.0.0.1}"
 GITLAB_URL="http://${GITLAB_HOST}"
 GITLAB_USER="root"
-GITLAB_PASS="${GITLAB_ROOT_PASSWORD:-$(grep '^GITLAB_ROOT_PASSWORD=' /home/cereal/gitlab/.env 2>/dev/null | cut -d'=' -f2-)}"
+GITLAB_PASS="${GITLAB_ROOT_PASSWORD:-$(grep '^GITLAB_ROOT_PASSWORD=' /opt/agentic-it/gitlab/.env 2>/dev/null | cut -d'=' -f2-)}"
 SSH_PORT="${GITLAB_SSH_PORT:-2222}"
 TEST_ORG="test-suite-org"
 TEST_REPO="test-repo-e2e"
@@ -28,7 +28,7 @@ PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
 
-# ─── Test Framework ─────────────────────────────────────────────────────────
+# --- Test Framework ---------------------------------------------------------
 pass() { PASS_COUNT=$((PASS_COUNT + 1)); echo -e "  ${GREEN}[PASS]${NC} $*"; }
 fail() { FAIL_COUNT=$((FAIL_COUNT + 1)); echo -e "  ${RED}[FAIL]${NC} $*"; }
 skip() { SKIP_COUNT=$((SKIP_COUNT + 1)); echo -e "  ${YELLOW}[SKIP]${NC} $*"; }
@@ -49,7 +49,7 @@ trap cleanup EXIT
 
 mkdir -p "${TEMP_DIR}"
 
-# ─── Pre-flight: Get API Token ─────────────────────────────────────────────
+# --- Pre-flight: Get API Token ---------------------------------------------
 test_header "Authentication"
 
 if [ -z "$GITLAB_PASS" ]; then
@@ -75,7 +75,7 @@ else
     pass "Authenticated as ${GITLAB_USER}"
 fi
 
-# ─── Test 1: Container Health ──────────────────────────────────────────────
+# --- Test 1: Container Health ----------------------------------------------
 test_header "Test 1: Container Health"
 
 # GitLab container running
@@ -94,7 +94,7 @@ else
     fail "GitLab Runner container is not running"
 fi
 
-# ─── Test 2: Health Endpoints ──────────────────────────────────────────────
+# --- Test 2: Health Endpoints ----------------------------------------------
 test_header "Test 2: Health Endpoints"
 
 # Overall health
@@ -118,7 +118,7 @@ else
     fail "Liveness endpoint not responding"
 fi
 
-# ─── Test 3: REST API ─────────────────────────────────────────────────────
+# --- Test 3: REST API -----------------------------------------------------
 test_header "Test 3: REST API"
 
 # Get current user
@@ -139,7 +139,7 @@ else
     fail "API: Version check"
 fi
 
-# ─── Test 4: Create Group (Organization) ───────────────────────────────────
+# --- Test 4: Create Group (Organization) -----------------------------------
 test_header "Test 4: Group Management"
 
 GROUP_RESPONSE=$(curl -sf -X POST \
@@ -158,7 +158,7 @@ else
     verbose_log "Response: ${GROUP_RESPONSE:0:200}"
 fi
 
-# ─── Test 5: Create Repository ─────────────────────────────────────────────
+# --- Test 5: Create Repository ---------------------------------------------
 test_header "Test 5: Repository Creation"
 
 REPO_RESPONSE=$(curl -sf -X POST \
@@ -179,7 +179,7 @@ else
     verbose_log "Response: ${REPO_RESPONSE:0:200}"
 fi
 
-# ─── Test 6: Clone Repository ──────────────────────────────────────────────
+# --- Test 6: Clone Repository ----------------------------------------------
 test_header "Test 6: Clone Repository"
 
 CLONE_DIR="${TEMP_DIR}/cloned-repo"
@@ -192,7 +192,7 @@ else
     fail "Failed to clone repository via HTTP"
 fi
 
-# ─── Test 7: Branch Operations ─────────────────────────────────────────────
+# --- Test 7: Branch Operations ---------------------------------------------
 test_header "Test 7: Branch Operations"
 
 cd "${CLONE_DIR}"
@@ -252,7 +252,7 @@ else
     fail "API: Failed to list branches"
 fi
 
-# ─── Test 8: Merge Request ─────────────────────────────────────────────────
+# --- Test 8: Merge Request -------------------------------------------------
 test_header "Test 8: Merge Request"
 
 git checkout main 2>/dev/null || git checkout master 2>/dev/null
@@ -309,7 +309,7 @@ if [ -n "${MR_IID:-}" ]; then
     fi
 fi
 
-# ─── Test 9: Tags ──────────────────────────────────────────────────────────
+# --- Test 9: Tags ----------------------------------------------------------
 test_header "Test 9: Tags"
 
 cd "${CLONE_DIR}"
@@ -338,7 +338,7 @@ else
     fail "API: Tags not visible"
 fi
 
-# ─── Test 10: CI/CD Pipeline ──────────────────────────────────────────────
+# --- Test 10: CI/CD Pipeline ----------------------------------------------
 test_header "Test 10: CI/CD Pipeline"
 
 # Create a .gitlab-ci.yml file
@@ -450,7 +450,7 @@ else
     fi
 fi
 
-# ─── Test 11: File Operations via API ──────────────────────────────────────
+# --- Test 11: File Operations via API --------------------------------------
 test_header "Test 11: File Operations via API"
 
 # Create a file via API
@@ -488,7 +488,7 @@ else
     verbose_log "Response: ${FILE_COMMIT:0:200}"
 fi
 
-# ─── Test 12: Issues & Milestones ──────────────────────────────────────────
+# --- Test 12: Issues & Milestones ------------------------------------------
 test_header "Test 12: Issues Management"
 
 ISSUE_RESPONSE=$(curl -sf -X POST \
@@ -506,7 +506,7 @@ else
     verbose_log "Response: ${ISSUE_RESPONSE:0:200}"
 fi
 
-# ─── Test 13: Runner Verification ──────────────────────────────────────────
+# --- Test 13: Runner Verification ------------------------------------------
 test_header "Test 13: Runner Status"
 
 RUNNER_VERIFY=$(docker exec gitlab-runner gitlab-runner verify 2>&1 || echo "FAILED")
@@ -526,7 +526,7 @@ fi
 RUNNER_VERSION=$(docker exec gitlab-runner gitlab-runner version 2>&1 | head -1 || echo "unknown")
 pass "Runner version: ${RUNNER_VERSION}"
 
-# ─── Test 14: Repository Contents ──────────────────────────────────────────
+# --- Test 14: Repository Contents ------------------------------------------
 test_header "Test 14: Repository Contents via API"
 
 TREE=$(curl -sf "${GITLAB_URL}/api/v4/projects/${REPO_ID}/repository/tree" \
@@ -539,7 +539,7 @@ else
     fail "Failed to list repository tree"
 fi
 
-# ─── Test 15: Commits History ─────────────────────────────────────────────
+# --- Test 15: Commits History ---------------------------------------------
 test_header "Test 15: Commits History"
 
 COMMITS=$(curl -sf "${GITLAB_URL}/api/v4/projects/${REPO_ID}/repository/commits" \
@@ -552,7 +552,7 @@ else
     fail "Failed to list commits"
 fi
 
-# ─── Summary ────────────────────────────────────────────────────────────────
+# --- Summary ----------------------------------------------------------------
 echo ""
 echo "============================================="
 echo "         TEST RESULTS SUMMARY"

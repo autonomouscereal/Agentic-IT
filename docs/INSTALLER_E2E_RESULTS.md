@@ -6,26 +6,26 @@ Last verified: 2026-05-12
 
 Fresh install target:
 
-- Target: `/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512`
+- Target: `/opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e-20260512`
 - Compose project: `soc-dashboard-e2e-20260512`
 - Dashboard/API: `http://localhost:25482`
 - PostgreSQL host port: `5435`
-- AI proxy: `http://192.168.50.222:4001`
+- AI proxy: `http://127.0.0.1:4001`
 - Agent model: `qwen/qwen3.6-27b`
 - iTop sync: disabled for provider-agnostic/local-only installer testing
 
 Actual one-line installer command:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 ./install.sh \
   --profile soc \
-  --source /home/cereal/SOC_TESTING/soc-dashboard \
-  --target /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512 \
+  --source /opt/agentic-it/SOC_TESTING/soc-dashboard \
+  --target /opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e-20260512 \
   --dashboard-port 25482 \
   --db-port 5435 \
   --project-name soc-dashboard-e2e-20260512 \
-  --ai-base-url http://192.168.50.222:4001 \
+  --ai-base-url http://127.0.0.1:4001 \
   --model qwen/qwen3.6-27b \
   --itop-sync-enabled false \
   --non-interactive
@@ -71,13 +71,13 @@ Observed outputs:
 Real installed-stack CI/CD agent workflow:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e-20260512
 SOC_DASHBOARD_URL=http://localhost:25482 \
 AGENT_MODEL=qwen/qwen3.6-27b \
 CICD_DOCKER_NETWORK=host \
 python3 scripts/agentic_cicd_full_demo.py \
   --base http://localhost:25482 \
-  --host-ip 192.168.50.222 \
+  --host-ip 127.0.0.1 \
   --timeout 2400
 ```
 
@@ -91,7 +91,7 @@ remediation_change=8 completed
 final_run=6 passed high=0 critical=0
 deployment_change=9 completed
 postmortem=4 ready_for_review
-mr_artifact=/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512/agent_work/7/agent-remediation.patch
+mr_artifact=/opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e-20260512/agent_work/7/agent-remediation.patch
 active_agent_processes=0
 ```
 
@@ -118,12 +118,12 @@ Command shape:
 ```bash
 python3 installer/bootstrap.py \
   --profile soc \
-  --source /home/cereal/SOC_TESTING/soc-dashboard \
-  --target /home/cereal/SOC_TESTING/soc-dashboard-install-e2e \
+  --source /opt/agentic-it/SOC_TESTING/soc-dashboard \
+  --target /opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e \
   --dashboard-port 25481 \
   --db-port 5434 \
   --project-name soc-dashboard-e2e \
-  --ai-base-url http://192.168.50.222:4001 \
+  --ai-base-url http://127.0.0.1:4001 \
   --itop-sync-enabled false
 ```
 
@@ -133,7 +133,7 @@ Result:
 - API: `http://localhost:25481`.
 - PostgreSQL: host port `5434`.
 - Health returned version `1.3.0`.
-- Runner health reached the model proxy at `http://192.168.50.222:4001`.
+- Runner health reached the model proxy at `http://127.0.0.1:4001`.
 - `install_state/last-plan.json` recorded profile `soc` with 25 modules.
 - `docker compose ps` showed project-scoped containers, no fixed-name collision.
 
@@ -170,6 +170,6 @@ Observed outputs:
 The scratch E2E install is intentionally still running on `25481/5434` for inspection. It can be removed with:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard-install-e2e
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e
 docker compose down -v --remove-orphans
 ```

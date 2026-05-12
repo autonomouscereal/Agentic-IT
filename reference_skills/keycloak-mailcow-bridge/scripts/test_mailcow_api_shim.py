@@ -87,7 +87,7 @@ def mysql_count(table):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="http://127.0.0.1:8081")
-    parser.add_argument("--key-file", default="/home/cereal/Mailcow/deploy/api-nginx/.api_key")
+    parser.add_argument("--key-file", default="/opt/agentic-it/Mailcow/deploy/api-nginx/.api_key")
     parser.add_argument("--mysql-parity", action="store_true")
     args = parser.parse_args()
 

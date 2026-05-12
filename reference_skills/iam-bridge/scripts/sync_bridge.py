@@ -335,7 +335,7 @@ def run_sync_cycle(config):
         results["keycloak_reachable"] = True
         print("[OK] Keycloak is reachable")
     else:
-        print("[WARN] Keycloak is unreachable — skipping Keycloak-side sync")
+        print("[WARN] Keycloak is unreachable - skipping Keycloak-side sync")
         return results
 
     # Check iTop
@@ -343,7 +343,7 @@ def run_sync_cycle(config):
         results["itop_reachable"] = True
         print("[OK] iTop is reachable")
     else:
-        print("[WARN] iTop is unreachable — skipping iTop-side sync")
+        print("[WARN] iTop is unreachable - skipping iTop-side sync")
         return results
 
     # Authenticate to Keycloak

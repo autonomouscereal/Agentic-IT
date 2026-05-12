@@ -108,7 +108,7 @@ INDEXER_PASSWORD = (
 )
 ITOP_HOST = os.environ.get("ITOP_HOST", "127.0.0.1")
 ITOP_PORT = int(os.environ.get("ITOP_PORT", "25432"))
-DASHBOARD_ENV = load_env_file(os.environ.get("DASHBOARD_ENV_FILE", "/home/cereal/SOC_TESTING/soc-dashboard/.env"))
+DASHBOARD_ENV = load_env_file(os.environ.get("DASHBOARD_ENV_FILE", "/opt/agentic-it/SOC_TESTING/soc-dashboard/.env"))
 ITOP_USER = os.environ.get("ITOP_USER") or DASHBOARD_ENV.get("ITOP_USER", "admin")
 ITOP_PASSWORD = os.environ.get("ITOP_PASSWORD") or DASHBOARD_ENV.get("ITOP_PASSWORD", "")
 
@@ -394,7 +394,7 @@ def test_sysmon_for_linux(result):
 def test_edr_ar_config(result):
     """Test 11: EDR active response config present."""
     import os
-    conf_path = "/home/cereal/SOC_TESTING/wazuh_deploy/config/wazuh_cluster/wazuh_manager.conf"
+    conf_path = "/opt/agentic-it/SOC_TESTING/wazuh_deploy/config/wazuh_cluster/wazuh_manager.conf"
     if os.path.exists(conf_path):
         with open(conf_path) as f:
             content = f.read()

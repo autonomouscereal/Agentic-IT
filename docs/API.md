@@ -5,7 +5,7 @@ Last updated: 2026-05-11.
 Base URL in the current lab:
 
 ```text
-http://192.168.50.222:25480
+http://127.0.0.1:25480
 ```
 
 Agent workspaces inside the API container should use:

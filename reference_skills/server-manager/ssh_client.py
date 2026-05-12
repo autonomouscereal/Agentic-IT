@@ -3,7 +3,8 @@ r"""
 Server Manager SSH Client - Secure, agnostic SSH management tool.
 
 Loads server configuration from servers.json (no hardcoded secrets).
-Reads passwords from environment variables. Supports SSH key fallback.
+Reads passwords from the credential-vault skill or environment variables.
+Supports SSH key fallback.
 Passes commands via file to avoid shell escaping issues.
 
 Usage via CLI:
@@ -16,18 +17,18 @@ Usage via CLI:
 
     # Execute complex commands via file (avoids ALL escaping issues)
     # 1. Write your command to a temp file
-    echo 'cd /home/cereal && docker compose ps && echo "done"' > /tmp/cmd.txt
+    echo 'cd /opt/platform && docker compose ps && echo "done"' > /tmp/cmd.txt
     # 2. Pass the file path
     python ssh_client.py --server ai --command-file "/tmp/cmd.txt"
 
     # Upload a file
-    python ssh_client.py --server ai --upload "~/local/file.txt" "/home/cereal/file.txt"
+    python ssh_client.py --server lab --upload "~/local/file.txt" "/opt/platform/file.txt"
 
     # Upload directory recursively
-    python ssh_client.py --server ai --upload-dir "~/local/dir" "/home/cereal/remote"
+    python ssh_client.py --server lab --upload-dir "~/local/dir" "/opt/platform/remote"
 
     # Download a file
-    python ssh_client.py --server ai --download "/home/cereal/file.txt" "~/downloads"
+    python ssh_client.py --server lab --download "/opt/platform/file.txt" "~/downloads"
 
     # List configured servers
     python ssh_client.py --list-servers
@@ -56,15 +57,16 @@ from pathlib import Path
 from typing import Tuple, Optional, List, Dict, Any
 
 
-def _fallback_skill_dir() -> Optional[Path]:
+def _fallback_skill_dir(skill_name: str) -> Optional[Path]:
     """Return canonical fallback skill dir when this synced copy lacks state."""
-    configured = os.environ.get("SERVER_MANAGER_FALLBACK_DIR", "").strip()
+    configured = os.environ.get(f"{skill_name.upper().replace('-', '_')}_DIR", "").strip()
     candidates = []
     if configured:
         candidates.append(Path(configured))
     home = Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or "")
     if home:
-        candidates.append(home / ".claude" / "skills" / "server-manager")
+        candidates.append(home / ".claude" / "skills" / skill_name)
+        candidates.append(home / ".agents" / "skills" / skill_name)
     for candidate in candidates:
         if candidate and candidate.exists():
             return candidate
@@ -80,9 +82,9 @@ def normalize_local_path(p: str) -> Path:
     Convert any path format to a proper Windows Path object.
 
     Handles:
-      - Git Bash style:  /c/Users/cereal/file.txt  ->  C:/Users/cereal/file.txt
-      - cygwin style:    /cygdrive/c/Users/cereal/file.txt
-      - Native Windows:  C:/Users/cereal/file.txt
+      - Git Bash style:  /c/Users/me/file.txt  ->  C:/Users/me/file.txt
+      - cygwin style:    /cygdrive/c/Users/me/file.txt
+      - Native Windows:  C:/Users/me/file.txt
       - Forward slashes: /d/some/path
     """
     if not p:
@@ -149,10 +151,24 @@ def _try_credman(server_name: str) -> str:
     """
     try:
         skill_dir = Path(__file__).resolve().parent
-        credman_candidates = [skill_dir / "credman.py"]
-        fallback = _fallback_skill_dir()
-        if fallback and fallback != skill_dir:
-            credman_candidates.append(fallback / "credman.py")
+        credman_candidates = []
+        configured = os.environ.get("CREDMAN_PATH", "").strip()
+        if configured:
+            credman_candidates.append(Path(configured))
+
+        sibling_vault = skill_dir.parent / "credential-vault"
+        credman_candidates.append(sibling_vault / "scripts" / "credman.py")
+
+        fallback_vault = _fallback_skill_dir("credential-vault")
+        if fallback_vault:
+            credman_candidates.append(fallback_vault / "scripts" / "credman.py")
+
+        # Legacy fallback for existing operator machines. New bundles should use
+        # the credential-vault skill and not place credman.py in server-manager.
+        legacy = _fallback_skill_dir("server-manager")
+        if legacy:
+            credman_candidates.append(legacy / "credman.py")
+
         python = sys.executable or "python"
         for credman_path in credman_candidates:
             if not credman_path.exists():
@@ -186,7 +202,7 @@ class ServerConfig:
             # Default: servers.json next to this script
             script_dir = Path(__file__).resolve().parent
             local_config = script_dir / "servers.json"
-            fallback = _fallback_skill_dir()
+            fallback = _fallback_skill_dir("server-manager")
             fallback_config = fallback / "servers.json" if fallback else None
             if local_config.exists() or not fallback_config:
                 self._path = str(local_config)
@@ -584,17 +600,17 @@ Examples:
   python ssh_client.py --server ai --execute "docker compose ps"
 
   # Complex command via file (no escaping issues!)
-  echo 'cd /home/cereal && docker compose logs -n 20 zeek' > /tmp/cmd.txt
+  echo 'cd /opt/platform && docker compose logs -n 20 app' > /tmp/cmd.txt
   python ssh_client.py --server ai --command-file "/tmp/cmd.txt"
 
   # Upload file
-  python ssh_client.py --server ai --upload "C:/reports/log.txt" "/home/cereal/log.txt"
+  python ssh_client.py --server example --upload "C:/reports/log.txt" "/opt/platform/log.txt"
 
   # Upload directory
-  python ssh_client.py --server ai --upload-dir "C:/project" "/home/cereal/project"
+  python ssh_client.py --server example --upload-dir "C:/project" "/opt/platform/project"
 
   # Download file
-  python ssh_client.py --server ai --download "/home/cereal/output.csv" "C:/Users/cereal/Downloads"
+  python ssh_client.py --server example --download "/opt/platform/output.csv" "C:/Users/me/Downloads"
 
   # JSON output (machine-parseable)
   python ssh_client.py --server ai --execute "pwd" --json

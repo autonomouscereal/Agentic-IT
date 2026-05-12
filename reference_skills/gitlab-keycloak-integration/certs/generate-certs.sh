@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-CERT_DIR="${1:-/home/cereal/gitlab-keycloak-integration/certs}"
+CERT_DIR="${1:-/opt/agentic-it/gitlab-keycloak-integration/certs}"
 DOMAIN="${DOMAIN:-keycloak.internal}"
 
 mkdir -p "$CERT_DIR"
@@ -41,7 +41,7 @@ extendedKeyUsage = serverAuth
 [alt_names]
 DNS.1 = ${DOMAIN}
 DNS.2 = localhost
-IP.1 = 192.168.50.222
+IP.1 = 127.0.0.1
 IP.2 = 127.0.0.1
 EOF
 
@@ -65,4 +65,4 @@ echo "    CA cert:  ${CERT_DIR}/ca-cert.pem"
 echo "    Server cert:  ${CERT_DIR}/server-cert.pem"
 echo "    Server key:   ${CERT_DIR}/server-key.pem"
 echo ""
-echo "  Valid for: ${DOMAIN}, localhost, 192.168.50.222, 127.0.0.1"
+echo "  Valid for: ${DOMAIN}, localhost, 127.0.0.1, 127.0.0.1"

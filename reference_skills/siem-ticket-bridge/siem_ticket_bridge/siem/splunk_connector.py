@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Splunk HEC connector — implements SIEMConnector for Splunk Enterprise/Cloud.
+Splunk HEC connector - implements SIEMConnector for Splunk Enterprise/Cloud.
 
 Uses the HTTP Event Collector (HEC) for submitting and querying alerts.
 Register with: from siem_ticket_bridge.siem import register_connector

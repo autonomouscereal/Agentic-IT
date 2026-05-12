@@ -1,4 +1,4 @@
-# Testing Runbook
+﻿# Testing Runbook
 
 Last updated: 2026-05-12.
 
@@ -20,7 +20,7 @@ python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashb
 Application code should not contain ORM/Pydantic/SQLAlchemy usage or hardcoded secrets.
 
 ```powershell
-rg -n --glob '!README.md' --glob '!*.md' --glob '!__pycache__/**' "pydantic|sqlalchemy|sk-[A-Za-z0-9]{20,}|host\.docker|docker\.internal|soc_password_change_me|itop_admin" .\soc-dashboard\api .\soc-dashboard\frontend .\soc-dashboard\scripts .\soc-dashboard\docker-compose.yml
+rg -n --glob '!README.md' --glob '!*.md' --glob '!__pycache__/**' "pydantic|sqlalchemy|sk-[A-Za-z0-9]{20,}|host\.docker|docker\.internal|hardcoded_password_placeholder|hardcoded_admin_placeholder" .\soc-dashboard\api .\soc-dashboard\frontend .\soc-dashboard\scripts .\soc-dashboard\docker-compose.yml
 ```
 
 Expected result: no matches.
@@ -52,12 +52,12 @@ Latest verified result on 2026-05-12:
 platform_doctor.py: PASS 18, WARN 0, FAIL 0
 runner timeout_minutes: 0
 default_model: qwen/qwen3.6-27b
-effective_anthropic_base_url: http://192.168.50.222:4001
+effective_anthropic_base_url: http://127.0.0.1:4001
 ```
 
 ## Cross-Platform Demo Credential Smoke
 
-Credential value lives in the local encrypted vault key `demo_account_1`. Do not print it.
+Credential value lives in the local encrypted vault key `platform_demo_user`. Do not print it.
 
 Latest verified result on 2026-05-12:
 
@@ -79,7 +79,7 @@ Important implementation notes:
 ## Agentic API Smoke
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_agentic_system.py http://localhost:25480
 ```
 
@@ -102,7 +102,7 @@ Covers:
 ## Service Desk Intake Smoke
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_service_desk_intake.py http://localhost:25480
 ```
 
@@ -119,7 +119,7 @@ Covers:
 ## Provider Adapter Smoke
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_provider_adapters.py http://localhost:25480
 ```
 
@@ -142,7 +142,7 @@ jira: fail-closed not configured
 ## CI/CD Security Pipeline Smoke
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480
 ```
 
@@ -158,11 +158,11 @@ Covers:
 ## Full Agentic CI/CD Remediation
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/agentic_cicd_full_demo.py \
   --base http://localhost:25480 \
   --model qwen/qwen3.6-27b \
-  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs
+  --workspace /opt/agentic-it/SOC_TESTING/soc-dashboard/demo_runs
 ```
 
 Covers:
@@ -187,7 +187,7 @@ remediation_change_id=34 status=approved
 final_run_id=10 status=passed
 deployment_change_id=36 status=completed
 branch=agent/remediate-security-gate
-patch=/home/cereal/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch
+patch=/opt/agentic-it/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch
 ```
 
 Notes from the live run:
@@ -204,7 +204,7 @@ Notes from the live run:
 ## Wazuh EDR/Sysmon E2E
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard/reference_skills/wazuh-edr-sysmon
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard/reference_skills/wazuh-edr-sysmon
 bash scripts/test-edr-e2e.sh
 ```
 
@@ -322,7 +322,7 @@ changes 39 and 40=completed
 Full operator blueprint: `docs/MAILCOW_API_SHIM.md`.
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd /opt/agentic-it/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 
@@ -374,7 +374,7 @@ instead of guessing provider-specific note URLs or reading arbitrary files.
 ## Postmortem Promotion Smoke
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_postmortem_promotion.py http://localhost:25480
 ```
 
@@ -404,7 +404,7 @@ ui_promotion_hooks=present
 ## Agent Auditor Smoke
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_agent_auditor.py http://localhost:25480
 ```
 
@@ -417,7 +417,7 @@ Covers:
 ## Approved Change Auto-Completion Smoke
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 docker compose cp scripts/smoke_change_auto_completion.py api:/app/smoke_change_auto_completion.py
 docker compose exec -T api sh -lc 'cd /app && python smoke_change_auto_completion.py'
 ```
@@ -446,13 +446,13 @@ review=approved_change_auto_completed
 ## Real Agentic CI/CD Flow
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 SOC_DASHBOARD_URL=http://localhost:25480 \
 AGENT_MODEL=qwen/qwen3.6-27b \
 CICD_DOCKER_NETWORK=host \
 python3 scripts/agentic_cicd_full_demo.py \
   --base http://localhost:25480 \
-  --host-ip 192.168.50.222 \
+  --host-ip 127.0.0.1 \
   --timeout 2400
 ```
 
@@ -493,7 +493,7 @@ attempts stalled on evidence processing.
 Latest verified result from a fresh one-line install on 2026-05-12:
 
 ```text
-install_target=/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512
+install_target=/opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e-20260512
 dashboard=http://localhost:25482
 ticket_id=13
 initial_run=5 failed high=1 medium=6 low=6 info=1 unknown=2
@@ -502,7 +502,7 @@ remediation_change=8 completed
 final_run=6 passed high=0 critical=0
 deployment_change=9 completed
 postmortem=4 ready_for_review
-mr_artifact=/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512/agent_work/7/agent-remediation.patch
+mr_artifact=/opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e-20260512/agent_work/7/agent-remediation.patch
 active_agent_processes=0
 ```
 
@@ -511,7 +511,7 @@ inside the API container because it imports the API database module and depends
 on container Python packages:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard-install-e2e-20260512
 docker compose exec -T api python smoke_change_auto_completion.py http://localhost:8000
 ```
 
@@ -568,7 +568,7 @@ audit_sources=event,note
 Real local-model verification:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_local_model_agent.py http://localhost:25480 qwen/qwen3.6-27b
 ```
 
@@ -649,7 +649,7 @@ served /static/css/dashboard.css contains gate-card
 ## Local Model Agent Smoke
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_local_model_agent.py http://localhost:25480 qwen/qwen3.6-27b
 ```
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wazuh Sync Bridge - Unidirectional sync Keycloak → Wazuh.
+Wazuh Sync Bridge - Unidirectional sync Keycloak -> Wazuh.
 Modes: CLI (one-shot sync) or Daemon (continuous polling).
 Graceful degradation: if either service is down, skip and continue.
 Zero hardcoded secrets. All credentials from .env or environment.
@@ -59,7 +59,7 @@ def load_config():
         "keycloak_admin": os.environ.get("KEYCLOAK_ADMIN_USER", "admin"),
         "keycloak_password": os.environ.get("KEYCLOAK_ADMIN_PASSWORD"),
         "bridge_realm": os.environ.get("BRIDGE_REALM", "wazuh"),
-        "wazuh_url": os.environ.get("WAZUH_URL", "https://192.168.50.222:26500").rstrip("/"),
+        "wazuh_url": os.environ.get("WAZUH_URL", "https://127.0.0.1:26500").rstrip("/"),
         "wazuh_username": os.environ.get("WAZUH_USERNAME", "wazuh-wui"),
         "wazuh_password": os.environ.get("WAZUH_PASSWORD"),
         "sync_state": os.environ.get("SYNC_STATE_FILE", os.path.join(SKILL_DIR, ".sync_state.json")),
@@ -276,7 +276,7 @@ def run_sync_cycle(config):
         results["keycloak_reachable"] = True
         print("[OK] Keycloak is reachable")
     else:
-        print("[WARN] Keycloak unreachable — skipping sync")
+        print("[WARN] Keycloak unreachable - skipping sync")
         return results
 
     wazuh_client = WazuhClient(config["wazuh_url"], config["wazuh_username"], config["wazuh_password"])
@@ -284,7 +284,7 @@ def run_sync_cycle(config):
         results["wazuh_reachable"] = True
         print("[OK] Wazuh is reachable")
     else:
-        print("[WARN] Wazuh unreachable — skipping sync")
+        print("[WARN] Wazuh unreachable - skipping sync")
         return results
 
     kc_token = kc_get_token(config["keycloak_url"], config["keycloak_admin"], config["keycloak_password"])
@@ -297,7 +297,7 @@ def run_sync_cycle(config):
         return results
 
     sync_state = load_sync_state(config["sync_state"])
-    print("\n--- Syncing Keycloak → Wazuh ---")
+    print("\n--- Syncing Keycloak -> Wazuh ---")
     synced, updated, errors = sync_keycloak_to_wazuh(config, kc_token, wazuh_client, sync_state)
     results["kc_to_wazuh"] = {"synced": synced, "updated": updated, "errors": errors, "status": "completed"}
     print(f"  New: {synced}, Updated: {updated}, Errors: {errors}")
@@ -351,7 +351,7 @@ class SyncDaemon:
 # --- CLI ---
 
 def main():
-    parser = argparse.ArgumentParser(description="Wazuh Sync Bridge - Keycloak → Wazuh")
+    parser = argparse.ArgumentParser(description="Wazuh Sync Bridge - Keycloak -> Wazuh")
     parser.add_argument("--sync", action="store_true", help="Run a single sync cycle")
     parser.add_argument("--daemon", action="store_true", help="Run as continuous daemon")
     parser.add_argument("--interval", type=int, default=300, help="Daemon sync interval (default: 300s)")
@@ -376,7 +376,7 @@ def main():
         print(f"\n=== Sync Complete ===")
         print(f"  Keycloak reachable: {results['keycloak_reachable']}")
         print(f"  Wazuh reachable: {results['wazuh_reachable']}")
-        print(f"  KC→Wazuh: {results['kc_to_wazuh']}")
+        print(f"  KC->Wazuh: {results['kc_to_wazuh']}")
         return
 
     parser.print_help()

@@ -4,6 +4,7 @@
   "skills": [
     "ai-proxy",
     "cicd-security-pipeline",
+    "credential-vault",
     "gitlab-keycloak-integration",
     "gitlab-manager",
     "iam-bridge",
@@ -37,10 +38,10 @@
     "web_research"
   ],
   "default_source_roots": [
-    "C:/Users/cereal/.agents/skills",
-    "C:/Users/cereal/.claude/skills",
-    "/home/cereal/.agents/skills",
-    "/home/cereal/.claude/skills",
+    "C:/Users/me/.agents/skills",
+    "C:/Users/me/.claude/skills",
+    "/opt/agentic-it/.agents/skills",
+    "/opt/agentic-it/.claude/skills",
     "/root/.agents/skills",
     "/root/.claude/skills"
   ],

@@ -1,4 +1,4 @@
-# Deployment Runbook
+﻿# Deployment Runbook
 
 Last updated: 2026-05-11.
 
@@ -8,7 +8,7 @@ Last updated: 2026-05-11.
 - PostgreSQL is provided by the compose stack.
 - Claude Code installed in the API image/runtime path if agent execution is enabled.
 - A reachable model/proxy endpoint in `AGENT_LLM_BASE_URL`.
-- Server credentials stored in the server-manager vault.
+- Server credentials stored in the credential-vault.
 
 Do not hardcode secrets in compose, docs, or source. Use environment variables or vault-backed deployment tooling.
 
@@ -17,9 +17,9 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | Item | Value |
 | --- | --- |
 | Server | AI server |
-| Path | `/home/cereal/SOC_TESTING/soc-dashboard` |
-| URL | `http://192.168.50.222:25480` |
-| Proxy | `http://192.168.50.222:4001` |
+| Path | `${PLATFORM_HOME}/soc-dashboard` |
+| URL | `${SOC_DASHBOARD_URL}` |
+| Proxy | `${AGENT_LLM_BASE_URL}` |
 | Default model | `qwen/qwen3.6-27b` |
 
 ## Upload
@@ -27,7 +27,7 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 Use server-manager from Windows:
 
 ```powershell
-C:\Users\cereal\.claude\skills\server-manager\.venv\Scripts\python.exe C:\Users\cereal\.claude\skills\server-manager\ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "/home/cereal/SOC_TESTING/soc-dashboard"
+python <server-manager>/ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "${PLATFORM_HOME}/soc-dashboard"
 ```
 
 ## Environment
@@ -75,7 +75,7 @@ Without those defaults, inbound iTop sync can still work, but dashboard-to-iTop 
 On the server:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd ${PLATFORM_HOME}/soc-dashboard
 docker compose up -d --build api
 ```
 
@@ -111,7 +111,7 @@ Expected:
 If the deployment includes the reference Mailcow email stack and the optional HTTP compatibility shim, manage it from the Mailcow deployment root, not from the dashboard compose stack:
 
 ```bash
-cd /home/cereal/Mailcow/deploy
+cd ${MAILCOW_DEPLOY_DIR}
 python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
@@ -134,7 +134,7 @@ Frontend-only JS/CSS/HTML changes generally need upload only because frontend is
 If `agent_work` was created by an earlier root-run container and later bind mounts/users change:
 
 ```bash
-sudo chown -R cereal:cereal /home/cereal/SOC_TESTING/soc-dashboard/agent_work
+sudo chown -R ${PLATFORM_USER}:${PLATFORM_GROUP} ${PLATFORM_HOME}/soc-dashboard/agent_work
 ```
 
 ## Rollback

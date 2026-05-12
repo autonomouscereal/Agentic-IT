@@ -15,6 +15,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import text_hygiene
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "platform" / "skill_sync_config.json"
@@ -39,6 +41,11 @@ def source_roots(config, explicit):
         roots.extend(split_paths(env_roots))
     if not explicit and not env_roots:
         roots.extend(Path(item).expanduser() for item in config.get("default_source_roots", []))
+        home = Path.home()
+        roots.extend([
+            home / ".agents" / "skills",
+            home / ".claude" / "skills",
+        ])
     unique = []
     seen = set()
     for root in roots:
@@ -65,10 +72,23 @@ def is_excluded(path, config):
 
 def sha256(path):
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
+    digest.update(sanitized_bytes(path))
     return digest.hexdigest()
+
+
+def should_sanitize(path):
+    return text_hygiene.is_text_file(path)
+
+
+def sanitized_bytes(path):
+    if should_sanitize(path):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return path.read_bytes()
+        text = text_hygiene.fix_text(text, include_lab_values=True)
+        return text.encode("utf-8")
+    return path.read_bytes()
 
 
 def skill_manifest(skill_dir):
@@ -117,7 +137,16 @@ def copy_skill(src, dest, config):
             target.mkdir(parents=True, exist_ok=True)
         elif path.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, target)
+            if should_sanitize(path):
+                try:
+                    text = path.read_text(encoding="utf-8")
+                    text = text_hygiene.fix_text(text, include_lab_values=True)
+                    target.write_text(text, encoding="utf-8", newline="\n")
+                    shutil.copystat(path, target, follow_symlinks=True)
+                except UnicodeDecodeError:
+                    shutil.copy2(path, target)
+            else:
+                shutil.copy2(path, target)
             copied += 1
     return copied, skipped
 
@@ -131,6 +160,31 @@ def write_bundle_manifest(bundle, records):
     bundle.mkdir(parents=True, exist_ok=True)
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8", newline="\n")
     return manifest
+
+
+def manifest(args, config):
+    bundle = Path(args.bundle).resolve()
+    assert_inside(bundle, ROOT)
+    records = []
+    missing = []
+    for skill in config["skills"]:
+        skill_dir = bundle / skill
+        if not (skill_dir / "SKILL.md").exists():
+            missing.append(skill)
+            continue
+        records.append({
+            "name": skill,
+            "source": "bundle",
+            "files": skill_manifest(skill_dir),
+        })
+    write_bundle_manifest(bundle, records)
+    print(json.dumps({
+        "status": "manifest",
+        "bundle": str(bundle),
+        "skills": len(records),
+        "missing": missing,
+    }, indent=2))
+    return 1 if missing else 0
 
 
 def stage(args, config):
@@ -199,12 +253,14 @@ def install(args, config):
 
 def main():
     parser = argparse.ArgumentParser(description="Sync platform reference skills")
-    parser.add_argument("mode", choices=["stage", "check", "install"])
+    parser.add_argument("mode", choices=["stage", "check", "install", "manifest"])
     parser.add_argument("--bundle", default=str(DEFAULT_BUNDLE))
     parser.add_argument("--source-roots", default="", help=f"Optional {os.pathsep}-separated source roots")
     parser.add_argument("--destination", default="", help="Destination skill root for install mode")
     args = parser.parse_args()
     config = load_config()
+    if args.mode == "manifest":
+        return manifest(args, config)
     if args.mode == "stage":
         return stage(args, config)
     if args.mode == "check":

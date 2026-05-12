@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""
-Credential Manager - Encrypted secret storage for server-manager.
+Credential Manager - encrypted secret storage for platform automation.
 
 Stores server passwords encrypted on disk using Fernet symmetric encryption.
 A master key (stored in a restricted-permission file) decrypts at runtime.
@@ -8,23 +8,19 @@ Passwords NEVER appear in plaintext in config files, scripts, or bash history.
 
 Usage:
     python credman.py setup              # Generate master key on first use
-    python credman.py set ai "password"  # Encrypt & store a password
-    python credman.py get ai             # Decrypt & return password to stdout
-    python credman.py list               # Show which servers have stored creds
-    python credman.py rm ai              # Remove stored cred for a server
+    python credman.py set key "secret"   # Encrypt and store a secret
+    python credman.py get key            # Decrypt and return secret to stdout
+    python credman.py list               # Show stored secret keys
+    python credman.py rm key             # Remove a stored secret
     python credman.py clear              # Remove ALL stored creds
 
-The ssh_client.py script calls `get` internally via subprocess - you won't
-normally need to interact with this module directly.
+Consumers such as server-manager call `get` internally via subprocess.
 """
 
 import argparse
 import base64
 import json
-import os
 import sys
-import hashlib
-import subprocess
 from pathlib import Path
 from cryptography.fernet import Fernet
 
@@ -61,7 +57,7 @@ def setup_key(interactive: bool = False) -> str:
     In interactive mode: optionally wraps the key with a password layer.
     """
     if _KEY_FILE.exists():
-        print("[WARN] Master key already exists at {_KEY_FILE}")
+        print(f"[WARN] Master key already exists at {_KEY_FILE}")
         if interactive:
             try:
                 reply = input("  Re-generate? (y/N): ").strip().lower()
@@ -109,36 +105,36 @@ def _save_vault(data: dict):
     _VAULT_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def add_credential(server_name: str, password: str):
-    """Encrypt and store a password for the given server."""
+def add_credential(key_name: str, secret: str):
+    """Encrypt and store a secret for the given key."""
     fernet = _ensure_key()
-    token = fernet.encrypt(password.encode("utf-8"))
+    token = fernet.encrypt(secret.encode("utf-8"))
     vault = _load_vault()
-    vault[server_name] = base64.b64encode(token).decode("ascii")
+    vault[key_name] = base64.b64encode(token).decode("ascii")
     _save_vault(vault)
-    print(f"[OK] Credential stored for '{server_name}'")
+    print(f"[OK] Credential stored for '{key_name}'")
 
 
-def get_credential(server_name: str) -> str:
-    """Decrypt and return the password.  Returns empty string if not found."""
+def get_credential(key_name: str) -> str:
+    """Decrypt and return the secret.  Returns empty string if not found."""
     fernet = _ensure_key()
     vault = _load_vault()
-    if server_name not in vault:
+    if key_name not in vault:
         return ""
 
-    encrypted = base64.b64decode(vault[server_name].encode("ascii"))
+    encrypted = base64.b64decode(vault[key_name].encode("ascii"))
     decrypted = fernet.decrypt(encrypted)
     return decrypted.decode("utf-8")
 
 
-def remove_credential(server_name: str):
+def remove_credential(key_name: str):
     vault = _load_vault()
-    if server_name in vault:
-        del vault[server_name]
+    if key_name in vault:
+        del vault[key_name]
         _save_vault(vault)
-        print(f"[OK] Credential removed for '{server_name}'")
+        print(f"[OK] Credential removed for '{key_name}'")
     else:
-        print(f"[WARN] No credential found for '{server_name}'")
+        print(f"[WARN] No credential found for '{key_name}'")
 
 
 def list_credentials():
@@ -146,7 +142,7 @@ def list_credentials():
     if not vault:
         print("No credentials stored.")
     else:
-        print("Stored credentials (server names):")
+        print("Stored credential keys:")
         for name in sorted(vault.keys()):
             print(f"  - {name}")
 
@@ -172,14 +168,14 @@ def main():
     sub.add_parser("clear", help="Remove all stored credentials")
 
     set_p = sub.add_parser("set", help="Store a credential")
-    set_p.add_argument("server", help="Server name (must match servers.json key)")
-    set_p.add_argument("password", help="Password to encrypt and store")
+    set_p.add_argument("key", help="Credential key name")
+    set_p.add_argument("secret", help="Secret to encrypt and store")
 
     get_p = sub.add_parser("get", help="Retrieve a credential")
-    get_p.add_argument("server", help="Server name")
+    get_p.add_argument("key", help="Credential key name")
 
     rm_p = sub.add_parser("rm", help="Remove a credential")
-    rm_p.add_argument("server", help="Server name")
+    rm_p.add_argument("key", help="Credential key name")
 
     args = parser.parse_args()
 
@@ -190,16 +186,16 @@ def main():
     elif args.command == "clear":
         clear_vault()
     elif args.command == "set":
-        add_credential(args.server, args.password)
+        add_credential(args.key, args.secret)
     elif args.command == "get":
-        pw = get_credential(args.server)
+        pw = get_credential(args.key)
         if pw:
             print(pw, end="")  # no trailing newline - safe for script consumption
         else:
-            print(f"[WARN] No credential for '{args.server}'", file=sys.stderr)
+            print(f"[WARN] No credential for '{args.key}'", file=sys.stderr)
             sys.exit(1)
     elif args.command == "rm":
-        remove_credential(args.server)
+        remove_credential(args.key)
     else:
         parser.print_help()
 

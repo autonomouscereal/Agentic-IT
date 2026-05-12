@@ -1,6 +1,6 @@
 ---
 name: soc-testing
-description: Zeek and Suricata SOC testing environment management on AI Server (192.168.50.222). Use when checking container status, viewing logs, or managing the security monitoring stack.
+description: Zeek and Suricata SOC testing environment management on AI Server (127.0.0.1). Use when checking container status, viewing logs, or managing the security monitoring stack.
 allowed-tools: Read Bash
 ---
 
@@ -12,7 +12,7 @@ This skill manages the Zeek + Suricata SOC testing deployment.
 
 ### Check Container Status
 ```bash
-cd /home/cereal/SOC_TESTING && docker compose -f docker-compose.yml ps
+cd /opt/agentic-it/SOC_TESTING && docker compose -f docker-compose.yml ps
 ```
 
 ### View Suricata Logs (eve.json)
@@ -22,7 +22,7 @@ docker exec suricata-soc tail -20 /var/log/suricata/eve.json
 
 ### Restart Containers
 ```bash
-cd /home/cereal/SOC_TESTING && ./soc-start.sh
+cd /opt/agentic-it/SOC_TESTING && ./soc-start.sh
 ```
 
 ## Management Scripts

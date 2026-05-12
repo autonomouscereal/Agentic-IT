@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wazuh SIEM connector — implements SIEMConnector for Wazuh v4.14.4+.
+Wazuh SIEM connector - implements SIEMConnector for Wazuh v4.14.4+.
 
 Fetches alerts from the Wazuh Indexer (OpenSearch) and supports
 syslog UDP forwarding for test events.

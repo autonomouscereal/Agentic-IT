@@ -1,18 +1,18 @@
-# SIEM-to-Ticketing Bridge — Deployment Blueprint
+﻿# SIEM-to-Ticketing Bridge - Deployment Blueprint
 
 > Fully modular, tool-agnostic integration framework between any SIEM (Wazuh, Splunk) and any ticketing system (iTop, Jira, ServiceNow). Zero hardcoded dependencies.
 
 ## Architecture
 
 ```
-┌──────────────┐     ┌─────────────────────┐     ┌──────────────┐
-│   Wazuh SIEM │────>│   Bridge Orchestrator│────>│  iTop ITSM   │
-│  (port 26500)│     │  (polling daemon)    │     │ (port 25432) │
-│  Indexer:920 │     │                      │     │              │
-└──────────────┘     │  - Deduplication     │     └──────────────┘
-                     │  - Severity filter   │
-                     │  - State persistence │
-                     └─────────────────────┘
++--------------+     +---------------------+     +--------------+
+|   Wazuh SIEM |---->|   Bridge Orchestrator|---->|  iTop ITSM   |
+|  (port 26500)|     |  (polling daemon)    |     | (port 25432) |
+|  Indexer:920 |     |                      |     |              |
+`--------------'     |  - Deduplication     |     `--------------'
+                     |  - Severity filter   |
+                     |  - State persistence |
+                     `---------------------'
 ```
 
 ### Key Design Decisions
@@ -21,7 +21,7 @@
 - **Factory Pattern**: `create_connector()` factories with pluggable registration via `register_connector()`
 - **Null Connectors**: Gracefully handle missing/disconnected systems without crashing
 - **Env-Only Config**: All credentials via `.env` file, zero hardcoded secrets
-- **Stdlib Only**: Python standard library — no pip dependencies required
+- **Stdlib Only**: Python standard library - no pip dependencies required
 - **Deduplication**: Alert dedup with configurable time windows and JSON state persistence
 
 ### Severity Mapping
@@ -40,31 +40,31 @@ Tickets only created for level >= 4 (medium and above).
 
 ```
 siem-ticket-bridge/
-├── siem_ticket_bridge/
-│   ├── __init__.py
-│   ├── config.py              # Env var loading, config builders
-│   ├── bridge.py              # Main orchestrator + CLI
-│   ├── siem/
-│   │   ├── __init__.py        # SIEM factory + register_connector()
-│   │   ├── connector.py       # Abstract SIEMConnector + NullConnector
-│   │   ├── wazuh_connector.py # Wazuh v4.14.4 implementation
-│   │   └── splunk_connector.py # Splunk HEC example
-│   └── ticketing/
-│       ├── __init__.py        # Ticketing factory + register_connector()
-│       ├── connector.py       # Abstract TicketingConnector + NullTicketingConnector
-│       └── itop_connector.py  # iTop v3.2.1 implementation
-├── tests/
-│   ├── test_bridge.py         # 40-unit test suite
-│   └── test_ticket_e2e.py     # E2E ticket creation test
-├── deploy/
-│   ├── deploy.sh              # One-shot deployment script
-│   ├── Dockerfile             # Container deployment
-│   ├── docker-compose.yml     # Docker Compose stack
-│   └── systemd/
-│       └── siem-ticket-bridge.service
-├── .env.example               # Template with all env vars
-├── severity_map.json          # Severity definitions + rule overrides
-└── BLUEPRINT.md               # This file
+|-- siem_ticket_bridge/
+|   |-- __init__.py
+|   |-- config.py              # Env var loading, config builders
+|   |-- bridge.py              # Main orchestrator + CLI
+|   |-- siem/
+|   |   |-- __init__.py        # SIEM factory + register_connector()
+|   |   |-- connector.py       # Abstract SIEMConnector + NullConnector
+|   |   |-- wazuh_connector.py # Wazuh v4.14.4 implementation
+|   |   `-- splunk_connector.py # Splunk HEC example
+|   `-- ticketing/
+|       |-- __init__.py        # Ticketing factory + register_connector()
+|       |-- connector.py       # Abstract TicketingConnector + NullTicketingConnector
+|       `-- itop_connector.py  # iTop v3.2.1 implementation
+|-- tests/
+|   |-- test_bridge.py         # 40-unit test suite
+|   `-- test_ticket_e2e.py     # E2E ticket creation test
+|-- deploy/
+|   |-- deploy.sh              # One-shot deployment script
+|   |-- Dockerfile             # Container deployment
+|   |-- docker-compose.yml     # Docker Compose stack
+|   `-- systemd/
+|       `-- siem-ticket-bridge.service
+|-- .env.example               # Template with all env vars
+|-- severity_map.json          # Severity definitions + rule overrides
+`-- BLUEPRINT.md               # This file
 ```
 
 ## Prerequisites
@@ -79,8 +79,8 @@ siem-ticket-bridge/
 ### 1. Copy Framework to Target Host
 
 ```bash
-# Deploy directory on AI Server (192.168.50.222)
-DEPLOY_DIR="/home/cereal/SOC_TESTING/siem-ticket-bridge"
+# Deploy directory on AI Server (127.0.0.1)
+DEPLOY_DIR="/opt/agentic-it/SOC_TESTING/siem-ticket-bridge"
 ```
 
 ### 2. Create Required Directories
@@ -106,8 +106,8 @@ cp .env.example .env
 #   BRIDGE_TICKETING_TYPE=itop
 #   BRIDGE_TICKETING_HOST=127.0.0.1
 #   BRIDGE_TICKETING_PORT=25432
-#   BRIDGE_TICKETING_API_USER=<itop_admin_user>
-#   BRIDGE_TICKETING_API_PASSWORD=<itop_admin_password>
+#   BRIDGE_TICKETING_API_USER=<itop-api-user>
+#   BRIDGE_TICKETING_API_PASSWORD=<itop-api-password>
 #   BRIDGE_TICKETING_SCHEME=http
 #   BRIDGE_TICKETING_API_PATH=/webservices/rest.php
 ```
@@ -115,7 +115,7 @@ cp .env.example .env
 ### 4. Test Connectivity
 
 ```bash
-cd /home/cereal/SOC_TESTING/siem-ticket-bridge
+cd /opt/agentic-it/SOC_TESTING/siem-ticket-bridge
 source .env
 python3 -m siem_ticket_bridge.bridge --test-connection
 # Expected: "OK: Both SIEM and ticketing connected"
@@ -142,7 +142,7 @@ PYTHONPATH=. python3 -m unittest tests.test_bridge -v
 bash deploy/deploy.sh
 
 # Method B: Manual
-sudo sed 's|{{DEPLOY_DIR}}|/home/cereal/SOC_TESTING/siem-ticket-bridge|g; s|{{LOG_DIR}}|/var/log/siem-ticket-bridge|g; s|{{USER}}|cereal|g' \
+sudo sed 's|{{DEPLOY_DIR}}|/opt/agentic-it/SOC_TESTING/siem-ticket-bridge|g; s|{{LOG_DIR}}|/var/log/siem-ticket-bridge|g; s|{{USER}}|cereal|g' \
     deploy/systemd/siem-ticket-bridge.service > /etc/systemd/system/siem-ticket-bridge.service
 sudo systemctl daemon-reload
 sudo systemctl enable siem-ticket-bridge

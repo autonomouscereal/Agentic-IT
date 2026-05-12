@@ -26,7 +26,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 
-# ─── Environment Loading ───────────────────────────────────────────────
+# --- Environment Loading -----------------------------------------------
 
 def load_env(env_path=None):
     """Load environment variables from .env file."""
@@ -71,7 +71,7 @@ TEMPLATE_QUOTAS = {
 }
 
 
-# ─── Sync State ────────────────────────────────────────────────────────
+# --- Sync State --------------------------------------------------------
 
 def load_sync_state():
     """Load sync state from file."""
@@ -94,7 +94,7 @@ def save_sync_state(state):
         json.dump(state, f, indent=2)
 
 
-# ─── Keycloak API Client ──────────────────────────────────────────────
+# --- Keycloak API Client ----------------------------------------------
 
 class KeycloakSyncClient:
     """Lightweight Keycloak client for sync operations."""
@@ -169,7 +169,7 @@ class KeycloakSyncClient:
             return False
 
 
-# ─── Mailcow MySQL Client ─────────────────────────────────────────────
+# --- Mailcow MySQL Client ---------------------------------------------
 
 class MailcowSyncClient:
     """Lightweight Mailcow client via direct MySQL for sync operations."""
@@ -281,7 +281,7 @@ class MailcowSyncClient:
         return self._run_sql_raw(sql) is True
 
 
-# ─── Sync Logic ────────────────────────────────────────────────────────
+# --- Sync Logic --------------------------------------------------------
 
 def sync_keycloak_to_mailcow(kc, mc, state):
     """Sync Keycloak users to Mailcow mailboxes."""
@@ -402,7 +402,7 @@ def sync_mailcow_to_keycloak(kc, mc, state):
     return updated
 
 
-# ─── Main ──────────────────────────────────────────────────────────────
+# --- Main --------------------------------------------------------------
 
 running = True
 

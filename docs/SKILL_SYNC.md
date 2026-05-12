@@ -64,8 +64,8 @@ The allowlist excludes unrelated ComfyUI, torrenting, media repair, image, video
 The API container mounts:
 
 - `./reference_skills:/app/skills:ro`
-- `${CLAUDE_SKILLS_DIR:-/home/cereal/.claude/skills}:/root/.claude/skills:ro`
-- `${AGENTS_SKILLS_DIR:-/home/cereal/.agents/skills}:/root/.agents/skills:ro`
+- `${CLAUDE_SKILLS_DIR:-/opt/agentic-it/.claude/skills}:/root/.claude/skills:ro`
+- `${AGENTS_SKILLS_DIR:-/opt/agentic-it/.agents/skills}:/root/.agents/skills:ro`
 
 This lets setup inventory show both the portable bundle and live harness skills without granting the dashboard write access to the harness directories.
 

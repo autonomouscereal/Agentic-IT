@@ -45,7 +45,7 @@ config_lines = [
     f'      {q}client_options{q} => {{',
     f'        {q}identifier{q} => {q}gitlab{q},',
     f'        {q}secret{q} => {q}Wveem5iXvZoJk49RIOJTSoxViL1FYsIV0_UMhXdvl_i_pP3Kd1T4Fev5ZmdZ2WZb{q},',
-    f'        {q}redirect_uri{q} => {q}http://192.168.50.222/users/auth/openid_connect/callback{q}',
+    f'        {q}redirect_uri{q} => {q}http://127.0.0.1/users/auth/openid_connect/callback{q}',
     "      }",
     "    }",
     "  }",

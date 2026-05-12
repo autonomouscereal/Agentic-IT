@@ -22,16 +22,16 @@ instead of deploying this reference module.
 ## Guardrails
 
 - Do not hardcode provider keys, master keys, OAuth tokens, or customer URLs with embedded secrets.
-- Store secrets in the server-manager vault or runtime environment.
+- Store secrets in the credential-vault skill or runtime environment.
 - Prefer routable LAN or localhost URLs over Docker-only hostnames.
 - Keep model IDs configurable per agent. Do not assume one global model is always safe to use.
 - Do not use model-invocation heartbeats for agent liveness; monitor process/task state and logs.
 
 ## Reference Shape
 
-Current lab proxy:
+Reference proxy configuration:
 
-- Base URL: `http://192.168.50.222:4001`
+- Base URL: `http://${AI_PROXY_HOST:-127.0.0.1}:4001`
 - Fast local model: `qwen/qwen3.6-27b`
 - Slower local model aliases may exist for older GPUs.
 

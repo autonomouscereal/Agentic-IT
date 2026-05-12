@@ -50,7 +50,7 @@ Use the gate card's **full gate audit** link to show the underlying audit fields
 Quick proof before the demo:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_local_model_agent.py http://localhost:25480 qwen/qwen3.6-27b
 ```
 
@@ -71,7 +71,7 @@ Use `qwen/qwen3.6-27b` for speed.
 1. Open dashboard:
 
 ```text
-http://192.168.50.222:25480
+http://127.0.0.1:25480
 ```
 
 2. Show runner health on Agents page:
@@ -127,7 +127,7 @@ This is the strongest proof that the system is more than a dashboard and more
 than code completion.
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/agentic_cicd_full_demo.py --base http://localhost:25480 --model qwen/qwen3.6-27b
 ```
 
@@ -155,7 +155,7 @@ Latest verified demo artifacts:
 - Remediation change `34`
 - Final scanner run `10`
 - Deployment gate `36`
-- Patch artifact `/home/cereal/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch`
+- Patch artifact `/opt/agentic-it/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch`
 
 ## GitLab Runner Agent Demo Path
 
@@ -165,24 +165,24 @@ failed gate, the local model remediates the repository after approval, and
 GitLab reruns the branch to a clean pass.
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/agentic_gitlab_cicd_demo.py \
   --dashboard http://localhost:25480 \
   --gitlab http://localhost \
   --model qwen/qwen3.6-27b \
-  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs \
+  --workspace /opt/agentic-it/SOC_TESTING/soc-dashboard/demo_runs \
   --timeout 3000
 ```
 
 The runner must be able to reach the dashboard and GitLab from inside job
 containers. In the reference deployment the runner uses `network_mode =
 "gitlab-net"`, mounts `/tmp/zap-wrk:/zap/wrk`, and passes
-`SOC_DASHBOARD_URL=http://192.168.50.222:25480` to jobs.
+`SOC_DASHBOARD_URL=http://127.0.0.1:25480` to jobs.
 
 Latest verified GitLab runner artifacts:
 
 - GitLab project `root/agentic-cicd-demo-1778538475`, project id `15`
-- Project URL `http://192.168.50.222/root/agentic-cicd-demo-1778538475`
+- Project URL `http://127.0.0.1/root/agentic-cicd-demo-1778538475`
 - Ticket `83`
 - Initial GitLab pipeline `9`: failed as intended after all scanner jobs ran
 - Initial dashboard CI/CD run `11`: failed with seven findings
@@ -195,11 +195,11 @@ Latest verified GitLab runner artifacts:
 - Final dashboard CI/CD run `12`: passed with zero findings
 - Deployment change `40`: approved and completed
 - Postmortem `21`: ready for review
-- Full log `/home/cereal/SOC_TESTING/soc-dashboard/demo_runs/gitlab_agentic_cicd_20260511_162755.log`
+- Full log `/opt/agentic-it/SOC_TESTING/soc-dashboard/demo_runs/gitlab_agentic_cicd_20260511_162755.log`
 
 Live verification:
 
-- MR URL `http://192.168.50.222/root/agentic-cicd-demo-1778538475/-/merge_requests/1`
+- MR URL `http://127.0.0.1/root/agentic-cicd-demo-1778538475/-/merge_requests/1`
 - Pipeline `9` on `main`: failed by design; unit tests and all scanner jobs
   succeeded, dashboard gate failed because findings existed
 - Pipeline `10` on `agent/remediate-security-gate`: success; unit tests,

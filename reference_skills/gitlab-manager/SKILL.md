@@ -11,7 +11,7 @@ Complete deployment, management, and testing toolkit for GitLab CE 17.x with Git
 ## Quick Deploy
 
 ```bash
-# On the target server, from /home/cereal/gitlab/:
+# On the target server, from /opt/agentic-it/gitlab/:
 bash scripts/deploy.sh --fresh
 ```
 
@@ -29,25 +29,25 @@ Both containers communicate over a private Docker bridge network (`gitlab-net`).
 ## File Structure
 
 ```
-/home/cereal/gitlab/              # Server deployment directory
-├── docker-compose.yml            # Service definitions
-├── .env                          # Secrets (chmod 600) - NEVER commit
-├── .gitlab-token                 # PAT for API auth (chmod 600)
-├── scripts/
-│   ├── deploy.sh                 # Deployment orchestrator
-│   ├── manage.sh                 # Day-to-day management CLI
-│   ├── health_check.sh           # Health monitoring
-│   ├── backup.sh                 # Backup/restore
-│   └── reset_password.sh         # Rails-based password reset
-└── tests/
-    └── test_all_v2.sh            # 31-test E2E suite (all pass)
+/opt/agentic-it/gitlab/              # Server deployment directory
+|-- docker-compose.yml            # Service definitions
+|-- .env                          # Secrets (chmod 600) - NEVER commit
+|-- .gitlab-token                 # PAT for API auth (chmod 600)
+|-- scripts/
+|   |-- deploy.sh                 # Deployment orchestrator
+|   |-- manage.sh                 # Day-to-day management CLI
+|   |-- health_check.sh           # Health monitoring
+|   |-- backup.sh                 # Backup/restore
+|   `-- reset_password.sh         # Rails-based password reset
+`-- tests/
+    `-- test_all_v2.sh            # 31-test E2E suite (all pass)
 
-C:/Users/cereal/.Codex/skills/gitlab-manager/  # Local skill directory
-├── SKILL.md                      # This file
-├── docker-compose.yml            # Template (identical to server copy)
-├── .env.example                  # Template - fill in and deploy
-├── scripts/                      # All scripts above
-└── tests/                        # All test scripts above
+C:/Users/me/.Codex/skills/gitlab-manager/  # Local skill directory
+|-- SKILL.md                      # This file
+|-- docker-compose.yml            # Template (identical to server copy)
+|-- .env.example                  # Template - fill in and deploy
+|-- scripts/                      # All scripts above
+`-- tests/                        # All test scripts above
 ```
 
 ## Deployment Process
@@ -59,7 +59,7 @@ C:/Users/cereal/.Codex/skills/gitlab-manager/  # Local skill directory
 
 ### Step-by-step for a new environment
 
-1. **Copy files**: Upload `docker-compose.yml`, all scripts, and `.env.example` to the target server's deployment directory (e.g., `/home/cereal/gitlab/`)
+1. **Copy files**: Upload `docker-compose.yml`, all scripts, and `.env.example` to the target server's deployment directory (e.g., `/opt/agentic-it/gitlab/`)
 
 2. **Generate credentials**: The deploy script auto-generates a secure root password via OpenSSL if no `.env` exists. Alternatively, create one manually:
    ```bash
@@ -129,7 +129,7 @@ bash scripts/health_check.sh --verbose
 GitLab 17.x **removed** the `/api/v4/session` endpoint. All API calls must use a Personal Access Token (PAT):
 
 ```bash
-curl -H "PRIVATE-TOKEN: glpat-YOUR_TOKEN" http://192.168.50.222/api/v4/user
+curl -H "PRIVATE-TOKEN: glpat-YOUR_TOKEN" http://127.0.0.1/api/v4/user
 ```
 
 Create PATs via the UI or API:
@@ -154,7 +154,7 @@ These were discovered through extensive testing and debugging:
 
 **Create project in a group:**
 ```bash
-curl -X POST http://192.168.50.222/api/v4/projects \
+curl -X POST http://127.0.0.1/api/v4/projects \
   -H "PRIVATE-TOKEN: $TOKEN" \
   -d "name=my-project" -d "namespace_id=7" \
   -d "visibility=internal" -d "initialize_with_readme=true"
@@ -162,7 +162,7 @@ curl -X POST http://192.168.50.222/api/v4/projects \
 
 **Create file via API:**
 ```bash
-curl -X POST http://192.168.50.222/api/v4/projects/$PID/repository/commits \
+curl -X POST http://127.0.0.1/api/v4/projects/$PID/repository/commits \
   -H "PRIVATE-TOKEN: $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"branch":"feature","start_branch":"main","commit_message":"add file",
@@ -202,7 +202,7 @@ The test suite is idempotent: it creates a unique test group per run and cleans 
 ### GitLab won't start / health check fails
 ```bash
 # Check logs
-cd /home/cereal/gitlab && docker compose logs --tail=100 gitlab
+cd /opt/agentic-it/gitlab && docker compose logs --tail=100 gitlab
 
 # First boot takes 3-7 minutes. Subsequent boots are faster.
 # If stuck > 10 minutes, check RAM: GitLab needs 4GB+ for comfortable operation
