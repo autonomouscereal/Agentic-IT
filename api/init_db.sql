@@ -307,6 +307,9 @@ CREATE TABLE IF NOT EXISTS service_raci_rules (
     approval_action VARCHAR(240),
     risk_level VARCHAR(40) DEFAULT 'low',
     knowledge_tags JSONB NOT NULL DEFAULT '[]',
+    auto_assign_agent BOOLEAN NOT NULL DEFAULT false,
+    auto_agent_model VARCHAR(200) DEFAULT 'qwen/qwen3.6-27b',
+    auto_agent_prompt TEXT,
     enabled BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -447,6 +450,16 @@ ON CONFLICT (name) DO UPDATE SET
     enabled = true,
     updated_at = NOW();
 
+UPDATE service_raci_rules
+SET auto_assign_agent = true,
+    auto_agent_model = COALESCE(auto_agent_model, 'qwen/qwen3.6-27b'),
+    auto_agent_prompt = COALESCE(
+        auto_agent_prompt,
+        'Auto-work Security Operations phishing tickets end to end. Read all canonical context and provider evidence, create approval gates for remediation actions, complete approved lab-safe actions with evidence, and recommend postmortem/workflow improvements.'
+    ),
+    updated_at = NOW()
+WHERE name = 'Phishing report';
+
 -- Baseline global skills for fresh installs
 INSERT INTO agent_skills (name, description, category, prompt_template, enabled, assigned_to_all)
 VALUES
@@ -561,6 +574,7 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_user_roles_user ON dashboard_user_roles
 CREATE INDEX IF NOT EXISTS idx_service_groups_enabled ON service_groups(enabled);
 CREATE INDEX IF NOT EXISTS idx_service_raci_rules_enabled ON service_raci_rules(enabled);
 CREATE INDEX IF NOT EXISTS idx_service_raci_rules_intent ON service_raci_rules(intent);
+CREATE INDEX IF NOT EXISTS idx_service_raci_rules_auto_agent ON service_raci_rules(auto_assign_agent) WHERE enabled = true;
 CREATE INDEX IF NOT EXISTS idx_service_intake_ticket ON service_intake_sessions(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_service_intake_created ON service_intake_sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_cicd_security_runs_created ON cicd_security_runs(created_at);

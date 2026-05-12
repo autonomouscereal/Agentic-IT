@@ -38,6 +38,7 @@ def main():
     require(classification.get("intent") == "phishing", f"expected phishing, got {classification}")
     require(classification.get("ticket_class") == "Incident", "phishing should route as Incident")
     require(classification.get("approval_required") is True, "phishing remediation should require approval")
+    require(classification.get("auto_assign_agent") is True, "phishing RACI rule should enable auto agent assignment")
 
     clarify = request("POST", "/api/intake/clarify", {
         "title": "Suspicious email",
@@ -68,6 +69,7 @@ def main():
         "approval_required": False,
         "risk_level": "low",
         "knowledge_tags": ["smoke"],
+        "auto_assign_agent": False,
     })
     require(rule.get("id"), f"rule create failed: {rule}")
     updated = request("PUT", f"/api/intake/raci/rules/{rule['id']}", {"priority": "P3"})
@@ -81,6 +83,7 @@ def main():
         "title": "Smoke phishing report",
         "message": "Smoke user reported phishing email with bad link and attachment.",
         "attachments": [{"filename": "reported-message.eml", "content_type": "message/rfc822"}],
+        "auto_assign": False,
     })
     ticket_id = submit.get("ticket", {}).get("id")
     require(ticket_id, f"intake did not create ticket: {submit}")
@@ -98,6 +101,7 @@ def main():
         "change_id": submit.get("change_id"),
         "intent": submit.get("classification", {}).get("intent"),
         "provider_sync_status": submit.get("ticket", {}).get("provider_sync_status"),
+        "auto_assignment": submit.get("auto_assignment", {}),
         "raci_rule_id": rule.get("id"),
     }))
 

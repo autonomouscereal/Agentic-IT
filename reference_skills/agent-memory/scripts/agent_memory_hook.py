@@ -19,7 +19,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from agent_memory import LOG_DIR, add_event_async, json_default, parse_json_arg
+from agent_memory import LOG_DIR, add_event_async, json_default, normalize_space, parse_json_arg
 
 
 SECRET_KEY_RE = re.compile(
@@ -118,6 +118,35 @@ def build_metadata(args: argparse.Namespace, payload: Any, raw_payload: str) -> 
     return metadata
 
 
+def derive_space(args: argparse.Namespace, payload: Any) -> str:
+    if args.space:
+        return normalize_space(args.space)
+    env_space = os.getenv("AGENT_MEMORY_SPACE", "").strip()
+    if env_space:
+        return normalize_space(env_space)
+    cwd = ""
+    if isinstance(payload, dict):
+        cwd = str(payload.get("cwd") or "")
+        if not cwd:
+            cwd = str((payload.get("raw_payload") or {}).get("cwd") or "") if isinstance(payload.get("raw_payload"), dict) else ""
+    cwd = cwd or os.getcwd()
+    normalized = cwd.replace("\\", "/").strip("/")
+    parts = [part for part in normalized.split("/") if part]
+    lowered = [part.lower() for part in parts]
+    if "codex" in lowered:
+        idx = lowered.index("codex")
+        tail = parts[idx + 1 : idx + 4]
+        if tail:
+            return normalize_space("codex/" + "/".join(tail))
+    if "soc-dashboard" in lowered:
+        return normalize_space("soc-dashboard")
+    if "memory_backend" in lowered:
+        return normalize_space("agent-memory/backend")
+    if parts:
+        return normalize_space("workspace/" + parts[-1])
+    return "global"
+
+
 async def run_hook(args: argparse.Namespace, raw: str, started: float) -> int:
     payload, raw_payload = parse_payload(raw)
     event_type, role = normalize_event(args.event)
@@ -128,16 +157,20 @@ async def run_hook(args: argparse.Namespace, raw: str, started: float) -> int:
     clean_payload = sanitize_value(payload)
     content = extract_text(clean_payload)
     metadata = build_metadata(args, clean_payload, raw_payload)
+    space = derive_space(args, clean_payload)
+    metadata["memory_space"] = space
 
     try:
         result = await add_event_async(
             agent=args.agent,
             event_type=event_type,
+            space=space,
+            memory_kind="hook",
             role=role,
             source=args.source,
             session_id=session_id,
             content=content,
-            tags=[args.agent, event_type, args.source, "asyncpg"],
+            tags=[args.agent, event_type, args.source, "asyncpg", space],
             metadata=metadata,
         )
         safe_log(
@@ -150,6 +183,7 @@ async def run_hook(args: argparse.Namespace, raw: str, started: float) -> int:
                 "event_type": event_type,
                 "agent": args.agent,
                 "source": args.source,
+                "space": space,
                 "session_id": session_id,
                 "memory_id": result["id"],
                 "inserted": result.get("inserted"),
@@ -171,6 +205,7 @@ async def run_hook(args: argparse.Namespace, raw: str, started: float) -> int:
                 "event": args.event,
                 "agent": args.agent,
                 "source": args.source,
+                "space": space,
                 "session_id": session_id,
                 "error_type": type(exc).__name__,
                 "error": str(exc),
@@ -189,6 +224,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--event", required=True)
     parser.add_argument("--agent", default=os.getenv("AGENT_MEMORY_AGENT", "agent"))
     parser.add_argument("--source", default="hook")
+    parser.add_argument("--space", default=os.getenv("AGENT_MEMORY_SPACE", ""))
     parser.add_argument("--session-id", default=os.getenv("CLAUDE_CODE_SESSION_ID", os.getenv("AGENT_MEMORY_SESSION_ID", "")))
     parser.add_argument("payload", nargs="*")
     return parser

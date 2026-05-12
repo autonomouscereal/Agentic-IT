@@ -1,6 +1,6 @@
 # SOC Dashboard API Reference
 
-Last updated: 2026-05-11.
+Last updated: 2026-05-12.
 
 Base URL in the current lab:
 
@@ -52,14 +52,17 @@ Example:
   "ticket_class": "Incident",
   "status": "new",
   "priority": "2",
-  "created_by": "dashboard"
+  "created_by": "dashboard",
+  "auto_assign": true
 }
 ```
 
 Ticket creation syncs to the active external provider automatically when one is
 configured, and falls back to `provider_sync_status=local_only` otherwise. For
 iTop Incident/UserRequest creation, configure `ITOP_DEFAULT_ORG_ID` and
-`ITOP_DEFAULT_CALLER_ID`.
+`ITOP_DEFAULT_CALLER_ID`. When `auto_assign` is true, the dashboard evaluates
+enabled RACI rules with `auto_assign_agent=true` and spawns an agent only when
+one of those rules matches.
 
 `GET /api/tickets/{ticket_id}`
 
@@ -376,6 +379,12 @@ Service desk intake:
 - `POST /api/intake/classify`
 - `POST /api/intake/submit`
 - `GET /api/intake/sessions`
+
+RACI rules may include `auto_assign_agent`, `auto_agent_model`, and
+`auto_agent_prompt`. The seeded phishing rule enables auto-assignment for
+Security Operations phishing incidents; other rules remain manual unless this
+flag is set. `POST /api/intake/submit` accepts `auto_assign=false` for smoke
+tests or manual-only submissions.
 
 CI/CD security:
 

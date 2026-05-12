@@ -119,6 +119,21 @@ Covers:
 - automatic provider sync fallback to `local_only` when outbound provider
   creation is not fully configured
 
+## RACI Auto-Assignment Policy Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_auto_assignment_policy.py
+```
+
+Covers:
+
+- matching Security Operations phishing tickets auto-spawn exactly one agent
+- the policy prompt is included in the standard ticket-resolution prompt
+- non-matching tickets remain in the manual queue
+- tickets with an existing agent are not duplicated
+- an internal ticket note is recorded for the assignment
+
 ## Awaiting User Response Smoke
 
 ```bash

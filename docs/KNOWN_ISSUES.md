@@ -593,6 +593,42 @@ Verified:
 - `python3 cli.py --config production_config.json poll --baseline` completed
   successfully and sent 0 notifications.
 
+### Incoming tickets can now auto-assign agents by RACI policy
+
+Status: fixed during the 2026-05-12 real agentic bridge acceptance pass.
+
+Problem:
+
+- Bridge-created or provider-synced tickets currently require manual agent
+  assignment from the dashboard or an explicit `/assign-agent` API call.
+- A production control plane needs configurable assignment policy: some RACI
+  groups, intents, severities, providers, or ticket classes should immediately
+  spawn an agent, while other tickets should stay in a manual queue.
+
+Impact:
+
+- Real bridge flows can create and sync tickets but do not yet prove the
+  intended hands-free path from incoming event to agent work.
+- This weakens the customer pitch because the system appears to need an
+  operator click at the exact point where automation should begin.
+
+Fix:
+
+- Added RACI rule fields `auto_assign_agent`, `auto_agent_model`, and
+  `auto_agent_prompt`.
+- Seeded the phishing RACI rule so Security Operations phishing incidents
+  auto-spawn a ticket agent.
+- Wired policy evaluation into direct ticket creation, service-desk intake after
+  classification notes/approval gates are written, and iTop sync for newly
+  discovered provider tickets.
+- Kept manual routing as the default for rules where `auto_assign_agent=false`.
+
+Verified:
+
+- `python -m py_compile api/services/auto_assignment.py api/services/ticket_service.py api/services/itop_sync.py api/routes/intake.py api/routes/tickets.py`: PASS.
+- `python -m unittest tests.test_auto_assignment tests.test_provider_registry tests.test_itop_outbound`: PASS.
+- `python scripts/smoke_auto_assignment_policy.py`: PASS.
+
 ## Current Limitations
 
 ### iTop outbound creation needs environment-specific defaults

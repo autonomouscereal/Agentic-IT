@@ -26,6 +26,7 @@ import asyncpg
 
 
 VECTOR_DIMS = 384
+DEFAULT_SPACE = os.getenv("AGENT_MEMORY_SPACE", "global").strip() or "global"
 DEFAULT_DB = {
     "host": "192.168.50.222",
     "port": 25490,
@@ -102,6 +103,10 @@ async def connect() -> asyncpg.Connection:
 
 
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_./:-]*", re.IGNORECASE)
+ENTITY_RE = re.compile(
+    r"\b(?:[A-Z][A-Za-z0-9_.:/-]{2,}|[a-z0-9]+(?:[-_/.:][a-z0-9]+)+)"
+    r"(?:\s+(?:[A-Z][A-Za-z0-9_.:/-]{2,}|[a-z0-9]+(?:[-_/.:][a-z0-9]+)+)){0,4}\b"
+)
 
 
 def stem_token(token: str) -> list[str]:
@@ -164,6 +169,45 @@ def summarize(content: str, limit: int = 280) -> str:
     return one_line[: limit - 3] + "..."
 
 
+def normalize_space(space: str | None) -> str:
+    value = (space or DEFAULT_SPACE or "global").strip().lower()
+    value = re.sub(r"[^a-z0-9_.:/-]+", "-", value).strip("-")
+    return value[:160] or "global"
+
+
+def normalize_entity_name(name: str) -> str:
+    return re.sub(r"\s+", " ", (name or "").strip())[:240]
+
+
+def extract_entities(content: str, tags: list[str] | None = None, metadata: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    """Extract lightweight concept candidates for the memory knowledge graph."""
+    candidates: dict[str, dict[str, str]] = {}
+    for item in (metadata or {}).get("entities", []) if isinstance(metadata, dict) else []:
+        if isinstance(item, dict):
+            name = normalize_entity_name(str(item.get("name") or ""))
+            kind = str(item.get("kind") or "concept").strip().lower() or "concept"
+        else:
+            name = normalize_entity_name(str(item))
+            kind = "concept"
+        if name:
+            candidates[name.lower()] = {"name": name, "kind": kind[:80]}
+
+    for tag in tags or []:
+        tag_text = normalize_entity_name(str(tag))
+        if tag_text and len(tag_text) >= 4 and tag_text not in {"asyncpg", "memory"}:
+            candidates.setdefault(tag_text.lower(), {"name": tag_text, "kind": "tag"})
+
+    for match in ENTITY_RE.findall(content or ""):
+        name = normalize_entity_name(match)
+        lowered = name.lower()
+        if len(name) < 4 or lowered in {"http", "https", "json", "true", "false", "null"}:
+            continue
+        candidates.setdefault(lowered, {"name": name, "kind": "concept"})
+        if len(candidates) >= 32:
+            break
+    return list(candidates.values())[:32]
+
+
 async def _execute_ddl(conn: asyncpg.Connection, sql: str) -> None:
     try:
         await conn.execute(sql)
@@ -184,13 +228,35 @@ async def init_db_async() -> dict[str, Any]:
         await _execute_ddl(
             conn,
             """
+            CREATE TABLE IF NOT EXISTS agent_memory_spaces (
+                space TEXT PRIMARY KEY,
+                description TEXT,
+                parent_space TEXT REFERENCES agent_memory_spaces(space) ON DELETE SET NULL,
+                metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+        )
+        await conn.execute(
+            """
+            INSERT INTO agent_memory_spaces (space, description)
+            VALUES ('global', 'Default shared memory space for unscoped legacy events.')
+            ON CONFLICT (space) DO NOTHING
+            """
+        )
+        await _execute_ddl(
+            conn,
+            """
             CREATE TABLE IF NOT EXISTS agent_memory_events (
                 id BIGSERIAL PRIMARY KEY,
                 event_uid TEXT UNIQUE NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                space TEXT NOT NULL DEFAULT 'global',
                 session_id TEXT,
                 agent TEXT NOT NULL,
                 event_type TEXT NOT NULL,
+                memory_kind TEXT NOT NULL DEFAULT 'event',
                 role TEXT,
                 source TEXT,
                 content TEXT NOT NULL,
@@ -204,7 +270,74 @@ async def init_db_async() -> dict[str, Any]:
             )
             """,
         )
+        await _execute_ddl(conn, "ALTER TABLE agent_memory_events ADD COLUMN IF NOT EXISTS space TEXT NOT NULL DEFAULT 'global'")
+        await _execute_ddl(conn, "ALTER TABLE agent_memory_events ADD COLUMN IF NOT EXISTS memory_kind TEXT NOT NULL DEFAULT 'event'")
+        await _execute_ddl(
+            conn,
+            """
+            CREATE TABLE IF NOT EXISTS agent_memory_entities (
+                id BIGSERIAL PRIMARY KEY,
+                space TEXT NOT NULL DEFAULT 'global',
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'concept',
+                summary TEXT,
+                metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+        )
+        await _execute_ddl(
+            conn,
+            """
+            CREATE TABLE IF NOT EXISTS agent_memory_entity_mentions (
+                event_id BIGINT NOT NULL REFERENCES agent_memory_events(id) ON DELETE CASCADE,
+                entity_id BIGINT NOT NULL REFERENCES agent_memory_entities(id) ON DELETE CASCADE,
+                weight REAL NOT NULL DEFAULT 1.0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (event_id, entity_id)
+            )
+            """,
+        )
+        await _execute_ddl(
+            conn,
+            """
+            CREATE TABLE IF NOT EXISTS agent_memory_entity_edges (
+                id BIGSERIAL PRIMARY KEY,
+                space TEXT NOT NULL DEFAULT 'global',
+                source_entity_id BIGINT NOT NULL REFERENCES agent_memory_entities(id) ON DELETE CASCADE,
+                target_entity_id BIGINT NOT NULL REFERENCES agent_memory_entities(id) ON DELETE CASCADE,
+                relation TEXT NOT NULL DEFAULT 'related_to',
+                description TEXT,
+                metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+        )
+        await _execute_ddl(
+            conn,
+            """
+            CREATE TABLE IF NOT EXISTS agent_memory_event_links (
+                id BIGSERIAL PRIMARY KEY,
+                source_event_id BIGINT NOT NULL REFERENCES agent_memory_events(id) ON DELETE CASCADE,
+                target_event_id BIGINT NOT NULL REFERENCES agent_memory_events(id) ON DELETE CASCADE,
+                link_type TEXT NOT NULL DEFAULT 'related_to',
+                description TEXT,
+                metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+        )
         ddl = [
+            """
+            CREATE INDEX IF NOT EXISTS agent_memory_events_space_created_idx
+            ON agent_memory_events (space, created_at DESC)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS agent_memory_events_space_kind_idx
+            ON agent_memory_events (space, memory_kind, created_at DESC)
+            """,
             """
             CREATE INDEX IF NOT EXISTS agent_memory_events_created_idx
             ON agent_memory_events (created_at DESC)
@@ -230,6 +363,30 @@ async def init_db_async() -> dict[str, Any]:
             ON agent_memory_events USING hnsw (embedding vector_cosine_ops)
             WITH (m = 16, ef_construction = 100)
             """,
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS agent_memory_entities_space_name_kind_uidx
+            ON agent_memory_entities (space, lower(name), kind)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS agent_memory_entities_space_idx
+            ON agent_memory_entities (space, kind, updated_at DESC)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS agent_memory_entities_name_trgm_idx
+            ON agent_memory_entities USING GIN (name gin_trgm_ops)
+            """,
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS agent_memory_entity_edges_uidx
+            ON agent_memory_entity_edges (space, source_entity_id, target_entity_id, relation)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS agent_memory_entity_edges_source_idx
+            ON agent_memory_entity_edges (source_entity_id, relation)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS agent_memory_event_links_source_idx
+            ON agent_memory_event_links (source_event_id, link_type)
+            """,
         ]
         for sql in ddl:
             await _execute_ddl(conn, sql)
@@ -238,11 +395,21 @@ async def init_db_async() -> dict[str, Any]:
         await conn.close()
 
 
-def make_uid(agent: str, event_type: str, session_id: str, content: str, metadata: dict[str, Any]) -> str:
+def make_uid(
+    agent: str,
+    event_type: str,
+    session_id: str,
+    content: str,
+    metadata: dict[str, Any],
+    space: str = "",
+    memory_kind: str = "event",
+) -> str:
     seed = json.dumps(
         {
+            "space": normalize_space(space),
             "agent": agent,
             "event_type": event_type,
+            "memory_kind": memory_kind,
             "session_id": session_id,
             "content": content,
             "metadata": metadata,
@@ -254,11 +421,123 @@ def make_uid(agent: str, event_type: str, session_id: str, content: str, metadat
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
+async def ensure_space_async(
+    space: str,
+    *,
+    description: str = "",
+    parent_space: str = "",
+    metadata: dict[str, Any] | None = None,
+    conn: asyncpg.Connection | None = None,
+) -> str:
+    normalized = normalize_space(space)
+    if normalized == parent_space:
+        parent_space = ""
+    own_conn = conn is None
+    conn = conn or await connect()
+    try:
+        if parent_space:
+            await ensure_space_async(parent_space, conn=conn)
+        await conn.execute(
+            """
+            INSERT INTO agent_memory_spaces (space, description, parent_space, metadata)
+            VALUES ($1, $2, $3, $4::JSONB)
+            ON CONFLICT (space) DO UPDATE SET
+                description = COALESCE(NULLIF(EXCLUDED.description, ''), agent_memory_spaces.description),
+                parent_space = COALESCE(EXCLUDED.parent_space, agent_memory_spaces.parent_space),
+                metadata = agent_memory_spaces.metadata || EXCLUDED.metadata,
+                updated_at = NOW()
+            """,
+            normalized,
+            description or None,
+            normalize_space(parent_space) if parent_space else None,
+            metadata or {},
+        )
+        return normalized
+    finally:
+        if own_conn:
+            await conn.close()
+
+
+async def upsert_entity_async(
+    space: str,
+    name: str,
+    *,
+    kind: str = "concept",
+    summary: str = "",
+    metadata: dict[str, Any] | None = None,
+    conn: asyncpg.Connection | None = None,
+) -> int | None:
+    name = normalize_entity_name(name)
+    if not name:
+        return None
+    own_conn = conn is None
+    conn = conn or await connect()
+    try:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO agent_memory_entities (space, name, kind, summary, metadata)
+            VALUES ($1, $2, $3, $4, $5::JSONB)
+            ON CONFLICT (space, lower(name), kind) DO UPDATE SET
+                summary = COALESCE(NULLIF(EXCLUDED.summary, ''), agent_memory_entities.summary),
+                metadata = agent_memory_entities.metadata || EXCLUDED.metadata,
+                updated_at = NOW()
+            RETURNING id
+            """,
+            normalize_space(space),
+            name,
+            (kind or "concept")[:80],
+            summary or None,
+            metadata or {},
+        )
+        return row["id"] if row else None
+    finally:
+        if own_conn:
+            await conn.close()
+
+
+async def mention_entities_async(
+    event_id: int,
+    space: str,
+    entities: list[dict[str, str]],
+    *,
+    conn: asyncpg.Connection | None = None,
+) -> list[int]:
+    own_conn = conn is None
+    conn = conn or await connect()
+    mentioned: list[int] = []
+    try:
+        for entity in entities:
+            entity_id = await upsert_entity_async(
+                space,
+                entity.get("name", ""),
+                kind=entity.get("kind") or "concept",
+                conn=conn,
+            )
+            if not entity_id:
+                continue
+            await conn.execute(
+                """
+                INSERT INTO agent_memory_entity_mentions (event_id, entity_id, weight)
+                VALUES ($1, $2, 1.0)
+                ON CONFLICT (event_id, entity_id) DO UPDATE SET weight = GREATEST(agent_memory_entity_mentions.weight, 1.0)
+                """,
+                event_id,
+                entity_id,
+            )
+            mentioned.append(entity_id)
+        return mentioned
+    finally:
+        if own_conn:
+            await conn.close()
+
+
 async def add_event_async(
     *,
     agent: str,
     event_type: str,
     content: str,
+    space: str = "",
+    memory_kind: str = "event",
     role: str = "",
     source: str = "",
     session_id: str = "",
@@ -267,29 +546,34 @@ async def add_event_async(
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     await init_db_async()
+    space = normalize_space(space)
     metadata = metadata or {}
     tags = tags or []
     summary = summary or summarize(content)
-    event_uid = make_uid(agent, event_type, session_id, content, metadata)
+    event_uid = make_uid(agent, event_type, session_id, content, metadata, space, memory_kind)
     embedding = vector_literal(cpu_embedding(content + "\n" + summary))
 
     conn = await connect()
     try:
+        await ensure_space_async(space, conn=conn)
         row = await conn.fetchrow(
             """
             INSERT INTO agent_memory_events (
-                event_uid, session_id, agent, event_type, role, source,
+                event_uid, space, session_id, agent, event_type, memory_kind, role, source,
                 content, summary, tags, metadata, embedding
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::TEXT[], $10::JSONB, $11::VECTOR)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::TEXT[], $12::JSONB, $13::VECTOR)
             ON CONFLICT (event_uid) DO UPDATE SET
-                metadata = agent_memory_events.metadata || EXCLUDED.metadata
+                metadata = agent_memory_events.metadata || EXCLUDED.metadata,
+                space = COALESCE(NULLIF(EXCLUDED.space, 'global'), agent_memory_events.space)
             RETURNING id, created_at, (xmax = 0) AS inserted
             """,
             event_uid,
+            space,
             session_id or None,
             agent,
             event_type,
+            memory_kind or "event",
             role or None,
             source or None,
             content,
@@ -298,12 +582,17 @@ async def add_event_async(
             metadata,
             embedding,
         )
+        entities = extract_entities(content + "\n" + summary, tags, metadata)
+        mentioned = await mention_entities_async(row["id"], space, entities, conn=conn)
         return {
             "ok": True,
             "id": row["id"],
             "created_at": row["created_at"],
             "inserted": bool(row["inserted"]),
             "event_uid": event_uid,
+            "space": space,
+            "memory_kind": memory_kind or "event",
+            "entities": len(mentioned),
         }
     finally:
         await conn.close()
@@ -313,8 +602,11 @@ async def search_events_async(
     query: str,
     *,
     limit: int = 10,
+    space: str = "",
+    all_spaces: bool = False,
     agent: str = "",
     event_type: str = "",
+    memory_kind: str = "",
     tags: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     await init_db_async()
@@ -322,6 +614,10 @@ async def search_events_async(
     filters = []
     params: list[Any] = [query, qvec, query]
     idx = 4
+    if space and not all_spaces:
+        filters.append(f"space = ${idx}")
+        params.append(normalize_space(space))
+        idx += 1
     if agent:
         filters.append(f"agent = ${idx}")
         params.append(agent)
@@ -329,6 +625,10 @@ async def search_events_async(
     if event_type:
         filters.append(f"event_type = ${idx}")
         params.append(event_type)
+        idx += 1
+    if memory_kind:
+        filters.append(f"memory_kind = ${idx}")
+        params.append(memory_kind)
         idx += 1
     if tags:
         filters.append(f"tags && ${idx}::TEXT[]")
@@ -348,7 +648,7 @@ async def search_events_async(
                     $3 AS raw_query
             )
             SELECT
-                id, created_at, session_id, agent, event_type, role, source,
+                id, created_at, space, session_id, agent, event_type, memory_kind, role, source,
                 summary, tags, metadata,
                 left(content, 2400) AS content,
                 1 - (embedding <=> (SELECT emb FROM q)) AS semantic_score,
@@ -371,7 +671,13 @@ async def search_events_async(
         await conn.close()
 
 
-async def audit_events_async(limit: int = 20, session_id: str = "", agent: str = "") -> list[dict[str, Any]]:
+async def audit_events_async(
+    limit: int = 20,
+    session_id: str = "",
+    agent: str = "",
+    space: str = "",
+    all_spaces: bool = False,
+) -> list[dict[str, Any]]:
     await init_db_async()
     filters = []
     params: list[Any] = []
@@ -384,6 +690,10 @@ async def audit_events_async(limit: int = 20, session_id: str = "", agent: str =
         filters.append(f"agent = ${idx}")
         params.append(agent)
         idx += 1
+    if space and not all_spaces:
+        filters.append(f"space = ${idx}")
+        params.append(normalize_space(space))
+        idx += 1
     where = ("WHERE " + " AND ".join(filters)) if filters else ""
     params.append(limit)
 
@@ -391,7 +701,7 @@ async def audit_events_async(limit: int = 20, session_id: str = "", agent: str =
     try:
         rows = await conn.fetch(
             f"""
-            SELECT id, created_at, session_id, agent, event_type, role, source,
+            SELECT id, created_at, space, session_id, agent, event_type, memory_kind, role, source,
                    summary, tags, metadata, left(content, 2400) AS content
             FROM agent_memory_events
             {where}
@@ -412,10 +722,27 @@ async def status_async() -> dict[str, Any]:
         total = await conn.fetchval("SELECT count(*) AS total FROM agent_memory_events")
         breakdown_rows = await conn.fetch(
             """
-            SELECT agent, event_type, count(*) AS count
+            SELECT space, agent, event_type, count(*) AS count
             FROM agent_memory_events
-            GROUP BY agent, event_type
-            ORDER BY agent, event_type
+            GROUP BY space, agent, event_type
+            ORDER BY space, agent, event_type
+            """
+        )
+        space_rows = await conn.fetch(
+            """
+            SELECT s.space, s.description, s.parent_space, count(e.id) AS events
+            FROM agent_memory_spaces s
+            LEFT JOIN agent_memory_events e ON e.space = s.space
+            GROUP BY s.space, s.description, s.parent_space
+            ORDER BY s.space
+            """
+        )
+        graph_counts = await conn.fetchrow(
+            """
+            SELECT
+                (SELECT count(*) FROM agent_memory_entities) AS entities,
+                (SELECT count(*) FROM agent_memory_entity_edges) AS entity_edges,
+                (SELECT count(*) FROM agent_memory_event_links) AS event_links
             """
         )
         span = await conn.fetchrow(
@@ -429,8 +756,135 @@ async def status_async() -> dict[str, Any]:
             "driver": "asyncpg",
             "total": total,
             "span": dict(span) if span else {},
+            "spaces": [dict(row) for row in space_rows],
+            "graph": dict(graph_counts) if graph_counts else {},
             "breakdown": [dict(row) for row in breakdown_rows],
         }
+    finally:
+        await conn.close()
+
+
+async def list_spaces_async() -> list[dict[str, Any]]:
+    await init_db_async()
+    conn = await connect()
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT s.*, count(e.id) AS event_count
+            FROM agent_memory_spaces s
+            LEFT JOIN agent_memory_events e ON e.space = s.space
+            GROUP BY s.space, s.description, s.parent_space, s.metadata, s.created_at, s.updated_at
+            ORDER BY s.updated_at DESC, s.space
+            """
+        )
+        return [dict(row) for row in rows]
+    finally:
+        await conn.close()
+
+
+async def search_entities_async(query: str = "", *, space: str = "", all_spaces: bool = False, limit: int = 20) -> list[dict[str, Any]]:
+    await init_db_async()
+    filters = []
+    params: list[Any] = []
+    idx = 1
+    if query:
+        filters.append(f"(name ILIKE ${idx} OR summary ILIKE ${idx})")
+        params.append(f"%{query}%")
+        idx += 1
+    if space and not all_spaces:
+        filters.append(f"space = ${idx}")
+        params.append(normalize_space(space))
+        idx += 1
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+    params.append(limit)
+    conn = await connect()
+    try:
+        rows = await conn.fetch(
+            f"""
+            SELECT e.*, count(m.event_id) AS mentions
+            FROM agent_memory_entities e
+            LEFT JOIN agent_memory_entity_mentions m ON m.entity_id = e.id
+            {where}
+            GROUP BY e.id
+            ORDER BY mentions DESC, e.updated_at DESC
+            LIMIT ${idx}
+            """,
+            *params,
+        )
+        return [dict(row) for row in rows]
+    finally:
+        await conn.close()
+
+
+async def relate_entities_async(
+    *,
+    source: str,
+    target: str,
+    relation: str = "related_to",
+    space: str = "",
+    description: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    await init_db_async()
+    space = normalize_space(space)
+    conn = await connect()
+    try:
+        await ensure_space_async(space, conn=conn)
+        source_id = await upsert_entity_async(space, source, conn=conn)
+        target_id = await upsert_entity_async(space, target, conn=conn)
+        if not source_id or not target_id:
+            return {"ok": False, "error": "source and target are required"}
+        row = await conn.fetchrow(
+            """
+            INSERT INTO agent_memory_entity_edges (
+                space, source_entity_id, target_entity_id, relation, description, metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6::JSONB)
+            ON CONFLICT (space, source_entity_id, target_entity_id, relation) DO UPDATE SET
+                description = COALESCE(NULLIF(EXCLUDED.description, ''), agent_memory_entity_edges.description),
+                metadata = agent_memory_entity_edges.metadata || EXCLUDED.metadata,
+                updated_at = NOW()
+            RETURNING id
+            """,
+            space,
+            source_id,
+            target_id,
+            relation or "related_to",
+            description or None,
+            metadata or {},
+        )
+        return {"ok": True, "id": row["id"], "space": space, "source_entity_id": source_id, "target_entity_id": target_id}
+    finally:
+        await conn.close()
+
+
+async def graph_neighbors_async(entity: str, *, space: str = "", all_spaces: bool = False, limit: int = 30) -> list[dict[str, Any]]:
+    await init_db_async()
+    filters = ["lower(src.name) = lower($1)"]
+    params: list[Any] = [entity]
+    idx = 2
+    if space and not all_spaces:
+        filters.append(f"edge.space = ${idx}")
+        params.append(normalize_space(space))
+        idx += 1
+    where = "WHERE " + " AND ".join(filters)
+    params.append(limit)
+    conn = await connect()
+    try:
+        rows = await conn.fetch(
+            f"""
+            SELECT edge.id, edge.space, src.name AS source, edge.relation,
+                   dst.name AS target, edge.description, edge.metadata, edge.updated_at
+            FROM agent_memory_entity_edges edge
+            JOIN agent_memory_entities src ON src.id = edge.source_entity_id
+            JOIN agent_memory_entities dst ON dst.id = edge.target_entity_id
+            {where}
+            ORDER BY edge.updated_at DESC
+            LIMIT ${idx}
+            """,
+            *params,
+        )
+        return [dict(row) for row in rows]
     finally:
         await conn.close()
 
@@ -447,12 +901,28 @@ def search_events(query: str, **kwargs: Any) -> list[dict[str, Any]]:
     return asyncio.run(search_events_async(query, **kwargs))
 
 
-def audit_events(limit: int = 20, session_id: str = "", agent: str = "") -> list[dict[str, Any]]:
-    return asyncio.run(audit_events_async(limit, session_id, agent))
+def audit_events(limit: int = 20, session_id: str = "", agent: str = "", space: str = "", all_spaces: bool = False) -> list[dict[str, Any]]:
+    return asyncio.run(audit_events_async(limit, session_id, agent, space, all_spaces))
 
 
 def status() -> dict[str, Any]:
     return asyncio.run(status_async())
+
+
+def list_spaces() -> list[dict[str, Any]]:
+    return asyncio.run(list_spaces_async())
+
+
+def search_entities(query: str = "", **kwargs: Any) -> list[dict[str, Any]]:
+    return asyncio.run(search_entities_async(query, **kwargs))
+
+
+def relate_entities(**kwargs: Any) -> dict[str, Any]:
+    return asyncio.run(relate_entities_async(**kwargs))
+
+
+def graph_neighbors(entity: str, **kwargs: Any) -> list[dict[str, Any]]:
+    return asyncio.run(graph_neighbors_async(entity, **kwargs))
 
 
 def read_content(args: argparse.Namespace) -> str:
@@ -513,7 +983,8 @@ def print_result(data: Any, as_json: bool = False) -> None:
             created = item.get("created_at")
             score = item.get("score")
             score_text = f" score={score:.3f}" if isinstance(score, float) else ""
-            print(f"[{item.get('id')}] {created} {item.get('agent')}/{item.get('event_type')}{score_text}")
+            space_text = f" space={item.get('space')}" if item.get("space") else ""
+            print(f"[{item.get('id')}] {created}{space_text} {item.get('agent')}/{item.get('event_type')}{score_text}")
             print(f"  {item.get('summary')}")
             print()
         return
@@ -523,19 +994,46 @@ def print_result(data: Any, as_json: bool = False) -> None:
 async def self_test_async() -> dict[str, Any]:
     await init_db_async()
     sentinel = "AGENT_MEMORY_SELF_TEST_20260512 asyncpg cpu embedder postgres semantic audit trace"
+    space_a = "self-test-alpha"
+    space_b = "self-test-beta"
     added = await add_event_async(
         agent="self_test",
         event_type="diagnostic",
+        space=space_a,
+        memory_kind="test",
         role="system",
         source="agent_memory.py",
         session_id="self-test",
         content=sentinel,
         tags=["self_test", "memory", "asyncpg"],
-        metadata={"test": True, "driver": "asyncpg"},
+        metadata={"test": True, "driver": "asyncpg", "entities": [{"name": "Agent Memory Spaces", "kind": "concept"}]},
     )
-    results = await search_events_async("asyncpg semantic audit trace memory self test", limit=5)
+    await add_event_async(
+        agent="self_test",
+        event_type="diagnostic",
+        space=space_b,
+        memory_kind="test",
+        role="system",
+        source="agent_memory.py",
+        session_id="self-test",
+        content="AGENT_MEMORY_SELF_TEST_20260512 beta isolated unrelated context marker",
+        tags=["self_test", "beta"],
+        metadata={"test": True, "entities": ["Memory Space Isolation"]},
+    )
+    relation = await relate_entities_async(
+        source="Agent Memory Spaces",
+        target="Memory Space Isolation",
+        relation="mitigates",
+        space=space_a,
+        description="Spaces prevent unrelated ideas and workflows from merging in default retrieval.",
+        metadata={"test": True},
+    )
+    results = await search_events_async("asyncpg semantic audit trace memory self test", space=space_a, limit=5)
+    beta_results = await search_events_async("beta isolated unrelated context marker", space=space_a, limit=5)
+    graph = await graph_neighbors_async("Agent Memory Spaces", space=space_a, limit=5)
     found = any(sentinel in r.get("content", "") for r in results)
-    return {"ok": found, "added": added, "top_results": results}
+    isolated = not any("beta isolated" in r.get("content", "") for r in beta_results)
+    return {"ok": found and isolated and bool(graph), "added": added, "relation": relation, "isolated": isolated, "top_results": results, "graph": graph}
 
 
 def self_test() -> dict[str, Any]:
@@ -554,6 +1052,8 @@ def build_parser() -> argparse.ArgumentParser:
     add = sub.add_parser("add", help="Add a memory event")
     add.add_argument("--agent", default=os.getenv("AGENT_MEMORY_AGENT", "agent"))
     add.add_argument("--event-type", default="observation")
+    add.add_argument("--space", default=os.getenv("AGENT_MEMORY_SPACE", DEFAULT_SPACE))
+    add.add_argument("--memory-kind", default="event")
     add.add_argument("--role", default="")
     add.add_argument("--source", default="")
     add.add_argument("--session-id", default=os.getenv("AGENT_MEMORY_SESSION_ID", ""))
@@ -567,14 +1067,45 @@ def build_parser() -> argparse.ArgumentParser:
     search = sub.add_parser("search", help="Search memory")
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=10)
+    search.add_argument("--space", default=os.getenv("AGENT_MEMORY_SPACE", ""))
+    search.add_argument("--all-spaces", action="store_true")
     search.add_argument("--agent", default="")
     search.add_argument("--event-type", default="")
+    search.add_argument("--memory-kind", default="")
     search.add_argument("--tags", default="")
 
     audit = sub.add_parser("audit", help="Show recent audit records")
     audit.add_argument("--limit", type=int, default=20)
+    audit.add_argument("--space", default=os.getenv("AGENT_MEMORY_SPACE", ""))
+    audit.add_argument("--all-spaces", action="store_true")
     audit.add_argument("--session-id", default="")
     audit.add_argument("--agent", default="")
+
+    spaces = sub.add_parser("spaces", help="List or upsert memory spaces")
+    spaces.add_argument("--space", default="")
+    spaces.add_argument("--description", default="")
+    spaces.add_argument("--parent-space", default="")
+    spaces.add_argument("--metadata", default="")
+
+    entities = sub.add_parser("entities", help="List/search graph entities")
+    entities.add_argument("--query", default="")
+    entities.add_argument("--space", default=os.getenv("AGENT_MEMORY_SPACE", ""))
+    entities.add_argument("--all-spaces", action="store_true")
+    entities.add_argument("--limit", type=int, default=20)
+
+    relate = sub.add_parser("relate", help="Create an entity relationship")
+    relate.add_argument("--space", default=os.getenv("AGENT_MEMORY_SPACE", DEFAULT_SPACE))
+    relate.add_argument("--source", required=True)
+    relate.add_argument("--target", required=True)
+    relate.add_argument("--relation", default="related_to")
+    relate.add_argument("--description", default="")
+    relate.add_argument("--metadata", default="")
+
+    graph = sub.add_parser("graph", help="Show graph neighbors for an entity")
+    graph.add_argument("entity")
+    graph.add_argument("--space", default=os.getenv("AGENT_MEMORY_SPACE", ""))
+    graph.add_argument("--all-spaces", action="store_true")
+    graph.add_argument("--limit", type=int, default=30)
 
     return parser
 
@@ -598,6 +1129,8 @@ async def run_cli(args: argparse.Namespace) -> int:
             await add_event_async(
                 agent=args.agent,
                 event_type=args.event_type,
+                space=args.space,
+                memory_kind=args.memory_kind,
                 role=args.role,
                 source=args.source,
                 session_id=args.session_id,
@@ -614,14 +1147,52 @@ async def run_cli(args: argparse.Namespace) -> int:
             await search_events_async(
                 args.query,
                 limit=args.limit,
+                space=args.space,
+                all_spaces=args.all_spaces,
                 agent=args.agent,
                 event_type=args.event_type,
+                memory_kind=args.memory_kind,
                 tags=tags,
             ),
             args.json,
         )
     elif args.command == "audit":
-        print_result(await audit_events_async(args.limit, args.session_id, args.agent), args.json)
+        print_result(await audit_events_async(args.limit, args.session_id, args.agent, args.space, args.all_spaces), args.json)
+    elif args.command == "spaces":
+        metadata = parse_json_arg(args.metadata, {})
+        if args.space:
+            await init_db_async()
+            space = await ensure_space_async(
+                args.space,
+                description=args.description,
+                parent_space=args.parent_space,
+                metadata=metadata,
+            )
+            print_result({"ok": True, "space": space}, args.json)
+        else:
+            print_result(await list_spaces_async(), args.json)
+    elif args.command == "entities":
+        print_result(
+            await search_entities_async(args.query, space=args.space, all_spaces=args.all_spaces, limit=args.limit),
+            args.json,
+        )
+    elif args.command == "relate":
+        print_result(
+            await relate_entities_async(
+                source=args.source,
+                target=args.target,
+                relation=args.relation,
+                space=args.space,
+                description=args.description,
+                metadata=parse_json_arg(args.metadata, {}),
+            ),
+            args.json,
+        )
+    elif args.command == "graph":
+        print_result(
+            await graph_neighbors_async(args.entity, space=args.space, all_spaces=args.all_spaces, limit=args.limit),
+            args.json,
+        )
     return 0
 
 

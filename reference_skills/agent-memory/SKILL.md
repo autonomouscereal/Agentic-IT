@@ -5,7 +5,7 @@ description: Deploy, test, search, and integrate the shared PostgreSQL/pgvector 
 
 # Agent Memory
 
-Shared long-term agent memory backed by raw PostgreSQL with pgvector. The bundled scripts use `asyncpg`, deterministic CPU embeddings, JSONB metadata, full-text search, trigram search, and hook ingestion for prompts, tool calls, and session lifecycle events.
+Shared long-term agent memory backed by raw PostgreSQL with pgvector. The bundled scripts use `asyncpg`, deterministic CPU embeddings, JSONB metadata, full-text search, trigram search, scoped memory spaces, a lightweight entity graph, and hook ingestion for prompts, tool calls, and session lifecycle events.
 
 ## Quick Commands
 
@@ -14,7 +14,9 @@ Set `AGENT_MEMORY_SKILL_DIR` to this skill folder when running manually:
 ```bash
 python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json status
 python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json self-test
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" search "what happened with memory hooks" --limit 10
+python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" search "what happened with memory hooks" --space agent-memory/backend --limit 10
+python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" search "what happened with memory hooks" --all-spaces --limit 10
+python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" spaces
 ```
 
 Store a deliberate note:
@@ -23,10 +25,25 @@ Store a deliberate note:
 python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" add \
   --agent Codex \
   --event-type note \
+  --space agent-memory/backend \
+  --memory-kind decision \
   --role assistant \
   --source manual \
   --tags memory,decision \
   --content "High-value fact to retrieve later."
+```
+
+Link concepts when a memory should intentionally bridge ideas:
+
+```bash
+python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" relate \
+  --space agent-memory/backend \
+  --source "Memory Spaces" \
+  --relation "mitigates" \
+  --target "Context Blending" \
+  --description "Scoped search keeps unrelated projects separate while --all-spaces enables broad retrieval."
+
+python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" graph "Memory Spaces" --space agent-memory/backend
 ```
 
 Run a hook ingestion test:
@@ -50,6 +67,8 @@ The scripts read these environment variables:
 | `MEMORY_DB_PASSWORD` | Direct password, preferred in containers. |
 | `MEMORY_DB_VAULT_KEY` | server-manager vault key. Defaults to `agent_memory_pg`. |
 | `SERVER_MANAGER_SKILL_DIR` | server-manager skill path for vault reads. |
+| `AGENT_MEMORY_SPACE` | Default memory space for add/search/audit/hook events. |
+| `AGENT_MEMORY_AGENT` | Agent name used by manual CLI and hooks when not passed explicitly. |
 
 Never hardcode passwords in source, skills, docs, or hook config. Use `MEMORY_DB_PASSWORD` from a generated environment file inside deployments, or use the server-manager vault on local workstations.
 
@@ -97,7 +116,15 @@ For Claude Code or compatible harnesses, add hooks that call `agent_memory_hook.
 }
 ```
 
-The hook reads JSON from stdin first and argv fallback second. It logs successes to `logs/agent_memory_hook_events.jsonl`, logs failures to `logs/agent_memory_hook_errors.jsonl`, redacts obvious secret fields, and exits zero on failure so memory cannot break the agent harness.
+The hook reads JSON from stdin first and argv fallback second. It logs successes to `logs/agent_memory_hook_events.jsonl`, logs failures to `logs/agent_memory_hook_errors.jsonl`, redacts obvious secret fields, and exits zero on failure so memory cannot break the agent harness. Hooks write into `AGENT_MEMORY_SPACE` when set; otherwise they infer a stable space from `cwd` such as `codex/2026-05-12/project-name`, `soc-dashboard`, or `agent-memory/backend`.
+
+## Memory Space Pattern
+
+- Use one space per project, ticket family, experiment, or major idea.
+- Search the current space first. Use `--all-spaces` only when deliberately looking for reusable context elsewhere.
+- Store durable decisions with `--memory-kind decision`; store run evidence with `--memory-kind test_report` or `integration_report`.
+- Use `relate` to connect concepts across workstreams instead of relying on accidental semantic similarity.
+- Use `entities` and `graph` to inspect whether memories are clustering around the right concepts.
 
 ## SOC Dashboard Pattern
 
@@ -108,7 +135,8 @@ For the agentic IT/SOC dashboard:
 3. Pass `MEMORY_DB_HOST=agent-memory-db`, `MEMORY_DB_PORT=5432`, `MEMORY_DB_NAME=agent_memory`, `MEMORY_DB_USER=agent_memory`, and `MEMORY_DB_PASSWORD=${AGENT_MEMORY_DB_PASSWORD}` into the API container and spawned agent settings.
 4. Mount `reference_skills/agent-memory` into `/root/.claude/skills/agent-memory`.
 5. Write spawned-agent hooks into each workspace `.claude/settings.json`.
-6. Seed a global dashboard skill that tells agents to search memory before substantial work and store durable notes after meaningful completion.
+6. Set `AGENT_MEMORY_SPACE` per agent workspace, preferably from ticket/project identity, so spawned agents do not merge unrelated tickets by default.
+7. Seed a global dashboard skill that tells agents to search their current space before substantial work, use `--all-spaces` only for cross-project retrieval, and store durable notes after meaningful completion.
 
 ## Validation
 
@@ -118,6 +146,8 @@ Minimum validation after any change:
 python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json init
 python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json self-test
 python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json status
+python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" spaces
+python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" entities --query memory --all-spaces --limit 5
 python -m py_compile "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory_hook.py"
 ```
 

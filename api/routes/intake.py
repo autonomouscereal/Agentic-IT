@@ -137,6 +137,9 @@ def _classification(rule, score, correlation):
         "approval_required": bool(rule.get("approval_required")),
         "approval_action": rule.get("approval_action"),
         "risk_level": rule.get("risk_level") or "low",
+        "auto_assign_agent": bool(rule.get("auto_assign_agent")),
+        "auto_agent_model": rule.get("auto_agent_model"),
+        "auto_agent_prompt": rule.get("auto_agent_prompt"),
         "raci": {
             "responsible": rule.get("responsible"),
             "accountable": rule.get("accountable"),
@@ -216,9 +219,11 @@ async def create_rule(body: dict = Body({})):
         INSERT INTO service_raci_rules (
             name, intent, keywords, ticket_class, priority, assignment_group,
             responsible, accountable, consulted, informed, approval_required,
-            approval_action, risk_level, knowledge_tags, enabled
+            approval_action, risk_level, knowledge_tags, auto_assign_agent,
+            auto_agent_model, auto_agent_prompt, enabled
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, true))
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                COALESCE($15, false), $16, $17, COALESCE($18, true))
         ON CONFLICT (name) DO UPDATE SET
             intent = EXCLUDED.intent,
             keywords = EXCLUDED.keywords,
@@ -233,6 +238,9 @@ async def create_rule(body: dict = Body({})):
             approval_action = EXCLUDED.approval_action,
             risk_level = EXCLUDED.risk_level,
             knowledge_tags = EXCLUDED.knowledge_tags,
+            auto_assign_agent = EXCLUDED.auto_assign_agent,
+            auto_agent_model = EXCLUDED.auto_agent_model,
+            auto_agent_prompt = EXCLUDED.auto_agent_prompt,
             enabled = EXCLUDED.enabled,
             updated_at = NOW()
         RETURNING id
@@ -249,6 +257,9 @@ async def create_rule(body: dict = Body({})):
         (body or {}).get("approval_action"),
         (body or {}).get("risk_level") or "low",
         json_dumps(_as_list((body or {}).get("knowledge_tags"))),
+        bool((body or {}).get("auto_assign_agent", False)),
+        (body or {}).get("auto_agent_model") or "qwen/qwen3.6-27b",
+        (body or {}).get("auto_agent_prompt"),
         (body or {}).get("enabled", True))
     await log_event("intake", "info", "dashboard", "raci_rule_saved", f"rule_{rule_id}", {"name": name})
     return {"id": rule_id, "status": "saved"}
@@ -260,7 +271,8 @@ async def update_rule(rule_id: int, body: dict = Body({})):
     allowed = {
         "name", "intent", "keywords", "ticket_class", "priority", "assignment_group",
         "responsible", "accountable", "consulted", "informed", "approval_required",
-        "approval_action", "risk_level", "knowledge_tags", "enabled",
+        "approval_action", "risk_level", "knowledge_tags", "auto_assign_agent",
+        "auto_agent_model", "auto_agent_prompt", "enabled",
     }
     fields = []
     params = []
@@ -345,6 +357,7 @@ async def submit_intake(body: dict = Body({})):
     channel = (body or {}).get("channel") or "dashboard"
     attachments = _as_list((body or {}).get("attachments"))
     sync_provider = (body or {}).get("sync_provider")
+    auto_assign = bool((body or {}).get("auto_assign", True))
 
     if not message.strip() and not title.strip():
         return {"error": "message or title is required"}
@@ -370,7 +383,9 @@ async def submit_intake(body: dict = Body({})):
         priority=classification.get("priority"),
         provider=(body or {}).get("provider"),
         sync_provider=sync_provider,
+        assignee_team=classification.get("assignment_group"),
         created_by="service-desk-intake",
+        auto_assign=False,
     )
     ticket_id = ticket["id"]
 
@@ -450,11 +465,23 @@ async def submit_intake(body: dict = Body({})):
                         "assignment_group": classification.get("assignment_group"),
                     })
 
+    if auto_assign:
+        try:
+            from services import auto_assignment
+            auto_assignment_result = await auto_assignment.maybe_auto_assign(ticket_id, source="service-desk-intake")
+        except Exception as exc:
+            auto_assignment_result = {"status": "error", "error": str(exc)}
+            await log_event("agent", "error", "service-desk-intake", "auto_assignment_failed",
+                            f"ticket_{ticket_id}", {"error": str(exc)})
+    else:
+        auto_assignment_result = {"status": "skipped", "reason": "request_disabled"}
+
     return {
         "intake_id": intake_id,
         "ticket": ticket,
         "change_id": change_id,
         "classification": classification,
+        "auto_assignment": auto_assignment_result,
     }
 
 

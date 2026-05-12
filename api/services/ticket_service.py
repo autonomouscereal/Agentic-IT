@@ -36,7 +36,10 @@ async def create_ticket(
     provider_ref=None,
     provider_class=None,
     sync_provider=None,
+    assignee=None,
+    assignee_team=None,
     created_by="dashboard",
+    auto_assign=True,
 ):
     """Create a canonical local ticket.
 
@@ -66,15 +69,18 @@ async def create_ticket(
     ticket_id = await fetchval("""
         INSERT INTO tickets (
             itop_ref, itop_class, title, description, status, priority,
-            provider, provider_ref, provider_class, provider_sync_status,
+            assignee, assignee_team, provider, provider_ref, provider_class,
+            provider_sync_status,
             synced_at, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
         ON CONFLICT (itop_ref, itop_class) DO UPDATE SET
             title = EXCLUDED.title,
             description = EXCLUDED.description,
             status = EXCLUDED.status,
             priority = EXCLUDED.priority,
+            assignee = COALESCE(EXCLUDED.assignee, tickets.assignee),
+            assignee_team = COALESCE(EXCLUDED.assignee_team, tickets.assignee_team),
             provider = EXCLUDED.provider,
             provider_ref = EXCLUDED.provider_ref,
             provider_class = EXCLUDED.provider_class,
@@ -82,7 +88,8 @@ async def create_ticket(
             updated_at = NOW()
         RETURNING id
     """, itop_ref, itop_class, title, description, status, priority,
-        provider, provider_ref, provider_class, sync_status, synced_at)
+        assignee, assignee_team, provider, provider_ref, provider_class,
+        sync_status, synced_at)
 
     await log_event("ticket", "info", created_by, "ticket_created",
                     f"ticket_{ticket_id}", {
@@ -140,7 +147,16 @@ async def create_ticket(
                 ticket_id)
             await log_event("sync", "info", created_by, "provider_create_complete",
                             f"ticket_{ticket_id}", provider_result)
-    return await get_ticket(ticket_id)
+    ticket = await get_ticket(ticket_id)
+    if auto_assign:
+        try:
+            from services import auto_assignment
+            ticket["auto_assignment"] = await auto_assignment.maybe_auto_assign(ticket_id, source=created_by)
+        except Exception as exc:
+            ticket["auto_assignment"] = {"status": "error", "error": str(exc)}
+            await log_event("agent", "error", created_by, "auto_assignment_failed",
+                            f"ticket_{ticket_id}", {"error": str(exc)})
+    return ticket
 
 
 async def get_ticket(ticket_id):

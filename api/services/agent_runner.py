@@ -381,8 +381,11 @@ Before updating `checkpoint.json`, read it first, then write the updated JSON. D
 """
 
 
-def _build_settings(model, agent_id=None):
+def _build_settings(model, agent_id=None, ticket=None):
     """Build minimal settings.json for agent workspace."""
+    ticket_id = (ticket or {}).get("id")
+    ticket_class = (ticket or {}).get("itop_class") or (ticket or {}).get("provider_class") or "ticket"
+    memory_space = f"soc-dashboard/{str(ticket_class).lower()}/ticket-{ticket_id}" if ticket_id else "soc-dashboard"
     env = {
         "PYTHONIOENCODING": "utf-8",
         "DASHBOARD_API_BASE": DASHBOARD_API_BASE,
@@ -392,6 +395,7 @@ def _build_settings(model, agent_id=None):
         "MEMORY_DB_USER": os.getenv("MEMORY_DB_USER", "agent_memory"),
         "MEMORY_DB_PASSWORD": os.getenv("MEMORY_DB_PASSWORD", os.getenv("AGENT_MEMORY_DB_PASSWORD", "")),
         "AGENT_MEMORY_AGENT": f"SOC-Dashboard-Agent-{agent_id}" if agent_id else "SOC-Dashboard-Agent",
+        "AGENT_MEMORY_SPACE": memory_space,
     }
     if AGENT_LLM_BASE_URL:
         env["ANTHROPIC_BASE_URL"] = AGENT_LLM_BASE_URL
@@ -456,7 +460,7 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt):
     # Write settings
     settings_path = os.path.join(claude_dir, "settings.json")
     with open(settings_path, "w") as f:
-        json.dump(_build_settings(model, agent_id), f)
+        json.dump(_build_settings(model, agent_id, ticket), f)
 
     # Write CLAUDE.md
     claude_md_path = os.path.join(claude_dir, "CLAUDE.md")

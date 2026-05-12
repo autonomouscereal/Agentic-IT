@@ -113,6 +113,7 @@ async def create_ticket(
     provider_class: str = Body(None),
     sync_provider: bool = Body(None),
     created_by: str = Body("dashboard"),
+    auto_assign: bool = Body(True),
 ):
     """Create a canonical dashboard ticket.
 
@@ -130,6 +131,7 @@ async def create_ticket(
         provider_class=provider_class,
         sync_provider=sync_provider,
         created_by=created_by,
+        auto_assign=auto_assign,
     )
 
 

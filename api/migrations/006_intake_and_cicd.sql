@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS service_raci_rules (
     approval_action VARCHAR(240),
     risk_level VARCHAR(40) DEFAULT 'low',
     knowledge_tags JSONB NOT NULL DEFAULT '[]',
+    auto_assign_agent BOOLEAN NOT NULL DEFAULT false,
+    auto_agent_model VARCHAR(200) DEFAULT 'qwen/qwen3.6-27b',
+    auto_agent_prompt TEXT,
     enabled BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -261,6 +264,7 @@ ON CONFLICT (name) DO UPDATE SET
 CREATE INDEX IF NOT EXISTS idx_service_groups_enabled ON service_groups(enabled);
 CREATE INDEX IF NOT EXISTS idx_service_raci_rules_enabled ON service_raci_rules(enabled);
 CREATE INDEX IF NOT EXISTS idx_service_raci_rules_intent ON service_raci_rules(intent);
+CREATE INDEX IF NOT EXISTS idx_service_raci_rules_auto_agent ON service_raci_rules(auto_assign_agent) WHERE enabled = true;
 CREATE INDEX IF NOT EXISTS idx_service_intake_ticket ON service_intake_sessions(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_service_intake_created ON service_intake_sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_cicd_security_runs_created ON cicd_security_runs(created_at);

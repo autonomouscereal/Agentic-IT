@@ -246,22 +246,35 @@ class iTopProvider(TicketProvider):
                 ticket_data["impact"], ticket_data["urgency"],
                 ticket_data["assignee"], ticket_data["assignee_team"],
                 str(key_val), ticket_class, json_dumps(obj_data))
+            ticket_id = exists
         else:
-            await execute("""
+            ticket_id = await fetchval("""
                 INSERT INTO tickets (itop_ref, itop_class, title, description, status,
                                     priority, impact, urgency, assignee, assignee_team,
                                     provider, provider_ref, provider_class, provider_sync_status,
                                     provider_payload, synced_at, created_at, updated_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                         'itop', $1, $2, 'synced', $11, NOW(), NOW(), NOW())
+                RETURNING id
             """, str(key_val), ticket_class, ticket_data["title"],
                 ticket_data["description"], ticket_data["status"],
                 ticket_data["priority"], ticket_data["impact"],
                 ticket_data["urgency"], ticket_data["assignee"],
                 ticket_data["assignee_team"], json_dumps(obj_data))
 
+        auto_assignment = None
+        if not exists:
+            try:
+                from services import auto_assignment as auto_assignment_service
+                auto_assignment = await auto_assignment_service.maybe_auto_assign(ticket_id, source="itop_sync")
+            except Exception as exc:
+                auto_assignment = {"status": "error", "error": str(exc)}
+                await log_event("agent", "error", "itop_sync", "auto_assignment_failed",
+                                f"ticket_{ticket_id}", {"error": str(exc)})
+
         return {"status": "synced", "itop_ref": str(key_val),
-                "itop_class": ticket_class, "is_new": not exists}
+                "itop_class": ticket_class, "is_new": not exists,
+                "ticket_id": ticket_id, "auto_assignment": auto_assignment}
 
     async def full_sync(self) -> dict:
         """Sync all known tickets across all classes."""

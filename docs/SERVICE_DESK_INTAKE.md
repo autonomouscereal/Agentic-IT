@@ -13,6 +13,7 @@ canonical ticket for the next agent or human.
 - Searches existing tickets and knowledge articles for context.
 - Stores attachment metadata.
 - Creates a change request automatically when the route requires approval.
+- Can auto-assign an agent when the matching RACI rule explicitly enables it.
 - Automatically syncs through the active provider adapter when one is
   configured; otherwise it falls back to local-only tickets.
 - Supports CRUD for RACI groups and rules.
@@ -21,6 +22,16 @@ canonical ticket for the next agent or human.
 The seeded groups and rules are examples. In a deployment, replace or extend
 them with ServiceNow groups, iTop teams, Jira components, Keycloak groups, or
 customer-specific RACI data.
+
+Auto-agent assignment is a RACI rule setting, not a hardcoded phishing shortcut:
+
+- `auto_assign_agent`: enables automatic agent spawn for matching tickets.
+- `auto_agent_model`: model to use for that assignment.
+- `auto_agent_prompt`: extra instruction appended to the standard fast ticket
+  resolution prompt.
+
+The seeded phishing rule auto-assigns Security Operations phishing incidents.
+Most other seeded rules stay manual until an operator enables them.
 
 ## API
 
@@ -76,7 +87,10 @@ python3 scripts/smoke_service_desk_intake.py http://localhost:25480
 ```
 
 Expected: the phishing fixture creates an Incident, an internal classification
-note, attachment metadata, an intake session, and a pending approval gate.
+note, attachment metadata, an intake session, and a pending approval gate. The
+smoke fixture disables auto-assignment for the created ticket to avoid spending
+model time, but still verifies that the phishing RACI rule advertises
+`auto_assign_agent=true`.
 
 For post-creation clarification and resume behavior, see
 `docs/USER_RESPONSE_WORKFLOW.md`.
