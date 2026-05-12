@@ -256,6 +256,25 @@ Verified:
   `110`, notes `427` and `428` with full evidence bodies, checkpoint note `429`,
   completion note `430`, and final ticket status `resolved`.
 
+### SIEM bridge EDR fanout can create too many local agents
+
+Problem:
+
+- A successful EDR/Sysmon rerun created multiple bridge tickets for closely
+  related marker alerts, then RACI auto-assignment spawned agents for each.
+- That behavior proves the bridge and auto-assignment hooks work, but it can
+  saturate the current one-local-model lab and obscure the single incident
+  narrative in demos.
+
+Fix:
+
+- The SIEM bridge now stores `ticket_correlation_keys` in bridge state.
+- Exact alert dedup still works as before, while cross-rule correlation collapses
+  alerts with an explicit `correlation_key` or marker such as `CODEX_*` into the
+  first ticket for that incident.
+- Added unit coverage proving two Sysmon marker alerts with different rules but
+  the same marker produce one ticket and one correlated event.
+
 ### Mailcow HTTP API shim missing compatibility pieces
 
 Full blueprint and runbook: `docs/MAILCOW_API_SHIM.md`.

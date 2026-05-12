@@ -50,7 +50,7 @@ Wazuh SIEM (port 26500/26920) ──> Bridge Orchestrator (polling daemon) ─�
 - **Null Connectors**: Gracefully handle missing/disconnected systems without crashing
 - **Env-Only Config**: All credentials via `.env` file, zero hardcoded secrets
 - **Stdlib Only**: Python standard library — no pip dependencies
-- **Deduplication**: Alert dedup with configurable time windows and JSON state persistence
+- **Deduplication + Correlation**: Exact alert dedup plus cross-rule incident correlation with configurable time windows and JSON state persistence. Explicit `correlation_key` values and markers such as `CODEX_*` collapse related alerts into one ticket.
 
 ### Severity Mapping
 
@@ -112,7 +112,8 @@ siem-ticket-bridge/
 All via `.env` file on server. Key prefixes:
 - `BRIDGE_SIEM_*` — Wazuh host, ports, API/indexer credentials
 - `BRIDGE_TICKETING_*` — iTop host, port, credentials, scheme, API path
-- `BRIDGE_*` — poll interval, log level, state file, dedup window
+- `BRIDGE_*` — poll interval, log level, state file, dedup window, correlation window
+- `BRIDGE_CORRELATION_WINDOW` — default `300` seconds; related cross-rule alerts with an explicit marker/correlation key are attached to the first ticket instead of creating duplicate tickets
 
 ## Adding New Backends
 

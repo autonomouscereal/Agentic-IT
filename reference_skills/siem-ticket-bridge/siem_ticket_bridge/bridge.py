@@ -13,6 +13,7 @@ import time
 import signal
 import logging
 import logging.handlers
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Set
@@ -48,6 +49,7 @@ class Bridge:
         self.poll_interval = bridge_config.get("poll_interval", 60)
         self.batch_size = bridge_config.get("batch_size", 50)
         self.dedup_window = bridge_config.get("dedup_window", 3600)
+        self.correlation_window = bridge_config.get("correlation_window", 300)
         self.state_file = bridge_config.get("state_file", "/var/lib/siem-ticket-bridge/state.json")
         self.severity_map_file = bridge_config.get("severity_map_file", "severity_map.json")
 
@@ -56,6 +58,7 @@ class Bridge:
         self._alert_count = 0
         self._ticket_count = 0
         self._error_count = 0
+        self._ticket_correlation_keys: Dict[str, Dict[str, Any]] = {}
 
         # Load state
         self._load_state()
@@ -77,6 +80,9 @@ class Bridge:
             self._alert_count = state.get("alert_count", 0)
             self._ticket_count = state.get("ticket_count", 0)
             self._error_count = state.get("error_count", 0)
+            correlations = state.get("ticket_correlation_keys", {})
+            if isinstance(correlations, dict):
+                self._ticket_correlation_keys = correlations
             logger.info("Loaded state: %d processed alerts", len(self._processed_alerts))
         except Exception:
             logger.debug("No state file found, starting fresh")
@@ -88,9 +94,34 @@ class Bridge:
             "alert_count": self._alert_count,
             "ticket_count": self._ticket_count,
             "error_count": self._error_count,
+            "ticket_correlation_keys": self._ticket_correlation_keys,
             "last_poll": datetime.now(timezone.utc).isoformat(),
         }
         save_json_config(self.state_file, state)
+
+    def _extract_marker(self, alert: Dict[str, Any]) -> str:
+        """Extract an explicit test/incident marker from alert text when present."""
+        text_parts = [
+            alert.get("correlation_key", ""),
+            alert.get("log", ""),
+            alert.get("rule_name", ""),
+        ]
+        raw = alert.get("raw", {})
+        if isinstance(raw, dict):
+            text_parts.append(json.dumps(raw, sort_keys=True, default=str)[:5000])
+        text = " ".join(str(part or "") for part in text_parts)
+        match = re.search(r"\b(CODEX_[A-Z0-9_]+|E2E[-_][A-Za-z0-9_-]+)\b", text)
+        return match.group(1) if match else ""
+
+    def _correlation_key(self, alert: Dict[str, Any]) -> str:
+        """Return a cross-rule incident correlation key, or empty string if none applies."""
+        explicit = str(alert.get("correlation_key") or "").strip()
+        if explicit:
+            return f"explicit:{explicit}"
+        marker = self._extract_marker(alert)
+        if marker:
+            return f"marker:{marker}"
+        return ""
 
     def _is_duplicate(self, alert: Dict[str, Any]) -> bool:
         """Check if an alert was already processed within the dedup window."""
@@ -105,6 +136,34 @@ class Bridge:
         if len(self._processed_alerts) > 50000:
             self._processed_alerts = set(list(self._processed_alerts)[-25000:])
 
+    def _existing_correlated_ticket(self, alert: Dict[str, Any]) -> Dict[str, Any]:
+        """Return existing ticket metadata for a correlated alert group."""
+        key = self._correlation_key(alert)
+        if not key:
+            return {}
+        existing = self._ticket_correlation_keys.get(key)
+        return existing if isinstance(existing, dict) else {}
+
+    def _mark_correlated_ticket(self, alert: Dict[str, Any], ticket_id: str) -> None:
+        """Remember which ticket owns this alert correlation group."""
+        key = self._correlation_key(alert)
+        if not key:
+            return
+        current = self._ticket_correlation_keys.get(key, {})
+        rules = set(current.get("rules", [])) if isinstance(current, dict) else set()
+        rules.add(str(alert.get("rule_id", "")))
+        now = datetime.now(timezone.utc).isoformat()
+        self._ticket_correlation_keys[key] = {
+            "ticket_id": str(ticket_id),
+            "first_seen": current.get("first_seen") if isinstance(current, dict) else now,
+            "last_seen": alert.get("timestamp") or now,
+            "alert_count": int(current.get("alert_count", 0)) + 1 if isinstance(current, dict) else 1,
+            "rules": sorted(rule for rule in rules if rule),
+        }
+        if len(self._ticket_correlation_keys) > 10000:
+            keys = list(self._ticket_correlation_keys)[-5000:]
+            self._ticket_correlation_keys = {key: self._ticket_correlation_keys[key] for key in keys}
+
     def _should_create_ticket(self, alert: Dict[str, Any]) -> bool:
         """Determine if an alert should create a ticket based on severity."""
         level = alert.get("level", 0)
@@ -117,7 +176,7 @@ class Bridge:
 
         Returns stats dict.
         """
-        stats = {"fetched": 0, "new": 0, "tickets_created": 0, "errors": 0, "duplicates": 0}
+        stats = {"fetched": 0, "new": 0, "tickets_created": 0, "errors": 0, "duplicates": 0, "correlated": 0}
 
         # Check connectivity
         siem_ok = self.siem.is_connected()
@@ -144,11 +203,25 @@ class Bridge:
                 self._mark_processed(alert)
                 continue
 
+            existing_ticket = self._existing_correlated_ticket(alert)
+            if existing_ticket.get("ticket_id"):
+                stats["correlated"] += 1
+                logger.info(
+                    "Correlated alert rule %s to existing ticket %s",
+                    alert.get("rule_id"),
+                    existing_ticket.get("ticket_id"),
+                )
+                self._mark_correlated_ticket(alert, existing_ticket.get("ticket_id"))
+                self._mark_processed(alert)
+                self._alert_count += 1
+                continue
+
             # Create ticket
             ticket_id = self.ticketing.safe_create_ticket(alert)
             if ticket_id:
                 stats["tickets_created"] += 1
                 self._ticket_count += 1
+                self._mark_correlated_ticket(alert, ticket_id)
                 logger.info("Created ticket %s for alert level %d", ticket_id, alert.get("level"))
             else:
                 stats["errors"] += 1
@@ -202,7 +275,9 @@ class Bridge:
             "ticketing_connected": self.ticketing.is_connected(),
             "ticketing_type": self.ticketing.__class__.__name__,
             "poll_interval": self.poll_interval,
+            "correlation_window": self.correlation_window,
             "processed_alerts": len(self._processed_alerts),
+            "ticket_correlation_keys": len(self._ticket_correlation_keys),
             "alert_count": self._alert_count,
             "ticket_count": self._ticket_count,
             "error_count": self._error_count,

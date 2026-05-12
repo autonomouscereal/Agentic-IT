@@ -63,6 +63,7 @@ BRIDGE_ENV_MAP = {
     "enabled": f"{ENV_PREFIX}_ENABLED",
     "batch_size": f"{ENV_PREFIX}_BATCH_SIZE",
     "dedup_window": f"{ENV_PREFIX}_DEDUP_WINDOW",
+    "correlation_window": f"{ENV_PREFIX}_CORRELATION_WINDOW",
 }
 
 
@@ -163,6 +164,7 @@ def build_bridge_config(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
         "state_file": _env_str(BRIDGE_ENV_MAP["state_file"], "/var/lib/siem-ticket-bridge/state.json"),
         "batch_size": _env_int(BRIDGE_ENV_MAP["batch_size"], 50),
         "dedup_window": _env_int(BRIDGE_ENV_MAP["dedup_window"], 3600),
+        "correlation_window": _env_int(BRIDGE_ENV_MAP["correlation_window"], 300),
     }
     if overrides:
         cfg.update(overrides)

@@ -840,3 +840,28 @@ Optional repeatable live smoke:
 ```bash
 python3 scripts/smoke_provider_adapters.py http://localhost:25480 --itop-create
 ```
+
+## SIEM Bridge Correlation Regression
+
+The SIEM bridge should not create separate tickets for multiple Wazuh rules that
+are clearly part of the same explicit test/incident marker. Exact dedup still
+keys on rule/source/timestamp, while cross-rule correlation keys on explicit
+`correlation_key` values or marker strings such as `CODEX_*`.
+
+Local/source verification:
+
+```powershell
+python -m unittest reference_skills.siem-ticket-bridge.tests.test_bridge
+python -m py_compile reference_skills\siem-ticket-bridge\siem_ticket_bridge\bridge.py reference_skills\siem-ticket-bridge\siem_ticket_bridge\config.py
+```
+
+Latest verified result on 2026-05-12:
+
+```text
+SIEM bridge tests: Ran 41, OK, skipped 3 live tests
+marker correlation: 2 related Sysmon marker alerts -> 1 ticket + 1 correlated event
+live bridge status: active
+BRIDGE_CORRELATION_WINDOW=300
+processed_alerts=552
+ticket_correlation_keys=0 before next marker run
+```

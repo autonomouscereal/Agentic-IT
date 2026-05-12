@@ -233,6 +233,57 @@ class TestBridgeDedup(unittest.TestCase):
         self.assertFalse(self.bridge._should_create_ticket(low_alert))
         self.assertTrue(self.bridge._should_create_ticket(high_alert))
 
+    def test_marker_correlation_creates_one_ticket_for_related_alerts(self):
+        class FakeSIEM:
+            def is_connected(self):
+                return True
+
+            def safe_fetch_alerts(self, limit=50):
+                return [
+                    {
+                        "rule_id": "100201",
+                        "source_ip": "127.0.0.1",
+                        "timestamp": "2026-05-12T23:00:01Z",
+                        "level": 10,
+                        "rule_name": "Sysmon marker",
+                        "log": "CODEX_SYSMON_E2E_ABC raw marker alert",
+                    },
+                    {
+                        "rule_id": "100202",
+                        "source_ip": "127.0.0.1",
+                        "timestamp": "2026-05-12T23:00:02Z",
+                        "level": 10,
+                        "rule_name": "Sysmon XML marker",
+                        "log": "CODEX_SYSMON_E2E_ABC xml marker alert",
+                    },
+                ]
+
+        class FakeTicketing:
+            def __init__(self):
+                self.created = []
+
+            def is_connected(self):
+                return True
+
+            def safe_create_ticket(self, alert):
+                self.created.append(alert)
+                return f"TICKET-{len(self.created)}"
+
+        ticketing = FakeTicketing()
+        self.bridge.siem = FakeSIEM()
+        self.bridge.ticketing = ticketing
+
+        stats = self.bridge.run_once()
+
+        self.assertEqual(stats["tickets_created"], 1)
+        self.assertEqual(stats["correlated"], 1)
+        self.assertEqual(len(ticketing.created), 1)
+        self.assertEqual(len(self.bridge._ticket_correlation_keys), 1)
+        correlation = next(iter(self.bridge._ticket_correlation_keys.values()))
+        self.assertEqual(correlation["ticket_id"], "TICKET-1")
+        self.assertEqual(correlation["alert_count"], 2)
+        self.assertEqual(correlation["rules"], ["100201", "100202"])
+
 
 class TestWazuhConnectorInit(unittest.TestCase):
     """Test Wazuh connector initialization without live connection."""
