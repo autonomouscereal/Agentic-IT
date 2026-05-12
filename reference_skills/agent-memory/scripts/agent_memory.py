@@ -36,7 +36,7 @@ DEFAULT_DB = {
 BACKEND_DIR = Path(__file__).resolve().parent
 LOG_DIR = BACKEND_DIR / "logs"
 SERVER_MANAGER_DIR = Path(
-    os.getenv("SERVER_MANAGER_SKILL_DIR", r"C:\Users\cereal\.claude\skills\server-manager")
+    os.getenv("SERVER_MANAGER_SKILL_DIR", r"C:\Users\cereal\.agents\skills\server-manager")
 )
 
 
@@ -49,23 +49,31 @@ def json_default(value: Any) -> str:
 def read_vault_secret(key: str) -> str:
     if not key:
         return ""
-    credman = SERVER_MANAGER_DIR / "credman.py"
-    if not credman.exists():
-        return ""
+    candidate_dirs = [
+        SERVER_MANAGER_DIR,
+        Path(r"C:\Users\cereal\.agents\skills\server-manager"),
+        Path(r"C:\Users\cereal\.claude\skills\server-manager"),
+    ]
     try:
         import subprocess
-
-        result = subprocess.run(
-            [sys.executable, str(credman), "get", key],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
     except Exception:
         return ""
+    for directory in candidate_dirs:
+        credman = directory / "credman.py"
+        if not credman.exists():
+            continue
+        try:
+            result = subprocess.run(
+                [sys.executable, str(credman), "get", key],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except Exception:
+            continue
     return ""
 
 

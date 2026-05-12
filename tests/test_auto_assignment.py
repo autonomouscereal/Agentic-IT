@@ -148,6 +148,39 @@ class AutoAssignmentTests(unittest.TestCase):
         self.assertEqual(result["status"], "skipped")
         self.assertEqual(result["reason"], "no_matching_policy")
 
+    def test_incident_class_alone_does_not_auto_assign(self):
+        module = load_auto_assignment()
+
+        async def fetchrow(query, *args):
+            if "FROM tickets" in query:
+                return {
+                    "id": 13,
+                    "title": "Provider adapter smoke",
+                    "description": "Synthetic provider adapter incident.",
+                    "itop_class": "Incident",
+                    "provider_class": "Incident",
+                    "assignee_team": "",
+                    "agent_id": None,
+                }
+            return None
+
+        async def fetchall(*args):
+            return [{
+                "id": 3,
+                "name": "Phishing report",
+                "intent": "phishing",
+                "keywords": ["phishing", "bad link"],
+                "ticket_class": "Incident",
+                "assignment_group": "Security Operations",
+            }]
+
+        module.fetchrow = fetchrow
+        module.fetchall = fetchall
+
+        result = asyncio.run(module.maybe_auto_assign(13, source="unit-test"))
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "no_matching_policy")
+
     def test_existing_agent_is_not_duplicated(self):
         module = load_auto_assignment()
 

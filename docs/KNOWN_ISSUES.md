@@ -4,6 +4,82 @@ Last updated: 2026-05-12.
 
 ## Fixed In Current Pass
 
+### Acceptance reruns could hit API before restart finished
+
+Problem:
+
+- A live provider-adapter smoke rerun immediately after `docker compose restart api`
+  hit `/api/providers` before Uvicorn was fully ready and raised
+  `ConnectionResetError: [Errno 104] Connection reset by peer`.
+
+Fix:
+
+- Acceptance scripts and manual reruns should wait on `/health` after restarting
+  the API before calling route-level smoke tests.
+
+Verified:
+
+- Rerun command waited on `/health` and completed provider-adapter smoke after
+  the API rebuild/recreate sequence.
+
+### Python service hot uploads do not change the running API container
+
+Problem:
+
+- Uploading `api/services/auto_assignment.py` to the live host source tree and
+  restarting the API container did not change the code running inside `/app`.
+- The API image bakes Python service files at build time; only selected volumes
+  such as frontend, platform, skills, and agent work are mounted.
+
+Impact:
+
+- A policy fix can appear deployed on the host but still run old code until the
+  API image is rebuilt.
+
+Fix:
+
+- For Python API/service/route changes, run `docker compose up -d --build api`
+  after updating the host source.
+- Keep simple restarts for frontend/skill/config changes that are actually
+  mounted into the container.
+
+Verified:
+
+- Rebuilt API with `docker compose up -d --build api`.
+- Container-side `_score_rule` returned `{'class_only_score': 0}`.
+- `python3 scripts/smoke_provider_adapters.py http://localhost:25480` created
+  ticket `174` and `GET /api/agents/active` remained empty afterward.
+
+### Change auto-completion smoke command used the wrong container path
+
+Status: fixed during the 2026-05-12 full acceptance regression pass.
+
+Problem:
+
+- The full regression command tried to run `python smoke_change_auto_completion.py`
+  inside the API container.
+- The script lives under `scripts/` in the source tree and is not mounted into
+  `/app` by the running API container.
+
+Impact:
+
+- Baseline regression stopped at the approved-change auto-completion check even
+  though earlier platform doctor, provider, intake, workflow, CI/CD, and auditor
+  smokes passed.
+
+Fix:
+
+- Document the correct pattern: copy `scripts/smoke_change_auto_completion.py`
+  into the API container, then run `/app/smoke_change_auto_completion.py`.
+- Updated the acceptance command script to use the same copy-and-run pattern.
+
+Verified:
+
+- `docker compose cp scripts/smoke_change_auto_completion.py api:/app/smoke_change_auto_completion.py`: PASS.
+- `docker compose exec -T api python /app/smoke_change_auto_completion.py`: PASS
+  with ticket `172`, agent `76`, task `74`, change `82`, and
+  `change_status=completed`.
+
 ### `ps` missing in API container
 
 Problem:
@@ -630,6 +706,70 @@ Verified:
 - `python scripts/smoke_auto_assignment_policy.py`: PASS.
 
 ## Current Limitations
+
+### RACI auto-assignment matched generic Incident tickets too broadly
+
+Status: fixed during the 2026-05-12 full acceptance baseline.
+
+Problem:
+
+- A provider-adapter smoke ticket titled `Provider adapter smoke` received an
+  active agent even though it did not contain phishing keywords and was not
+  routed to Security Operations.
+- Root cause: the auto-assignment scorer gave enough points for matching
+  `ticket_class=Incident` alone, so the phishing RACI rule could match generic
+  Incident tickets.
+
+Impact:
+
+- Agents can be assigned to tickets that should remain in a manual or unrelated
+  queue.
+- This matches the observed concern that agents may spill into tickets that
+  already have a different purpose.
+
+Fix:
+
+- Auto-assignment now requires a strong signal such as assignment group or
+  keyword match before an
+  auto-assignment rule can fire.
+- Ticket class is now a ranking boost only after a real intent/group signal is
+  present.
+- Added a unit/smoke case proving generic Incident tickets stay manual while
+  phishing/Security Operations incidents auto-assign.
+
+Verified:
+
+- Local `python -m unittest tests.test_auto_assignment`: PASS.
+- Local `python scripts/smoke_auto_assignment_policy.py`: PASS.
+- Live rebuilt API `_score_rule` returned `{'class_only_score': 0}` for
+  `Provider adapter smoke`.
+- Live provider-adapter smoke created ticket `174` with no active agent spawned.
+
+### Tool health inventory still has unprobeable deployed/reference modules
+
+Status: active, found during the 2026-05-12 full acceptance baseline.
+
+Problem:
+
+- `POST /api/tools/check-all` reports `unknown` for Suricata IDS, SOC Bridge,
+  SIEM-Ticket Bridge, and TheHive.
+- The returned error is `No port configured for health check`.
+
+Impact:
+
+- The Tools page is not yet a clean demo surface for every deployed or reference
+  integration.
+- Operators can see Wazuh Dashboard, iTop, Mailcow, GitLab, SearXNG, Agent
+  Memory, and other HTTP/port-backed tools as healthy, but bridge/daemon-style
+  modules do not yet expose a dashboard health contract.
+
+Next action:
+
+- Add provider-aware health checks for daemon/file/container-backed tools, or
+  mark optional/reference modules inactive when they are not part of the current
+  setup profile.
+- Reconcile the Tools page from the setup manifest so unused modules are hidden
+  or explicitly labeled optional/not configured.
 
 ### iTop outbound creation needs environment-specific defaults
 

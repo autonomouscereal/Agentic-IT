@@ -111,7 +111,8 @@ python3 scripts/smoke_agentic_system.py "$BASE"
 python3 scripts/smoke_phishing_workflow_lifecycle.py "$BASE"
 python3 scripts/smoke_cicd_security_pipeline.py "$BASE"
 python3 scripts/smoke_agent_auditor.py "$BASE"
-docker compose exec -T api python smoke_change_auto_completion.py http://localhost:8000
+docker compose cp scripts/smoke_change_auto_completion.py api:/app/smoke_change_auto_completion.py
+docker compose exec -T api python /app/smoke_change_auto_completion.py
 python3 scripts/smoke_local_model_agent.py "$BASE" qwen/qwen3.6-27b
 python3 scripts/smoke_setup_agent.py "$BASE" qwen/qwen3.6-27b
 docker compose exec -T api python /root/.claude/skills/agent-memory/scripts/agent_memory.py --json status

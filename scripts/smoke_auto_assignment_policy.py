@@ -70,6 +70,16 @@ TICKETS = {
         "provider": "itop",
         "agent_id": 7,
     },
+    104: {
+        "id": 104,
+        "title": "Provider adapter smoke",
+        "description": "Synthetic provider adapter incident.",
+        "itop_class": "Incident",
+        "provider_class": "Incident",
+        "assignee_team": "",
+        "provider": "local",
+        "agent_id": None,
+    },
 }
 
 CALLS = {"spawned": [], "notes": [], "events": []}
@@ -125,6 +135,7 @@ async def main():
     assigned = await auto_assignment.maybe_auto_assign(101, source="smoke")
     skipped = await auto_assignment.maybe_auto_assign(102, source="smoke")
     duplicate = await auto_assignment.maybe_auto_assign(103, source="smoke")
+    class_only = await auto_assignment.maybe_auto_assign(104, source="smoke")
 
     require(assigned.get("status") == "assigned", f"expected assignment, got {assigned}")
     require(assigned.get("rule_id") == 11, f"expected phishing rule, got {assigned}")
@@ -134,12 +145,14 @@ async def main():
     require(len(CALLS["notes"]) == 1, "missing auto-assignment ticket note")
     require(skipped.get("reason") == "no_matching_policy", f"expected no match, got {skipped}")
     require(duplicate.get("reason") == "ticket_already_has_agent", f"expected duplicate skip, got {duplicate}")
+    require(class_only.get("reason") == "no_matching_policy", f"expected class-only skip, got {class_only}")
 
     print(json.dumps({
         "ok": True,
         "assigned": assigned,
         "manual_queue_skip": skipped,
         "duplicate_skip": duplicate,
+        "class_only_skip": class_only,
         "spawn_calls": len(CALLS["spawned"]),
         "note_calls": len(CALLS["notes"]),
     }))

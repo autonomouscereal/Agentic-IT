@@ -1,0 +1,2 @@
+asyncpg>=0.30.0,<1.0
+cryptography>=42.0.0,<47.0.0

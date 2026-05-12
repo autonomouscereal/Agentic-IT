@@ -12,17 +12,27 @@ Shared long-term agent memory backed by raw PostgreSQL with pgvector. The bundle
 Set `AGENT_MEMORY_SKILL_DIR` to this skill folder when running manually:
 
 ```bash
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json status
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json self-test
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" search "what happened with memory hooks" --space agent-memory/backend --limit 10
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" search "what happened with memory hooks" --all-spaces --limit 10
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" spaces
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json status
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json self-test
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" search "what happened with memory hooks" --space agent-memory/backend --limit 10
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" search "what happened with memory hooks" --all-spaces --limit 10
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" spaces
 ```
+
+Create the venv first when installing or using the skill outside a container:
+
+```bash
+python -m venv "${AGENT_MEMORY_SKILL_DIR}/.venv"
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" -m pip install -r "${AGENT_MEMORY_SKILL_DIR}/requirements.txt"
+```
+
+On Linux containers or servers, use `.venv/bin/python` instead of `.venv/Scripts/python.exe`.
+`requirements.txt` includes `asyncpg` for PostgreSQL and `cryptography` for optional server-manager vault reads.
 
 Store a deliberate note:
 
 ```bash
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" add \
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" add \
   --agent Codex \
   --event-type note \
   --space agent-memory/backend \
@@ -36,21 +46,21 @@ python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" add \
 Link concepts when a memory should intentionally bridge ideas:
 
 ```bash
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" relate \
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" relate \
   --space agent-memory/backend \
   --source "Memory Spaces" \
   --relation "mitigates" \
   --target "Context Blending" \
   --description "Scoped search keeps unrelated projects separate while --all-spaces enables broad retrieval."
 
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" graph "Memory Spaces" --space agent-memory/backend
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" graph "Memory Spaces" --space agent-memory/backend
 ```
 
 Run a hook ingestion test:
 
 ```bash
 printf '{"session_id":"hook-test","prompt":"memory hook sentinel"}' | \
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory_hook.py" \
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory_hook.py" \
   --event UserPromptSubmit --agent HookTest --source manual
 ```
 
@@ -132,23 +142,24 @@ For the agentic IT/SOC dashboard:
 
 1. Deploy `agent-memory-db` as a `pgvector/pgvector:pg16` Compose service.
 2. Generate `AGENT_MEMORY_DB_PASSWORD` in `.env`.
-3. Pass `MEMORY_DB_HOST=agent-memory-db`, `MEMORY_DB_PORT=5432`, `MEMORY_DB_NAME=agent_memory`, `MEMORY_DB_USER=agent_memory`, and `MEMORY_DB_PASSWORD=${AGENT_MEMORY_DB_PASSWORD}` into the API container and spawned agent settings.
-4. Mount `reference_skills/agent-memory` into `/root/.claude/skills/agent-memory`.
-5. Write spawned-agent hooks into each workspace `.claude/settings.json`.
-6. Set `AGENT_MEMORY_SPACE` per agent workspace, preferably from ticket/project identity, so spawned agents do not merge unrelated tickets by default.
-7. Seed a global dashboard skill that tells agents to search their current space before substantial work, use `--all-spaces` only for cross-project retrieval, and store durable notes after meaningful completion.
+3. Create a venv inside the mounted skill path and install `requirements.txt` when the runtime does not already provide `asyncpg`.
+4. Pass `MEMORY_DB_HOST=agent-memory-db`, `MEMORY_DB_PORT=5432`, `MEMORY_DB_NAME=agent_memory`, `MEMORY_DB_USER=agent_memory`, and `MEMORY_DB_PASSWORD=${AGENT_MEMORY_DB_PASSWORD}` into the API container and spawned agent settings.
+5. Mount `reference_skills/agent-memory` into `/root/.claude/skills/agent-memory` and `/root/.agents/skills/agent-memory`.
+6. Write spawned-agent hooks into each workspace `.claude/settings.json`.
+7. Set `AGENT_MEMORY_SPACE` per agent workspace, preferably from ticket/project identity, so spawned agents do not merge unrelated tickets by default.
+8. Seed a global dashboard skill that tells agents to search their current space before substantial work, use `--all-spaces` only for cross-project retrieval, and store durable notes after meaningful completion.
 
 ## Validation
 
 Minimum validation after any change:
 
 ```bash
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json init
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json self-test
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json status
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" spaces
-python "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" entities --query memory --all-spaces --limit 5
-python -m py_compile "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory_hook.py"
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json init
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json self-test
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json status
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" spaces
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" entities --query memory --all-spaces --limit 5
+"${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" -m py_compile "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory_hook.py"
 ```
 
 For hook reliability, run at least one stdin hook test and one concurrent ingestion test. Then confirm:

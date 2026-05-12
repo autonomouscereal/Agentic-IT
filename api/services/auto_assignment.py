@@ -32,16 +32,21 @@ def _score_rule(rule, ticket):
         ticket.get("assignee_team") or "",
     ]).lower()
     score = 0
+    strong_signal = False
     ticket_class = (ticket.get("provider_class") or ticket.get("itop_class") or "").lower()
-    if rule.get("ticket_class") and ticket_class == str(rule.get("ticket_class")).lower():
-        score += 3
     assignee_team = (ticket.get("assignee_team") or "").lower()
     if rule.get("assignment_group") and assignee_team == str(rule.get("assignment_group")).lower():
         score += 4
+        strong_signal = True
     for keyword in _as_list(rule.get("keywords")):
         keyword_text = str(keyword).lower().strip()
         if keyword_text and keyword_text in text:
             score += max(1, len(keyword_text.split()))
+            strong_signal = True
+    if not strong_signal:
+        return 0
+    if rule.get("ticket_class") and ticket_class == str(rule.get("ticket_class")).lower():
+        score += 3
     return score
 
 
