@@ -109,6 +109,77 @@ def load_agents_route():
     return module
 
 
+def load_tickets_route():
+    fastapi = types.ModuleType("fastapi")
+
+    class APIRouter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def get(self, *args, **kwargs):
+            return lambda fn: fn
+
+        def post(self, *args, **kwargs):
+            return lambda fn: fn
+
+    class HTTPException(Exception):
+        def __init__(self, status_code=None, detail=None):
+            self.status_code = status_code
+            self.detail = detail
+            super().__init__(detail)
+
+    fastapi.APIRouter = APIRouter
+    fastapi.Query = lambda default=None, **kwargs: default
+    fastapi.Body = lambda default=None, **kwargs: default
+    fastapi.HTTPException = HTTPException
+    sys.modules["fastapi"] = fastapi
+
+    database = types.ModuleType("database")
+    database.fetchall = None
+    database.fetchrow = None
+    database.execute = None
+    database.fetchval = None
+    database.json_dumps = lambda value: value
+    sys.modules["database"] = database
+
+    services = types.ModuleType("services")
+    services.provider_registry = types.SimpleNamespace()
+    services.ticket_service = types.SimpleNamespace()
+    sys.modules["services"] = services
+    sys.modules["services.provider_registry"] = services.provider_registry
+
+    ticket_service = types.ModuleType("services.ticket_service")
+    ticket_service.compact_ticket_payload = lambda value: value
+    sys.modules["services.ticket_service"] = ticket_service
+    services.ticket_service = ticket_service
+
+    ticket_links = types.ModuleType("services.ticket_links")
+    ticket_links.external_ticket_url = lambda row: None
+    sys.modules["services.ticket_links"] = ticket_links
+
+    task_prompts = types.ModuleType("services.task_prompts")
+    task_prompts.build_ticket_resolution_prompt = lambda ticket, extra_prompt=None: "ticket prompt"
+    task_prompts.build_postmortem_prompt = lambda ticket, context=None: "postmortem prompt"
+    task_prompts.build_workflow_prompt = lambda ticket, context=None: "workflow prompt"
+    sys.modules["services.task_prompts"] = task_prompts
+
+    event_logger = types.ModuleType("services.event_logger")
+
+    async def log_event(*args, **kwargs):
+        return None
+
+    event_logger.log_event = log_event
+    sys.modules["services.event_logger"] = event_logger
+
+    spec = importlib.util.spec_from_file_location(
+        "tested_tickets_route",
+        ROOT / "api" / "routes" / "tickets.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_postmortems_route():
     fastapi = types.ModuleType("fastapi")
 
@@ -425,6 +496,28 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertEqual(module._ensure_list("rerun EDR marker test"), ["rerun EDR marker test"])
         self.assertEqual(module._ensure_list('["one", "two"]'), ["one", "two"])
         self.assertEqual(module._ensure_list({"name": "guard"}), [{"name": "guard"}])
+
+    def test_ticket_notes_accept_content_alias_from_agents(self):
+        module = load_tickets_route()
+        calls = []
+
+        async def add_note(ticket_id, text, author, source, visibility, external_ref):
+            calls.append((ticket_id, text, author, source, visibility, external_ref))
+            return {"id": 420, "ticket_id": ticket_id, "status": "created"}
+
+        module.ticket_service.add_note = add_note
+
+        result = asyncio.run(
+            module.add_ticket_note(
+                340,
+                content="Full evidence body from local agent",
+                title="Agent closure proof - triage",
+            )
+        )
+
+        self.assertEqual(result["status"], "created")
+        self.assertIn("Agent closure proof - triage", calls[0][1])
+        self.assertIn("Full evidence body from local agent", calls[0][1])
 
     def test_no_output_watchdog_stops_silent_process(self):
         module = load_agent_runner()

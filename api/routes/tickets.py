@@ -148,6 +148,7 @@ async def add_ticket_note(
     ticket_id: int,
     body: str = Body(None),
     note: str = Body(None),
+    content: str = Body(None),
     title: str = Body(None),
     author: str = Body("dashboard"),
     source: str = Body("dashboard"),
@@ -156,12 +157,14 @@ async def add_ticket_note(
 ):
     """Add a canonical ticket note.
 
-    `body` is the documented field. `note` and `title` are accepted as
+    `body` is the documented field. `note`, `content`, and `title` are accepted as
     compatibility aliases because local agents and external ticket widgets often
     naturally send those names during ad hoc work. Keeping the API tolerant here
     prevents a harmless schema mismatch from stalling an incident workflow.
     """
     text = body if body is not None else note
+    if text is None:
+        text = content
     if text is None and title:
         text = title
     if text is None:

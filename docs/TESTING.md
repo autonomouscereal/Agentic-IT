@@ -758,6 +758,45 @@ active_process_count=0
 
 See `docs/AGENT_RUN_FAILURES_2026-05-12.md` for the detailed failure note.
 
+2026-05-12 real local-agent closure proof after runner queue/stall fixes:
+
+```text
+runtime:
+  MAX_CONCURRENT_AGENTS=1
+  AGENT_TIMEOUT_MINUTES=0
+  AGENT_NO_OUTPUT_STALL_SECONDS=3600
+first proof:
+  ticket_id=340
+  agent_id=112
+  task_id=109
+  task_status=completed
+  ticket_status=resolved
+  evidence_notes=420,421
+  finding=agent_progress_ok
+  active_process_count=0
+content-alias regression:
+  ticket_id=341
+  note_id=424
+  passed=true
+second proof:
+  ticket_id=342
+  agent_id=113
+  task_id=110
+  task_status=completed
+  ticket_status=resolved
+  evidence_notes=427,428
+  checkpoint_note=429
+  completion_note=430
+  finding=agent_progress_ok
+  active_process_count=0
+```
+
+The first proof found that agents naturally used `content` for note bodies; the
+API previously accepted only `body`/`note`/`title`, so notes retained only their
+titles. `POST /api/tickets/{ticket_id}/notes` now accepts `content` as an alias,
+and the V2 proof confirms full note bodies are retained while the runner closes
+successful `ticket_resolution` work.
+
 ## Manual Provider Push Smoke
 
 Local provider:

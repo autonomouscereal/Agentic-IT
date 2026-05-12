@@ -232,6 +232,30 @@ Fix:
 - The agent auditor is the supervision path and defaults to `AGENT_AUDITOR_AUTO_RECOVER=false` so recovery is auditable before being made automatic.
 - Existing deployments can run `python3 scripts/repair_agent_supervision_env.py --env-file .env`, then recreate the API container.
 
+### Agent note API dropped evidence when local agents used `content`
+
+Problem:
+
+- A real local-agent closure proof on ticket `340` completed and resolved the
+  ticket, but the agent used `content` in `POST /api/tickets/340/notes`.
+- The route accepted `body`, `note`, and `title` only, so notes `420` and `421`
+  stored the titles without the detailed evidence body.
+
+Fix:
+
+- `POST /api/tickets/{ticket_id}/notes` now accepts `content` as a compatibility
+  alias and combines it with `title` the same way it already handled `body` and
+  `note`.
+- Added unit coverage in `tests/test_agent_lifecycle_guards.py`.
+
+Verified:
+
+- Direct API proof ticket `341` created note `424` with title and full `content`
+  body retained.
+- Real local-agent closure proof V2 created ticket `342`, agent `113`, task
+  `110`, notes `427` and `428` with full evidence bodies, checkpoint note `429`,
+  completion note `430`, and final ticket status `resolved`.
+
 ### Mailcow HTTP API shim missing compatibility pieces
 
 Full blueprint and runbook: `docs/MAILCOW_API_SHIM.md`.

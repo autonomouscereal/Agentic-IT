@@ -224,6 +224,25 @@ Behavior:
 
 ## Diagnostics
 
+## Local Model Runner Policy
+
+The reference AI server runs slow local models. Treat output/activity, process
+state, checkpoints, notes, and audit findings as the source of truth. Do not use
+short wall-clock timeouts to judge local agent work.
+
+Current reference defaults:
+
+```text
+MAX_CONCURRENT_AGENTS=1
+AGENT_TIMEOUT_MINUTES=0
+AGENT_NO_OUTPUT_STALL_SECONDS=3600
+```
+
+`AGENT_TIMEOUT_MINUTES=0` disables the fixed wall-clock process timeout.
+`AGENT_NO_OUTPUT_STALL_SECONDS` is a configurable silent-harness guard. It is
+not a progress timer: agents that are streaming output, using tools, updating
+checkpoints, or writing notes should continue.
+
 Runner health:
 
 ```bash
