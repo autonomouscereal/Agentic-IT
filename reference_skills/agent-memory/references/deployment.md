@@ -61,6 +61,12 @@ guarantee these dependencies:
 }
 ```
 
+Hook stdout is part of the Codex/Claude hook-control contract. Do not print
+memory status or inserted IDs from production hooks. The hook command should
+write all prompt/tool/session payloads to PostgreSQL and JSONL audit logs, then
+exit with empty stdout/stderr. Use `--emit-json` only in explicit contract tests;
+it emits valid hook-control JSON and still records the full payload.
+
 ## Schema
 
 The script creates:
@@ -108,3 +114,6 @@ printf '{"session_id":"demo","cwd":"/work/demo-space","prompt":"memory sentinel"
 ```
 
 For concurrency, spawn 10+ hook processes with unique sentinels and confirm all are searchable.
+Also test a `PostToolUse` payload with full `tool_input`, full `tool_response`,
+and an escaped surrogate such as `\udc9d`; default hook stdout/stderr must be
+empty while search/audit still returns the complete payload.

@@ -126,7 +126,7 @@ For Claude Code or compatible harnesses, add hooks that call `agent_memory_hook.
 }
 ```
 
-The hook reads JSON from stdin first and argv fallback second. It logs successes to `logs/agent_memory_hook_events.jsonl`, logs failures to `logs/agent_memory_hook_errors.jsonl`, redacts obvious secret fields, and exits zero on failure so memory cannot break the agent harness. Hooks write into `AGENT_MEMORY_SPACE` when set; otherwise they infer a stable space from `cwd` such as `codex/2026-05-12/project-name`, `soc-dashboard`, or `agent-memory/backend`.
+The hook reads JSON from stdin first and argv fallback second. It captures full prompts, tool inputs, tool outputs, session lifecycle payloads, and malformed fallback text into PostgreSQL memory and local JSONL hook logs. It redacts obvious secret fields, escapes invalid UTF-8/surrogate text instead of dropping audit content, and exits zero on failure so memory cannot break the agent harness. Hooks are silent on stdout/stderr by default because Codex/Claude parse hook stdout as hook-control JSON; use `--emit-json` only in explicit hook contract tests. Hooks write into `AGENT_MEMORY_SPACE` when set; otherwise they infer a stable space from `cwd` such as `codex/2026-05-12/project-name`, `soc-dashboard`, or `agent-memory/backend`.
 
 ## Memory Space Pattern
 
@@ -168,6 +168,8 @@ For hook reliability, run at least one stdin hook test and one concurrent ingest
 - `logs/agent_memory_hook_errors.jsonl` has no new entries
 - JSONB metadata decodes as structured JSON
 - secret-like fields are redacted in hook metadata/logs
+- default hook stdout/stderr are empty while prompt/tool/session payloads remain searchable
+- surrogate or otherwise invalid UTF-8 transcript text is preserved as escaped audit text such as `\udc9d`
 
 ## References
 

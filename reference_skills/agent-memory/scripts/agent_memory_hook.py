@@ -32,10 +32,19 @@ SECRET_TEXT_RE = re.compile(
 )
 
 
+def audit_safe_text(text: str, limit: int | None = 4000) -> str:
+    """Keep hook payload text UTF-8 safe without dropping audit content."""
+    if not text:
+        return ""
+    value = text if limit is None else text[:limit]
+    value = value.replace("\x00", "\\x00")
+    return value.encode("utf-8", errors="backslashreplace").decode("utf-8")
+
+
 def redact_text(text: str, limit: int = 4000) -> str:
     if not text:
         return ""
-    return SECRET_TEXT_RE.sub(r"\1\2<redacted>", text[:limit])
+    return SECRET_TEXT_RE.sub(r"\1\2<redacted>", audit_safe_text(text, limit))
 
 
 def sanitize_value(value: Any) -> Any:
@@ -50,7 +59,7 @@ def sanitize_value(value: Any) -> Any:
     if isinstance(value, list):
         return [sanitize_value(item) for item in value[:100]]
     if isinstance(value, str):
-        return redact_text(value)
+        return redact_text(value, limit=None)
     return value
 
 
@@ -193,7 +202,8 @@ async def run_hook(args: argparse.Namespace, raw: str, started: float) -> int:
                 "pid": os.getpid(),
             },
         )
-        print(json.dumps({"ok": True, "memory_id": result["id"], "driver": "asyncpg"}, ensure_ascii=False))
+        if args.emit_json:
+            print(json.dumps({"continue": True, "suppressOutput": True}, ensure_ascii=False))
         return 0
     except Exception as exc:
         safe_log(
@@ -215,7 +225,8 @@ async def run_hook(args: argparse.Namespace, raw: str, started: float) -> int:
                 "pid": os.getpid(),
             },
         )
-        print(json.dumps({"ok": False, "error": str(exc), "driver": "asyncpg"}, ensure_ascii=False))
+        if args.emit_json:
+            print(json.dumps({"continue": True, "suppressOutput": True}, ensure_ascii=False))
         return 0
 
 
@@ -226,6 +237,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source", default="hook")
     parser.add_argument("--space", default=os.getenv("AGENT_MEMORY_SPACE", ""))
     parser.add_argument("--session-id", default=os.getenv("CLAUDE_CODE_SESSION_ID", os.getenv("AGENT_MEMORY_SESSION_ID", "")))
+    parser.add_argument("--emit-json", action="store_true", help="Emit Codex/Claude hook-control JSON for explicit tests only")
     parser.add_argument("payload", nargs="*")
     return parser
 
