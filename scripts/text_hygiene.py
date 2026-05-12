@@ -12,7 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SKIP_PARTS = {
     ".git",
     "__pycache__",
+    "agent_work",
+    "data",
+    "demo_runs",
+    "install_state",
     "node_modules",
+    "runtime",
     ".venv",
     "venv",
     ".pytest_cache",
