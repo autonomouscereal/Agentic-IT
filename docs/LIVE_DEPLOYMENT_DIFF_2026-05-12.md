@@ -24,20 +24,20 @@ Current priority notes call out:
 - Keep tools dynamic and remove unrelated media/ComfyUI inventory.
 - Test with real agent workflows after code/deployment sync is resolved.
 
-## What Is Actually Deployed
+## What Was Deployed Before Sync
 
 The AI server source directory is not a Git checkout. It is a copied source tree
 with no `.git` metadata, so live-vs-local must be compared by snapshots.
 
 The live API at `http://192.168.50.222:25480/health` reports version `1.3.0`.
-The live source contains many dashboard features, but it is behind local Git for
-several routes and UI affordances.
+Before the 2026-05-12 deployment, the live source contained many dashboard
+features but was behind local Git for several routes and UI affordances.
 
 ## Important Differences
 
-### Live Is Missing Local Product Features
+### Live Was Missing Local Product Features
 
-Local Git includes these features that are absent from the deployed source:
+Local Git included these features that were absent from the deployed source:
 
 - `POST /api/intake/clarify`
 - RACI CRUD endpoints:
@@ -60,8 +60,8 @@ Local Git includes these features that are absent from the deployed source:
   - CI/CD finding/report/repo links
   - richer audit trail links and ticket activity panels
 
-This explains the live smoke failure on `/api/intake/clarify`: the deployed API
-source and container are older than the local Git tree for the intake workflow.
+This explained the live smoke failure on `/api/intake/clarify`: the deployed API
+source and container were older than the local Git tree for the intake workflow.
 
 ### Live Has Artifacts That Should Not Be Preserved As Runtime State
 
@@ -122,12 +122,45 @@ Do not treat the live tree as authoritative wholesale. The correct merge line is
 - Live `smoke_service_desk_intake.py` failed because `/api/intake/clarify` is
   not deployed yet.
 
+## Deployment Completed
+
+The local Git tree was deployed to `/home/cereal/SOC_TESTING/soc-dashboard` on
+2026-05-12 with runtime-state exclusions for `.env`, `.git`, `data`,
+`agent_work`, `runtime`, caches, and bytecode. The API was rebuilt and
+force-recreated so bind-mounted directories such as `/app/platform` were
+attached cleanly.
+
+Two regressions surfaced during live verification and were fixed in commit
+`6a9b766`:
+
+- Explicit `provider: "local"` ticket creation now stays local instead of
+  falling through to configured iTop auto-sync.
+- Postmortem promotion notes now include the source postmortem id, preserving
+  the evidence link in ticket context.
+
+Final live regression passed end to end:
+
+- `/health`: `{"status":"ok","version":"1.3.0"}`
+- `POST /api/intake/clarify`: 200 OK
+- `python3 -m compileall api scripts tests`: PASS
+- frontend `node --check frontend/js/*.js`: PASS
+- `python3 -m unittest discover -s tests -v`: PASS, 4 tests
+- `python3 scripts/audit_codex_migration.py --source-roots "$APP/reference_skills"`: PASS
+- `python3 scripts/platform_doctor.py --base http://localhost:25480 --env-file .env`: PASS 18/18
+- smoke suite: setup platform, provider adapters, service desk intake,
+  user response, agentic system, phishing workflow lifecycle, CI/CD security
+  pipeline, agent auditor, postmortem promotion, change auto-completion,
+  local-model agent, and setup agent all passed.
+
+Final containers:
+
+- `soc-dashboard-api-1`: up on `0.0.0.0:25480->8000/tcp`
+- `soc-dashboard-db-1`: up and healthy on `0.0.0.0:5433->5432/tcp`
+
 ## Next Safe Steps
 
-1. Commit the migration/sanitization and diff documentation locally.
-2. Deploy local Git code to the AI server with runtime-state exclusions.
-3. Rebuild/restart the dashboard API.
-4. Run the full smoke suite against live.
-5. Run real agentic workflows only after API/UI parity is confirmed:
-   phishing, user-response, postmortem workflow promotion, CI/CD scan/fix, and
-   setup-plan integration.
+1. Keep the local Git tree as the source of truth for product code.
+2. Use runtime-state exclusions for future deploys.
+3. Rebuild and force-recreate the API container after replacing source
+   directories.
+4. Run the documented live regression before considering deployment complete.

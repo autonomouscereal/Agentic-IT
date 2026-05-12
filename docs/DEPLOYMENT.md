@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-Last updated: 2026-05-11.
+Last updated: 2026-05-12.
 
 ## Requirements
 
@@ -24,11 +24,18 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 
 ## Upload
 
-Use server-manager from Windows:
+Use server-manager from Windows. Do not copy runtime state back into the source
+tree. Package code with exclusions for `.env`, `.git`, `data`, `agent_work`,
+`runtime`, caches, and bytecode, then upload the archive to the server.
 
 ```powershell
-C:\Users\cereal\.agents\skills\server-manager\.venv\Scripts\python.exe C:\Users\cereal\.agents\skills\server-manager\ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "/home/cereal/SOC_TESTING/soc-dashboard"
+tar --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' --exclude='data' --exclude='agent_work' --exclude='runtime' --exclude='.git' -czf soc-dashboard-deploy.tgz api frontend platform reference_skills scripts tests installer deploy docs agent_models.json docker-compose.yml README.md install.ps1 install.sh .env.example
+python C:\Users\cereal\.agents\skills\server-manager\ssh_client.py --server ai --upload .\soc-dashboard-deploy.tgz /tmp/soc-dashboard-deploy.tgz
 ```
+
+On the server, extract to a staging directory, replace only source-controlled
+directories and files, and preserve `.env`, database volumes, `data`,
+`agent_work`, and `runtime`.
 
 ## Environment
 
@@ -76,8 +83,12 @@ On the server:
 
 ```bash
 cd /home/cereal/SOC_TESTING/soc-dashboard
-docker compose up -d --build api
+docker compose up -d --build --force-recreate api
 ```
+
+Use `--force-recreate` after replacing bind-mounted source directories. This
+prevents stale mounts such as an empty `/app/platform` from surviving a source
+sync.
 
 ## Migrations
 
@@ -105,6 +116,29 @@ Expected:
 - runner harness `claude-code`
 - model API status `ok`
 - process diagnostics include `/usr/bin/ps`
+
+After a source deployment, run the full live regression:
+
+```bash
+python3 -m compileall api scripts tests
+for file in frontend/js/*.js; do node --check "$file"; done
+python3 -m unittest discover -s tests -v
+python3 scripts/audit_codex_migration.py --source-roots "/home/cereal/SOC_TESTING/soc-dashboard/reference_skills"
+python3 scripts/platform_doctor.py --base http://localhost:25480 --env-file .env
+python3 scripts/smoke_setup_platform.py http://localhost:25480
+python3 scripts/smoke_provider_adapters.py http://localhost:25480
+python3 scripts/smoke_service_desk_intake.py http://localhost:25480
+python3 scripts/smoke_user_response_workflow.py http://localhost:25480
+python3 scripts/smoke_agentic_system.py http://localhost:25480
+python3 scripts/smoke_phishing_workflow_lifecycle.py http://localhost:25480
+python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480
+python3 scripts/smoke_agent_auditor.py http://localhost:25480
+python3 scripts/smoke_postmortem_promotion.py http://localhost:25480
+docker compose cp scripts/smoke_change_auto_completion.py api:/app/smoke_change_auto_completion.py
+docker compose exec -T api python /app/smoke_change_auto_completion.py http://localhost:8000
+python3 scripts/smoke_local_model_agent.py http://localhost:25480 qwen/qwen3.6-27b
+python3 scripts/smoke_setup_agent.py http://localhost:25480 qwen/qwen3.6-27b
+```
 
 ## Reference Mailcow API Shim
 

@@ -308,6 +308,38 @@ wazuh-edr-sysmon E2E: PASS 15/15 exact marker
 agentic_cicd_full_demo.py: PASS ticket_id=98 initial_run=16 failed final_run=17 passed remediation_agent=59 task=57 deployment_change=51 completed postmortem=25 ready_for_review active_processes=0
 ```
 
+Post-deployment live regression on 2026-05-12 after commit `6a9b766`:
+
+```text
+dashboard health: PASS version=1.3.0
+POST /api/intake/clarify: PASS 200 OK
+source compile: PASS
+frontend node --check: PASS
+unit tests: PASS 4/4
+migration audit against reference_skills: PASS
+platform_doctor.py: PASS 18/18
+smoke_setup_platform.py: PASS ticket_id=152
+smoke_provider_adapters.py: PASS ticket_id=153 local_push=local_only
+smoke_service_desk_intake.py: PASS ticket_id=154 change_id=73 intent=phishing
+smoke_user_response_workflow.py: PASS ticket_id=155 final_status=new
+smoke_agentic_system.py: PASS ticket_id=156 local_push_ticket_id=157 change_id=74 postmortem_id=39 workflow_id=39 workflow_status=active skill_id=47
+smoke_phishing_workflow_lifecycle.py: PASS ticket_id=158 change_id=75 workflow_id=4 postmortem_id=40
+smoke_cicd_security_pipeline.py: PASS provider=gitlab run_id=19 ticket_id=159 change_id=76
+smoke_agent_auditor.py: PASS audited=0 recent=25
+smoke_postmortem_promotion.py: PASS ticket_id=160 postmortem_id=41 knowledge_article_id=40 workflow_id=41 skill_ids=48,49
+smoke_change_auto_completion.py: PASS ticket_id=161 agent_id=69 task_id=67 change_id=77 completed
+smoke_local_model_agent.py: PASS ticket_id=162 agent_id=70 task_id=68 completed note_written=true active_process_count=0
+smoke_setup_agent.py: PASS ticket_id=163 agent_id=71 task_id=69 completed note_written=true active_process_count=0
+final container check: PASS api up, db healthy
+```
+
+Two fixes came out of this deployment regression:
+
+- Explicit `provider: "local"` is now honored even when iTop is configured as
+  the automatic outbound provider.
+- Postmortem promotion notes include the source postmortem id so ticket context
+  preserves the promotion evidence link.
+
 The GitLab proof ran all scanner jobs through GitLab Runner:
 
 - `unit_tests`: success
