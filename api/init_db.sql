@@ -375,8 +375,7 @@ INSERT INTO tools (name, type, host, port, description) VALUES
     ('SIEM-Ticket Bridge', 'bridge', 'localhost', NULL, 'Wazuh <-> iTop alert bridge'),
     ('Agent Memory', 'memory', 'agent-memory-db', 5432, 'Shared PostgreSQL/pgvector memory service for dashboard agents'),
     ('SearXNG', 'search', 'localhost', 7999, 'Local search engine for research'),
-    ('GitLab', 'vcs', 'localhost', 80, 'GitLab CE for source management'),
-    ('TheHive', 'soc-platform', 'localhost', NULL, 'TheHive incident response')
+    ('GitLab', 'vcs', 'localhost', 80, 'GitLab CE for source management')
 ON CONFLICT (name) DO UPDATE SET
     type = EXCLUDED.type,
     host = EXCLUDED.host,
@@ -386,6 +385,9 @@ ON CONFLICT (name) DO UPDATE SET
 
 -- Delete ComfyUI if exists
 DELETE FROM tools WHERE name = 'ComfyUI';
+-- TheHive is optional/legacy in the current platform and should not appear
+-- unless an operator configures an actual reachable TheHive endpoint.
+DELETE FROM tools WHERE name = 'TheHive' AND port IS NULL;
 
 -- Insert default dashboard settings
 INSERT INTO dashboard_settings (key, value) VALUES
@@ -429,6 +431,7 @@ INSERT INTO service_raci_rules (
     ('Account locked or MFA help', 'identity-help', '["locked out", "password reset", "mfa", "2fa", "authenticator", "cannot login", "access denied"]', 'UserRequest', 'P3', 'Identity & Access', 'Identity & Access', 'IAM Service Owner', '["Service Desk"]', '["Security Operations"]', false, null, 'low', '["iam", "service-desk"]'),
     ('Access request', 'access-request', '["need access", "grant access", "permission", "role", "group membership", "shared mailbox", "distribution group"]', 'UserRequest', 'P3', 'Identity & Access', 'Identity & Access', 'Data Owner', '["Compliance & Audit"]', '["Requester Manager"]', true, 'Approve entitlement, role, or group membership change before execution.', 'medium', '["iam", "approval", "least-privilege"]'),
     ('Service outage', 'outage', '["down", "outage", "unavailable", "cannot reach", "service offline", "site broken", "network down"]', 'Incident', 'P1', 'Infrastructure Operations', 'Infrastructure Operations', 'Infrastructure Manager', '["Network Operations", "Business Applications"]', '["Security Operations", "Compliance & Audit"]', true, 'Approve production restart, failover, firewall, DNS, or routing change before execution.', 'high', '["incident", "availability", "change-management"]'),
+    ('EDR/SIEM security alert', 'edr-siem-alert', '["wazuh", "sysmon", "edr", "siem alert", "security breach", "critical security", "suricata", "zeek", "malware", "endpoint alert"]', 'Incident', 'P1', 'Security Operations', 'Security Operations', 'Security Operations Manager', '["Endpoint Support", "Infrastructure Operations", "Identity & Access"]', '["Compliance & Audit"]', true, 'Approve endpoint containment, account disablement, network block, or active response before execution.', 'high', '["edr", "siem", "incident-response", "endpoint"]'),
     ('Endpoint issue', 'endpoint-support', '["laptop", "desktop", "workstation", "edr", "sysmon", "agent missing", "software install"]', 'UserRequest', 'P3', 'Endpoint Support', 'Endpoint Support', 'Endpoint Service Owner', '["Security Operations"]', '[]', false, null, 'low', '["endpoint", "support"]'),
     ('Deployment or code change', 'devsecops', '["deploy", "merge request", "pull request", "pipeline", "repository", "semgrep", "trivy", "zap", "nuclei", "ci/cd"]', 'Change', 'P2', 'DevSecOps', 'DevSecOps', 'Change Advisory Board', '["Security Operations", "Compliance & Audit"]', '["Requester Manager"]', true, 'Run CI/CD security pipeline and require approval before production deployment.', 'high', '["devsecops", "cicd", "security-gate"]'),
     ('Audit evidence', 'audit-evidence', '["audit", "evidence", "compliance", "control", "report", "access review"]', 'UserRequest', 'P3', 'Compliance & Audit', 'Compliance & Audit', 'Compliance Lead', '["Security Operations", "Identity & Access"]', '[]', false, null, 'low', '["audit", "evidence"]'),
@@ -456,6 +459,13 @@ SET auto_assign_agent = true,
     auto_agent_prompt = 'Auto-work Security Operations phishing tickets end to end using compact evidence first. Required actions: write a triage note listing sender, recipients, URLs, clicked users, exposed credentials if any, endpoints, and provider ticket refs; create approval-gated changes for URL blocking, message quarantine/search, and endpoint scan/account containment when evidence supports them; poll approvals; complete approved lab-safe actions with evidence; write a final resolution note with residual risk and postmortem/workflow recommendations. Do not browse full ticket context unless compact evidence is missing a specific fact.',
     updated_at = NOW()
 WHERE name = 'Phishing report';
+
+UPDATE service_raci_rules
+SET auto_assign_agent = true,
+    auto_agent_model = COALESCE(auto_agent_model, 'qwen/qwen3.6-27b'),
+    auto_agent_prompt = 'Auto-work Security Operations EDR/SIEM alert tickets end to end using compact evidence first. Required actions: identify alert source, severity, affected host/user/IP, related telemetry, and provider ticket refs; classify incident scope; create approval-gated changes for endpoint scan, containment, account/session action, or network block only when evidence supports them; poll approvals; complete approved lab-safe actions with evidence; write a final resolution note with residual risk and postmortem/workflow recommendations. Do not browse full ticket context unless compact evidence is missing a specific fact.',
+    updated_at = NOW()
+WHERE name = 'EDR/SIEM security alert';
 
 -- Baseline global skills for fresh installs
 INSERT INTO agent_skills (name, description, category, prompt_template, enabled, assigned_to_all)

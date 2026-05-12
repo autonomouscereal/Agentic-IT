@@ -153,6 +153,17 @@ Three background tasks start on app startup via the FastAPI lifespan:
 
 3. **Agent Monitor Loop** (`agent_monitor.monitor_loop`) — Runs every 15 seconds (configurable via `AGENT_HEARTBEAT_INTERVAL`). Detects stalled agents (no heartbeat for 120+ seconds), marks them as 'stalled', writes audit entries, broadcasts over WebSocket.
 
+### Local Model Runner Policy
+
+The reference AI server currently runs slow local models. Do not use short wall-clock process timeouts for agent work.
+
+- `AGENT_TIMEOUT_MINUTES=0`: no fixed wall-clock kill for valid local-model work.
+- `MAX_CONCURRENT_AGENTS=1`: one active dashboard agent in the current lab so queued tasks do not saturate the local model.
+- `AGENT_NO_OUTPUT_STALL_SECONDS=3600`: configurable no-output stall guard. This is a last-resort harness-hang guard, not a progress timer; streaming or tool-using agents should continue.
+- The agent auditor is the primary supervision path. Judge status from task logs, checkpoints, notes, audit entries, and process state, not from percent alone.
+- Before rebuilding the API container, check `/api/agents/active` and `/api/agents/processes`. Stop only agents in your current test swim lane, with an explicit audit reason.
+- Per-agent curl guards block broad dashboard schema/tool endpoints (`/openapi.json`, `/api/tools`, `/docs`, `/redoc`) and cap oversized curl output so local agents stay on bounded ticket/evidence context.
+
 ## Database Schema
 
 Raw PostgreSQL — **NO ORM, NO Pydantic, NO SQLAlchemy**. All queries use parameterized raw SQL via asyncpg.

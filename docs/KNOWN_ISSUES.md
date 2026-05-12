@@ -227,6 +227,8 @@ Problem:
 Fix:
 
 - Installer, compose defaults, and `.env.example` now default `AGENT_TIMEOUT_MINUTES=0`.
+- Local-model deployments should default to `MAX_CONCURRENT_AGENTS=1` until faster models are available. This prevents queued work from saturating the model and creating false stalled-agent symptoms.
+- `AGENT_NO_OUTPUT_STALL_SECONDS` is configurable and defaults to `3600` for this environment. It is a last-resort silent-harness guard, not a short task timeout; agents that are streaming output or using tools should continue.
 - The agent auditor is the supervision path and defaults to `AGENT_AUDITOR_AUTO_RECOVER=false` so recovery is auditable before being made automatic.
 - Existing deployments can run `python3 scripts/repair_agent_supervision_env.py --env-file .env`, then recreate the API container.
 

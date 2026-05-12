@@ -57,7 +57,9 @@ This skill packages endpoint telemetry and response assets for the modular SOC p
   land in `/var/log/sysmon/sysmon.log`.
 - Keep the Sysmon hot log small. A very large historical file can fill the Wazuh
   logcollector queue and delay fresh alert indexing. The Linux deployment script
-  installs a logrotate policy at `/etc/logrotate.d/sysmon-edr`.
+  installs a logrotate policy at `/etc/logrotate.d/sysmon-edr`; keep the
+  `su syslog adm` directive because `/var/log/sysmon` is group-writable in the
+  reference deployment and logrotate will refuse to rotate without it.
 - A green config smoke is not enough. The E2E test now triggers harmless local
   endpoint activity and verifies an exact `CODEX_SYSMON_*` marker in Wazuh
   Indexer.

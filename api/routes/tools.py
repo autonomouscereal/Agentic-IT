@@ -6,9 +6,15 @@ from services.event_logger import log_event
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
+
+async def cleanup_tool_inventory():
+    await execute("DELETE FROM tools WHERE lower(name) = 'comfyui'")
+    await execute("DELETE FROM tools WHERE lower(name) = 'thehive' AND port IS NULL")
+
+
 @router.get("")
 async def list_tools():
-    await execute("DELETE FROM tools WHERE lower(name) = 'comfyui'")
+    await cleanup_tool_inventory()
     rows = await fetchall("""
         SELECT t.*, tc.status AS last_check_status, tc.response_time_ms
         FROM tools t
@@ -18,6 +24,7 @@ async def list_tools():
             FROM tool_checks
         ) tc ON t.id = tc.tool_id AND tc.rn = 1
         WHERE lower(t.name) <> 'comfyui'
+          AND NOT (lower(t.name) = 'thehive' AND t.port IS NULL)
         ORDER BY t.type, t.name
     """)
     manifest = platform_manifest.load_manifest()
@@ -37,7 +44,7 @@ async def list_tools():
 
 @router.get("/status")
 async def tools_status_summary():
-    await execute("DELETE FROM tools WHERE lower(name) = 'comfyui'")
+    await cleanup_tool_inventory()
     rows = await fetchall("""
         SELECT t.name, t.status, t.last_check, tc.status AS last_check_status
         FROM tools t
@@ -71,7 +78,7 @@ async def sync_manifest_tools(body: dict = None):
     deliberately avoids inserting every blueprint module as a port-checked tool;
     the setup page remains the source for modules that are not actually in use.
     """
-    await execute("DELETE FROM tools WHERE lower(name) = 'comfyui'")
+    await cleanup_tool_inventory()
     await execute("""
         INSERT INTO tools (name, type, host, port, description)
         VALUES ($1, $2, $3, $4, $5)

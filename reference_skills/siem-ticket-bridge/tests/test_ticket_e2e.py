@@ -3,7 +3,7 @@
 import sys, os, json, base64, urllib.request, ssl
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from siem_ticket_bridge.config import load_env_file, build_siem_config, build_ticketing_config, build_bridge_config
 from siem_ticket_bridge.siem import create_connector as create_siem_connector

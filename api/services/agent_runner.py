@@ -11,6 +11,21 @@ from database import execute, fetchrow, fetchval, fetchall
 from services.event_logger import log_event
 from services.agent_harness import get_harness, list_harnesses
 
+
+def _env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_bool(name, default=True):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in ("0", "false", "no", "off")
+
+
 AGENT_WORK_BASE = os.getenv("AGENT_WORK_BASE", "/app/agent_work")
 MAX_CONCURRENT_AGENTS = int(os.getenv("MAX_CONCURRENT_AGENTS", "3"))
 AGENT_TIMEOUT_MINUTES = int(os.getenv("AGENT_TIMEOUT_MINUTES", "0"))
@@ -21,6 +36,16 @@ AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", "").strip()
 AGENT_LLM_AUTH_TOKEN = os.getenv("AGENT_LLM_AUTH_TOKEN", "").strip()
 DASHBOARD_API_BASE = os.getenv("DASHBOARD_API_BASE", "http://localhost:8000").strip()
 AGENT_HARNESS = os.getenv("AGENT_HARNESS", "claude-code")
+AGENT_CURL_GUARD_ENABLED = _env_bool("AGENT_CURL_GUARD_ENABLED", True)
+AGENT_CURL_MAX_OUTPUT_BYTES = _env_int("AGENT_CURL_MAX_OUTPUT_BYTES", 250000)
+AGENT_CURL_BLOCKED_PATHS = os.getenv(
+    "AGENT_CURL_BLOCKED_PATHS",
+    "/openapi.json,/api/tools,/api/tools/status,/api/tools/check-all,/docs,/redoc",
+).strip()
+AGENT_NO_OUTPUT_STALL_SECONDS = _env_int(
+    "AGENT_NO_OUTPUT_STALL_SECONDS",
+    _env_int("AGENT_NO_OUTPUT_TIMEOUT_SECONDS", 3600),
+)
 
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_AGENTS)
 _active_processes = {}
@@ -48,7 +73,7 @@ def _parse_stream_result(output):
     return result
 
 
-async def _stream_reader(stream, label, output_path, task_id, agent_id, chunks):
+async def _stream_reader(stream, label, output_path, task_id, agent_id, chunks, activity=None):
     """Stream subprocess output to disk and periodically mirror a tail to DB."""
     last_db_update = 0.0
     with open(output_path, "a", encoding="utf-8", errors="replace") as f:
@@ -56,6 +81,8 @@ async def _stream_reader(stream, label, output_path, task_id, agent_id, chunks):
             line = await stream.readline()
             if not line:
                 break
+            if activity is not None:
+                activity["last_output_at"] = time.monotonic()
             text = line.decode("utf-8", errors="replace")
             rendered = text if label == "stdout" else f"[stderr] {text}"
             f.write(rendered)
@@ -98,6 +125,34 @@ def _progress_from_stream_event(line):
     if event_type == "result":
         return 95
     return 15
+
+
+async def _terminate_after_no_output(process, stall_seconds, activity, state):
+    if stall_seconds <= 0:
+        return
+    while process.returncode is None:
+        await asyncio.sleep(min(30, max(1, stall_seconds / 10)))
+        if process.returncode is not None:
+            return
+        idle_seconds = time.monotonic() - activity.get("last_output_at", time.monotonic())
+        if idle_seconds < stall_seconds:
+            continue
+        state["stalled"] = True
+        state["reason"] = (
+            f"Agent produced no output for {int(idle_seconds)} seconds; "
+            "runner marked it stalled and stopped the process to prevent a silent harness/model hang."
+        )
+        try:
+            process.terminate()
+            for _ in range(5):
+                await asyncio.sleep(1)
+                if process.returncode is not None:
+                    return
+            if process.returncode is None:
+                process.kill()
+        except ProcessLookupError:
+            return
+        return
 
 
 def _write_checkpoint(work_dir, task_id, step, status, output, progress_pct):
@@ -153,6 +208,76 @@ def _loads(value, default):
         except json.JSONDecodeError:
             return default
     return value
+
+
+def _split_guard_paths(value):
+    return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+def _curl_guard_script(real_curl, blocked_paths=None, max_output_bytes=None):
+    paths = blocked_paths if blocked_paths is not None else _split_guard_paths(AGENT_CURL_BLOCKED_PATHS)
+    limit = int(max_output_bytes if max_output_bytes is not None else AGENT_CURL_MAX_OUTPUT_BYTES)
+    return f"""#!/usr/bin/env python3
+import subprocess
+import sys
+
+REAL_CURL = {json.dumps(real_curl)}
+BLOCKED_PATHS = {json.dumps(paths)}
+MAX_OUTPUT_BYTES = {limit}
+
+args = sys.argv[1:]
+for blocked in BLOCKED_PATHS:
+    if blocked and any(blocked in arg for arg in args):
+        sys.stderr.write("[curl-guard] blocked broad dashboard endpoint: " + blocked + "\\n")
+        sys.stderr.write("[curl-guard] use a bounded ticket/evidence endpoint instead.\\n")
+        sys.exit(64)
+
+try:
+    proc = subprocess.Popen([REAL_CURL] + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+except OSError as exc:
+    sys.stderr.write("[curl-guard] failed to execute real curl: " + str(exc) + "\\n")
+    sys.exit(127)
+
+def emit(stream, data, label):
+    if MAX_OUTPUT_BYTES > 0 and len(data) > MAX_OUTPUT_BYTES:
+        stream.write(data[:MAX_OUTPUT_BYTES])
+        sys.stderr.buffer.write(
+            ("\\n[curl-guard] " + label + " truncated from " + str(len(data)) +
+             " bytes to " + str(MAX_OUTPUT_BYTES) + " bytes. Use a bounded API query.\\n").encode("utf-8")
+        )
+        return
+    stream.write(data)
+
+emit(sys.stdout.buffer, stdout, "stdout")
+emit(sys.stderr.buffer, stderr, "stderr")
+sys.exit(proc.returncode)
+"""
+
+
+def _write_curl_guard(work_dir, real_curl=None, blocked_paths=None, max_output_bytes=None):
+    """Install a per-agent curl wrapper that blocks broad context pulls."""
+    if not AGENT_CURL_GUARD_ENABLED:
+        return None
+    resolved_curl = real_curl or shutil.which("curl") or "/usr/bin/curl"
+    bin_dir = os.path.join(work_dir, "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+    guard_path = os.path.join(bin_dir, "curl")
+    with open(guard_path, "w", encoding="utf-8") as f:
+        f.write(_curl_guard_script(resolved_curl, blocked_paths, max_output_bytes))
+    os.chmod(guard_path, 0o755)
+    return guard_path
+
+
+def _apply_agent_path_guards(env, work_dir):
+    guard_bin = os.path.join(work_dir, "bin")
+    if os.path.exists(os.path.join(guard_bin, "curl")):
+        env["PATH"] = guard_bin + os.pathsep + env.get("PATH", "")
+        env["AGENT_CURL_GUARD_ENABLED"] = "1"
+        env["AGENT_CURL_MAX_OUTPUT_BYTES"] = str(AGENT_CURL_MAX_OUTPUT_BYTES)
+        env["AGENT_CURL_BLOCKED_PATHS"] = AGENT_CURL_BLOCKED_PATHS
+        env["AGENT_NO_OUTPUT_STALL_SECONDS"] = str(AGENT_NO_OUTPUT_STALL_SECONDS)
+    return env
 
 
 async def _add_agent_note(ticket_id, agent_id, task_id, title, body, source="agent-control-plane"):
@@ -293,6 +418,59 @@ async def complete_approved_changes_for_task(agent_id, task_id, reason="agent_ta
     return {"completed": completed, "skipped": skipped}
 
 
+async def _detect_completed_ticket_resolution(task_id, agent_id):
+    task = await fetchrow("""
+        SELECT id, agent_id, ticket_id, task_type, started_at, created_at
+        FROM agent_tasks
+        WHERE id = $1 AND agent_id = $2
+    """, task_id, agent_id)
+    if not task or task.get("task_type") != "ticket_resolution" or not task.get("ticket_id"):
+        return None
+
+    ticket_id = task["ticket_id"]
+    started_at = task.get("started_at") or task.get("created_at")
+    evidence = await fetchrow("""
+        SELECT
+            (SELECT COUNT(*)
+             FROM change_requests
+             WHERE ticket_id = $1 AND status = 'completed') AS completed_changes,
+            (SELECT COUNT(*)
+             FROM change_requests
+             WHERE ticket_id = $1
+               AND status NOT IN ('completed', 'rejected', 'cancelled')) AS open_changes,
+            (SELECT COUNT(*)
+             FROM ticket_notes
+             WHERE ticket_id = $1
+               AND created_at >= COALESCE($2, created_at)
+               AND source IN ('soc-agent', 'dashboard', 'agent-control-plane')
+               AND (
+                   body ILIKE '%Resolution%'
+                   OR body ILIKE '%Residual Risk%'
+                   OR body ILIKE '%complete%'
+               )) AS final_notes,
+            (SELECT COUNT(*)
+             FROM postmortems
+             WHERE ticket_id = $1
+               AND (task_id = $3 OR created_at >= COALESCE($2, created_at))) AS postmortems
+    """, ticket_id, started_at, task_id)
+    if not evidence:
+        return None
+
+    completed_changes = int(evidence.get("completed_changes") or 0)
+    open_changes = int(evidence.get("open_changes") or 0)
+    final_notes = int(evidence.get("final_notes") or 0)
+    postmortems = int(evidence.get("postmortems") or 0)
+    if final_notes > 0 and open_changes == 0 and (completed_changes > 0 or postmortems > 0):
+        return {
+            "ticket_id": ticket_id,
+            "completed_changes": completed_changes,
+            "open_changes": open_changes,
+            "final_notes": final_notes,
+            "postmortems": postmortems,
+        }
+    return None
+
+
 async def _mirror_checkpoint_to_task(task_id, agent_id, work_dir):
     checkpoint = _read_checkpoint_sync(work_dir)
     if not checkpoint:
@@ -357,7 +535,9 @@ You are an SOC agent assigned to resolve the following ticket.
 ## Dashboard API
 Use the canonical dashboard API for ticket context, notes, approvals, postmortems, and workflows:
 - Base URL inside this runner: `{DASHBOARD_API_BASE}`
-- Ticket context: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}/context`
+- Preferred bounded evidence: `GET /api/postmortems/evidence/{ticket.get('id', '{ticket_id}')}?task_log_lines=0`
+- Ticket detail: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}`
+- Broader ticket context only when needed: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}/context`
 - Add ticket notes: `POST /api/tickets/{ticket.get('id', '{ticket_id}')}/notes`
 - Request approval: `POST /api/changes/request`
 - Poll approval: `GET /api/changes/{{change_id}}/status`
@@ -365,6 +545,8 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Persist workflows: `POST /api/workflows`
 
 Treat iTop, ServiceNow, Jira, and local-only tickets as providers behind the dashboard API. Do not call provider-specific APIs unless the ticket context or a skill explicitly requires it.
+Do not fetch broad schema, docs, or tool inventory endpoints such as `/openapi.json`, `/api/tools`, `/api/tools/status`, `/docs`, or `/redoc`. The runner blocks those calls because they have caused local models to stall on oversized context. Use the bounded ticket/evidence endpoints above.
+When posting a postmortem, `skill_proposals`, `test_cases`, and `guardrails` must be JSON arrays, not strings.
 
 ## Checkpoint Protocol
 After each major step, write your progress to `checkpoint.json` in your work directory.
@@ -467,6 +649,16 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt):
     with open(claude_md_path, "w") as f:
         f.write(_build_claude_md(ticket, skills, prompt))
 
+    guard_path = _write_curl_guard(work_dir)
+    if guard_path:
+        await log_event("agent", "info", f"agent_{agent_id}", "agent_curl_guard_provisioned",
+                        f"task_{task_id}", {
+                            "work_dir": work_dir,
+                            "guard_path": guard_path,
+                            "blocked_paths": _split_guard_paths(AGENT_CURL_BLOCKED_PATHS),
+                            "max_output_bytes": AGENT_CURL_MAX_OUTPUT_BYTES,
+                        })
+
     # Initial checkpoint
     checkpoint_path = os.path.join(work_dir, "checkpoint.json")
     with open(checkpoint_path, "w") as f:
@@ -491,6 +683,7 @@ async def _run_agent(work_dir, prompt, task_id):
         llm_auth_token=AGENT_LLM_AUTH_TOKEN,
         dashboard_api_base=DASHBOARD_API_BASE,
     )
+    env = _apply_agent_path_guards(env, work_dir)
 
     settings_path = os.path.join(work_dir, ".claude", "settings.json")
     config = _load_model_config()
@@ -530,11 +723,16 @@ async def _run_agent(work_dir, prompt, task_id):
         )
 
         chunks = []
+        activity = {"last_output_at": time.monotonic()}
+        idle_state = {"stalled": False, "reason": None}
+        idle_task = asyncio.create_task(
+            _terminate_after_no_output(process, AGENT_NO_OUTPUT_STALL_SECONDS, activity, idle_state)
+        )
         stdout_task = asyncio.create_task(
-            _stream_reader(process.stdout, "stdout", output_path, task_id, agent_id, chunks)
+            _stream_reader(process.stdout, "stdout", output_path, task_id, agent_id, chunks, activity)
         )
         stderr_task = asyncio.create_task(
-            _stream_reader(process.stderr, "stderr", output_path, task_id, agent_id, chunks)
+            _stream_reader(process.stderr, "stderr", output_path, task_id, agent_id, chunks, activity)
         )
         try:
             if AGENT_TIMEOUT_MINUTES > 0:
@@ -542,16 +740,19 @@ async def _run_agent(work_dir, prompt, task_id):
                 await asyncio.wait_for(process.wait(), timeout=timeout)
             else:
                 await process.wait()
+            idle_task.cancel()
             await asyncio.gather(stdout_task, stderr_task)
             output = "".join(chunks)
             return {
                 "exit_code": process.returncode,
                 "stdout": output,
-                "stderr": "",
+                "stderr": idle_state["reason"] or "",
+                "no_output_stalled": idle_state["stalled"],
             }
         except asyncio.TimeoutError:
             process.kill()
             await process.wait()
+            idle_task.cancel()
             stdout_task.cancel()
             stderr_task.cancel()
             return {
@@ -756,6 +957,11 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 "UPDATE agents SET status = 'finished', heartbeat = NOW(), finished_at = NOW() WHERE id = $1",
                 agent_id,
             )
+            if task_meta and task_meta.get("task_type") == "ticket_resolution":
+                await execute(
+                    "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
+                    task_meta.get("ticket_id"),
+                )
             change_completion = await complete_approved_changes_for_task(
                 agent_id,
                 task_id,
@@ -781,6 +987,46 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                     ),
                 )
         else:
+            recovered_completion = await _detect_completed_ticket_resolution(task_id, agent_id)
+            if recovered_completion:
+                summary = (
+                    "Recovered completion: ticket has final resolution evidence, "
+                    f"{recovered_completion['completed_changes']} completed change gates, "
+                    f"{recovered_completion['final_notes']} final notes, and "
+                    f"{recovered_completion['postmortems']} postmortems."
+                )
+                await execute(
+                    "UPDATE agent_tasks SET status = 'completed', output = $1, error_message = NULL, "
+                    "completed_at = NOW(), progress_pct = 100 WHERE id = $2",
+                    _tail_text(result.get("stdout", "")), task_id,
+                )
+                await execute(
+                    "UPDATE agents SET status = 'finished', heartbeat = NOW(), error_message = NULL, finished_at = NOW() WHERE id = $1",
+                    agent_id,
+                )
+                await execute(
+                    "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
+                    recovered_completion["ticket_id"],
+                )
+                await log_event("agent", "warning", f"agent_{agent_id}", "agent_completion_recovered",
+                                f"task_{task_id}", {
+                                    "summary": summary,
+                                    "checkpoint_done": checkpoint_done,
+                                    "exit_code": result.get("exit_code"),
+                                    "evidence": recovered_completion,
+                                })
+                await _add_agent_note(
+                    recovered_completion["ticket_id"],
+                    agent_id,
+                    task_id,
+                    "Agent completed with recovered finalization",
+                    (
+                        f"Agent `{agent_id}` finished the ticket work but did not persist a final done checkpoint. "
+                        f"The supervisor recovered completion from dashboard evidence: {summary}"
+                    ),
+                )
+                _active_processes.pop(task_id, None)
+                return
             raw_error = result.get("stderr") or result.get("stdout") or f"Agent exited with code {result['exit_code']}"
             error = raw_error[:2000]
             await execute(
@@ -938,6 +1184,7 @@ async def get_runner_health():
         "work_base": AGENT_WORK_BASE,
         "max_concurrent_agents": MAX_CONCURRENT_AGENTS,
         "timeout_minutes": AGENT_TIMEOUT_MINUTES,
+        "no_output_stall_seconds": AGENT_NO_OUTPUT_STALL_SECONDS,
         "permission_mode": AGENT_PERMISSION_MODE,
         "allowed_tools": AGENT_ALLOWED_TOOLS,
         "harness": AGENT_HARNESS,

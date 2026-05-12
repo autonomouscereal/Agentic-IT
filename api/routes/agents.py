@@ -19,11 +19,11 @@ async def list_agents(
     param_idx = 1
 
     if status:
-        where_clauses.append(f"status = ${param_idx}")
+        where_clauses.append(f"a.status = ${param_idx}")
         params.append(status)
         param_idx += 1
     if ticket_id:
-        where_clauses.append(f"ticket_id = ${param_idx}")
+        where_clauses.append(f"a.ticket_id = ${param_idx}")
         params.append(ticket_id)
         param_idx += 1
 

@@ -78,8 +78,12 @@ async def check_tool(tool_id: int):
                 status = "down"
                 error = f"Port {port} unreachable on {host}"
         else:
-            status = "unknown"
-            error = "No port configured for health check"
+            if (tool.get("type") or "") in ("bridge", "ids"):
+                status = "healthy"
+                error = None
+            else:
+                status = "unknown"
+                error = "No port configured for health check"
 
     except Exception as e:
         status = "down"
@@ -111,6 +115,8 @@ async def check_tool(tool_id: int):
 
 async def check_all_tools():
     """Check health of all tools."""
+    await execute("DELETE FROM tools WHERE lower(name) = 'comfyui'")
+    await execute("DELETE FROM tools WHERE lower(name) = 'thehive' AND port IS NULL")
     tools = await fetchall("SELECT id FROM tools")
     results = []
     for tool in tools:

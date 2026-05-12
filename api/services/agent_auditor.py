@@ -66,6 +66,17 @@ async def _recent_duplicate(task_id, finding, minutes=15):
     """, task_id, finding, str(minutes))
 
 
+async def _recent_ticket_duplicate(ticket_id, finding, minutes=60):
+    if not ticket_id:
+        return None
+    return await fetchrow("""
+        SELECT id FROM agent_audit_reviews
+        WHERE ticket_id = $1 AND finding = $2
+          AND created_at > NOW() - ($3::text || ' minutes')::interval
+        ORDER BY created_at DESC LIMIT 1
+    """, ticket_id, finding, str(minutes))
+
+
 async def _ticket_has_other_active_agent(ticket_id, agent_id):
     if not ticket_id:
         return None
@@ -198,7 +209,9 @@ async def _audit_task(row):
                       "agent_no_progress", "spawn_replacement_agent", action,
                       False, {"age_minutes": age_minutes, "threshold_minutes": NO_PROGRESS_MINUTES})
     elif task["status"] == "failed":
-        if await _recent_duplicate(task["id"], "agent_task_failed", 15):
+        if await _recent_duplicate(task["id"], "agent_task_failed", 120):
+            return
+        if await _recent_ticket_duplicate(agent["ticket_id"], "agent_task_failed", 30):
             return
         if task.get("task_type") == "postmortem":
             from services.postmortem_synthesizer import synthesize_postmortem

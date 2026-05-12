@@ -52,6 +52,29 @@ def _text_lines(value):
     return [str(value)]
 
 
+def _ensure_list(value):
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return parsed
+            if parsed is None:
+                return []
+            return [parsed]
+        except json.JSONDecodeError:
+            return [text]
+    return [value]
+
+
 def _postmortem_article_body(postmortem, ticket, skill_ids, workflow_name):
     title = ticket.get("title") if ticket else f"postmortem {postmortem['id']}"
     skill_proposals = _loads(postmortem.get("skill_proposals"), [])
@@ -381,12 +404,15 @@ async def create_postmortem(
     went_well: str = Body(""),
     improvements: str = Body(""),
     workflow_proposal: str = Body(""),
-    skill_proposals: list = Body([]),
-    test_cases: list = Body([]),
-    guardrails: list = Body([]),
+    skill_proposals=Body([]),
+    test_cases=Body([]),
+    guardrails=Body([]),
     documentation: str = Body(""),
     created_by: str = Body("dashboard"),
 ):
+    skill_proposals = _ensure_list(skill_proposals)
+    test_cases = _ensure_list(test_cases)
+    guardrails = _ensure_list(guardrails)
     postmortem_id = await fetchval("""
         INSERT INTO postmortems (
             ticket_id, agent_id, task_id, status, summary, went_well,
@@ -412,9 +438,9 @@ async def update_postmortem(
     went_well: str = Body(None),
     improvements: str = Body(None),
     workflow_proposal: str = Body(None),
-    skill_proposals: list = Body(None),
-    test_cases: list = Body(None),
-    guardrails: list = Body(None),
+    skill_proposals=Body(None),
+    test_cases=Body(None),
+    guardrails=Body(None),
     documentation: str = Body(None),
     review_notes: str = Body(None),
 ):
@@ -424,9 +450,9 @@ async def update_postmortem(
         "went_well": went_well,
         "improvements": improvements,
         "workflow_proposal": workflow_proposal,
-        "skill_proposals": json_dumps(skill_proposals) if skill_proposals is not None else None,
-        "test_cases": json_dumps(test_cases) if test_cases is not None else None,
-        "guardrails": json_dumps(guardrails) if guardrails is not None else None,
+        "skill_proposals": json_dumps(_ensure_list(skill_proposals)) if skill_proposals is not None else None,
+        "test_cases": json_dumps(_ensure_list(test_cases)) if test_cases is not None else None,
+        "guardrails": json_dumps(_ensure_list(guardrails)) if guardrails is not None else None,
         "documentation": documentation,
         "review_notes": review_notes,
     }

@@ -90,6 +90,7 @@ log "  -> rsyslog Sysmon file forwarding installed"
 # an oversized historical Sysmon file in demo or lab environments.
 cat > /etc/logrotate.d/sysmon-edr << EOF
 $SYSMON_LOG {
+    su syslog adm
     daily
     rotate 7
     size 256M
