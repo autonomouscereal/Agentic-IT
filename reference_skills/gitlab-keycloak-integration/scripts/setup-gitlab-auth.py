@@ -3,12 +3,52 @@
 import json
 import os
 import ssl
+import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
 BASE_URL = "http://localhost"
-PAT = os.environ.get("GITLAB_PAT", "")
+
+
+def load_gitlab_pat():
+    env_pat = os.environ.get("GITLAB_PAT", "").strip()
+    if env_pat:
+        return env_pat
+
+    token_file = os.environ.get("GITLAB_PAT_FILE", "").strip()
+    if token_file and os.path.exists(token_file):
+        with open(token_file, encoding="utf-8") as handle:
+            token = handle.read().strip()
+            if token:
+                return token
+
+    vault_key = os.environ.get("GITLAB_PAT_VAULT_KEY", "gitlab_oidc_setup_pat")
+    candidates = [
+        os.environ.get("CREDMAN_PATH", ""),
+        "/home/cereal/.claude/skills/server-manager/credman.py",
+        "/home/cereal/.agents/skills/server-manager/credman.py",
+        "C:/Users/cereal/.claude/skills/server-manager/credman.py",
+        "C:/Users/cereal/.agents/skills/server-manager/credman.py",
+    ]
+    for credman in [path for path in candidates if path]:
+        if not os.path.exists(credman):
+            continue
+        result = subprocess.run(
+            [sys.executable, credman, "get", vault_key],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        token = result.stdout.strip()
+        if result.returncode == 0 and token:
+            return token
+
+    return ""
+
+
+PAT = load_gitlab_pat()
 
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False

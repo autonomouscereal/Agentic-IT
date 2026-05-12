@@ -4,7 +4,12 @@
 set -euo pipefail
 
 TOTAL=0; PASS=0; FAIL=0; SKIP=0
-GITLAB_PAT="${GITLAB_PAT:?Set GITLAB_PAT from the credential vault before running tests}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/gitlab_token.sh"
+GITLAB_PAT="$(load_gitlab_pat gitlab_oidc_setup_pat)" || {
+    echo "ERROR: No GitLab PAT found. Set GITLAB_PAT, GITLAB_PAT_FILE, or CREDMAN_PATH/GITLAB_PAT_VAULT_KEY." >&2
+    exit 1
+}
 GITLAB_URL="http://localhost"
 KC_URL="https://localhost:8443"
 

@@ -17,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import textwrap
 import time
@@ -47,7 +48,41 @@ DEFAULT_DASHBOARD = os.getenv("SOC_DASHBOARD_URL", "http://localhost:25480").rst
 DEFAULT_RUNNER_DASHBOARD = os.getenv("SOC_RUNNER_DASHBOARD_URL", "http://192.168.50.222:25480").rstrip("/")
 DEFAULT_GITLAB = os.getenv("GITLAB_URL", "http://localhost").rstrip("/")
 DEFAULT_MODEL = os.getenv("AGENT_MODEL", "qwen/qwen3.6-27b")
-DEFAULT_TOKEN_FILE = "/home/cereal/gitlab/.gitlab-token"
+DEFAULT_TOKEN_FILE = os.getenv("GITLAB_PAT_FILE", "/home/cereal/gitlab/.gitlab-token")
+
+
+def load_gitlab_token(token_file: str) -> str:
+    env_token = os.getenv("GITLAB_PAT", "").strip()
+    if env_token:
+        return env_token
+
+    if token_file and Path(token_file).exists():
+        token = Path(token_file).read_text(encoding="utf-8").strip()
+        if token:
+            return token
+
+    vault_key = os.getenv("GITLAB_PAT_VAULT_KEY", "gitlab_manager_pat")
+    candidates = [
+        os.getenv("CREDMAN_PATH", ""),
+        "/home/cereal/.claude/skills/server-manager/credman.py",
+        "/home/cereal/.agents/skills/server-manager/credman.py",
+        "C:/Users/cereal/.claude/skills/server-manager/credman.py",
+        "C:/Users/cereal/.agents/skills/server-manager/credman.py",
+    ]
+    for credman in [path for path in candidates if path]:
+        if not Path(credman).exists():
+            continue
+        result = subprocess.run(
+            [sys.executable, credman, "get", vault_key],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        token = result.stdout.strip()
+        if result.returncode == 0 and token:
+            return token
+
+    return ""
 
 
 def gitlab_request(method: str, base: str, token: str, path: str, payload=None, timeout: int = 120):
@@ -454,9 +489,9 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=2400)
     args = parser.parse_args()
 
-    token = Path(args.gitlab_token_file).read_text(encoding="utf-8").strip()
+    token = load_gitlab_token(args.gitlab_token_file)
     if not token:
-        raise RuntimeError("GitLab token file is empty")
+        raise RuntimeError("No GitLab PAT found. Set GITLAB_PAT, GITLAB_PAT_FILE, or CREDMAN_PATH/GITLAB_PAT_VAULT_KEY.")
 
     run_id = int(time.time())
     work_root = Path(args.workspace).resolve() / f"gitlab-agentic-cicd-{run_id}"

@@ -5,6 +5,8 @@ set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 PASS=0; WARN=0; FAIL=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/gitlab_token.sh"
 
 check() { local section="$1"; test="$2"; result="$3"; echo -e "  ${result} $test" ; }
 header() { echo -e "\n${CYAN}=== $1 ===${NC}"; }
@@ -75,7 +77,7 @@ else
 fi
 
 header "GitLab Groups"
-GITLAB_PAT="${GITLAB_PAT:-}"
+GITLAB_PAT="$(load_gitlab_pat gitlab_oidc_setup_pat)" || GITLAB_PAT=""
 for g in gitlab-admins gitlab-developers gitlab-viewers; do
   exists=$(curl -s "http://localhost/api/v4/groups?search=$g" -H "PRIVATE-TOKEN: $GITLAB_PAT" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if any(x['path']=='$g' for x in d) else 'no')" 2>/dev/null || echo "no")
   if [[ "$exists" == "yes" ]]; then

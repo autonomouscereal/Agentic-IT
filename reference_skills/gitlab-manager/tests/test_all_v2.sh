@@ -8,7 +8,12 @@ set -uo pipefail
 
 GITLAB_HOST="192.168.50.222"
 GITLAB_URL="http://${GITLAB_HOST}"
-TOKEN="${GITLAB_PAT:?Set GITLAB_PAT from the credential vault before running tests}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/../scripts/gitlab_token.sh"
+TOKEN="$(load_gitlab_pat gitlab_manager_pat)" || {
+    echo "ERROR: No GitLab PAT found. Set GITLAB_PAT, GITLAB_PAT_FILE, or CREDMAN_PATH/GITLAB_PAT_VAULT_KEY." >&2
+    exit 1
+}
 TEST_GROUP="test-suite-$(date +%s)"
 TEST_REPO="e2e-test-repo"
 TEMP_DIR="/tmp/gl-tests-$$"

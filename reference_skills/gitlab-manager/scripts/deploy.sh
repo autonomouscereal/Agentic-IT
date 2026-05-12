@@ -13,6 +13,8 @@ GITLAB_HOSTNAME="${GITLAB_HOSTNAME:-192.168.50.222}"
 GITLAB_HTTP_PORT="${GITLAB_HTTP_PORT:-80}"
 GITLAB_SSH_PORT="${GITLAB_SSH_PORT:-2222}"
 GITLAB_TIMEZONE="${GITLAB_TIMEZONE:-UTC}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/gitlab_token.sh"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
@@ -69,9 +71,7 @@ get_root_password() {
 }
 
 get_pat() {
-    # Try .gitlab-token file first, then .env
-    if [ -f "${DEPLOY_DIR}/.gitlab-token" ]; then
-        cat "${DEPLOY_DIR}/.gitlab-token"
+    if load_gitlab_pat gitlab_manager_pat; then
         return 0
     fi
     if [ -f "${DEPLOY_DIR}/.env" ]; then

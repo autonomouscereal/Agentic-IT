@@ -9,16 +9,19 @@ set -uo pipefail
 GITLAB_HOST="${GITLAB_HOST:-192.168.50.222}"
 GITLAB_URL="http://${GITLAB_HOST}"
 TOKEN_FILE="${TOKEN_FILE:-/home/cereal/gitlab/.gitlab-token}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/gitlab_token.sh"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
 load_token() {
-    if [ -f "$TOKEN_FILE" ]; then
-        TOKEN=$(cat "$TOKEN_FILE")
-    elif [ -f "/home/cereal/gitlab/.env" ]; then
-        TOKEN=$(grep '^GITLAB_PAT=' /home/cereal/gitlab/.env 2>/dev/null | cut -d'=' -f2-)
-    else
-        echo -e "${RED}ERROR: No PAT found. Create one in GitLab UI or set TOKEN_FILE.${NC}"
+    TOKEN="$(load_gitlab_pat gitlab_manager_pat)" || {
+        if [ -f "/home/cereal/gitlab/.env" ]; then
+            TOKEN=$(grep '^GITLAB_PAT=' /home/cereal/gitlab/.env 2>/dev/null | cut -d'=' -f2-)
+        fi
+    }
+    if [ -z "${TOKEN:-}" ]; then
+        echo -e "${RED}ERROR: No PAT found. Set GITLAB_PAT, GITLAB_PAT_FILE, TOKEN_FILE, or configure the credential vault.${NC}"
         exit 1
     fi
 }
@@ -102,10 +105,14 @@ create_pat() {
     local new_token
     new_token=$(echo "$resp" | grep -o '"token":"glpat-[A-Za-z0-9_\-]*"' | cut -d'"' -f4)
     if [ -n "${new_token:-}" ]; then
-        echo "$new_token" > "$TOKEN_FILE"
-        chmod 600 "$TOKEN_FILE"
-        echo -e "${GREEN}New PAT created and saved to ${TOKEN_FILE}${NC}"
-        echo "  Token: ${new_token}"
+        if [ -n "${CREDMAN_PATH:-}" ]; then
+            python "$CREDMAN_PATH" set "${GITLAB_PAT_VAULT_KEY:-gitlab_manager_pat}" "$new_token"
+            echo -e "${GREEN}New PAT created and saved to credential vault key '${GITLAB_PAT_VAULT_KEY:-gitlab_manager_pat}'${NC}"
+        else
+            echo "$new_token" > "$TOKEN_FILE"
+            chmod 600 "$TOKEN_FILE"
+            echo -e "${GREEN}New PAT created and saved to ${TOKEN_FILE}${NC}"
+        fi
     else
         echo -e "${RED}Failed: ${resp:0:200}${NC}"
     fi

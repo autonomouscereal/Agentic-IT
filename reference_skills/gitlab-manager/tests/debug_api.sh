@@ -1,5 +1,10 @@
 #!/bin/bash
-TOKEN="${GITLAB_PAT:?Set GITLAB_PAT from the credential vault before running this debug script}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/../scripts/gitlab_token.sh"
+TOKEN="$(load_gitlab_pat gitlab_manager_pat)" || {
+    echo "ERROR: No GitLab PAT found. Set GITLAB_PAT, GITLAB_PAT_FILE, or CREDMAN_PATH/GITLAB_PAT_VAULT_KEY." >&2
+    exit 1
+}
 URL='http://192.168.50.222'
 
 echo "=== Test: Create group ==="
