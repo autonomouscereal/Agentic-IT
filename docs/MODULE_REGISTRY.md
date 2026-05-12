@@ -30,6 +30,7 @@ Provider-contract modules are intentionally separate from reference products. Ma
 Important boundaries:
 
 - Use generated environment values or vault references for `AGENT_MEMORY_DB_PASSWORD`.
+- The one-line installer registers **Agent Memory** in the dashboard Tools inventory with a port health check against `agent-memory-db:5432`.
 - Store durable operational notes, user prompts, tool-call audit records, and test evidence.
 - Do not store plaintext secrets; hook metadata redacts obvious secret fields.
 - MemPalace is now optional legacy/secondary memory and is not part of default platform profiles.

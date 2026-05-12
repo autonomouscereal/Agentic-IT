@@ -64,7 +64,7 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
 
 The setup ticket becomes the auditable deployment record. Agents must request changes before modifying infrastructure.
 
-The installer also deploys `agent-memory-db` and wires spawned dashboard agents to the `agent-memory` skill. Agent prompts, tool calls, session stops, deliberate notes, and smoke-test sentinels are stored in the shared memory service with async PostgreSQL writes, JSONB metadata, full-text search, trigram search, and pgvector retrieval.
+The installer also deploys `agent-memory-db`, registers **Agent Memory** on the Tools page, and wires spawned dashboard agents to the `agent-memory` skill. Agent prompts, tool calls, session stops, deliberate notes, and smoke-test sentinels are stored in the shared memory service with async PostgreSQL writes, JSONB metadata, full-text search, trigram search, and pgvector retrieval. Running **Tools -> Check All** should report Agent Memory as healthy when the database service is deployed.
 
 Multiple installs can run on the same host when different `--target`, `--dashboard-port`, `--db-port`, and optionally `--project-name` values are used. The compose file does not use fixed container names.
 

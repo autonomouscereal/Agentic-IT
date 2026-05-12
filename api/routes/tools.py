@@ -72,6 +72,17 @@ async def sync_manifest_tools(body: dict = None):
     the setup page remains the source for modules that are not actually in use.
     """
     await execute("DELETE FROM tools WHERE lower(name) = 'comfyui'")
+    await execute("""
+        INSERT INTO tools (name, type, host, port, description)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (name) DO UPDATE SET
+            type = EXCLUDED.type,
+            host = EXCLUDED.host,
+            port = EXCLUDED.port,
+            description = EXCLUDED.description,
+            updated_at = NOW()
+    """, "Agent Memory", "memory", "agent-memory-db", 5432,
+        "Shared PostgreSQL/pgvector memory service for dashboard agents")
     manifest = platform_manifest.load_manifest()
     excluded = [item.get("id") for item in manifest.get("excluded_modules", [])]
     await log_event("health", "info", "dashboard", "tool_manifest_synced",

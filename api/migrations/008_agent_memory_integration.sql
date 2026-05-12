@@ -17,3 +17,19 @@ ON CONFLICT (name) DO UPDATE SET
     enabled = EXCLUDED.enabled,
     assigned_to_all = EXCLUDED.assigned_to_all,
     updated_at = NOW();
+
+INSERT INTO tools (name, type, host, port, description, status)
+VALUES (
+    'Agent Memory',
+    'memory',
+    'agent-memory-db',
+    5432,
+    'Shared PostgreSQL/pgvector memory service for dashboard agents',
+    'unknown'
+)
+ON CONFLICT (name) DO UPDATE SET
+    type = EXCLUDED.type,
+    host = EXCLUDED.host,
+    port = EXCLUDED.port,
+    description = EXCLUDED.description,
+    updated_at = NOW();
