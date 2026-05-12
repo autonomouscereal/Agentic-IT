@@ -44,12 +44,12 @@ Encrypted, agnostic SSH management tool. Zero hardcoded secrets. Zero escaping i
 
 ## First-Time Setup (any environment)
 
-Run these steps **once** when planted in a new environment. All script paths use `${CLAUDE_SKILL_DIR}` which resolves to this skill's directory.
+Run these steps **once** when planted in a new environment. Set `SERVER_MANAGER_SKILL_DIR` to this skill directory, for example `C:/Users/cereal/.agents/skills/server-manager`.
 
 ### Step 1: Initialize the encrypted credential vault
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/credman.py" setup
+python "${SERVER_MANAGER_SKILL_DIR}/credman.py" setup
 ```
 
 This generates `.cred_key` (master encryption key) with restricted permissions.
@@ -57,12 +57,12 @@ This generates `.cred_key` (master encryption key) with restricted permissions.
 ### Step 2: Store server passwords (one-time, encrypted at rest)
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/credman.py" set <server-name> "<password>"
+python "${SERVER_MANAGER_SKILL_DIR}/credman.py" set <server-name> "<password>"
 ```
 
 For example, with a configured AI server:
 ```bash
-python "${CLAUDE_SKILL_DIR}/credman.py" set ai "the-ai-server-password"
+python "${SERVER_MANAGER_SKILL_DIR}/credman.py" set ai "<from secure handoff>"
 ```
 
 **After this, passwords NEVER appear in bash again.** They are encrypted in `.cred_vault.json` and only decrypted in-memory when needed.
@@ -70,7 +70,7 @@ python "${CLAUDE_SKILL_DIR}/credman.py" set ai "the-ai-server-password"
 ### Step 3: Verify connection
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --test
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --test
 ```
 
 Expected output: `Auth: password (from vault)` followed by `[OK] Connected`.
@@ -100,7 +100,7 @@ Edit `servers.json` to add a new server entry, then store its password:
 
 Then store the password:
 ```bash
-python "${CLAUDE_SKILL_DIR}/credman.py" set my-new-server "the-password"
+python "${SERVER_MANAGER_SKILL_DIR}/credman.py" set my-new-server "the-password"
 ```
 
 That's it. Use `--server my-new-server` from then on.
@@ -143,7 +143,7 @@ That's it. Use `--server my-new-server` from then on.
 ### Pattern 1: Simple command (no special characters)
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --execute "docker compose ps"
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --execute "docker compose ps"
 ```
 
 ### Pattern 2: Complex command via file (avoids ALL escaping)
@@ -158,13 +158,13 @@ with open('/tmp/my_cmd.txt', 'w') as f:
 "
 
 # Step 2: Execute via command-file
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --command-file "/tmp/my_cmd.txt"
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --command-file "/tmp/my_cmd.txt"
 ```
 
 ### Pattern 3: Multi-line scripts (most robust for complex work)
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --script '
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --script '
 echo "=== Status ==="
 echo "Hostname: $(hostname)"
 echo "User: $(whoami)"
@@ -180,19 +180,19 @@ The `--script` flag uploads the script to a secure temp file on the remote serve
 
 ```bash
 # Upload a single file
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --upload "C:/reports/output.csv" "/home/cereal/output.csv"
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --upload "C:/reports/output.csv" "/home/cereal/output.csv"
 
 # Upload a directory tree (handles nested directories)
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --upload-dir "C:/project/src" "/home/cereal/project/src"
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --upload-dir "C:/project/src" "/home/cereal/project/src"
 
 # Download a file
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --download "/home/cereal/logs/app.log" "C:/Users/cereal/Downloads"
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --download "/home/cereal/logs/app.log" "C:/Users/cereal/Downloads"
 ```
 
 ### Pattern 5: JSON output for programmatic consumption
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/ssh_client.py" --server ai --execute "hostname" --json
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --execute "hostname" --json
 ```
 
 ---
@@ -226,10 +226,10 @@ For each server: encrypted vault -> environment variable -> SSH key.
 ### Credential management
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/credman.py" list      # Show stored server names
-python "${CLAUDE_SKILL_DIR}/credman.py" set ai "new-password"
-python "${CLAUDE_SKILL_DIR}/credman.py" rm ai
-python "${CLAUDE_SKILL_DIR}/credman.py" clear     # Remove all
+python "${SERVER_MANAGER_SKILL_DIR}/credman.py" list      # Show stored server names
+python "${SERVER_MANAGER_SKILL_DIR}/credman.py" set ai "new-password"
+python "${SERVER_MANAGER_SKILL_DIR}/credman.py" rm ai
+python "${SERVER_MANAGER_SKILL_DIR}/credman.py" clear     # Remove all
 ```
 
 ---
@@ -238,7 +238,7 @@ python "${CLAUDE_SKILL_DIR}/credman.py" clear     # Remove all
 
 ```python
 import sys
-sys.path.insert(0, "${CLAUDE_SKILL_DIR}")
+sys.path.insert(0, "${SERVER_MANAGER_SKILL_DIR}")
 
 from ssh_client import ServerConfig, SSHClient
 
@@ -275,7 +275,7 @@ if ssh.connect():
 
 1. Run `python credman.py setup` to create the encryption key.
 2. Run `python credman.py set ai "<pw>"` for each configured server key.
-3. Replace `--ai` flag with `--server ai`.
+3. Replace `--server ai` flag with `--server ai`.
 4. For complex commands, use `--script` or `--command-file` instead of `--execute`.
 
 ---

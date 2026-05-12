@@ -27,6 +27,7 @@ data/
 agent_work/
 install_state/
 .tmp-install-*/
+_compare_live/
 
 # Skill bundle exclusions
 reference_skills/**/.cred_key

@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 
 BASE_URL = "http://localhost"
-PAT = os.environ.get("GITLAB_PAT", "glpat-uyTtfbshu1wUzA5sBd4y")
+PAT = os.environ.get("GITLAB_PAT", "")
 
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
@@ -242,6 +242,9 @@ def verify_setup(token, project_id):
 
 def main():
     token = PAT
+    if not token:
+        raise SystemExit("GITLAB_PAT is required; load it from the credential vault-backed environment before running")
+
     print("=" * 60)
     print("GitLab Authorization Workflow Setup")
     print("=" * 60)

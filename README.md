@@ -171,7 +171,7 @@ External ticket links are built from `ITOP_WEB_BASE` when available, falling bac
 Use the server-manager skill. Do not use raw SSH.
 
 ```powershell
-C:\Users\cereal\.claude\skills\server-manager\.venv\Scripts\python.exe C:\Users\cereal\.claude\skills\server-manager\ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "/home/cereal/SOC_TESTING/soc-dashboard"
+C:\Users\cereal\.agents\skills\server-manager\.venv\Scripts\python.exe C:\Users\cereal\.agents\skills\server-manager\ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "/home/cereal/SOC_TESTING/soc-dashboard"
 ```
 
 Then on the AI server:

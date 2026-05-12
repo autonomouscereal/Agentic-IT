@@ -19,17 +19,17 @@ All AI Server platform credentials are managed through the **Server Manager v2 e
 ## Credential Vault
 
 ### Location
-- Vault script: `C:/Users/cereal/.Codex/skills/server-manager/credman.py`
-- Encrypted store: `C:/Users/cereal/.Codex/skills/server-manager/.cred_vault.json`
-- Server config: `C:/Users/cereal/.Codex/skills/server-manager/servers.json`
+- Vault script: `C:/Users/cereal/.agents/skills/server-manager/credman.py`
+- Encrypted store: `C:/Users/cereal/.agents/skills/server-manager/.cred_vault.json`
+- Server config: `C:/Users/cereal/.agents/skills/server-manager/servers.json`
 
 ### Usage
 ```bash
 # Store a password
-python "C:/Users/cereal/.Codex/skills/server-manager/credman.py" set <server-name> "<password>"
+python "C:/Users/cereal/.agents/skills/server-manager/credman.py" set <server-name> "<password>"
 
 # List servers
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --list-servers
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-servers
 ```
 
 ## Platform Services & Ports

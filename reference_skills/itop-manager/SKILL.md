@@ -2,7 +2,7 @@
 name: itop-manager
 description: Manage the iTop ITSM v3.2.1 instance on AI Server (192.168.50.222) via Docker. Create/update/delete incidents, changes, requests, servers, and CMDB objects through the REST API. Apply workflow stimuli for state transitions including approval chains. Execute the Python client script remotely via SSH.
 when_to_use: iTop operations, ITSM ticket management, incident/change/request lifecycle, Docker container management for iTop, REST API calls to iTop, ITIL workflows, approval chains, assignment groups, escalation testing.
-allowed-tools: Bash("C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" "--ai" "--execute" "*"), Read, Edit, Write, Glob, Grep
+allowed-tools: Bash("C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" "--server" "ai" "--execute" "*"), Read, Edit, Write, Glob, Grep
 ---
 
 # iTop ITSM Manager

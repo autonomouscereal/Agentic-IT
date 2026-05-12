@@ -27,7 +27,7 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 Use server-manager from Windows:
 
 ```powershell
-C:\Users\cereal\.claude\skills\server-manager\.venv\Scripts\python.exe C:\Users\cereal\.claude\skills\server-manager\ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "/home/cereal/SOC_TESTING/soc-dashboard"
+C:\Users\cereal\.agents\skills\server-manager\.venv\Scripts\python.exe C:\Users\cereal\.agents\skills\server-manager\ssh_client.py --server ai --upload-dir "C:\path\to\soc-dashboard" "/home/cereal/SOC_TESTING/soc-dashboard"
 ```
 
 ## Environment

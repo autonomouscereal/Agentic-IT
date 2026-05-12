@@ -4,6 +4,7 @@
   "skills": [
     "ai-proxy",
     "cicd-security-pipeline",
+    "credential-vault",
     "gitlab-keycloak-integration",
     "gitlab-manager",
     "iam-bridge",
@@ -84,6 +85,7 @@
     ".env.production",
     "credentials.json",
     ".credentials.json",
+    ".server_state",
     "token.json",
     "servers.json",
     "server_config.json",

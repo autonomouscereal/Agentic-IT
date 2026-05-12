@@ -91,11 +91,6 @@ def write_demo_app(repo: Path):
             severity: ERROR
             languages: [python]
             pattern: subprocess.$FUNC(..., shell=True, ...)
-          - id: demo-hardcoded-password
-            message: "Demo hardcoded credential: move this value to environment or vault."
-            severity: ERROR
-            languages: [python]
-            pattern: DEMO_PASSWORD = "..."
         """
     ).strip() + "\n", encoding="utf-8")
     (repo / "app.py").write_text(textwrap.dedent(
@@ -105,7 +100,7 @@ def write_demo_app(repo: Path):
         import os
         import subprocess
 
-        DEMO_PASSWORD = "demo-password"
+        DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "")
 
 
         class Handler(BaseHTTPRequestHandler):
@@ -337,7 +332,7 @@ CMD ["python", "app.py"]
 ```
 
 4. Run `python3 -m py_compile demo-app/app.py`.
-5. Add a ticket note saying the local model remediated Semgrep command injection, hardcoded password, stale dependency, and container user issues.
+5. Add a ticket note saying the local model remediated Semgrep command injection, stale dependency, and container user issues.
 6. Update checkpoint.json with step "agentic-cicd-remediation", status "done", progress_pct 100, output "agentic ci/cd remediation complete", and an ISO timestamp.
 7. Reply exactly: agentic ci/cd remediation complete
 """

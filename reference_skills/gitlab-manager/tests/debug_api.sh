@@ -1,5 +1,5 @@
 #!/bin/bash
-TOKEN='glpat-MrwXKrPG4tyEaGnpYzpu'
+TOKEN="${GITLAB_PAT:?GITLAB_PAT is required; load it from the vault-backed environment}"
 URL='http://192.168.50.222'
 
 echo "=== Test: Create group ==="

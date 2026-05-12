@@ -42,7 +42,7 @@ Both containers communicate over a private Docker bridge network (`gitlab-net`).
 └── tests/
     └── test_all_v2.sh            # 31-test E2E suite (all pass)
 
-C:/Users/cereal/.Codex/skills/gitlab-manager/  # Local skill directory
+C:/Users/cereal/.agents/skills/gitlab-manager/  # Local skill directory
 ├── SKILL.md                      # This file
 ├── docker-compose.yml            # Template (identical to server copy)
 ├── .env.example                  # Template - fill in and deploy
@@ -129,7 +129,7 @@ bash scripts/health_check.sh --verbose
 GitLab 17.x **removed** the `/api/v4/session` endpoint. All API calls must use a Personal Access Token (PAT):
 
 ```bash
-curl -H "PRIVATE-TOKEN: glpat-YOUR_TOKEN" http://192.168.50.222/api/v4/user
+curl -H "PRIVATE-TOKEN: <gitlab_pat_from_vault>" http://192.168.50.222/api/v4/user
 ```
 
 Create PATs via the UI or API:

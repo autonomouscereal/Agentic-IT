@@ -40,7 +40,7 @@ Manages the Wazuh SIEM deployment on the AI Server (192.168.50.222). Wazuh provi
 
 ## Server Selection
 
-All commands use the `--ai` flag to target the AI Server.
+All commands use the `--server ai` flag to target the AI Server.
 
 ---
 
@@ -50,42 +50,42 @@ All commands use the `--ai` flag to target the AI Server.
 
 ```bash
 # Start all services
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose up -d"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose up -d"
 
 # Stop all services
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose down"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose down"
 
 # Restart single container
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose restart wazuh.manager"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose restart wazuh.manager"
 
 # Force recreate after config changes
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose up -d --force-recreate"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose up -d --force-recreate"
 
 # Check container status
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose ps"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose ps"
 ```
 
 ### Logs
 
 ```bash
 # Live manager logs
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose logs -f --tail=50 wazuh.manager"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose logs -f --tail=50 wazuh.manager"
 
 # Live indexer logs
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose logs -f --tail=50 wazuh.indexer"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose logs -f --tail=50 wazuh.indexer"
 
 # Live dashboard logs
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose logs -f --tail=50 wazuh.dashboard"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && docker compose logs -f --tail=50 wazuh.dashboard"
 ```
 
 ### Run Tests
 
 ```bash
 # Run full test suite
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && source .venv/bin/activate && pytest test_wazuh.py -v"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && source .venv/bin/activate && pytest test_wazuh.py -v"
 
 # Run client diagnostic
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && source .venv/bin/activate && python wazuh_client.py"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/wazuh_deploy && source .venv/bin/activate && python wazuh_client.py"
 ```
 
 ---
@@ -180,13 +180,13 @@ sender.send_udp("UDP test log message")
 
 ```bash
 # Cluster health
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute 'curl -k -u admin:"$WAZUH_INDEXER_PASSWORD" https://127.0.0.1:26920/_cluster/health'
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute 'curl -k -u admin:"$WAZUH_INDEXER_PASSWORD" https://127.0.0.1:26920/_cluster/health'
 
 # List indices
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute 'curl -k -u admin:"$WAZUH_INDEXER_PASSWORD" https://127.0.0.1:26920/_cat/indices?v'
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute 'curl -k -u admin:"$WAZUH_INDEXER_PASSWORD" https://127.0.0.1:26920/_cat/indices?v'
 
 # Search alerts
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute 'curl -k -u admin:"$WAZUH_INDEXER_PASSWORD" -H "Content-Type: application/json" -d "{\"query\":{\"match_all:{}}, \"size\":10}" https://127.0.0.1:26920/wazuh-alerts-4.x-*/_search'
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute 'curl -k -u admin:"$WAZUH_INDEXER_PASSWORD" -H "Content-Type: application/json" -d "{\"query\":{\"match_all:{}}, \"size\":10}" https://127.0.0.1:26920/wazuh-alerts-4.x-*/_search'
 ```
 
 ---

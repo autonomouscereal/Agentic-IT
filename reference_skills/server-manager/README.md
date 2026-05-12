@@ -13,11 +13,13 @@ This skill enables seamless interaction with two remote servers:
 
 ## Environment Variables
 
-Ensure the following environment variables are set before using this skill:
+Credentials are resolved by `credman.py` from the encrypted vault first, then
+from environment variables when explicitly configured. Do not store plaintext
+passwords in scripts, docs, or repo files.
 
 ```bash
-export media_server_password="your_media_server_password"
-export ai_server_password="your_ai_server_password"
+python "C:/Users/cereal/.agents/skills/server-manager/credman.py" set ai "<from secure handoff>"
+python "C:/Users/cereal/.agents/skills/server-manager/credman.py" set media "<from secure handoff>"
 ```
 
 ## Commands
@@ -81,7 +83,7 @@ server.sh notes ai
 ## File Structure
 
 ```
-.claude/skills/server-manager/
+.agents/skills/server-manager/
 ├── README.md              # This documentation file
 ├── server.sh              # Main entry point script
 ├── ssh-servers.sh         # Core SSH management logic

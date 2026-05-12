@@ -23,19 +23,19 @@ Versioned backup system for the server-manager credential vault. Creates integri
 
 ```bash
 # Create a versioned backup (verifies integrity first)
-python "C:/Users/cereal/.Codex/skills/vault-backup/backup.py" backup
+python "C:/Users/cereal/.agents/skills/vault-backup/backup.py" backup
 
 # List all available checkpoints
-python "C:/Users/cereal/.Codex/skills/vault-backup/backup.py" list
+python "C:/Users/cereal/.agents/skills/vault-backup/backup.py" list
 
 # Verify current vault integrity (no backup)
-python "C:/Users/cereal/.Codex/skills/vault-backup/backup.py" verify
+python "C:/Users/cereal/.agents/skills/vault-backup/backup.py" verify
 
 # Restore to a specific checkpoint by date
-python "C:/Users/cereal/.Codex/skills/vault-backup/backup.py" restore 2026-05-06_143000
+python "C:/Users/cereal/.agents/skills/vault-backup/backup.py" restore 2026-05-06_143000
 
 # Delete old checkpoints older than N days
-python "C:/Users/cereal/.Codex/skills/vault-backup/backup.py" cleanup --older-than 30
+python "C:/Users/cereal/.agents/skills/vault-backup/backup.py" cleanup --older-than 30
 ```
 
 ## How It Works
@@ -47,4 +47,4 @@ python "C:/Users/cereal/.Codex/skills/vault-backup/backup.py" cleanup --older-th
 
 ## Backup Storage
 
-All backups stored at: `C:/Users/cereal/.Codex/skills/vault-backup/backups/`
+All backups stored at: `C:/Users/cereal/.agents/skills/vault-backup/backups/`

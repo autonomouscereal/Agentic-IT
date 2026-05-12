@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-12T03:30:04.952576+00:00",
-  "config": "C:\\Users\\cereal\\Documents\\Codex\\2026-05-11\\i-have-been-working-on-creating\\soc-dashboard\\platform\\skill_sync_config.json",
+  "generated_at": "2026-05-12T16:37:56.913637+00:00",
+  "config": "C:\\Users\\cereal\\Documents\\Codex\\2026-05-12\\you-were-working-on-another-project\\soc-dashboard\\platform\\skill_sync_config.json",
   "skills": [
     {
       "name": "ai-proxy",
@@ -29,6 +29,24 @@
       "skipped_paths": 0
     },
     {
+      "name": "credential-vault",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\credential-vault",
+      "files": [
+        {
+          "path": "scripts/load_secret.sh",
+          "size": 1622,
+          "sha256": "0c34e0a03891ba5a76697950020bd2ec9ced56f865ea3bfee401cbd6631e98b6"
+        },
+        {
+          "path": "SKILL.md",
+          "size": 2142,
+          "sha256": "bf4c0f3460067052c1dfd1db3970e081b68a65792cdd814c0ef00ca8e834e970"
+        }
+      ],
+      "copied_files": 2,
+      "skipped_paths": 0
+    },
+    {
       "name": "gitlab-keycloak-integration",
       "source": "C:\\Users\\cereal\\.agents\\skills\\gitlab-keycloak-integration",
       "files": [
@@ -49,8 +67,8 @@
         },
         {
           "path": "scripts/_upload_helper.py",
-          "size": 1463,
-          "sha256": "cdccb8e2bed09e4b63835fb6552d830c0742db5b6ea431e081a03c04b6b90078"
+          "size": 2097,
+          "sha256": "bf64377e54b3940c31bc8e61a82b36085438195465cd6f4a148aa26c6fe15865"
         },
         {
           "path": "scripts/backup_restore.sh",
@@ -64,8 +82,8 @@
         },
         {
           "path": "scripts/diagnose.sh",
-          "size": 3872,
-          "sha256": "de20a414b0e76cb22ede7a844eade45e06dded60f9849ac0ee1fceb0163c708c"
+          "size": 4056,
+          "sha256": "2d7c4d9054883c786f8c54a973d319ee2622864d25f1c5f7425d30ef900e9264"
         },
         {
           "path": "scripts/fix-gitlab-oidc.py",
@@ -84,8 +102,8 @@
         },
         {
           "path": "scripts/setup-gitlab-auth.py",
-          "size": 8904,
-          "sha256": "be4662eb0651284535718d5d209caa138f7b865f29ced1bf9e3536472db6f7cd"
+          "size": 9017,
+          "sha256": "290dc9418fb57678ac7ffa25358fb5db12d5bde3a5bf54a5a80706ac5cbdcf90"
         },
         {
           "path": "scripts/setup_oidc.py",
@@ -94,8 +112,8 @@
         },
         {
           "path": "scripts/test_integration.sh",
-          "size": 7927,
-          "sha256": "4fcca3b4563c3b52a3f53c20399df0dada7b83ba1f024377f03cefbc88f00faa"
+          "size": 8100,
+          "sha256": "1588a7e4c06fa1ad0a093f56771c6a900a94fc5aee48f9149404063efaead830"
         },
         {
           "path": "scripts/validate_automation.sh",
@@ -104,8 +122,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 15320,
-          "sha256": "2c76fe0f69a3b9ddb2f15c9a23f2a0b6c076b256acbe04e73d836b314c1f328c"
+          "size": 15321,
+          "sha256": "a52d5d51ecb4d775ecab00c5a51be1f9ff921ccfa36e92a44faaf33e1bdc08d9"
         }
       ],
       "copied_files": 15,
@@ -152,23 +170,23 @@
         },
         {
           "path": "SKILL.md",
-          "size": 10348,
-          "sha256": "1f3db2594c926652fb083111803d71e0557479020ea451b2185f57cf94bfc114"
+          "size": 10356,
+          "sha256": "2d8a4a2e754ecdadcda96c03e0c02a836b493c9763ee060cda31704fec7dd88e"
         },
         {
           "path": "tests/debug_api.sh",
-          "size": 1109,
-          "sha256": "82be9ef74f71803a9839f28061227574d2119910f28c2d52dd2a17e2c48e9d9c"
+          "size": 1163,
+          "sha256": "4de5f5fc4f35b1f832aa5713029e5ae5834f1df562092465192c2299b5bb7471"
         },
         {
           "path": "tests/debug_api2.sh",
-          "size": 1172,
-          "sha256": "1fbaaf40c604ccc7674d97844f5c88086fb4db2b81416308a0589e6c2be3f804"
+          "size": 1226,
+          "sha256": "ac1c080655df374935ff6751e5ac13af2a493279e366b05722f68f79229fab85"
         },
         {
           "path": "tests/debug_api3.sh",
-          "size": 1378,
-          "sha256": "e1f32c8d9e0adb0b2dbb176f370646433ea87ada24f3e579ccca2eb77e864b78"
+          "size": 1432,
+          "sha256": "e63e0a263cb7c40b79413dcdaf773f9500526c6712c631b8627ecd7ea3355f87"
         },
         {
           "path": "tests/test_all.sh",
@@ -177,8 +195,8 @@
         },
         {
           "path": "tests/test_all_v2.sh",
-          "size": 14272,
-          "sha256": "2b19a1f6351958e39f26ef6dbe6c313048d0369472f2d3427115d101aa833a45"
+          "size": 14326,
+          "sha256": "f87b5a76f85c86acba3a1ec7a730f5c1bb826ba92cf2a2bb69f405e4aa30a3be"
         }
       ],
       "copied_files": 13,
@@ -243,16 +261,21 @@
       "files": [
         {
           "path": "DEPLOYMENT.md",
-          "size": 11268,
-          "sha256": "e6dec6e423453b0dc70b07605c764c4c6b4620fe02940777dd9436bf10d1cf81"
+          "size": 12588,
+          "sha256": "9f5267fce0386936054ed7ffac1c4876465d8185e39f570c467f4495fcb30d3b"
+        },
+        {
+          "path": "scripts/itop_client.py",
+          "size": 6440,
+          "sha256": "219a5b5271a308c174cb6db9c8a4e9fbae9113a7ed5d3b44b2ec1ef951922945"
         },
         {
           "path": "SKILL.md",
-          "size": 10136,
-          "sha256": "defa769b6a15fd52ab7db441e238f22ee2325168ac04c1134761040a54f237c6"
+          "size": 11381,
+          "sha256": "62dec2afa0d403d502aefd33e5e51c7c55d217ba0361b0f49d3cdabe1ad732e9"
         }
       ],
-      "copied_files": 2,
+      "copied_files": 3,
       "skipped_paths": 0
     },
     {
@@ -379,8 +402,8 @@
         },
         {
           "path": "scripts/test_keycloak.py",
-          "size": 9471,
-          "sha256": "8bb57002f02304523f1078469f98efde7968cf408a62e126a15fd3526c8af988"
+          "size": 9564,
+          "sha256": "ee1ef2327c6cf2433fb53a0f6e55db1ba0f9dde46c22113cd0af7ea324349a64"
         },
         {
           "path": "SKILL.md",
@@ -415,8 +438,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 38523,
-          "sha256": "654057f98398e4fba58288e10468c24dd89e1a3025d411397122850f61729c77"
+          "size": 38540,
+          "sha256": "ef9901d790094b6915372fe16f61f9b591be29f1b80c5996964b071a9f4a7497"
         }
       ],
       "copied_files": 1,
@@ -515,8 +538,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 6015,
-          "sha256": "c9d62d0de5dafb7848b66271803b685195c0d380968fbf80e98dcc9a25112310"
+          "size": 6019,
+          "sha256": "fd7a5fa665abc6ec8bc890991635bfb2c7f07bf381ed4ccfe6d58a5a85b61e87"
         }
       ],
       "copied_files": 1,
@@ -528,8 +551,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 8355,
-          "sha256": "77893ee4fb3a22b8132d1f682f220f31835fa51722e0870f9af1cd1beb4e80da"
+          "size": 8357,
+          "sha256": "1ce943809eddba50560f17c82de19986984506eb4e7e5174c64db2b93e0cb12d"
         }
       ],
       "copied_files": 1,
@@ -543,11 +566,6 @@
           "path": ".env.template",
           "size": 767,
           "sha256": "d612bf47d6a29768d5081d784d05fa0199801c87f60a03433261abedef7d152d"
-        },
-        {
-          "path": ".server_state",
-          "size": 330,
-          "sha256": "aeb195c74e524fe987ed62120ed56c3d4218854d023b451eeff61a6d880e6004"
         },
         {
           "path": "credman.py",
@@ -611,8 +629,8 @@
         },
         {
           "path": "README.md",
-          "size": 3658,
-          "sha256": "3ce095048e5d1e338356060f78c197bf37e3f6ef80a82b3fc8057afc24bc766b"
+          "size": 3868,
+          "sha256": "55251746912f1bcaf4df9dce6470de54d139368716a64438ecaf29347390ff03"
         },
         {
           "path": "requirements.txt",
@@ -621,8 +639,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 10420,
-          "sha256": "e07e702aeea4da9dd47bced504ae46e4218a10cefffcef3d4a9b1942dfe7e593"
+          "size": 10594,
+          "sha256": "20d8e50e2d3d087aac107b4551d8710b86083472ca50aa44c30f7f669a90d37b"
         },
         {
           "path": "ssh_client.py",
@@ -631,12 +649,12 @@
         },
         {
           "path": "upload_compose.py",
-          "size": 2407,
-          "sha256": "1fafb64a804d6222134eea7c9ed2cacd6534ba6ca7132da6983d38f5bb994cef"
+          "size": 1571,
+          "sha256": "09729fc0ff748ef0ef6dea88b284d9b1ac92fe49acd9dee4c75aa568ffba42e4"
         }
       ],
-      "copied_files": 19,
-      "skipped_paths": 2
+      "copied_files": 18,
+      "skipped_paths": 1
     },
     {
       "name": "semgrep-scanner",
@@ -742,8 +760,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 8167,
-          "sha256": "c5123ba23c8115a64e036efac07b5e0f5b86d64893a487a6d8df66adfbb88c2f"
+          "size": 8169,
+          "sha256": "833cf033c80a88841620f1ae31849d4638c8ba31aa9c3c649229b1ada5943128"
         },
         {
           "path": "tests/test_bridge.py",
@@ -766,12 +784,12 @@
         {
           "path": "DEPLOYMENT.md",
           "size": 7777,
-          "sha256": "10be46502e173073d965aaad46ee86e24e9087682b608c5ab62741cb95d6f911"
+          "sha256": "0d133477e523aa79a7ffb590ebc4b6fceab55b216904abeba0cc0b296776684b"
         },
         {
           "path": "SKILL.md",
-          "size": 4923,
-          "sha256": "38c6b1a096920a479d0e3f2a052a3ded87fff3160031b932acfd6268cf26d9d8"
+          "size": 4925,
+          "sha256": "569386c3b45f6adfeb7152e485d281374e796118cf39ce7624a071c45deb6fb1"
         }
       ],
       "copied_files": 2,
@@ -788,8 +806,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 13223,
-          "sha256": "9610f7880e888c6dccb90593f22958e0575636226fe878a12bbce5c8be531586"
+          "size": 16190,
+          "sha256": "ab92dd202478fb59b996f5f5befbb1744ac6997723bc267f1dce6c71524d8611"
         }
       ],
       "copied_files": 2,
@@ -858,8 +876,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 1966,
-          "sha256": "3602a72cd10eb8ad0a1b0a3c29a4ed4956c39761cac17c01016cd5c008c6fea3"
+          "size": 1972,
+          "sha256": "57e53e2f173f6ba77f01991bd78445f23712bc29e1e61df54a571f3735bf6c31"
         }
       ],
       "copied_files": 2,
@@ -949,8 +967,8 @@
         },
         {
           "path": "scripts/deploy-edr.sh",
-          "size": 7072,
-          "sha256": "32d93aa62e155eecdbbd898ee39bc13a60a1d00c8e75d3febccc10d75a95e30b"
+          "size": 7281,
+          "sha256": "40dc2023dd507ec4836ffe0aa7fde82edc9d9730ac257febfe758e219d1c8aff"
         },
         {
           "path": "scripts/deploy-sysmon-linux.sh",
@@ -969,13 +987,13 @@
         },
         {
           "path": "SKILL.md",
-          "size": 3763,
-          "sha256": "2928ca2a92b1c8fe94e0f68df81be1ffcab71476b541c9c307a613d94a68edf2"
+          "size": 4003,
+          "sha256": "e91e704bcb7b4b8e161d48401f575dfb85f674710d9598c575681c1821b4d6a7"
         },
         {
           "path": "tests/test_edr_sysmon_e2e.py",
-          "size": 14951,
-          "sha256": "d0965c537c3018e79de5ae6484260aae58f0e7ad67b4eadc3c2dd4a7634a200c"
+          "size": 16609,
+          "sha256": "c46fbbea18a1c201c549976b94dfa8709a97e427ef65707e1f78397e31d6c5b1"
         },
         {
           "path": "wazuh_configs/ar_scripts/edr-respond.sh",
@@ -999,8 +1017,8 @@
         },
         {
           "path": "wazuh_configs/sysmon_rules.xml",
-          "size": 8342,
-          "sha256": "a4119976ed12dce74aa765b6778e88151f66dedf61368c870c0769044fcd660f"
+          "size": 8811,
+          "sha256": "6e84e73add2d4d00e72224a71b9ccabad5ce65874a5aa0a58f74a09c08f40fbe"
         },
         {
           "path": "wazuh_configs/sysmon_rules_fixed.xml",
@@ -1009,7 +1027,7 @@
         }
       ],
       "copied_files": 17,
-      "skipped_paths": 2
+      "skipped_paths": 0
     },
     {
       "name": "wazuh-manager",
@@ -1017,8 +1035,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 13915,
-          "sha256": "a6a4d10608af0832d32fb14f89f99bde9b2ce730a80ad47254735c506a3c0f74"
+          "size": 14005,
+          "sha256": "3a0d60937a8a520af03a4b980d7d1cabf188a49c7c4383a354e7030f293f1b79"
         }
       ],
       "copied_files": 1,
@@ -1069,8 +1087,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2297,
-          "sha256": "310ee2b91df841734b4438383b8f69867d5621927dbb12c1b99a6d4e8557ff93"
+          "size": 2303,
+          "sha256": "bf7e6a3fb62ceb9921d44214d53c87f95023b9618c0c4bd77ed27f1ea7dd555a"
         },
         {
           "path": "web_research.py",

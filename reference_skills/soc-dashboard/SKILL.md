@@ -17,6 +17,23 @@ allowed-tools:
 
 Unified SOC monitoring platform deployed on the AI Server. Mirrors iTop tickets, orchestrates AI agents, manages change approvals, monitors tool health, and provides real-time WebSocket updates.
 
+## Project Mental Model
+
+This is the control plane for a provider-agnostic agentic IT/SOC replacement platform, not merely a monitoring dashboard. The dashboard owns canonical operational state: tickets, notes, attachments, agent tasks, prompts, checkpoints, logs, model selection, change approvals, workflows, postmortems, skills, knowledge articles, tool health, setup plans, and audit/event history.
+
+All concrete products are replaceable providers or reference modules. iTop, Wazuh, Zeek, Suricata, Mailcow, Keycloak, GitLab, SearXNG, and the AI proxy are the current lab/reference stack on `192.168.50.222`; ServiceNow, Jira, Splunk, Sentinel, Defender, CrowdStrike, Exchange, Gmail, Proofpoint, Okta, GitHub, Azure DevOps, Jenkins, and similar tools should be integrated through provider adapters without changing the canonical dashboard contract.
+
+Claude Code is the first working harness, not the permanent architecture boundary. Keep harness-specific command building isolated in `api/services/agent_harness.py` and preserve the dashboard task/checkpoint/API contract for future harnesses.
+
+Default ticket agents should complete assigned work quickly and safely. They should not create reusable workflows unless explicitly asked. Postmortems and workflow-builds are separate learning tasks that convert completed work into reviewed knowledge, skills, tests, guardrails, and draft workflows.
+
+Additional reconstructed context for future Codex sessions lives at:
+
+- `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/AGENTS.md`
+- `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/AGENTIC_IT_REPLACEMENT_CONTEXT.md`
+- `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/REFERENCE_MAP.md`
+- `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/REMOTE_INVENTORY_2026-05-12.md`
+
 ## Quick Access
 
 | Service | URL | Port |
@@ -262,22 +279,22 @@ Verified on 2026-05-12: direct dashboard creates produced `UserRequest::169` and
 
 ```bash
 # Check container status
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker ps --filter name=soc-dashboard"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker ps --filter name=soc-dashboard"
 
 # View API logs
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker logs soc-dashboard-api-1 --tail 50"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker logs soc-dashboard-api-1 --tail 50"
 
 # Restart API container (no rebuild needed for frontend changes)
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker restart soc-dashboard-api"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker restart soc-dashboard-api"
 
 # Access PostgreSQL
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker exec -it soc-dashboard-db psql -U soc_admin -d soc_dashboard"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker exec -it soc-dashboard-db psql -U soc_admin -d soc_dashboard"
 
 # Rebuild API container (after Python code changes)
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc-dashboard && docker compose up -d --build api"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc-dashboard && docker compose up -d --build api"
 
 # Check sync state
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "docker exec soc-dashboard-api cat /app/data/.itop_max_keys.json"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker exec soc-dashboard-api cat /app/data/.itop_max_keys.json"
 ```
 
 ## Architecture Details

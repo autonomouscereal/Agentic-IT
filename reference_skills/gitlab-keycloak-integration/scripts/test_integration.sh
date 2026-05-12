@@ -4,7 +4,7 @@
 set -euo pipefail
 
 TOTAL=0; PASS=0; FAIL=0; SKIP=0
-GITLAB_PAT="${GITLAB_PAT:-glpat-uyTtfbshu1wUzA5sBd4y}"
+GITLAB_PAT="${GITLAB_PAT:-}"
 GITLAB_URL="http://localhost"
 KC_URL="https://localhost:8443"
 
@@ -84,6 +84,10 @@ assert "Auto-created users blocked" "$rc" "not blocked"
 
 # --- TEST 5: GitLab groups and projects ---
 echo -e "\n[Group] GitLab Groups & Projects"
+if [[ -z "$GITLAB_PAT" ]]; then
+  assert_skip "GitLab groups and project API checks (set GITLAB_PAT from vault-backed environment)"
+  PROJECT_ID=""
+else
 set +e; curl -s "$GITLAB_URL/api/v4/groups?search=gitlab-admins" -H "PRIVATE-TOKEN: $GITLAB_PAT" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); assert any(x['path']=='gitlab-admins' for x in d); sys.exit(0)" 2>/dev/null; rc=$?; set -e
 assert "gitlab-admins group exists" "$rc" "group not found"
 
@@ -92,10 +96,15 @@ assert "gitlab-developers group exists" "$rc" "group not found"
 
 set +e; curl -s "$GITLAB_URL/api/v4/groups?search=gitlab-viewers" -H "PRIVATE-TOKEN: $GITLAB_PAT" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); assert any(x['path']=='gitlab-viewers' for x in d); sys.exit(0)" 2>/dev/null; rc=$?; set -e
 assert "gitlab-viewers group exists" "$rc" "group not found"
+fi
 
 # --- TEST 6: Protected branches ---
 echo -e "\n[Group] Protected Branches"
-set +e; PROJECT_ID=$(curl -s "$GITLAB_URL/api/v4/projects?search=test-project" -H "PRIVATE-TOKEN: $GITLAB_PAT" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print([x['id'] for x in d if x['name']=='test-project'][0])" 2>/dev/null)
+set +e
+if [[ -n "$GITLAB_PAT" ]]; then
+  PROJECT_ID=$(curl -s "$GITLAB_URL/api/v4/projects?search=test-project" -H "PRIVATE-TOKEN: $GITLAB_PAT" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print([x['id'] for x in d if x['name']=='test-project'][0])" 2>/dev/null)
+fi
+set -e
 if [[ -n "$PROJECT_ID" ]]; then
   set +e; curl -s "$GITLAB_URL/api/v4/projects/$PROJECT_ID/protected_branches" -H "PRIVATE-TOKEN: $GITLAB_PAT" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); assert any(x['name']=='main' for x in d); sys.exit(0)" 2>/dev/null; rc=$?; set -e
   assert "main branch protected" "$rc" "main not protected"

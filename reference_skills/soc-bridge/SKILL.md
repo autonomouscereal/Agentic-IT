@@ -15,12 +15,12 @@ Full deployment blueprint in [DEPLOYMENT.md](../../soc_bridge/DEPLOYMENT.md).
 
 All remote operations use Server Manager v2:
 ```bash
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --execute "command"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "command"
 ```
 
 Upload files:
 ```bash
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --server ai --upload "local/path" "remote/path"
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --upload "local/path" "remote/path"
 ```
 
 ## Quick Operations

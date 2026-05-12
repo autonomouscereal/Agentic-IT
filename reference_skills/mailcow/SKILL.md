@@ -119,13 +119,13 @@ This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-bui
 Connect via the SSH skill:
 
 ```bash
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --test
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --test
 ```
 
 Or interactively:
 
 ```bash
-python "C:/Users/cereal/.Codex/skills/server-manager/ssh_client.py" --ai --interactive
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --interactive
 ```
 
 ### Verify Docker is Running
@@ -237,7 +237,7 @@ REDISPASS=<from vault: mailcow_redis>
 
 **WARNING:** These credentials are in plaintext. Do NOT commit `.env` to version control.
 
-> Credentials stored in server-manager vault. Retrieve with: `python "C:/Users/cereal/.Codex/skills/server-manager/credman.py" get <name>`
+> Credentials stored in server-manager vault. Retrieve with: `python "C:/Users/cereal/.agents/skills/server-manager/credman.py" get <name>`
 
 ---
 

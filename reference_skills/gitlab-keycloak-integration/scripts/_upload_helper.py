@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
-"""Helper script to upload bash scripts to the AI server using paramiko."""
+"""Upload GitLab/Keycloak helper scripts through server-manager.
+
+This file is kept for older runbooks that referenced `_upload_helper.py`, but
+it now delegates to the encrypted-vault server-manager CLI instead of opening a
+raw Paramiko session or carrying credentials in source.
+"""
+import argparse
+import subprocess
 import sys
-import os
+from pathlib import Path
 
-# Add server-manager to path
-sys.path.insert(0, "C:/Users/cereal/.claude/skills/server-manager")
 
-# Import paramiko directly to avoid the CLI wrapper
-import paramiko
-
-REMOTE_HOST = "192.168.50.222"
-REMOTE_USER = "cereal"
-REMOTE_PASS = "root"
-REMOTE_DIR = "/home/cereal/gitlab-keycloak-integration/scripts/"
-
-LOCAL_DIR = "/c/Users/cereal/.claude/skills/gitlab-keycloak-integration/scripts"
-
+DEFAULT_SERVER_MANAGER = Path("C:/Users/cereal/.agents/skills/server-manager/ssh_client.py")
+DEFAULT_REMOTE_DIR = "/home/cereal/gitlab-keycloak-integration/scripts"
 FILES_TO_UPLOAD = [
     "diagnose.sh",
     "test_integration.sh",
@@ -23,28 +20,37 @@ FILES_TO_UPLOAD = [
     "backup_restore.sh",
 ]
 
+
+def run(cmd):
+    result = subprocess.run(cmd, text=True)
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
+
+
 def main():
-    # Connect
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(REMOTE_HOST, username=REMOTE_USER, password=REMOTE_PASS, timeout=30)
+    parser = argparse.ArgumentParser(description="Upload GitLab/Keycloak helper scripts via server-manager")
+    parser.add_argument("--server", default="ai", help="server-manager server key")
+    parser.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR)
+    parser.add_argument("--server-manager", default=str(DEFAULT_SERVER_MANAGER))
+    parser.add_argument("--local-dir", default=str(Path(__file__).resolve().parent))
+    args = parser.parse_args()
 
-    # Ensure remote directory exists
-    stdin, stdout, stderr = ssh.exec_command(f"mkdir -p {REMOTE_DIR}")
-    stdout.channel.recv_exit_status()
+    local_dir = Path(args.local_dir).resolve()
+    server_manager = Path(args.server_manager).resolve()
 
-    # Upload each file
-    sftp = ssh.open_sftp()
-    for fname in FILES_TO_UPLOAD:
-        local_path = os.path.join(LOCAL_DIR, fname)
-        remote_path = os.path.join(REMOTE_DIR, fname)
-        try:
-            sftp.put(local_path, remote_path)
-            print(f"[OK] Uploaded {fname} ({os.path.getsize(local_path)} bytes)")
-        except Exception as e:
-            print(f"[FAIL] {fname}: {e}")
-    sftp.close()
-    ssh.close()
+    if not server_manager.exists():
+        raise SystemExit(f"server-manager CLI not found: {server_manager}")
+
+    run([sys.executable, str(server_manager), "--server", args.server, "--execute", f"mkdir -p {args.remote_dir}"])
+
+    for filename in FILES_TO_UPLOAD:
+        local_path = local_dir / filename
+        if not local_path.exists():
+            raise SystemExit(f"missing helper script: {local_path}")
+        remote_path = f"{args.remote_dir.rstrip('/')}/{filename}"
+        run([sys.executable, str(server_manager), "--server", args.server, "--upload", str(local_path), remote_path])
+        print(f"[OK] Uploaded {filename} ({local_path.stat().st_size} bytes)")
+
 
 if __name__ == "__main__":
     main()

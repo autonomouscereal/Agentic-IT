@@ -33,6 +33,7 @@ from keycloak_admin import (
 BASE_URL = os.environ.get("KEYCLOAK_URL", "http://localhost:8080")
 REALM = "master"
 TEST_PREFIX = "test_kc"
+TEST_PASSWORD = os.environ.get("KEYCLOAK_TEST_PASSWORD") or f"TmpPass{int(time.time())}!"
 
 
 class TestRunner:
@@ -116,7 +117,7 @@ class TestRunner:
                 self.token, self.base_url, self.realm, test_user,
                 email=f"{test_user}@test.local",
                 first_name="Test", last_name="User",
-                password="TestPass123!",
+                password=TEST_PASSWORD,
             ),
         )
 
@@ -131,7 +132,7 @@ class TestRunner:
             ),
         )
 
-        self.run_test("Set new password", lambda: set_user_password(self.token, self.base_url, self.realm, test_user, "NewPass456!"))
+        self.run_test("Set new password", lambda: set_user_password(self.token, self.base_url, self.realm, test_user, f"{TEST_PASSWORD}2"))
 
         self.run_test("Delete user", lambda: delete_user(self.token, self.base_url, self.realm, user_result["id"]) if user_result else True)
 
@@ -173,7 +174,7 @@ class TestRunner:
             lambda: create_user(
                 self.token, self.base_url, self.realm, integ_user,
                 email=f"{integ_user}@test.local",
-                password="IntegPass123!",
+                password=TEST_PASSWORD,
             ),
         )
 

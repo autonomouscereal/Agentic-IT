@@ -72,7 +72,7 @@ Browser <--HTTPS(8443)--> nginx proxy <----HTTP(8080)----> Keycloak 26.6.0
     ├── setup_oidc.py           # Keycloak realm, client, mappers, groups, roles, users
     └── backup_restore.sh       # GitLab backup/restore utility
 
-C:/Users/cereal/.Codex/skills/gitlab-keycloak-integration/  # Local skill directory
+C:/Users/cereal/.agents/skills/gitlab-keycloak-integration/  # Local skill directory
 ├── SKILL.md                      # This file
 ├── docker-compose.yml            # Template (identical to server copy)
 ├── nginx/                        # Nginx config

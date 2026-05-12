@@ -97,7 +97,7 @@ See `default_config.json` for the full template. Key sections:
 ### 1. Deploy Package to Server
 
 ```bash
-cd ~/.claude/skills/server-manager
+cd ~/.agents/skills/server-manager
 # Upload entire package directory
 python ssh_client.py --server ai --upload "C:/Users/cereal/soc_bridge/" "/home/cereal/SOC_TESTING/soc_bridge/"
 ```
