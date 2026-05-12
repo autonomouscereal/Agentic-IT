@@ -8,7 +8,7 @@ set -uo pipefail
 
 GITLAB_HOST="192.168.50.222"
 GITLAB_URL="http://${GITLAB_HOST}"
-TOKEN="${GITLAB_PAT:-<from vault: gitlab_manager_pat>}"
+TOKEN="${GITLAB_PAT:?Set GITLAB_PAT from the credential vault before running tests}"
 TEST_GROUP="test-suite-$(date +%s)"
 TEST_REPO="e2e-test-repo"
 TEMP_DIR="/tmp/gl-tests-$$"

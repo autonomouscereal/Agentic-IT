@@ -6,6 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     initTicketSorting();
     loadAgentModels();
+    applyAuditUrlFilters();
     loadDashboardStats();
     startAutoRefresh();
 });
@@ -44,6 +45,32 @@ function navigateTo(page) {
         case "access": loadAccess(); break;
         case "audit": loadAudit(); break;
     }
+}
+
+function applyAuditUrlFilters() {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("audit_q");
+    const source = params.get("audit_source");
+    const level = params.get("audit_level");
+    if (q && document.getElementById("audit-filter-text")) document.getElementById("audit-filter-text").value = q;
+    if (source && document.getElementById("audit-filter-source")) document.getElementById("audit-filter-source").value = source;
+    if (level && document.getElementById("audit-filter-level")) document.getElementById("audit-filter-level").value = level;
+}
+
+function openAuditTrail(query, source = "") {
+    navigateTo("audit");
+    const text = document.getElementById("audit-filter-text");
+    const sourceEl = document.getElementById("audit-filter-source");
+    const levelEl = document.getElementById("audit-filter-level");
+    if (text) text.value = query || "";
+    if (sourceEl) sourceEl.value = source || "";
+    if (levelEl) levelEl.value = "";
+    const url = new URL(window.location.href);
+    url.searchParams.set("audit_q", query || "");
+    if (source) url.searchParams.set("audit_source", source);
+    else url.searchParams.delete("audit_source");
+    history.replaceState(null, "", url);
+    loadAudit();
 }
 
 let ticketSort = { by: "updated_at", dir: "desc" };
@@ -134,6 +161,48 @@ function statusClass(status) {
     return "status-" + status.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z-]/g, "");
 }
 
+function isAutoApproval(actor) {
+    const value = String(actor || "").toLowerCase();
+    return value.includes("auto") || value.includes("demo") || value.includes("smoke");
+}
+
+function approvalModeBadge(change) {
+    if (change.status === "pending") {
+        return `<span class="status-badge status-pending">Gate pending</span>`;
+    }
+    if (change.status === "approved" || change.status === "completed") {
+        return isAutoApproval(change.approved_by)
+            ? `<span class="status-badge status-approved">Auto-approved demo gate</span>`
+            : `<span class="status-badge status-approved">Manually approved gate</span>`;
+    }
+    if (change.status === "rejected") {
+        return `<span class="status-badge status-rejected">Gate rejected</span>`;
+    }
+    return `<span class="status-badge ${statusClass(change.status)}">Gate ${escHtml(change.status || "unknown")}</span>`;
+}
+
+function renderGateSummary(change) {
+    const requested = formatTime(change.requested_at);
+    const approved = change.approved_at ? formatTime(change.approved_at) : "-";
+    const approver = change.approved_by || "-";
+    return `
+        <div class="gate-card">
+            <div class="gate-card-header">
+                <strong>Approval Gate #${change.id}</strong>
+                ${approvalModeBadge(change)}
+            </div>
+            <div class="gate-card-body">
+                <div>${escHtml(change.action || "Change")} on <code>${escHtml(change.target || "-")}</code></div>
+                <div class="gate-meta">Risk ${escHtml(change.risk_level || "unknown")} &middot; requested ${requested} &middot; approved ${approved} by ${escHtml(approver)}</div>
+                ${change.reason ? `<div class="gate-reason">${escHtml(change.reason)}</div>` : ""}
+                ${change.result ? `<div class="gate-result">${escHtml(String(change.result).slice(0, 260))}</div>` : ""}
+                <button class="inline-link" onclick="openAuditTrail('change_${change.id}')">full gate audit</button>
+                ${change.agent_id ? `<button class="inline-link" onclick="openAuditTrail('agent_${change.agent_id}')">agent trail</button>` : ""}
+            </div>
+        </div>
+    `;
+}
+
 // Load dashboard stats
 async function loadDashboardStats() {
     const data = await apiGet("/api/dashboard/stats");
@@ -156,7 +225,11 @@ async function loadDashboardStats() {
             <div class="activity-item">
                 <span class="activity-time">${formatTime(a.created_at)}</span>
                 <span class="activity-dot"></span>
-                <span class="activity-text"><strong>${a.actor}</strong> ${a.action} ${a.target || ""}</span>
+                <span class="activity-text">
+                    <strong>${escHtml(a.actor || "system")}</strong>
+                    ${escHtml(a.summary || `${a.action || ""} ${a.target || ""}`)}
+                    ${a.ticket_id ? `<button class="inline-link" onclick="openAuditTrail('ticket_${escAttr(a.ticket_id)}')">trail</button>` : ""}
+                </span>
             </div>
         `).join("");
     }
@@ -224,7 +297,7 @@ async function loadTickets() {
     if (!tbody) return;
 
     if (data.tickets.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="loading">No tickets found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="loading">No tickets found</td></tr>';
         return;
     }
 
@@ -491,7 +564,7 @@ async function loadPostmortems() {
     if (!data || !tbody) return;
     const rows = data.postmortems || [];
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="loading">No postmortems yet</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No postmortems yet</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(p => `
@@ -501,8 +574,31 @@ async function loadPostmortems() {
             <td><span class="status-badge ${statusClass(p.status)}">${escHtml(p.status)}</span></td>
             <td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.summary || "-")}</td>
             <td>${formatTime(p.updated_at || p.created_at)}</td>
+            <td>
+                <button class="btn btn-sm" onclick="promotePostmortem(${p.id})">Promote</button>
+                <button class="inline-link" onclick="openAuditTrail('postmortem_${p.id}')">audit</button>
+            </td>
         </tr>
     `).join("");
+}
+
+async function promotePostmortem(postmortemId) {
+    const ok = confirm("Promote this postmortem into a knowledge article, draft workflow, and reusable skills?");
+    if (!ok) return;
+    const result = await apiPost(`/api/postmortems/${postmortemId}/promote`, {
+        create_knowledge: true,
+        create_workflow: true,
+        create_skills: true,
+        workflow_status: "draft",
+        created_by: "dashboard",
+        mark_promoted: true,
+    });
+    if (result && !result.error) {
+        alert(`Postmortem promoted. KB ${result.knowledge_article_id || "none"}, workflow ${result.workflow_id || "none"}, skills ${(result.skill_ids || []).join(", ") || "none"}.`);
+        loadLearning();
+    } else {
+        alert(result?.error || "Postmortem promotion failed");
+    }
 }
 
 async function loadSkills() {
@@ -560,7 +656,10 @@ async function loadChanges() {
     tbody.innerHTML = data.changes.map(c => `
         <tr>
             <td>${c.id}</td>
-            <td>${escHtml(c.action)}</td>
+            <td>
+                ${escHtml(c.action)}
+                <div class="module-meta">${approvalModeBadge(c)}</div>
+            </td>
             <td>${escHtml(c.target)}</td>
             <td>${escHtml(c.ticket_title || "-")}</td>
             <td><span class="status-badge ${statusClass(c.status)}">${c.status}</span></td>
@@ -629,6 +728,12 @@ async function loadAudit() {
                     ${escHtml(a.summary || `${a.actor}: ${a.action}`)}
                 </div>
                 <div class="audit-details">${escHtml(a.category || "")}${a.ticket_id ? ` &middot; ticket ${escHtml(a.ticket_id)}` : ""}${a.agent_id ? ` &middot; agent ${escHtml(a.agent_id)}` : ""}</div>
+                <div class="audit-links">
+                    ${a.ticket_id ? `<button class="inline-link" onclick="viewTicket(${Number(a.ticket_id)})">ticket</button>` : ""}
+                    ${a.ticket_id ? `<button class="inline-link" onclick="openAuditTrail('ticket_${escAttr(a.ticket_id)}')">ticket trail</button>` : ""}
+                    ${a.agent_id ? `<button class="inline-link" onclick="openAuditTrail('agent_${escAttr(a.agent_id)}')">agent trail</button>` : ""}
+                    ${a.target ? `<button class="inline-link" onclick="openAuditTrail('${escJs(a.target)}')">target trail</button>` : ""}
+                </div>
                 ${a.details ? `<pre class="audit-json">${escHtml(JSON.stringify(a.details, null, 2))}</pre>` : ""}
             </div>
         </div>
@@ -662,14 +767,8 @@ async function viewTicket(id) {
     // Build change requests section
     const changesSection = data.change_requests && data.change_requests.length > 0 ? `
         <div class="modal-section">
-            <div class="section-title">Change Requests</div>
-            ${data.change_requests.map(c => `
-                <div style="margin-bottom:6px;font-size:12px">
-                    <span class="status-badge ${statusClass(c.status)}">${c.status}</span>
-                    ${escHtml(c.action)} on ${escHtml(c.target)}
-                    <span style="color:var(--text-muted)">(${formatTime(c.requested_at)})</span>
-                </div>
-            `).join("")}
+            <div class="section-title">Approval Gates</div>
+            ${data.change_requests.map(c => renderGateSummary(c)).join("")}
         </div>
     ` : "";
 
@@ -681,6 +780,7 @@ async function viewTicket(id) {
             <button class="btn btn-sm" onclick="apiPost('/api/tickets/${data.id}/sync');setTimeout(()=>viewTicket(${data.id}), 1000)">Sync from iTop</button>
             <button class="btn btn-sm btn-warning" onclick="startTicketPostmortem(${data.id})">Postmortem</button>
             <button class="btn btn-sm btn-warning" onclick="startTicketWorkflow(${data.id})">Build Workflow</button>
+            <button class="btn btn-sm" onclick="openAuditTrail('ticket_${data.id}')">Full Audit Trail</button>
             ${data.external_url ? `<a class="btn btn-sm" href="${escAttr(data.external_url)}" target="_blank" rel="noopener">Open Ticket</a>` : ""}
         </div>
     `;
@@ -738,10 +838,14 @@ async function viewWorkflow(id) {
 // Load activity log for a ticket (appends to modal)
 async function loadTicketActivity(ticketId) {
     try {
-        const data = await apiGet(`/api/dashboard/audit?limit=50&ticket_id=${ticketId}`);
-        if (!data || !data.audit) return;
-
-        const relevant = data.audit || [];
+        const [auditData, contextData] = await Promise.all([
+            apiGet(`/api/dashboard/audit?limit=80&ticket_id=${ticketId}`),
+            apiGet(`/api/tickets/${ticketId}/context`),
+        ]);
+        const relevant = auditData?.audit || [];
+        const notes = contextData?.notes || [];
+        const tasks = contextData?.tasks || [];
+        const changes = contextData?.change_requests || [];
 
         const modalBody = document.getElementById("modal-body");
         if (!modalBody) return;
@@ -752,12 +856,33 @@ async function loadTicketActivity(ticketId) {
 
         const activityHtml = `
             <div class="modal-section">
-                <div class="section-title">Activity Log (${relevant.length} entries)</div>
-                ${relevant.length === 0 ? '<div style="color:var(--text-muted);font-size:12px">No activity recorded</div>' : ""}
+                <div class="section-title">
+                    Ticket Timeline
+                    <button class="inline-link" onclick="openAuditTrail('ticket_${ticketId}')">open full trail</button>
+                </div>
+                <div class="timeline-summary">
+                    ${notes.length} notes &middot; ${relevant.length} audit/events &middot; ${tasks.length} tasks &middot; ${changes.length} changes
+                </div>
+                ${notes.length === 0 ? '<div style="color:var(--text-muted);font-size:12px">No notes recorded yet</div>' : ""}
+                ${notes.slice(-8).reverse().map(n => `
+                    <div class="modal-activity-item note-item">
+                        <span style="min-width:60px">${formatTime(n.created_at)}</span>
+                        <span>
+                            <strong>${escHtml(n.author || "note")}</strong>
+                            <span class="source-badge local">${escHtml(n.source || "note")}</span>
+                            <div class="activity-note-body">${escHtml(n.body || "")}</div>
+                        </span>
+                    </div>
+                `).join("")}
+                ${relevant.length === 0 ? '<div style="color:var(--text-muted);font-size:12px;margin-top:8px">No audit entries recorded</div>' : ""}
                 ${relevant.slice(0, 20).map(a => `
                     <div class="modal-activity-item">
                         <span style="min-width:60px">${formatTime(a.created_at)}</span>
-                        <span><strong>${escHtml(a.actor)}</strong> ${escHtml(a.action)} ${escHtml(a.target || "")}</span>
+                        <span>
+                            <strong>${escHtml(a.actor)}</strong> ${escHtml(a.summary || `${a.action} ${a.target || ""}`)}
+                            ${a.agent_id ? `<button class="inline-link" onclick="openAuditTrail('agent_${escAttr(a.agent_id)}')">agent trail</button>` : ""}
+                            ${a.target ? `<button class="inline-link" onclick="openAuditTrail('${escJs(a.target)}')">target trail</button>` : ""}
+                        </span>
                     </div>
                 `).join("")}
             </div>
@@ -947,6 +1072,14 @@ function escHtml(str) {
 
 function escAttr(str) {
     return escHtml(String(str || "")).replace(/"/g, "&quot;");
+}
+
+function escJs(str) {
+    return String(str || "")
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'")
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "");
 }
 
 let setupManifest = null;

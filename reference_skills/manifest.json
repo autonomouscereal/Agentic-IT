@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T19:15:42.082023+00:00",
+  "generated_at": "2026-05-12T03:30:04.952576+00:00",
   "config": "C:\\Users\\cereal\\Documents\\Codex\\2026-05-11\\i-have-been-working-on-creating\\soc-dashboard\\platform\\skill_sync_config.json",
   "skills": [
     {
@@ -21,8 +21,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 4394,
-          "sha256": "5049ced28872a13dfb3c78b8f444840562a2a0438e02ba686b90da24f0046390"
+          "size": 7787,
+          "sha256": "f82c4806b337da54abd9d70d0c1fa54d0cd59b88c5826a44e4765ebb52bfc7ab"
         }
       ],
       "copied_files": 1,
@@ -281,8 +281,8 @@
         },
         {
           "path": "scripts/deploy_mailcow_api.py",
-          "size": 18397,
-          "sha256": "c2f13391cc54efc3312f2dbd7f7f8e96fc183a6104c98f7eb332632c52e30316"
+          "size": 21890,
+          "sha256": "0459d2312a55fafa87798751480f4d5c655617b4aa2b6679a94d1eeef3602769"
         },
         {
           "path": "scripts/find_mailcow_creds.py",
@@ -293,6 +293,11 @@
           "path": "scripts/keycloak_setup.py",
           "size": 21888,
           "sha256": "6afdbb521522660da20174142d5db8148806e5fa03eacdc7fc98da2cff823230"
+        },
+        {
+          "path": "scripts/mailcow_api_compat.php",
+          "size": 3911,
+          "sha256": "706c362f2ca85d2bc2f4dd1e983c09d9eb90d7f664ff080a3ab09a4971147809"
         },
         {
           "path": "scripts/mailcow_api_pool.conf",
@@ -320,9 +325,14 @@
           "sha256": "cf3ba057c866d77d7a825d12a4cf404d2f1773377f40381bb8f6cdf63259ff56"
         },
         {
+          "path": "scripts/test_mailcow_api_shim.py",
+          "size": 5771,
+          "sha256": "a76dc32d5d0b8f21ecbab36d40baf583c5bcc5bb6ee9ef48d6cba91df076e3f3"
+        },
+        {
           "path": "SKILL.md",
-          "size": 10961,
-          "sha256": "74ce36e6d3a28d7148b7a630b7ea2d189b3a42941b064cdf3694272103f315b3"
+          "size": 14064,
+          "sha256": "b5a783ac1996dbf93a0141e85f20eff7b708150c78906f0de6e3614941f9c955"
         },
         {
           "path": "troubleshooting.md",
@@ -330,7 +340,7 @@
           "sha256": "da2a37cd89f42163f1878bb09576a4cfbe4c82687353b3a86f22d5502d660bd8"
         }
       ],
-      "copied_files": 14,
+      "copied_files": 16,
       "skipped_paths": 0
     },
     {
@@ -405,8 +415,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 37166,
-          "sha256": "e2c1bddf3b81712aeddd0daaea6774f67c49dc802df0700b49dcb520ef9f88b5"
+          "size": 38523,
+          "sha256": "654057f98398e4fba58288e10468c24dd89e1a3025d411397122850f61729c77"
         }
       ],
       "copied_files": 1,
@@ -471,7 +481,7 @@
         }
       ],
       "copied_files": 8,
-      "skipped_paths": 14889
+      "skipped_paths": 0
     },
     {
       "name": "nuclei-scanner",
@@ -616,8 +626,8 @@
         },
         {
           "path": "ssh_client.py",
-          "size": 26123,
-          "sha256": "b5b91228f163c64f17152c3ba6804038999ead2a87335703d855a0f86a3d5e71"
+          "size": 27251,
+          "sha256": "86f1459d2a261aab08028dc18d63b3573f53b2e454638a3f9e2c682687c52161"
         },
         {
           "path": "upload_compose.py",
@@ -626,7 +636,7 @@
         }
       ],
       "copied_files": 19,
-      "skipped_paths": 1723
+      "skipped_paths": 2
     },
     {
       "name": "semgrep-scanner",
@@ -747,7 +757,7 @@
         }
       ],
       "copied_files": 20,
-      "skipped_paths": 14
+      "skipped_paths": 0
     },
     {
       "name": "soc-bridge",
@@ -853,7 +863,7 @@
         }
       ],
       "copied_files": 2,
-      "skipped_paths": 6
+      "skipped_paths": 0
     },
     {
       "name": "wazuh-bridge",
@@ -906,7 +916,7 @@
         }
       ],
       "copied_files": 9,
-      "skipped_paths": 5
+      "skipped_paths": 0
     },
     {
       "name": "wazuh-edr-sysmon",
@@ -919,8 +929,8 @@
         },
         {
           "path": "configs/sysmon_config_linux.xml",
-          "size": 4455,
-          "sha256": "29e5a9a2e78a771884f5e6b10f20fc186414913b4d7146ba91e563002fc36a48"
+          "size": 2346,
+          "sha256": "6cf3c22fa4e8ac9576aa94c117502b8e9c994922f08fc6d161ff7f56d40d70b7"
         },
         {
           "path": "configs/sysmon_config_windows.xml",
@@ -939,13 +949,13 @@
         },
         {
           "path": "scripts/deploy-edr.sh",
-          "size": 4642,
-          "sha256": "c23d5b5116e911266e56224acf775bea26a71e9cc068ad9ea2da8c41fc77268d"
+          "size": 7072,
+          "sha256": "32d93aa62e155eecdbbd898ee39bc13a60a1d00c8e75d3febccc10d75a95e30b"
         },
         {
           "path": "scripts/deploy-sysmon-linux.sh",
-          "size": 3020,
-          "sha256": "3b500d0c9944353bdab0f7aa3798e7b0c1aa5c0b85c5add60e4e118aee5123ea"
+          "size": 4252,
+          "sha256": "fb865e648a298e75f811081840c0e1f4565f32ada0ec96bdb2fceb786350ace1"
         },
         {
           "path": "scripts/edr-status.sh",
@@ -959,13 +969,13 @@
         },
         {
           "path": "SKILL.md",
-          "size": 2116,
-          "sha256": "9533eb06073885c7a6e8b8ba174ace71ec16b83151d07d57a48b80c635b427fb"
+          "size": 3763,
+          "sha256": "2928ca2a92b1c8fe94e0f68df81be1ffcab71476b541c9c307a613d94a68edf2"
         },
         {
           "path": "tests/test_edr_sysmon_e2e.py",
-          "size": 11155,
-          "sha256": "b7df37c96ea84ad796d3d500ed89a07a1da50e000732fb541b534c0975eeaf55"
+          "size": 14951,
+          "sha256": "d0965c537c3018e79de5ae6484260aae58f0e7ad67b4eadc3c2dd4a7634a200c"
         },
         {
           "path": "wazuh_configs/ar_scripts/edr-respond.sh",
@@ -984,13 +994,13 @@
         },
         {
           "path": "wazuh_configs/sysmon_decoder.xml",
-          "size": 5947,
-          "sha256": "bc0d1bf99572abc99b424a9a0fd9e58cd17e5dae255c0172e78d4adb57be5c4d"
+          "size": 511,
+          "sha256": "2b18e17c3a4ad75049b6a52b0b0b85f24a7976bc94372f4effba5911428c4bdf"
         },
         {
           "path": "wazuh_configs/sysmon_rules.xml",
-          "size": 8037,
-          "sha256": "42102736451ee44d19e755bf54d5dc366e63ca685daa3820ed096854ae501db4"
+          "size": 8342,
+          "sha256": "a4119976ed12dce74aa765b6778e88151f66dedf61368c870c0769044fcd660f"
         },
         {
           "path": "wazuh_configs/sysmon_rules_fixed.xml",
@@ -999,7 +1009,7 @@
         }
       ],
       "copied_files": 17,
-      "skipped_paths": 0
+      "skipped_paths": 2
     },
     {
       "name": "wazuh-manager",
@@ -1041,6 +1051,19 @@
       "skipped_paths": 0
     },
     {
+      "name": "ticket-provider-adapters",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\ticket-provider-adapters",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 2782,
+          "sha256": "d10dd16321878cd38c0b3e1df1871b53c9fe1e0e093a8b8dba19408b3bdcfd28"
+        }
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
+    },
+    {
       "name": "web_research",
       "source": "C:\\Users\\cereal\\.agents\\skills\\web_research",
       "files": [
@@ -1056,7 +1079,7 @@
         }
       ],
       "copied_files": 2,
-      "skipped_paths": 6163
+      "skipped_paths": 0
     }
   ]
 }

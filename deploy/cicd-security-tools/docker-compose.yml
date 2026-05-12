@@ -15,7 +15,7 @@ services:
       - ${HOST_REPO:-.}:/workspace:ro
       - ${HOST_OUTPUT:-./scan-output}:/output
       - trivy-cache:/root/.cache/trivy
-    command: ["trivy", "fs", "--format", "json", "--output", "/output/trivy.json", "/workspace"]
+    command: ["fs", "--format", "json", "--output", "/output/trivy.json", "/workspace"]
     profiles: ["trivy", "gate"]
 
   zap:

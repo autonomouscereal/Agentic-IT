@@ -180,17 +180,48 @@ def gate_status(findings: list[dict], tool_results: dict) -> str:
     return "passed"
 
 
+def scanner_status(result: dict, warning_codes: tuple[int, ...] = (1,)) -> str:
+    """Classify scanner exit codes without losing finding evidence."""
+    if result.get("status") in ("skipped", "error") and result.get("returncode") is None:
+        return result.get("status")
+    returncode = result.get("returncode")
+    if returncode is None:
+        return result.get("status", "completed")
+    return "completed" if returncode in (0, *warning_codes) else "error"
+
+
 def docker_available() -> bool:
     return shutil.which("docker") is not None
 
 
-def run_docker_scanner(name: str, image: str, command: list[str], volumes: list[tuple[Path, str, str]], timeout: int = 1800) -> dict:
+def run_docker_scanner(
+    name: str,
+    image: str,
+    command: list[str],
+    volumes: list[tuple[Path, str, str]],
+    timeout: int = 1800,
+    network: str | None = None,
+) -> dict:
     argv = ["docker", "run", "--rm"]
+    if network:
+        argv.extend(["--network", network])
     for host_path, container_path, mode in volumes:
         argv.extend(["-v", f"{host_path}:{container_path}:{mode}"])
     argv.append(image)
     argv.extend(command)
     return run_command(name, argv, timeout=timeout)
+
+
+def semgrep_config_args(repo: Path, container: bool = False) -> list[str]:
+    """Prefer a repo-local Semgrep config when present.
+
+    The production default remains `auto`, but deterministic demo/test
+    repositories can ship `.semgrep.yml` to prove remediation end to end.
+    """
+    config = repo / ".semgrep.yml"
+    if config.exists():
+        return ["--config", "/workspace/.semgrep.yml" if container else str(config)]
+    return ["--config", "auto"]
 
 
 def artifact_result(path: Path, kind: str) -> dict:
@@ -210,6 +241,7 @@ def main() -> int:
     parser.add_argument("--output", default=None, help="Write canonical JSON result to this path.")
     parser.add_argument("--execution", choices=["auto", "local", "docker", "artifacts"], default="auto", help="Scanner execution mode.")
     parser.add_argument("--artifact-dir", default=None, help="Directory containing semgrep.json, trivy.json, zap.json, nuclei.jsonl.")
+    parser.add_argument("--docker-network", default=os.getenv("CICD_DOCKER_NETWORK"), help="Optional Docker network for scanner containers, e.g. host for local lab DAST.")
     parser.add_argument("--safe-demo", action="store_true", help="Do not fail when scanners are missing; useful for dashboard smoke tests.")
     args = parser.parse_args()
 
@@ -249,33 +281,39 @@ def main() -> int:
         zap_file = out_dir / "zap.json"
         nuclei_file = out_dir / "nuclei.jsonl"
         semgrep = run_docker_scanner("semgrep", "semgrep/semgrep:latest",
-                                     ["semgrep", "--config", "auto", "--json", "--output", "/output/semgrep.json", "/workspace"],
-                                     [(repo, "/workspace", "ro"), (out_dir, "/output", "rw")])
+                                     ["semgrep", *semgrep_config_args(repo, container=True), "--json", "--output", "/output/semgrep.json", "/workspace"],
+                                     [(repo, "/workspace", "ro"), (out_dir, "/output", "rw")],
+                                     network=args.docker_network)
         tool_results["semgrep"] = {key: semgrep.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if semgrep.get(key) is not None}
         findings.extend(normalize_semgrep(load_json_file(semgrep_file) or {}))
 
         trivy = run_docker_scanner("trivy", "aquasec/trivy:latest",
-                                   ["trivy", "fs", "--format", "json", "--output", "/output/trivy.json", "/workspace"],
-                                   [(repo, "/workspace", "ro"), (out_dir, "/output", "rw")])
+                                   ["fs", "--format", "json", "--output", "/output/trivy.json", "/workspace"],
+                                   [(repo, "/workspace", "ro"), (out_dir, "/output", "rw")],
+                                   network=args.docker_network)
+        trivy["status"] = scanner_status(trivy)
         tool_results["trivy"] = {key: trivy.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if trivy.get(key) is not None}
         findings.extend(normalize_trivy(load_json_file(trivy_file) or {}))
 
         if args.target_url:
             zap = run_docker_scanner("owasp-zap", "ghcr.io/zaproxy/zaproxy:stable",
                                      ["zap-baseline.py", "-t", args.target_url, "-J", "zap.json"],
-                                     [(out_dir, "/zap/wrk", "rw")], timeout=1800)
+                                     [(out_dir, "/zap/wrk", "rw")], timeout=1800,
+                                     network=args.docker_network)
             nuclei = run_docker_scanner("nuclei", "projectdiscovery/nuclei:latest",
                                         ["-u", args.target_url, "-jsonl", "-o", "/output/nuclei.jsonl"],
-                                        [(out_dir, "/output", "rw")], timeout=1800)
+                                        [(out_dir, "/output", "rw")], timeout=1800,
+                                        network=args.docker_network)
         else:
             zap = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
             nuclei = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
+        zap["status"] = scanner_status(zap, warning_codes=(1, 2))
         tool_results["owasp_zap"] = {key: zap.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if zap.get(key) is not None}
         tool_results["nuclei"] = {key: nuclei.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if nuclei.get(key) is not None}
         findings.extend(normalize_zap(zap, zap_file))
         findings.extend(normalize_nuclei_file(nuclei_file))
     else:
-        semgrep = run_command("semgrep", ["semgrep", "--config", "auto", "--json", str(repo)])
+        semgrep = run_command("semgrep", ["semgrep", *semgrep_config_args(repo), "--json", str(repo)])
         tool_results["semgrep"] = {key: semgrep.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if semgrep.get(key) is not None}
         findings.extend(normalize_semgrep(semgrep))
 
@@ -290,6 +328,7 @@ def main() -> int:
         else:
             zap = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
             nuclei = {"status": "skipped", "reason": "target URL not provided", "duration_seconds": 0}
+        zap["status"] = scanner_status(zap, warning_codes=(1, 2))
         tool_results["owasp_zap"] = {key: zap.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if zap.get(key) is not None}
         tool_results["nuclei"] = {key: nuclei.get(key) for key in ("status", "returncode", "reason", "duration_seconds", "stderr") if nuclei.get(key) is not None}
         findings.extend(normalize_zap(zap, zap_file))

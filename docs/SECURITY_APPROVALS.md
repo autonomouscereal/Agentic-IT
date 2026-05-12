@@ -63,7 +63,15 @@ Approve:
 ```bash
 curl -sS -X POST http://localhost:25480/api/changes/7/approve \
   -H 'Content-Type: application/json' \
-  -d '{"approved_by":"operator"}'
+  -d '{"approved_by":"operator","reason":"Reviewed evidence and approved scoped action."}'
+```
+
+Demo/lab auto-approval:
+
+```bash
+curl -sS -X POST http://localhost:25480/api/changes/7/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"approved_by":"demo-auto-approver","reason":"Demo mode auto-approval to prove the approval gate without waiting for a human."}'
 ```
 
 Reject:
@@ -79,8 +87,50 @@ Complete:
 ```bash
 curl -sS -X POST http://localhost:25480/api/changes/7/complete \
   -H 'Content-Type: application/json' \
-  -d '{"result":"Block applied in test environment."}'
+  -d '{"completed_by":"agent_26","result":"Block applied in test environment. Compile/test/diff evidence ..."}'
 ```
+
+## Completion Advancement
+
+Approved change requests should not remain in `approved` after the work is done.
+The primary path is agent-driven: after the approved action is executed and
+verified, the agent calls `POST /api/changes/{id}/complete` with evidence.
+
+The control plane also has a deterministic fallback:
+
+- `agent_runner` checks for approved, agent-linked changes after a clean task completion.
+- `task_tracker` performs the same check when completion is detected from `checkpoint.json`.
+- `agent_auditor` sweeps already-completed tasks that still have approved changes.
+- Changes with `approval_policy.auto_complete=false` or
+  `approval_policy.manual_completion_required=true` are left for explicit manual completion.
+
+Auto-completion writes the compiled evidence into `change_requests.result` and
+records both `event_log` and `audit_log` entries with actor `agent-supervisor`.
+
+## Demo Transparency
+
+Every change request is presented as an approval gate in the ticket timeline.
+The control plane writes ticket notes for:
+
+- `Approval gate opened`
+- `Approval gate AUTO-APPROVED` or `Approval gate approved`
+- `Approval gate rejected`
+- `Approval gate completed`
+
+Auto-approval is intentionally loud in the demo. If `approved_by` contains
+`auto`, `demo`, or `smoke`, the approval audit payload includes:
+
+```json
+{
+  "approval_gate": true,
+  "approval_mode": "demo_auto_approval",
+  "auto_approved": true
+}
+```
+
+The dashboard ticket detail modal renders each change as an **Approval Gate**
+card with an `Auto-approved demo gate` badge and direct links to the full gate,
+ticket, and agent audit trails.
 
 ## Future Access Control
 
@@ -111,4 +161,3 @@ Useful filters:
 - `q=<text>`
 
 Audit/event logs are not a replacement for production SIEM retention yet. They are the dashboard-native operational record.
-

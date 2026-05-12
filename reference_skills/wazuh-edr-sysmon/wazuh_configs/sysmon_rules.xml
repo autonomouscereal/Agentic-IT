@@ -202,4 +202,22 @@
     <group>sysmon</group>
   </rule>
 
+  <!-- Non-destructive exact-marker rule used by the E2E test suite.
+       Real Sysmon XML first matches the base catch-all, so this child rule
+       raises the marker event to an alert while keeping production behavior
+       safe and explicit. -->
+  <rule id="100230" level="5">
+    <if_sid>100200</if_sid>
+    <match>CODEX_SYSMON_</match>
+    <description>SysmonForLinux: EDR pipeline verification marker observed</description>
+    <group>sysmon,linux,edr_test</group>
+  </rule>
+
+  <!-- Fallback for raw syslog marker injection during manager diagnostics. -->
+  <rule id="100231" level="5">
+    <match>CODEX_SYSMON_</match>
+    <description>SysmonForLinux: raw EDR pipeline verification marker observed</description>
+    <group>sysmon,linux,edr_test</group>
+  </rule>
+
 </group>

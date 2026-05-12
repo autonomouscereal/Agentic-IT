@@ -144,6 +144,155 @@ def _append_checkpoint(existing, checkpoint):
     return checkpoints
 
 
+def _loads(value, default):
+    if value is None:
+        return default
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default
+    return value
+
+
+async def _add_agent_note(ticket_id, agent_id, task_id, title, body, source="agent-control-plane"):
+    """Write a human-readable agent progress note to the canonical ticket."""
+    if not ticket_id:
+        return None
+    text = f"{title}\n\n{body}".strip()
+    note_id = await fetchval("""
+        INSERT INTO ticket_notes (ticket_id, source, author, body, visibility)
+        VALUES ($1, $2, $3, $4, 'internal')
+        RETURNING id
+    """, ticket_id, source, f"agent-{agent_id}" if agent_id else source, text)
+    await execute("UPDATE tickets SET updated_at = NOW() WHERE id = $1", ticket_id)
+    await log_event("ticket", "info", f"agent_{agent_id}" if agent_id else source,
+                    "agent_progress_note_added", f"ticket_{ticket_id}", {
+                        "note_id": note_id,
+                        "agent_id": agent_id,
+                        "task_id": task_id,
+                        "title": title,
+                    })
+    return note_id
+
+
+def _auto_complete_allowed(change):
+    policy = _loads(change.get("approval_policy"), {})
+    if not isinstance(policy, dict):
+        return True
+    if policy.get("auto_complete") is False:
+        return False
+    if policy.get("manual_completion_required") is True:
+        return False
+    return True
+
+
+def _format_change_completion_result(change, task, checkpoint):
+    checkpoints = _loads(task.get("checkpoints"), [])
+    latest_checkpoint = checkpoint
+    if not latest_checkpoint and checkpoints and isinstance(checkpoints[-1], dict):
+        latest_checkpoint = checkpoints[-1]
+
+    output = _parse_stream_result(task.get("output") or "")
+    evidence = [
+        "Control plane auto-completed this approved agent-linked change after verified agent task completion.",
+        f"Change: {change.get('id')} - {change.get('action') or 'unspecified action'}",
+        f"Target: {change.get('target') or 'unspecified target'}",
+        f"Agent: {task.get('agent_id')}; task: {task.get('id')}; ticket: {task.get('ticket_id')}",
+        f"Task status: {task.get('status')}; completed_at: {task.get('completed_at') or 'recorded by supervisor'}",
+    ]
+    if task.get("work_dir"):
+        evidence.append(f"Work directory: {task.get('work_dir')}")
+    if latest_checkpoint:
+        evidence.append(
+            "Final checkpoint: "
+            f"{latest_checkpoint.get('step', 'unknown')} / {latest_checkpoint.get('status', 'unknown')} - "
+            f"{(latest_checkpoint.get('output') or '')[:900]}"
+        )
+    if output:
+        evidence.append(f"Task final response: {_tail_text(output, 700)}")
+    return "\n".join(evidence)
+
+
+async def complete_approved_changes_for_task(agent_id, task_id, reason="agent_task_completed", checkpoint=None):
+    """Advance approved agent-linked changes when a task has finished cleanly.
+
+    Agents are still instructed to call the change completion API themselves.
+    This supervisor path is the deterministic fallback for cases where the
+    approved remediation finished but the final state transition was omitted.
+    """
+    task = await fetchrow("""
+        SELECT id, agent_id, ticket_id, status, work_dir, output, checkpoints,
+               completed_at, task_type
+        FROM agent_tasks
+        WHERE id = $1 AND agent_id = $2
+    """, task_id, agent_id)
+    if not task or task.get("status") != "completed":
+        return {"completed": [], "skipped": [], "reason": "task_not_completed"}
+
+    changes = await fetchall("""
+        SELECT *
+        FROM change_requests
+        WHERE agent_id = $1
+          AND status = 'approved'
+          AND ($2::integer IS NULL OR ticket_id = $2 OR ticket_id IS NULL)
+        ORDER BY approved_at NULLS LAST, requested_at
+    """, agent_id, task.get("ticket_id"))
+
+    completed = []
+    skipped = []
+    for change in changes or []:
+        if not _auto_complete_allowed(change):
+            skipped.append({"change_id": change["id"], "reason": "manual_completion_required"})
+            await log_event("change", "info", "agent-supervisor", "change_auto_complete_skipped",
+                            f"change_{change['id']}", {
+                                "agent_id": agent_id,
+                                "task_id": task_id,
+                                "ticket_id": task.get("ticket_id"),
+                                "reason": "manual_completion_required",
+                            })
+            continue
+
+        result = _format_change_completion_result(change, task, checkpoint)
+        await execute("""
+            UPDATE change_requests
+            SET status = 'completed', result = $1
+            WHERE id = $2 AND status = 'approved'
+        """, result, change["id"])
+        await execute("""
+            INSERT INTO audit_log (actor, action, target, details)
+            VALUES ($1, $2, $3, $4)
+        """, "agent-supervisor", "change_auto_completed", f"change_{change['id']}", json.dumps({
+            "change_id": change["id"],
+            "agent_id": agent_id,
+            "task_id": task_id,
+            "ticket_id": task.get("ticket_id"),
+            "reason": reason,
+        }))
+        await log_event("change", "info", "agent-supervisor", "change_auto_completed",
+                        f"change_{change['id']}", {
+                            "agent_id": agent_id,
+                            "task_id": task_id,
+                            "ticket_id": task.get("ticket_id"),
+                            "reason": reason,
+                        })
+        await _add_agent_note(
+            task.get("ticket_id"),
+            agent_id,
+            task_id,
+            f"Change {change['id']} completed",
+            (
+                f"The approved change `{change.get('action') or 'unspecified action'}` "
+                f"on `{change.get('target') or 'unspecified target'}` was moved to completed "
+                f"after the agent task finished and the control plane verified completion evidence."
+            ),
+            "agent-supervisor",
+        )
+        completed.append(change["id"])
+
+    return {"completed": completed, "skipped": skipped}
+
+
 async def _mirror_checkpoint_to_task(task_id, agent_id, work_dir):
     checkpoint = _read_checkpoint_sync(work_dir)
     if not checkpoint:
@@ -408,10 +557,16 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
         "UPDATE agents SET last_task_id = $1 WHERE id = $2",
         task_id, agent_id,
     )
-    await execute(
-        "UPDATE tickets SET agent_id = $1, status = 'in_progress', updated_at = NOW() WHERE id = $2",
-        agent_id, ticket_id,
-    )
+    if task_type == "postmortem":
+        await execute(
+            "UPDATE tickets SET updated_at = NOW() WHERE id = $1",
+            ticket_id,
+        )
+    else:
+        await execute(
+            "UPDATE tickets SET agent_id = $1, status = 'in_progress', updated_at = NOW() WHERE id = $2",
+            agent_id, ticket_id,
+        )
 
     # Provision isolated work directory with Claude Code config
     work_dir = await _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt)
@@ -422,6 +577,16 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
 
     await log_event("agent", "info", f"agent_{agent_id}", "spawn_requested",
                     f"ticket_{ticket_id}", {"model": model, "task_id": task_id})
+    await _add_agent_note(
+        ticket_id,
+        agent_id,
+        task_id,
+        "Agent assigned",
+        (
+            f"Agent `{agent_id}` was assigned with model `{model}` for `{task_type}`. "
+            "The runner provisioned an isolated workspace and queued the task."
+        ),
+    )
 
     # Spawn in background with semaphore
     asyncio.create_task(_spawn_with_semaphore(work_dir, prompt, task_id, agent_id))
@@ -438,15 +603,78 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
 async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
     """Wait for semaphore slot, then run agent."""
     async with _semaphore:
+        task_meta = await fetchrow(
+            "SELECT ticket_id, task_type FROM agent_tasks WHERE id = $1",
+            task_id,
+        )
         await log_event("agent", "info", f"agent_{agent_id}", "agent_running",
                         f"task_{task_id}", {"work_dir": work_dir})
+        if task_meta:
+            await _add_agent_note(
+                task_meta.get("ticket_id"),
+                agent_id,
+                task_id,
+                "Agent started",
+                (
+                    f"Agent `{agent_id}` started `{task_meta.get('task_type') or 'ticket_resolution'}` "
+                    f"in workspace `{work_dir}`. Progress checkpoints and approval gates will be recorded here."
+                ),
+            )
 
         result = await _run_agent(work_dir, prompt, task_id)
         checkpoint = await _mirror_checkpoint_to_task(task_id, agent_id, work_dir)
         checkpoint_done = bool(checkpoint and checkpoint.get("status") in ("done", "completed"))
+        task_meta = await fetchrow(
+            "SELECT ticket_id, task_type, started_at FROM agent_tasks WHERE id = $1",
+            task_id,
+        )
 
         # Update task and agent status
         if result["exit_code"] == 0 or checkpoint_done:
+            if task_meta and task_meta.get("task_type") == "postmortem":
+                postmortem_count = await fetchval("""
+                    SELECT COUNT(*) FROM postmortems
+                    WHERE ticket_id = $1
+                      AND (task_id = $2 OR created_at >= $3)
+                """, task_meta["ticket_id"], task_id, task_meta["started_at"])
+                if not postmortem_count:
+                    error = "Postmortem task exited without creating a postmortem artifact"
+                    synthesis = None
+                    try:
+                        from services.postmortem_synthesizer import synthesize_postmortem
+                        synthesis = await synthesize_postmortem(
+                            task_meta["ticket_id"],
+                            agent_id,
+                            task_id,
+                            "agent-runner",
+                            error,
+                        )
+                    except Exception as exc:
+                        synthesis = {"status": "failed", "error": str(exc)}
+                    await execute(
+                        "UPDATE agent_tasks SET status = 'failed', output = $1, error_message = $2, "
+                        "completed_at = NOW() WHERE id = $3",
+                        _tail_text(result.get("stdout", "")), error, task_id,
+                    )
+                    await execute(
+                        "UPDATE agents SET status = 'failed', heartbeat = NOW(), error_message = $1, finished_at = NOW() WHERE id = $2",
+                        error, agent_id,
+                    )
+                    await log_event("agent", "error", f"agent_{agent_id}",
+                                    "postmortem_artifact_missing", f"task_{task_id}",
+                                    {"synthesis": synthesis})
+                    await _add_agent_note(
+                        task_meta["ticket_id"],
+                        agent_id,
+                        task_id,
+                        "Postmortem fallback used",
+                        (
+                            "The postmortem agent exited without creating a postmortem artifact. "
+                            f"The supervisor synthesis result was `{(synthesis or {}).get('status', 'unknown')}`."
+                        ),
+                    )
+                    _active_processes.pop(task_id, None)
+                    return
             summary = _parse_stream_result(result["stdout"]) or "Claude Code process completed"
             if checkpoint_done and checkpoint.get("output"):
                 summary = checkpoint.get("output")
@@ -459,8 +687,30 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 "UPDATE agents SET status = 'finished', heartbeat = NOW(), finished_at = NOW() WHERE id = $1",
                 agent_id,
             )
+            change_completion = await complete_approved_changes_for_task(
+                agent_id,
+                task_id,
+                reason="agent_runner_success",
+                checkpoint=checkpoint,
+            )
             await log_event("agent", "info", f"agent_{agent_id}", "agent_completed",
-                            f"task_{task_id}", {"summary": summary[:500], "checkpoint_done": checkpoint_done})
+                            f"task_{task_id}", {
+                                "summary": summary[:500],
+                                "checkpoint_done": checkpoint_done,
+                                "auto_completed_changes": change_completion.get("completed", []),
+                                "auto_complete_skipped": change_completion.get("skipped", []),
+                            })
+            if task_meta:
+                await _add_agent_note(
+                    task_meta.get("ticket_id"),
+                    agent_id,
+                    task_id,
+                    "Agent completed",
+                    (
+                        f"Agent `{agent_id}` finished task `{task_id}`. "
+                        f"Summary: {summary[:700] or 'Claude Code process completed.'}"
+                    ),
+                )
         else:
             raw_error = result.get("stderr") or result.get("stdout") or f"Agent exited with code {result['exit_code']}"
             error = raw_error[:2000]
@@ -475,6 +725,14 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
             )
             await log_event("agent", "error", f"agent_{agent_id}", "agent_failed",
                             f"task_{task_id}", {"error": error[:500]})
+            if task_meta:
+                await _add_agent_note(
+                    task_meta.get("ticket_id"),
+                    agent_id,
+                    task_id,
+                    "Agent failed",
+                    f"Agent `{agent_id}` failed task `{task_id}`. Error: {error[:900]}",
+                )
 
         # Clean up
         _active_processes.pop(task_id, None)

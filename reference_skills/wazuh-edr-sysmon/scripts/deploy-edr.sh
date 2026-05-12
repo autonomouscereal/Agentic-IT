@@ -9,6 +9,7 @@ set -euo pipefail
 WAZUH_DIR="${1:-/home/cereal/SOC_TESTING/wazuh_deploy}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIGS_DIR="${SCRIPT_DIR}/../wazuh_configs"
+WAZUH_MANAGER_CONTAINER="${WAZUH_MANAGER_CONTAINER:-wazuh_deploy-wazuh.manager-1}"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 err() { echo "[$(date '+%H:%M:%S')] ERROR: $*" >&2; exit 1; }
@@ -92,10 +93,12 @@ ar_config = '''
     <timeout>300</timeout>
   </active-response>
 
-  <!-- SysmonForLinux log source -->
+  <!-- SysmonForLinux log source.
+       SysmonForLinux writes syslog-prefixed XML to /var/log/sysmon/sysmon.log
+       in the reference deployment, so this must be syslog, not json. -->
   <localfile>
-    <log_format>json</log_format>
-    <location>/var/log/sysmon.log</location>
+    <log_format>syslog</log_format>
+    <location>/var/log/sysmon/sysmon.log</location>
   </localfile>
 '''
 
@@ -120,6 +123,37 @@ log "Verifying deployment..."
 [ -f "${WAZUH_DIR}/config/wazuh_custom/rules/sysmon_rules.xml" ] || err "sysmon_rules.xml not deployed"
 [ -f "${WAZUH_DIR}/config/wazuh_custom/decoders/sysmon_decoder.xml" ] || err "sysmon_decoder.xml not deployed"
 [ -f "${WAZUH_DIR}/config/wazuh_custom/ar_scripts/edr-respond.sh" ] || err "edr-respond.sh not deployed"
+
+if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -qx "$WAZUH_MANAGER_CONTAINER"; then
+    log "Applying EDR assets into live Wazuh manager container: $WAZUH_MANAGER_CONTAINER"
+    docker exec "$WAZUH_MANAGER_CONTAINER" sh -lc 'mkdir -p /var/ossec/etc/rules /var/ossec/etc/decoders /var/ossec/active-response/bin'
+    if docker exec "$WAZUH_MANAGER_CONTAINER" sh -lc 'grep -R "<rule id=\"100201\"" /var/ossec/etc/rules/*.xml >/dev/null 2>&1'; then
+        log "  -> Existing Sysmon rules detected in live manager; installing marker rule only to avoid duplicate rule warnings"
+        docker exec "$WAZUH_MANAGER_CONTAINER" sh -lc 'rm -f /var/ossec/etc/rules/sysmon_rules.xml && cat > /var/ossec/etc/rules/sysmon_marker_rules.xml <<'"'"'EOF'"'"'
+<group name="sysmon,edr">
+  <rule id="100230" level="5">
+    <if_sid>100200</if_sid>
+    <match>CODEX_SYSMON_</match>
+    <description>SysmonForLinux: EDR pipeline verification marker observed</description>
+    <group>sysmon,linux,edr_test</group>
+  </rule>
+  <rule id="100231" level="5">
+    <match>CODEX_SYSMON_</match>
+    <description>SysmonForLinux: raw EDR pipeline verification marker observed</description>
+    <group>sysmon,linux,edr_test</group>
+  </rule>
+</group>
+EOF'
+    else
+        docker cp "${WAZUH_DIR}/config/wazuh_custom/rules/sysmon_rules.xml" "$WAZUH_MANAGER_CONTAINER:/var/ossec/etc/rules/sysmon_rules.xml"
+    fi
+    docker cp "${WAZUH_DIR}/config/wazuh_custom/decoders/sysmon_decoder.xml" "$WAZUH_MANAGER_CONTAINER:/var/ossec/etc/decoders/sysmon_decoder.xml"
+    docker cp "${WAZUH_DIR}/config/wazuh_custom/ar_scripts/edr-respond.sh" "$WAZUH_MANAGER_CONTAINER:/var/ossec/active-response/bin/edr-respond.sh"
+    docker exec "$WAZUH_MANAGER_CONTAINER" sh -lc 'rm -f /var/ossec/etc/decoders/sysmon_decoder.xml.tmp && chown root:wazuh /var/ossec/etc/rules/sysmon_rules.xml /var/ossec/etc/rules/sysmon_marker_rules.xml /var/ossec/etc/decoders/sysmon_decoder.xml 2>/dev/null || true && chmod 0640 /var/ossec/etc/rules/sysmon_rules.xml /var/ossec/etc/rules/sysmon_marker_rules.xml /var/ossec/etc/decoders/sysmon_decoder.xml 2>/dev/null || true && chown root:wazuh /var/ossec/active-response/bin/edr-respond.sh && chmod 0750 /var/ossec/active-response/bin/edr-respond.sh'
+    log "  -> Live Wazuh manager assets updated"
+else
+    log "  -> Live manager container not found; assets staged on host only"
+fi
 
 log "=== Deployment complete ==="
 log "Run 'docker compose up -d --force-recreate wazuh.manager' to apply changes"

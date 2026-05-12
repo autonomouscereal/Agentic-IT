@@ -75,8 +75,9 @@ else
 fi
 
 header "GitLab Groups"
+GITLAB_PAT="${GITLAB_PAT:-}"
 for g in gitlab-admins gitlab-developers gitlab-viewers; do
-  exists=$(curl -s "http://localhost/api/v4/groups?search=$g" -H "PRIVATE-TOKEN: ${GITLAB_PAT:-<from vault: gitlab_oidc_setup_pat>}" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if any(x['path']=='$g' for x in d) else 'no')" 2>/dev/null || echo "no")
+  exists=$(curl -s "http://localhost/api/v4/groups?search=$g" -H "PRIVATE-TOKEN: $GITLAB_PAT" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if any(x['path']=='$g' for x in d) else 'no')" 2>/dev/null || echo "no")
   if [[ "$exists" == "yes" ]]; then
     check "groups" "$g group exists" "$GREEN[PASS]"; PASS=$((PASS + 1))
   else

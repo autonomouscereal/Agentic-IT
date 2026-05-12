@@ -4,7 +4,7 @@
 set -euo pipefail
 
 TOTAL=0; PASS=0; FAIL=0; SKIP=0
-GITLAB_PAT="${GITLAB_PAT:-${GITLAB_PAT:-<from vault: gitlab_oidc_setup_pat>}}"
+GITLAB_PAT="${GITLAB_PAT:?Set GITLAB_PAT from the credential vault before running tests}"
 GITLAB_URL="http://localhost"
 KC_URL="https://localhost:8443"
 

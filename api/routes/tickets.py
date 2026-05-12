@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Body
+from fastapi import APIRouter, Query, Body, HTTPException
 from datetime import datetime
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services import provider_registry, ticket_service
@@ -28,19 +28,19 @@ async def list_tickets(
     param_idx = 1
 
     if status:
-        where_clauses.append(f"status = ${param_idx}")
+        where_clauses.append(f"t.status = ${param_idx}")
         params.append(status)
         param_idx += 1
     if priority:
-        where_clauses.append(f"priority = ${param_idx}")
+        where_clauses.append(f"t.priority = ${param_idx}")
         params.append(priority)
         param_idx += 1
     if assignee:
-        where_clauses.append(f"assignee ILIKE ${param_idx}")
+        where_clauses.append(f"t.assignee ILIKE ${param_idx}")
         params.append(f"%{assignee}%")
         param_idx += 1
     if agent_only:
-        where_clauses.append("agent_id IS NOT NULL")
+        where_clauses.append("t.agent_id IS NOT NULL")
 
     where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
     sort_columns = {
@@ -59,7 +59,7 @@ async def list_tickets(
     direction = "ASC" if (sort_dir or "").lower() == "asc" else "DESC"
 
     count = await fetchval(
-        f"SELECT COUNT(*) FROM tickets{where_sql}", *params
+        f"SELECT COUNT(*) FROM tickets t{where_sql}", *params
     )
 
     rows = await fetchall(
@@ -141,13 +141,29 @@ async def get_ticket_context(ticket_id: int):
 @router.post("/{ticket_id}/notes")
 async def add_ticket_note(
     ticket_id: int,
-    body: str = Body(...),
+    body: str = Body(None),
+    note: str = Body(None),
+    title: str = Body(None),
     author: str = Body("dashboard"),
     source: str = Body("dashboard"),
     visibility: str = Body("internal"),
     external_ref: str = Body(None),
 ):
-    return await ticket_service.add_note(ticket_id, body, author, source, visibility, external_ref)
+    """Add a canonical ticket note.
+
+    `body` is the documented field. `note` and `title` are accepted as
+    compatibility aliases because local agents and external ticket widgets often
+    naturally send those names during ad hoc work. Keeping the API tolerant here
+    prevents a harmless schema mismatch from stalling an incident workflow.
+    """
+    text = body if body is not None else note
+    if text is None and title:
+        text = title
+    if text is None:
+        raise HTTPException(status_code=400, detail="Missing note body. Use body or note.")
+    if title and title not in text:
+        text = f"{title}\n\n{text}"
+    return await ticket_service.add_note(ticket_id, text, author, source, visibility, external_ref)
 
 
 @router.post("/{ticket_id}/attachments")

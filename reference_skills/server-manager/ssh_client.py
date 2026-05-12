@@ -56,6 +56,21 @@ from pathlib import Path
 from typing import Tuple, Optional, List, Dict, Any
 
 
+def _fallback_skill_dir() -> Optional[Path]:
+    """Return canonical fallback skill dir when this synced copy lacks state."""
+    configured = os.environ.get("SERVER_MANAGER_FALLBACK_DIR", "").strip()
+    candidates = []
+    if configured:
+        candidates.append(Path(configured))
+    home = Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or "")
+    if home:
+        candidates.append(home / ".claude" / "skills" / "server-manager")
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Path normalization utilities - handle Windows / Git Bash / cygwin chaos
 # ---------------------------------------------------------------------------
@@ -133,19 +148,23 @@ def _try_credman(server_name: str) -> str:
     the resolution cascade).
     """
     try:
-        credman_path = Path(__file__).resolve().parent / "credman.py"
-        if not credman_path.exists():
-            return ""
-
+        skill_dir = Path(__file__).resolve().parent
+        credman_candidates = [skill_dir / "credman.py"]
+        fallback = _fallback_skill_dir()
+        if fallback and fallback != skill_dir:
+            credman_candidates.append(fallback / "credman.py")
         python = sys.executable or "python"
-        result = subprocess.run(
-            [python, str(credman_path), "get", server_name],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            return result.stdout
+        for credman_path in credman_candidates:
+            if not credman_path.exists():
+                continue
+            result = subprocess.run(
+                [python, str(credman_path), "get", server_name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                return result.stdout
     except (subprocess.SubprocessError, OSError):
         pass
     return ""
@@ -166,7 +185,13 @@ class ServerConfig:
         if self._path is None:
             # Default: servers.json next to this script
             script_dir = Path(__file__).resolve().parent
-            self._path = str(script_dir / "servers.json")
+            local_config = script_dir / "servers.json"
+            fallback = _fallback_skill_dir()
+            fallback_config = fallback / "servers.json" if fallback else None
+            if local_config.exists() or not fallback_config:
+                self._path = str(local_config)
+            else:
+                self._path = str(fallback_config)
 
         self._load()
 
@@ -195,7 +220,7 @@ class ServerConfig:
     def default_server(self) -> str:
         if self._default in self._servers:
             return self._default
-        return list(self._servers[0]) if self._servers else ""
+        return next(iter(self._servers), "")
 
     def get(self, name: str) -> Dict[str, Any]:
         """Get server config by name, resolving secrets securely.

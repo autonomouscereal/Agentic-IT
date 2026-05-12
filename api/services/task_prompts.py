@@ -8,6 +8,7 @@ Operational rules:
 - Keep scanning for user notes or ticket updates while working. If the ticketing provider cannot expose notes yet, state that gap in the checkpoint and continue with available context.
 - Do not create a reusable workflow unless the task explicitly asks for workflow creation or automation.
 - If a potentially destructive or environment-changing action is needed, create a change request with POST /api/changes/request and poll GET /api/changes/{change_id}/status until approved before taking that action.
+- After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include compile/test/diff or operational evidence in the result.
 - Prefer non-destructive investigation, documentation, and clear ticket notes.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful progress, blockers, evidence, or resolution details.
 - Update checkpoint.json after major steps. The file already exists; read checkpoint.json directly before writing it.
@@ -16,6 +17,8 @@ Operational rules:
 
 
 POSTMORTEM_PROMPT = """Perform a full postmortem for this completed ticket and the agent work that resolved it.
+
+First call GET /api/postmortems/evidence/{ticket_id}?task_log_lines=0. Use that compact evidence as the primary source of truth for notes, attachments, CI/CD runs, change requests, approvals, audit entries, and prior postmortems. Do not read persisted oversized tool outputs unless the compact evidence is missing critical facts. Use GET /api/tickets/{ticket_id}/context only if you need broader related-ticket or knowledge article context.
 
 Analyze:
 - The original ticket context, notes, attachments, related tickets, and knowledge articles that were available.
@@ -30,7 +33,7 @@ Produce:
 - Guardrails and approval gates for any destructive or environment-changing action.
 - Documentation updates needed for operators.
 
-Persist the postmortem with POST /api/postmortems and mark it ready_for_review when complete.
+Persist the postmortem with POST /api/postmortems and mark it ready_for_review when complete. Include ticket_id, agent_id when known, and task_id from checkpoint.json so the supervisor can verify the artifact.
 Do not deploy new automation directly. If automation creation is requested, create a follow-up workflow-build task or ticket and mark it for human review before production use.
 Update checkpoint.json as you work. The file already exists; read checkpoint.json directly before writing it.
 """

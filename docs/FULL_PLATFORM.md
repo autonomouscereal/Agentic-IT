@@ -34,6 +34,8 @@ The manifest now represents this as first-class provider contracts:
 
 Reference deployments fill gaps. Existing customer products satisfy the same contracts and should be marked as existing integrations in Setup.
 
+Email is a good example of the contract boundary. Mailcow is the current reference email platform because it is open-source and deployable in a lab. The actual platform capability is email inventory, mailbox context, phishing-report intake, and optional mailbox/group provisioning. The Mailcow HTTP API shim in `docs/MAILCOW_API_SHIM.md` provides a narrow read-only compatibility surface for the reference stack, while the direct MySQL bridge remains the canonical Mailcow write path. A production environment can replace that with Exchange, Gmail, Proofpoint, Mimecast, or another adapter without changing the ticket/agent/approval model.
+
 ## Deployment Model
 
 1. Install the control plane with the one-line installer.
@@ -47,7 +49,7 @@ Reference deployments fill gaps. Existing customer products satisfy the same con
 
 ## Reference Modules
 
-The current reference modules include iTop, Wazuh, Zeek, Suricata, Mailcow, report-phish, GitLab, Keycloak, bridge services, Sysmon/Wazuh EDR, server-manager, MemPalace, web research, and vault backup. Planned DevSecOps/intelligence modules include Semgrep, Trivy, OWASP ZAP, Nuclei, and MISP.
+The current reference modules include iTop, Wazuh, Zeek, Suricata, Mailcow, the optional Mailcow HTTP API shim, report-phish, GitLab, Keycloak, bridge services, Sysmon/Wazuh EDR, server-manager, MemPalace, web research, and vault backup. Planned DevSecOps/intelligence modules include MISP and additional provider adapters. Semgrep, Trivy, OWASP ZAP, and Nuclei are already represented as modular CI/CD scanner skills in the current bundle.
 
 ComfyUI, torrenting, media repair, image generation, video generation, and music generation are explicitly excluded from platform setup.
 

@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYSMON_CONFIG="${1:-${SCRIPT_DIR}/../configs/sysmon_config_linux.xml}"
-SYSMON_LOG="/var/log/sysmon.log"
+SYSMON_LOG="/var/log/sysmon/sysmon.log"
 SYSMON_VERSION="18.26.2"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
@@ -22,7 +22,7 @@ log "=== SysmonForLinux Deployment ==="
 # Step 1: Install dependencies
 log "Installing dependencies..."
 apt-get update -qq
-apt-get install -y -qq systemd jq || err "Failed to install dependencies"
+apt-get install -y -qq systemd jq rsyslog || err "Failed to install dependencies"
 
 # Step 2: Download SysmonForLinux
 log "Downloading SysmonForLinux v${SYSMON_VERSION}..."
@@ -50,30 +50,56 @@ else
     log "  -> Using existing config at ${SYSMON_DIR}/sysmon_config.xml"
 fi
 
-# Step 4: Create systemd service
-log "Creating systemd service..."
-cat > /etc/systemd/system/sysmon.service << 'EOF'
-[Unit]
-Description=SysmonForLinux - Endpoint monitoring for Wazuh SIEM
-After=network.target
+# Step 4: Install or update the Sysmon service and configuration.
+log "Configuring SysmonForLinux service..."
+install -d -m 0775 -o syslog -g adm "$(dirname "$SYSMON_LOG")"
+touch "$SYSMON_LOG"
+chown syslog:adm "$SYSMON_LOG"
+chmod 0664 "$SYSMON_LOG"
 
-[Service]
-Type=simple
-ExecStart=/opt/sysmon/sysmon
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=sysmon
-
-[Install]
-WantedBy=multi-user.target
-EOF
+SYSMON_UNINSTALL_LOG="$(mktemp /var/tmp/sysmon-uninstall.XXXXXX.log)"
+SYSMON_INSTALL_LOG="$(mktemp /var/tmp/sysmon-install.XXXXXX.log)"
+systemctl stop sysmon >/dev/null 2>&1 || true
+"${SYSMON_DIR}/sysmon" -u force >"$SYSMON_UNINSTALL_LOG" 2>&1 || true
+"${SYSMON_DIR}/sysmon" -i "${SYSMON_DIR}/sysmon_config.xml" >"$SYSMON_INSTALL_LOG" 2>&1 || {
+    cat "$SYSMON_INSTALL_LOG" >&2
+    err "Failed to install SysmonForLinux service"
+}
 
 systemctl daemon-reload
-systemctl enable sysmon
-systemctl restart sysmon
-log "  -> SysmonForLinux systemd service enabled and started"
+systemctl enable sysmon >/dev/null 2>&1 || true
+systemctl restart sysmon || {
+    systemctl status sysmon --no-pager -l >&2 || true
+    err "SysmonForLinux failed to restart"
+}
+log "  -> SysmonForLinux systemd service installed/updated and started"
+
+# Step 4.5: Forward Sysmon journald/syslog records into the hot file Wazuh reads.
+# Keep this rule early so a broader stop rule cannot swallow Sysmon events first.
+rm -f /etc/rsyslog.d/99-sysmon-forward.conf
+cat > /etc/rsyslog.d/10-sysmon-forward.conf << EOF
+if (\$programname == 'sysmon') then {
+  action(type="omfile" file="$SYSMON_LOG")
+  stop
+}
+EOF
+systemctl restart rsyslog
+log "  -> rsyslog Sysmon file forwarding installed"
+
+# Step 4.6: Install a small logrotate policy so Wazuh does not get stuck behind
+# an oversized historical Sysmon file in demo or lab environments.
+cat > /etc/logrotate.d/sysmon-edr << EOF
+$SYSMON_LOG {
+    daily
+    rotate 7
+    size 256M
+    missingok
+    notifempty
+    copytruncate
+    compress
+}
+EOF
+log "  -> Sysmon logrotate policy installed for $SYSMON_LOG"
 
 # Step 5: Verify
 sleep 2

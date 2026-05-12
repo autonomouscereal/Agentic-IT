@@ -9,10 +9,10 @@ Creates:
 Keeps existing php-fpm-mailcow + MySQL bridge scripts fully functional.
 """
 
-import hashlib
 import json
 import os
 import secrets
+import shlex
 import subprocess
 import sys
 import time
@@ -20,18 +20,31 @@ import urllib.error
 import urllib.request
 
 
+def read_env_file(path):
+    values = {}
+    if not os.path.exists(path):
+        return values
+    with open(path, encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
 # ─── Configuration ──────────────────────────────────────────────────────
 
 MAILCOW_DOCKERIZED_WEB = "/home/cereal/mailcow-dockerized/data/web"
 NGINX_CONF_DIR = "/home/cereal/Mailcow/deploy/api-nginx"
+MAILCOW_ENV_FILE = os.environ.get("MAILCOW_ENV_FILE", "/home/cereal/Mailcow/deploy/.env")
 API_PORT = 8081
 PHPFPM_PORT = 9002
-MYSQL_ROOT_PASSWORD = os.environ.get("MYSQL_ROOT_PASSWORD", "")
-if not MYSQL_ROOT_PASSWORD:
-    print("[FATAL] MYSQL_ROOT_PASSWORD environment variable required")
-    sys.exit(1)
-MYSQL_DATABASE = "mailcow"
+MAILCOW_ENV = read_env_file(MAILCOW_ENV_FILE)
+MYSQL_DATABASE = os.environ.get("MYSQL_DATABASE") or os.environ.get("DBNAME") or MAILCOW_ENV.get("DBNAME") or "mailcow"
 MAILCOW_API_KEY = None  # Will be generated if not found
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────
@@ -47,13 +60,58 @@ def run(cmd, check=True):
     return result.stdout.strip(), result.stderr.strip()
 
 
+def docker_run(args, check=True):
+    """Run docker without shell interpolation so secrets never appear in errors."""
+    result = subprocess.run(args, capture_output=True, text=True)
+    if check and result.returncode != 0:
+        printable = " ".join(shlex.quote(a) for a in args if "PASSWORD" not in a and "PASS=" not in a)
+        print(f"  [ERROR] Command failed: {printable}")
+        print(f"  stdout: {result.stdout}")
+        print(f"  stderr: {result.stderr}")
+        sys.exit(1)
+    return result.stdout.strip(), result.stderr.strip()
+
+
 def run_sql(query):
-    """Run a SQL query on the Mailcow database."""
-    cmd = (
-        f"sudo docker exec mysql-mailcow mysql -uroot -p{MYSQL_ROOT_PASSWORD} "
-        f"-B -e \"{query}\" {MYSQL_DATABASE} 2>/dev/null"
-    )
-    return run(cmd, check=False)[0]
+    """Run SQL inside the Mailcow MySQL container using container-held creds."""
+    args = [
+        "sudo",
+        "docker",
+        "exec",
+        "-e",
+        f"SQL_QUERY={query}",
+        "-e",
+        f"SQL_DATABASE={MYSQL_DATABASE}",
+        "mysql-mailcow",
+        "sh",
+        "-lc",
+        'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -B -e "$SQL_QUERY" "$SQL_DATABASE" 2>/dev/null',
+    ]
+    return docker_run(args, check=False)[0]
+
+
+def sql_literal(value):
+    """Return a single-quoted SQL literal for generated non-secret values."""
+    return "'" + str(value).replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+def table_columns(table):
+    result = run_sql(f"DESCRIBE `{table}`")
+    columns = set()
+    for line in result.splitlines()[1:]:
+        if line.strip():
+            columns.add(line.split("\t", 1)[0])
+    return columns
+
+
+def write_api_key_file(api_key):
+    api_key_file = os.path.join(NGINX_CONF_DIR, ".api_key")
+    with open("/tmp/mailcow_api_key", "w", encoding="utf-8") as f:
+        f.write(api_key + "\n")
+    run(f"mkdir -p {shlex.quote(NGINX_CONF_DIR)}")
+    run(f"cp /tmp/mailcow_api_key {shlex.quote(api_key_file)}")
+    run(f"chmod 600 {shlex.quote(api_key_file)}")
+    print("  API key file: OK")
 
 
 def wait_for_port(host, port, timeout=30):
@@ -75,9 +133,8 @@ def setup_api_table():
     """Create proper API table schema if it doesn't exist."""
     print("\n--- Step 1: Fixing API table schema ---")
 
-    # Check current schema
-    result = run_sql("DESCRIBE api")
-    if not result:
+    columns = table_columns("api")
+    if not columns:
         print("  Creating api table with proper schema...")
         run_sql("""
             CREATE TABLE IF NOT EXISTS api (
@@ -95,29 +152,34 @@ def setup_api_table():
         """)
         print("  Created api table.")
     else:
-        # Check if api_key column exists
-        has_api_key = "api_key" in result
-        if not has_api_key:
-            print("  Adding api_key and related columns to api table...")
-            run_sql("ALTER TABLE api ADD COLUMN IF NOT EXISTS api_key VARCHAR(255) NOT NULL DEFAULT ''")
-            run_sql("ALTER TABLE api ADD COLUMN IF NOT EXISTS allow_from VARCHAR(512) DEFAULT NULL")
-            run_sql("ALTER TABLE api ADD COLUMN IF NOT EXISTS skip_ip_check TINYINT(1) DEFAULT 1")
-            run_sql("ALTER TABLE api ADD COLUMN IF NOT EXISTS access ENUM('ro','rw') DEFAULT 'rw'")
-            run_sql("ALTER TABLE api ADD COLUMN IF NOT EXISTS active TINYINT(1) DEFAULT 1")
-            run_sql("ALTER TABLE api ADD COLUMN IF NOT EXISTS created DATETIME DEFAULT CURRENT_TIMESTAMP")
-            run_sql("ALTER TABLE api ADD COLUMN IF NOT EXISTS modified DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
-            run_sql("ALTER TABLE api ADD UNIQUE INDEX IF NOT EXISTS api_key (api_key)")
-            print("  Added API columns.")
+        column_defs = {
+            "api_key": "VARCHAR(255) NOT NULL DEFAULT ''",
+            "allow_from": "VARCHAR(512) DEFAULT NULL",
+            "skip_ip_check": "TINYINT(1) DEFAULT 1",
+            "access": "ENUM('ro','rw') DEFAULT 'rw'",
+            "active": "TINYINT(1) DEFAULT 1",
+            "created": "DATETIME DEFAULT CURRENT_TIMESTAMP",
+            "modified": "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+        }
+        missing = [name for name in column_defs if name not in columns]
+        for name in missing:
+            run_sql(f"ALTER TABLE api ADD COLUMN `{name}` {column_defs[name]}")
+        if missing:
+            print(f"  Added API columns: {', '.join(missing)}")
         else:
-            print("  API table schema already correct.")
+            print("  API table columns already correct.")
+
+    run_sql("DELETE FROM api WHERE LENGTH(api_key) <= 10")
+    index_result = run_sql("SHOW INDEX FROM api WHERE Key_name = 'api_key'")
+    if not index_result.strip():
+        run_sql("ALTER TABLE api ADD UNIQUE INDEX api_key (api_key)")
+        print("  API key unique index: OK")
 
     # Seed API key if none exists (or existing key is empty)
     existing = run_sql("SELECT api_key FROM api WHERE LENGTH(api_key) > 10 LIMIT 1")
     if not existing or not existing.strip():
         api_key = secrets.token_hex(32)
-        # Delete any stale rows and insert fresh key
-        run_sql("DELETE FROM api WHERE LENGTH(api_key) <= 10")
-        run_sql(f"INSERT INTO api (api_key, access, active) VALUES ('{api_key}', 'rw', 1)")
+        run_sql(f"INSERT INTO api (api_key, access, active) VALUES ({sql_literal(api_key)}, 'rw', 1)")
         print("  Seeded new API key.")
         return api_key
     else:
@@ -139,6 +201,19 @@ def setup_identity_provider_table():
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
     """)
     print("  identity_provider table: OK")
+
+
+def install_compat_api():
+    """Install read-only compatibility endpoints for custom Mailcow stacks."""
+    print("\n--- Step 1c: Installing compatibility API shim ---")
+    source = os.path.join(SCRIPT_DIR, "mailcow_api_compat.php")
+    destination = os.path.join(MAILCOW_DOCKERIZED_WEB, "mailcow_compat_api.php")
+    if not os.path.exists(source):
+        print(f"  [FAIL] Missing compatibility script: {source}")
+        sys.exit(1)
+    run(f"sudo cp {shlex.quote(source)} {shlex.quote(destination)}")
+    run(f"sudo chmod 0444 {shlex.quote(destination)}")
+    print("  compatibility API: OK")
 
 
 # ─── Step 2: Deploy php-fpm-mailcow-api ────────────────────────────────
@@ -191,7 +266,7 @@ listen = 127.0.0.1:9002
     run(f"cp /tmp/mailcow_api_zz.conf {zz_conf_path}")
 
     # Write Redis session config (entrypoint normally does this)
-    redispass = os.environ.get("REDISPASS", "")
+    redispass = os.environ.get("REDISPASS") or MAILCOW_ENV.get("REDISPASS", "")
     session_conf = f"""session.save_handler = redis
 session.save_path = "tcp://127.0.0.1:6379?auth={redispass}"
 """
@@ -228,14 +303,13 @@ exec php-fpm
         f"--network host "
         f"-e MAILCOW_HOSTNAME=mailcow.local "
         f"-e TZ=America/New_York "
-        f"-e MYSQL_ROOT_PASSWORD={MYSQL_ROOT_PASSWORD} "
         f"-e MAILCOW_PASS_SCHEME=BLF-CRYPT "
         f"-v {MAILCOW_DOCKERIZED_WEB}:/web:ro "
         f"-v {www_conf_path}:/usr/local/etc/php-fpm.d/www.conf:ro "
         f"-v {zz_conf_path}:/usr/local/etc/php-fpm.d/zz-docker.conf:ro "
         f"-v {session_path}:/usr/local/etc/php/conf.d/session_store.ini:ro "
         f"-v deploy_mysql-socket:/var/run/mysqld:ro "
-        f"--env-file /home/cereal/Mailcow/deploy/.env "
+        f"--env-file {shlex.quote(MAILCOW_ENV_FILE)} "
         f"--entrypoint php-fpm "
         f"mailcow/phpfpm:1.92"
     )
@@ -305,7 +379,13 @@ http {{
             return 403;
         }}
 
-        # API routing - forwards to json_api.php
+        # Compatibility read endpoints for custom deployments where the stock
+        # json_api.php returns empty bodies behind this shim.
+        location ~ ^/api/v1/get/(domain|mailbox|alias)/(.*)$ {{
+            rewrite ^/api/v1/get/(domain|mailbox|alias)/(.*)$ /mailcow_compat_api.php?resource=$1&selector=$2 last;
+        }}
+
+        # API routing - forwards everything else to json_api.php
         location ~ ^/api/v1/(.*)$ {{
             try_files $uri $uri/ /json_api.php?query=$1&$args;
         }}
@@ -458,11 +538,17 @@ def main():
     print("\n--- Prerequisites ---")
 
     # Check web code exists
-    wc, _ = run(f"test -d {MAILCOW_DOCKERIZED_WEB} && echo 'OK'", check=False)
+    wc, _ = run(f"test -d {shlex.quote(MAILCOW_DOCKERIZED_WEB)} && echo 'OK'", check=False)
     if wc != "OK":
         print(f"  [FAIL] Web code not found at {MAILCOW_DOCKERIZED_WEB}")
         sys.exit(1)
     print("  Web code: OK")
+
+    wc, _ = run(f"test -f {shlex.quote(MAILCOW_ENV_FILE)} && echo 'OK'", check=False)
+    if wc != "OK":
+        print(f"  [FAIL] Mailcow env file not found at {MAILCOW_ENV_FILE}")
+        sys.exit(1)
+    print("  Mailcow env file: OK")
 
     # Check php-fpm image
     wc, _ = run("sudo docker image inspect mailcow/phpfpm:1.92 >/dev/null 2>&1 && echo 'OK'", check=False)
@@ -472,8 +558,8 @@ def main():
     print("  php-fpm image: OK")
 
     # Check MySQL reachable
-    wc, _ = run(f"sudo docker exec mysql-mailcow mysql -uroot -p{MYSQL_ROOT_PASSWORD} -s -e 'SELECT 1' {MYSQL_DATABASE} >/dev/null 2>&1 && echo 'OK'", check=False)
-    if wc != "OK":
+    wc = run_sql("SELECT 1")
+    if "1" not in wc:
         print("  [FAIL] MySQL not reachable")
         sys.exit(1)
     print("  MySQL: OK")
@@ -487,7 +573,9 @@ def main():
 
     # Deploy
     api_key = setup_api_table()
+    write_api_key_file(api_key)
     setup_identity_provider_table()
+    install_compat_api()
     deploy_php_fpm()
     deploy_nginx()
 
@@ -507,13 +595,7 @@ def main():
         print(f"  nginx:   port {API_PORT}")
         print("=" * 60)
 
-        # Write API key to a file for other scripts to read
-        api_key_file = "/home/cereal/Mailcow/deploy/api-nginx/.api_key"
-        with open("/tmp/mailcow_api_key", "w") as f:
-            f.write(api_key)
-        run(f"mkdir -p {NGINX_CONF_DIR}")
-        run(f"cp /tmp/mailcow_api_key {api_key_file}")
-        run(f"chmod 600 {api_key_file}")
+        write_api_key_file(api_key)
     else:
         print("\n[FAIL] API tests failed. Check logs:")
         print("  docker logs nginx-mailcow-api")

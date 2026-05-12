@@ -34,6 +34,18 @@ The gate fails when high or critical findings exist. Tool errors produce
 `needs_review`. Missing optional DAST targets skip ZAP/Nuclei but still record
 that decision.
 
+Scanner result semantics:
+
+- Semgrep returns findings in JSON; use repo-local `.semgrep.yml` when present
+  for deterministic customer demos and compact agent remediation prompts.
+- The `aquasec/trivy` Docker image entrypoint is already `trivy`; Docker
+  invocations should pass `fs ...`, not `trivy fs ...`.
+- OWASP ZAP baseline exit code `2` means warnings were found. Treat it as
+  completed-with-findings and let severity decide the gate. Treat only execution
+  failures as tool errors.
+- Nuclei can legitimately return no matches; record the completed scan and zero
+  findings.
+
 ## Deploy Scanner Tools
 
 Portable Docker Compose bundle:
@@ -68,12 +80,18 @@ python scripts/run_cicd_security_pipeline.py \
   --branch "$CI_COMMIT_REF_NAME" \
   --commit-sha "$CI_COMMIT_SHA" \
   --target-url "$DAST_TARGET_URL" \
+  --docker-network "$CICD_DOCKER_NETWORK" \
   --output cicd-security-result.json
 
 curl -sS -X POST "$SOC_DASHBOARD_URL/api/cicd/runs" \
   -H "Content-Type: application/json" \
   --data-binary @cicd-security-result.json
 ```
+
+For lab apps listening on the same Linux host as Docker, use
+`CICD_DOCKER_NETWORK=host` or `--docker-network host` so ZAP and Nuclei can
+reach the target without relying on Docker bridge hostnames. Leave it unset for
+normal provider-hosted CI targets.
 
 If the job represents production deployment, include:
 
@@ -125,10 +143,73 @@ Local safe smoke:
 python scripts/smoke_cicd_security_pipeline.py http://localhost:25480
 ```
 
-GitLab environment test:
+Full local-model proof:
 
-1. Create a test project in GitLab.
-2. Add the generated `.gitlab-ci.yml`.
-3. Add CI variables for `SOC_DASHBOARD_URL` and optional `DAST_TARGET_URL`.
-4. Push a branch and verify jobs run.
-5. Confirm `/api/cicd/runs`, the evidence ticket, and the change request exist.
+```bash
+python scripts/agentic_cicd_full_demo.py \
+  --base http://localhost:25480 \
+  --model qwen/qwen3.6-27b \
+  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs
+```
+
+Latest verified full run on 2026-05-11:
+
+- Ticket `82`
+- Initial CI/CD run `8`: `needs_review`
+- Local remediation agent `48`, task `46`
+- Agent remediation change `34`: approved before edits
+- Final CI/CD run `10`: `passed`
+- Deployment change `36`: approved and completed
+- Patch artifact: `/home/cereal/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch`
+
+The agent removed command injection and a hardcoded password, updated a stale
+dependency, added a non-root container user, wrote ticket evidence, and produced
+a patch/branch artifact for PR/MR review. This path is the local-only fallback
+proof; use the GitLab runner proof below when the demo needs a real GitLab
+project, MR, and branch pipeline.
+
+GitLab runner proof:
+
+```bash
+python scripts/agentic_gitlab_cicd_demo.py \
+  --dashboard http://localhost:25480 \
+  --gitlab http://localhost \
+  --model qwen/qwen3.6-27b \
+  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs \
+  --timeout 3000
+```
+
+Latest verified GitLab-backed run on 2026-05-11:
+
+- GitLab project `root/agentic-cicd-demo-1778538475`, project id `15`
+- Ticket `83`
+- Initial GitLab pipeline `9`: failed as intended after unit tests, Semgrep,
+  Trivy, OWASP ZAP, and Nuclei all ran
+- Initial dashboard run `11`: failed with seven findings
+- Local remediation agent `50`, task `48`
+- Agent change `39`: approved before edits and completed after the agent fix
+- Remediation branch `agent/remediate-security-gate`
+- Remediation commit `2f0984f2b074764927dd21ec024638eb020b9185`
+- Merge request `!1`
+- Final GitLab pipeline `10`: passed
+- Final dashboard run `12`: passed with zero findings
+- Deployment change `40`: approved and completed
+- Postmortem `21`: ready for review
+
+Live GitLab verification:
+
+- Project `15`: `root/agentic-cicd-demo-1778538475`
+- MR `!1`: `agent/remediate-security-gate` -> `main`, state `opened`
+- Pipeline `9` on `main`: `failed`; unit tests and all scanner jobs succeeded,
+  dashboard record failed because the initial branch had findings
+- Pipeline `10` on `agent/remediate-security-gate`: `success`; unit tests,
+  Semgrep, Trivy, ZAP, Nuclei, and dashboard record all succeeded
+
+Reference GitLab Runner requirements:
+
+- Attach the runner to generated demo projects, or configure it as an instance
+  runner.
+- Job containers must reach GitLab and the dashboard. In the lab, use
+  `network_mode = "gitlab-net"` and `SOC_DASHBOARD_URL=http://192.168.50.222:25480`.
+- Mount `/tmp/zap-wrk:/zap/wrk` so ZAP can write JSON output from its container.
+- Keep Nuclei bounded for demos with small template lists and explicit targets.

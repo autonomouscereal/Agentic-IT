@@ -1,6 +1,115 @@
 # Installer E2E Results
 
-Last verified: 2026-05-11
+Last verified: 2026-05-12
+
+## Full One-Line Install Verification - 2026-05-12
+
+Fresh install target:
+
+- Target: `/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512`
+- Compose project: `soc-dashboard-e2e-20260512`
+- Dashboard/API: `http://localhost:25482`
+- PostgreSQL host port: `5435`
+- AI proxy: `http://192.168.50.222:4001`
+- Agent model: `qwen/qwen3.6-27b`
+- iTop sync: disabled for provider-agnostic/local-only installer testing
+
+Actual one-line installer command:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+./install.sh \
+  --profile soc \
+  --source /home/cereal/SOC_TESTING/soc-dashboard \
+  --target /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512 \
+  --dashboard-port 25482 \
+  --db-port 5435 \
+  --project-name soc-dashboard-e2e-20260512 \
+  --ai-base-url http://192.168.50.222:4001 \
+  --model qwen/qwen3.6-27b \
+  --itop-sync-enabled false \
+  --non-interactive
+```
+
+Result:
+
+- Installer returned `status=installed`.
+- `GET /health` returned `{"status":"ok","version":"1.3.0"}`.
+- `docker compose ps` showed project-scoped `api` and healthy `db` containers.
+- `runner-health` reached the proxy and resolved `ps_path=/usr/bin/ps`.
+- `platform_doctor.py --base http://localhost:25482` passed `18/18`.
+
+Regression suite executed against the fresh install:
+
+```bash
+python3 scripts/platform_doctor.py --base http://localhost:25482
+python3 scripts/smoke_setup_platform.py http://localhost:25482
+python3 scripts/smoke_provider_adapters.py http://localhost:25482
+python3 scripts/smoke_service_desk_intake.py http://localhost:25482
+python3 scripts/smoke_agentic_system.py http://localhost:25482
+python3 scripts/smoke_phishing_workflow_lifecycle.py http://localhost:25482
+python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25482
+python3 scripts/smoke_agent_auditor.py http://localhost:25482
+docker compose exec -T api python smoke_change_auto_completion.py http://localhost:8000
+python3 scripts/smoke_local_model_agent.py http://localhost:25482 qwen/qwen3.6-27b
+python3 scripts/smoke_setup_agent.py http://localhost:25482 qwen/qwen3.6-27b
+```
+
+Observed outputs:
+
+- Setup smoke: ticket `14`.
+- Provider adapters: ticket `15`, local provider `local_only`, ServiceNow/Jira fail-closed as unconfigured.
+- Service desk intake: ticket `16`, change `10`, phishing intent.
+- Agentic system smoke: ticket `17`, local push ticket `18`, change `11`, postmortem `5`, workflow `3`, skill `24`.
+- Phishing lifecycle: ticket `19`, change `12`, workflow `2`, postmortem `6`.
+- CI/CD control-plane smoke: run `7`, ticket `20`, change `13`, provider `gitlab`.
+- Change auto-completion: ticket `21`, agent `9`, task `9`, change `14`, status `completed`, evidence persisted.
+- Local model agent smoke: ticket `22`, agent `10`, task `10`, status `completed`, note written.
+- Setup agent smoke: ticket `23`, agent `11`, task `11`, status `completed`, note written.
+- `/api/agents/processes` reported no active processes after the suite.
+
+Real installed-stack CI/CD agent workflow:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512
+SOC_DASHBOARD_URL=http://localhost:25482 \
+AGENT_MODEL=qwen/qwen3.6-27b \
+CICD_DOCKER_NETWORK=host \
+python3 scripts/agentic_cicd_full_demo.py \
+  --base http://localhost:25482 \
+  --host-ip 192.168.50.222 \
+  --timeout 2400
+```
+
+Latest verified result:
+
+```text
+ticket_id=13
+initial_run=5 failed high=1 medium=6 low=6 info=1 unknown=2
+remediation_agent=7 task=7 completed
+remediation_change=8 completed
+final_run=6 passed high=0 critical=0
+deployment_change=9 completed
+postmortem=4 ready_for_review
+mr_artifact=/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512/agent_work/7/agent-remediation.patch
+active_agent_processes=0
+```
+
+Issues found during this fresh installer run:
+
+- `install.sh` did not preserve executable mode after file transfer. Fixed with
+  `git update-index --chmod=+x install.sh`; remote source was repaired with
+  `chmod +x`.
+- `agentic_cicd_full_demo.py` repaired root-owned agent workdirs by fixed
+  container name. Fresh installs use custom Compose project names, so the runner
+  now uses `docker compose exec -T api` from the installed root and verifies
+  host writability before seeding agent workspaces.
+- Local-model postmortem agents can still stall or exit without writing a
+  postmortem row. The runner now synthesizes a bounded `ready_for_review`
+  postmortem directly when that happens, and the demo script stops the leftover
+  postmortem agent after synthesis.
+- The DB-coupled change-completion smoke requires API dependencies and should
+  run inside the API container for one-line/container installs.
 
 ## Scratch Install
 

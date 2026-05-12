@@ -3,7 +3,7 @@ import json
 import asyncio
 import signal
 from datetime import datetime, timedelta, timezone
-from database import fetchall, execute, fetchrow
+from database import fetchall, execute, fetchrow, fetchval
 from services.event_logger import log_event
 
 TRACK_INTERVAL = int(os.getenv("TRACK_INTERVAL", "10"))
@@ -26,6 +26,36 @@ async def _read_checkpoint(work_dir):
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return None
+
+
+async def _add_checkpoint_note(task, step, status, output, progress):
+    """Persist a readable checkpoint note so demos show what agents are doing."""
+    if not task.get("ticket_id"):
+        return None
+    title = f"Agent checkpoint: {step}"
+    body = (
+        f"{title}\n\n"
+        f"Agent `{task['agent_id']}` task `{task['id']}` reported `{status}` "
+        f"at {progress or 0}% progress."
+    )
+    if output:
+        body = f"{body}\n\n{str(output)[:900]}"
+    note_id = await fetchval("""
+        INSERT INTO ticket_notes (ticket_id, source, author, body, visibility)
+        VALUES ($1, 'agent-checkpoint', $2, $3, 'internal')
+        RETURNING id
+    """, task["ticket_id"], f"agent-{task['agent_id']}", body)
+    await execute("UPDATE tickets SET updated_at = NOW() WHERE id = $1", task["ticket_id"])
+    await log_event("ticket", "info", f"agent_{task['agent_id']}",
+                    "agent_checkpoint_note_added", f"ticket_{task['ticket_id']}", {
+                        "note_id": note_id,
+                        "agent_id": task["agent_id"],
+                        "task_id": task["id"],
+                        "step": step,
+                        "status": status,
+                        "progress_pct": progress,
+                    })
+    return note_id
 
 
 def _is_agent_process_alive(pid):
@@ -96,7 +126,8 @@ async def _sync_task_status(task):
         except json.JSONDecodeError:
             existing = []
     # Only append if this is a new checkpoint (different step or status)
-    if not existing or existing[-1].get("step") != step or existing[-1].get("status") != status:
+    is_new_checkpoint = not existing or existing[-1].get("step") != step or existing[-1].get("status") != status
+    if is_new_checkpoint:
         existing.append({
             "step": step,
             "status": status,
@@ -131,6 +162,8 @@ async def _sync_task_status(task):
         "UPDATE agents SET status = $1, heartbeat = NOW() WHERE id = $2",
         agent_status, task["agent_id"],
     )
+    if is_new_checkpoint and step != "init":
+        await _add_checkpoint_note(task, step, status, output, progress)
 
     # Complete ticket if agent finished
     if task_status == "completed":
@@ -155,8 +188,19 @@ async def _sync_task_status(task):
                 "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
                 task["ticket_id"],
             )
+        from services import agent_runner
+        change_completion = await agent_runner.complete_approved_changes_for_task(
+            task["agent_id"],
+            task["id"],
+            reason="checkpoint_task_tracker_success",
+            checkpoint=cp,
+        )
         await log_event("agent", "info", f"agent_{task['agent_id']}", "task_completed",
-                        f"task_{task['id']}", {"ticket_id": task["ticket_id"]})
+                        f"task_{task['id']}", {
+                            "ticket_id": task["ticket_id"],
+                            "auto_completed_changes": change_completion.get("completed", []),
+                            "auto_complete_skipped": change_completion.get("skipped", []),
+                        })
 
         if broadcast_fn:
             await broadcast_fn({

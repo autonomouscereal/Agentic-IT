@@ -14,6 +14,55 @@ Show that this is not code completion and not a static playbook system. The dash
 - approval gates
 - postmortems
 - reusable workflow creation
+- human-readable ticket notes and full audit drill-downs
+
+## Activity Trail For Demos
+
+Ticket details show a timeline instead of only raw event rows:
+
+- agent assignment note
+- agent started note
+- agent-authored notes
+- checkpoint notes
+- change completion notes
+- agent completion/failure notes
+- audit/event rows for the same ticket
+
+In the ticket detail modal, use **Full Audit Trail** to jump to the Audit page
+filtered to that ticket. Audit rows expose quick links for ticket, agent, and
+target trails when those identifiers are present. Use the Notes source filter
+on the Audit page when you want the human-readable narrative without the lower
+level system events.
+
+Approval gates are also deliberately visible for the demo. When the lab
+auto-approves a gate, the ticket timeline shows:
+
+```text
+Approval gate opened: change <id>
+Approval gate AUTO-APPROVED: change <id>
+Approval gate completed: change <id>
+```
+
+Use the gate card's **full gate audit** link to show the underlying audit fields:
+`approval_gate=true`, `approval_mode=demo_auto_approval`, and
+`auto_approved=true`.
+
+Quick proof before the demo:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_local_model_agent.py http://localhost:25480 qwen/qwen3.6-27b
+```
+
+Expected ticket timeline shape:
+
+```text
+Agent assigned
+Agent started
+<agent-authored task note>
+Agent checkpoint: <step>
+Agent completed
+```
 
 ## Fast Local Demo Path
 
@@ -59,6 +108,11 @@ Create a local-only ticket for a synthetic phishing report. Read the ticket cont
 - click Postmortem
 - give optional context
 - show postmortem agent/task and Learning page entry
+- click Promote on the postmortem
+- show the generated knowledge article, draft workflow, candidate skills, ticket
+  note, and full postmortem audit trail
+- optionally click Promote again to show the idempotent update behavior: the
+  same KB/workflow/skill assets are updated and audited instead of duplicated
 
 7. Trigger workflow build:
 
@@ -66,6 +120,90 @@ Create a local-only ticket for a synthetic phishing report. Read the ticket cont
 - click Build Workflow
 - ask for phishing triage workflow
 - show Workflows page draft/tested/review state
+
+## DevSecOps Agent Demo Path
+
+This is the strongest proof that the system is more than a dashboard and more
+than code completion.
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/agentic_cicd_full_demo.py --base http://localhost:25480 --model qwen/qwen3.6-27b
+```
+
+Narrative beats:
+
+1. Show a vulnerable demo app and a GitLab-default scanner gate.
+2. Run Semgrep, Trivy, OWASP ZAP, and Nuclei for real.
+3. Show the dashboard evidence ticket and initial failed or needs-review gate.
+4. Spawn the local-model remediation agent.
+5. Show the agent requesting approval before modifying source.
+6. Approve the remediation change from the dashboard.
+7. Show the agent patch, note, checkpoint, and logs.
+8. Rerun the scanner gate and show final pass with no high/critical findings.
+9. For the local-only proof, show the local branch and patch artifact as the
+   PR/MR handoff. For the full proof, switch to the GitLab Runner path below
+   and show the real GitLab MR and final branch pipeline.
+10. Show the postmortem task that turns the run into future workflow/skill
+    improvements.
+
+Latest verified demo artifacts:
+
+- Ticket `82`
+- Initial scanner run `8`
+- Remediation agent `48`, task `46`
+- Remediation change `34`
+- Final scanner run `10`
+- Deployment gate `36`
+- Patch artifact `/home/cereal/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch`
+
+## GitLab Runner Agent Demo Path
+
+Use this path when you want the strongest live proof: GitLab creates the
+project, GitLab Runner executes the scanner jobs, the dashboard records the
+failed gate, the local model remediates the repository after approval, and
+GitLab reruns the branch to a clean pass.
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/agentic_gitlab_cicd_demo.py \
+  --dashboard http://localhost:25480 \
+  --gitlab http://localhost \
+  --model qwen/qwen3.6-27b \
+  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs \
+  --timeout 3000
+```
+
+The runner must be able to reach the dashboard and GitLab from inside job
+containers. In the reference deployment the runner uses `network_mode =
+"gitlab-net"`, mounts `/tmp/zap-wrk:/zap/wrk`, and passes
+`SOC_DASHBOARD_URL=http://192.168.50.222:25480` to jobs.
+
+Latest verified GitLab runner artifacts:
+
+- GitLab project `root/agentic-cicd-demo-1778538475`, project id `15`
+- Project URL `http://192.168.50.222/root/agentic-cicd-demo-1778538475`
+- Ticket `83`
+- Initial GitLab pipeline `9`: failed as intended after all scanner jobs ran
+- Initial dashboard CI/CD run `11`: failed with seven findings
+- Remediation agent `50`, task `48`
+- Agent change request `39`: approved before file edits, completed afterward
+- Remediation branch `agent/remediate-security-gate`
+- Remediation commit `2f0984f2b074764927dd21ec024638eb020b9185`
+- Merge request `!1`
+- Final GitLab pipeline `10`: passed
+- Final dashboard CI/CD run `12`: passed with zero findings
+- Deployment change `40`: approved and completed
+- Postmortem `21`: ready for review
+- Full log `/home/cereal/SOC_TESTING/soc-dashboard/demo_runs/gitlab_agentic_cicd_20260511_162755.log`
+
+Live verification:
+
+- MR URL `http://192.168.50.222/root/agentic-cicd-demo-1778538475/-/merge_requests/1`
+- Pipeline `9` on `main`: failed by design; unit tests and all scanner jobs
+  succeeded, dashboard gate failed because findings existed
+- Pipeline `10` on `agent/remediate-security-gate`: success; unit tests,
+  Semgrep, Trivy, ZAP, Nuclei, and dashboard record all succeeded
 
 ## Cloud/Faster Model Demo Path
 
@@ -89,4 +227,3 @@ Suggested longer demo:
 - The model can run local or cloud through a proxy/harness abstraction.
 - iTop is a provider, not the architecture.
 - Claude Code is a harness, not the architecture.
-

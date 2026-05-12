@@ -27,6 +27,7 @@ The current implementation uses iTop and Claude Code because those are the activ
 | Model access | LAN proxy at `AGENT_LLM_BASE_URL` | Any OpenAI/Anthropic-compatible proxy/harness bridge |
 | Approval system | Dashboard `change_requests` table/API | Can later sync to external CAB/change platforms |
 | Memory/learning | Skills, KB, workflows, postmortems | Can later ingest external KB/tickets/docs |
+| Email provider | Mailcow reference stack plus optional API shim | Exchange, Gmail, Proofpoint, Mimecast, or another email/security adapter |
 
 ## Canonical Data Model
 
@@ -154,6 +155,10 @@ Postmortem path:
 2. Record what worked and what should improve.
 3. Propose skills/workflows/tests/guardrails.
 4. Mark for human review.
+5. Promote reviewed learning into reusable assets when appropriate:
+   knowledge article, draft workflow, candidate skills, ticket note, and audit
+   record. Promotion is idempotent per postmortem so repeated review updates the
+   same assets rather than duplicating them.
 
 Workflow-build path:
 
@@ -180,3 +185,12 @@ Developed environment:
 - Add provider-specific skills and KB articles.
 - Review and approve workflows before activation.
 
+## Email Provider Boundary
+
+The dashboard should treat email as a provider capability, not as a hard dependency on Mailcow. The reference lab currently uses:
+
+- Mailcow for the open-source email stack.
+- Keycloak-Mailcow bridge scripts for provisioning and sync through direct MySQL.
+- Optional Mailcow HTTP API shim for read-only compatibility checks and future adapter-style reads.
+
+The Mailcow HTTP shim is documented in `docs/MAILCOW_API_SHIM.md`. It exposes only domain, mailbox, and alias inventory and intentionally omits password hashes. It should not be used as a generic write API. In production-style deployments, a customer email product should satisfy the same provider contract through its own adapter while tickets, approvals, audit logs, and agent context remain canonical in the dashboard.

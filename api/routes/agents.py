@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Body
 from datetime import datetime
 from database import fetchall, fetchrow, execute, fetchval, json_dumps, json_loads
 from services.event_logger import log_event
+from services.task_prompts import build_ticket_resolution_prompt
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -176,13 +177,7 @@ async def create_from_prompt(
     )
     ticket_id = ticket["id"]
 
-    # Build agent prompt
-    agent_prompt = (
-        f"You have been assigned to investigate and resolve the following request:\n\n"
-        f"{prompt}\n\n"
-        f"Use your available skills to research, investigate, and resolve this issue. "
-        f"Write checkpoints as you work."
-    )
+    agent_prompt = build_ticket_resolution_prompt(ticket, prompt)
 
     # Spawn agent
     from services import agent_runner

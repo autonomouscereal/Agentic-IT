@@ -1,5 +1,5 @@
 #!/bin/bash
-TOKEN='${GITLAB_PAT:-<from vault: gitlab_manager_pat>}'
+TOKEN="${GITLAB_PAT:?Set GITLAB_PAT from the credential vault before running this debug script}"
 URL='http://192.168.50.222'
 
 echo "=== Test: Create group ==="

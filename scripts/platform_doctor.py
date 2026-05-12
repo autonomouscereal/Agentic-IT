@@ -158,19 +158,25 @@ def check_mailcow_api(doctor):
     except Exception as exc:
         doctor.record("Mailcow HTTP API invalid-key rejection", "warn", str(exc))
 
-    try:
-        status, raw, _headers = http_request(
-            base + "/api/v1/get/mailbox/all",
-            headers={"X-API-Key": api_key, "Sec-Fetch-Dest": "script"},
-            timeout=20,
-        )
-        if not raw:
-            doctor.record("Mailcow HTTP API mailbox endpoint", "warn", "empty body; keep direct MySQL bridge as canonical")
-            return
-        json.loads(raw.decode("utf-8"))
-        doctor.record("Mailcow HTTP API mailbox endpoint", "pass", f"HTTP {status}")
-    except Exception as exc:
-        doctor.record("Mailcow HTTP API mailbox endpoint", "warn", f"{exc}; keep direct MySQL bridge as canonical")
+    for label, path in [
+        ("Mailcow HTTP API domain endpoint", "/api/v1/get/domain/all"),
+        ("Mailcow HTTP API mailbox endpoint", "/api/v1/get/mailbox/all"),
+        ("Mailcow HTTP API alias endpoint", "/api/v1/get/alias/all"),
+    ]:
+        try:
+            status, raw, _headers = http_request(
+                base + path,
+                headers={"X-API-Key": api_key, "Sec-Fetch-Dest": "script"},
+                timeout=20,
+            )
+            if not raw:
+                doctor.record(label, "warn", "empty body; keep direct MySQL bridge as canonical")
+                continue
+            data = json.loads(raw.decode("utf-8"))
+            count = len(data) if isinstance(data, list) else 0
+            doctor.record(label, "pass" if status == 200 and count > 0 else "warn", f"HTTP {status}, count={count}")
+        except Exception as exc:
+            doctor.record(label, "warn", f"{exc}; keep direct MySQL bridge as canonical")
 
 
 def check_file_bundles(doctor):

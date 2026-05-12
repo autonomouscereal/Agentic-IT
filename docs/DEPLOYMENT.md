@@ -96,6 +96,7 @@ Fresh deployments get the current schema from `api/init_db.sql`.
 curl -sS http://localhost:25480/health
 curl -sS http://localhost:25480/api/agents/runner-health
 curl -sS http://localhost:25480/api/agents/processes
+python3 scripts/platform_doctor.py
 ```
 
 Expected:
@@ -104,6 +105,18 @@ Expected:
 - runner harness `claude-code`
 - model API status `ok`
 - process diagnostics include `/usr/bin/ps`
+
+## Reference Mailcow API Shim
+
+If the deployment includes the reference Mailcow email stack and the optional HTTP compatibility shim, manage it from the Mailcow deployment root, not from the dashboard compose stack:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+python3 scripts/test_mailcow_api_shim.py --mysql-parity
+```
+
+The shim redeploys only `php-fpm-mailcow-api` and `nginx-mailcow-api`. It does not recycle the main Mailcow mail path. Full details, endpoint contracts, rollback, and troubleshooting are in `docs/MAILCOW_API_SHIM.md`.
 
 ## Rebuild Triggers
 
@@ -127,4 +140,3 @@ sudo chown -R cereal:cereal /home/cereal/SOC_TESTING/soc-dashboard/agent_work
 ## Rollback
 
 This project directory is not currently a git repository in this workspace. Before major live changes, copy the deployed directory or commit it in a proper repo. Database rollback is not implemented; migrations are additive and idempotent where possible.
-

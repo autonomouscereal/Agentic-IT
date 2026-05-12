@@ -1,6 +1,6 @@
 # Testing Runbook
 
-Last updated: 2026-05-11.
+Last updated: 2026-05-12.
 
 ## Local Source Validation
 
@@ -12,7 +12,7 @@ node --check .\soc-dashboard\frontend\js\dashboard.js
 node --check .\soc-dashboard\frontend\js\agents.js
 node --check .\soc-dashboard\frontend\js\charts.js
 node --check .\soc-dashboard\frontend\js\websocket.js
-python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\smoke_provider_adapters.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py .\soc-dashboard\scripts\platform_doctor.py .\soc-dashboard\scripts\repair_agent_supervision_env.py
+python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\smoke_provider_adapters.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py .\soc-dashboard\scripts\agentic_cicd_full_demo.py .\soc-dashboard\scripts\agentic_gitlab_cicd_demo.py .\soc-dashboard\scripts\platform_doctor.py .\soc-dashboard\scripts\repair_agent_supervision_env.py
 ```
 
 ## Prohibited Pattern Sweep
@@ -44,12 +44,12 @@ Expected:
 - `ps_path` present
 - no active processes after completed smoke tests
 
-`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, iTop UI reachability, Mailcow HTTP API shim status, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence.
+`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, provider adapters, iTop UI reachability, Mailcow HTTP API domain/mailbox/alias counts, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence.
 
-Latest verified result on 2026-05-11:
+Latest verified result on 2026-05-12:
 
 ```text
-platform_doctor.py: PASS 16, WARN 0, FAIL 0
+platform_doctor.py: PASS 18, WARN 0, FAIL 0
 runner timeout_minutes: 0
 default_model: qwen/qwen3.6-27b
 effective_anthropic_base_url: http://192.168.50.222:4001
@@ -59,7 +59,7 @@ effective_anthropic_base_url: http://192.168.50.222:4001
 
 Credential value lives in the local encrypted vault key `demo_account_1`. Do not print it.
 
-Latest verified result on 2026-05-11:
+Latest verified result on 2026-05-12:
 
 ```text
 wazuh_api: PASS http=200
@@ -130,7 +130,7 @@ Covers:
 - ServiceNow/Jira adapters fail closed when not configured
 - failed external push records `provider_sync_status=create_failed` and `provider_last_error`
 
-Latest verified result on 2026-05-11:
+Latest verified result on 2026-05-12:
 
 ```text
 providers: generic-webhook, itop, jira, local, servicenow
@@ -155,6 +155,52 @@ Covers:
 - evidence ticket creation
 - production deployment approval gate
 
+## Full Agentic CI/CD Remediation
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/agentic_cicd_full_demo.py \
+  --base http://localhost:25480 \
+  --model qwen/qwen3.6-27b \
+  --workspace /home/cereal/SOC_TESTING/soc-dashboard/demo_runs
+```
+
+Covers:
+
+- real Docker scanner execution for Semgrep, Trivy, OWASP ZAP, and Nuclei
+- canonical `/api/cicd/runs` evidence capture
+- approval-gated source remediation by a local-model agent
+- ticket notes, attachments, change requests, and process logs
+- final scanner rerun after agent edits
+- local Git branch plus patch artifact for PR/MR demonstration. This is the
+  local-only fallback proof; the GitLab runner proof below creates a real
+  GitLab project, MR, and branch pipeline.
+- postmortem task launch for reusable workflow learning
+
+Latest verified result on 2026-05-11:
+
+```text
+ticket_id=82
+initial_run_id=8 status=needs_review
+agent_id=48 task_id=46 status=completed
+remediation_change_id=34 status=approved
+final_run_id=10 status=passed
+deployment_change_id=36 status=completed
+branch=agent/remediate-security-gate
+patch=/home/cereal/SOC_TESTING/soc-dashboard/agent_work/48/agent-remediation.patch
+```
+
+Notes from the live run:
+
+- The API container creates agent work directories as root. The demo harness
+  repairs host write permissions with `docker exec soc-dashboard-api-1 chown`
+  before seeding the agent repo.
+- Recreating the API container while an agent is running kills that harness
+  process. Do not rebuild the API during the middle of a live model demo.
+- ZAP exit code `2` is warnings-found, not scanner failure.
+- The Trivy Docker image command should be `fs ...` because the image entrypoint
+  is already `trivy`.
+
 ## Wazuh EDR/Sysmon E2E
 
 ```bash
@@ -165,11 +211,14 @@ bash scripts/test-edr-e2e.sh
 Latest verified result on 2026-05-11:
 
 ```text
-14/14 passed
+16/16 passed
 Wazuh Manager API authentication: PASS
 Wazuh Manager processes running: PASS
 Wazuh Indexer cluster healthy: PASS
 Alert search works: PASS
+Fresh Sysmon exact-marker alert flow: PASS, marker CODEX_SYSMON_E2E_1778567257, alerts=2
+Live Sysmon decoder/rule shape: PASS, decoder has no <location>, XML marker child and raw marker fallback present
+Sysmon rules loaded and searchable: PASS, 271 sysmon rules found
 iTop API authentication: PASS
 iTop test incident creation: PASS
 Active Response enabled in config: PASS
@@ -177,11 +226,28 @@ EDR AR script configured: PASS
 Bridge state file valid: PASS
 ```
 
+The exact-marker check is important: it triggers harmless endpoint file-create activity
+with a unique `CODEX_SYSMON_*` marker and verifies that exact marker in Wazuh
+Indexer. This catches the failure mode where Sysmon, rules, and APIs are all up,
+but Wazuh is not indexing current endpoint telemetry.
+
+The live shape check catches Wazuh 4.14 decoder regressions by verifying the
+manager's `sysmon_decoder.xml` does not contain unsupported `<location>` inside
+a decoder, and that rule `100230` handles real Sysmon XML markers while rule
+`100231` remains available for raw manager diagnostics.
+
 ## Full Workflow Verification Snapshot
 
 Latest verified result on 2026-05-11:
 
 ```text
+platform_doctor.py: PASS 18/18 checks, includes dashboard health, ticket sorting, iTop UI, Mailcow API domain/mailbox/alias counts, provider adapters, and required skills
+smoke_setup_platform.py: PASS setup_ticket_id=86
+smoke_provider_adapters.py: PASS ticket_id=84 local_push=local_only providers=local,itop,servicenow,jira,generic-webhook
+smoke_service_desk_intake.py: PASS ticket_id=85 change_id=41 intent=phishing
+smoke_agent_auditor.py: PASS audited=1 recent=25
+agentic_gitlab_cicd_demo.py: PASS ticket_id=83 project_id=15 initial_pipeline=9 final_pipeline=10 initial_run_id=11 final_run_id=12 agent_id=50 task_id=48 mr=!1 postmortem_id=21
+agentic_cicd_full_demo.py: PASS ticket_id=82 initial_run_id=8 final_run_id=10 agent_id=48 task_id=46 change_id=36
 smoke_setup_platform.py: PASS setup_ticket_id=78
 smoke_agentic_system.py: PASS ticket_id=76 local_push_ticket_id=77
 smoke_service_desk_intake.py: PASS ticket_id=71 change_id=30 intent=phishing
@@ -189,6 +255,150 @@ smoke_phishing_workflow_lifecycle.py: PASS ticket_id=74 workflow_id=4 postmortem
 smoke_cicd_security_pipeline.py: PASS provider=gitlab run_id=4 ticket_id=73 change_id=31
 smoke_agent_auditor.py: PASS audited=3 recent=25
 smoke_local_model_agent.py: PASS ticket_id=75 agent_id=44 task_id=42 completed note_written=true active_process_count=0
+```
+
+Latest full regression on 2026-05-12:
+
+```text
+local source compile: PASS
+frontend node --check: PASS
+forbidden pattern sweep: PASS, no ORM/Pydantic/SQLAlchemy/hardcoded test secret matches
+platform_doctor.py: PASS 18/18
+smoke_setup_platform.py: PASS setup_ticket_id=89
+smoke_provider_adapters.py: PASS ticket_id=90 local_push=local_only
+smoke_service_desk_intake.py: PASS ticket_id=91 change_id=45 intent=phishing
+smoke_agentic_system.py: PASS ticket_id=92 local_push_ticket_id=93 change_id=46 postmortem_id=23 workflow_id=22 skill_id=24
+smoke_phishing_workflow_lifecycle.py: PASS ticket_id=94 workflow_id=4 postmortem_id=24
+smoke_cicd_security_pipeline.py: PASS provider=gitlab run_id=15 ticket_id=95 change_id=48
+smoke_agent_auditor.py: PASS audited=3 recent=25
+smoke_change_auto_completion.py: PASS ticket_id=96 agent_id=57 task_id=55 change_id=49 completed
+smoke_local_model_agent.py: PASS ticket_id=97 agent_id=58 task_id=56 completed note_written=true active_process_count=0
+siem-ticket-bridge unit: PASS 40 tests, 3 expected live skips
+siem-ticket-bridge E2E: PASS connectivity and direct iTop ticket creation; poll dedup correctly skipped old injected alert
+soc_bridge iTop connector: PASS 22 tests
+soc_bridge Mailcow connector: PASS 13 tests
+soc_bridge E2E: PASS 11 tests
+report_phish/test_report.py: PASS, internal Mailcow report sent; Wazuh forwarding disabled unless WAZUH_API_PASSWORD is supplied
+report_phish/test_reporter.py: PASS after compatibility update
+itop-deployment/scripts/test_itop.py: PASS after current-schema update
+itop-deployment/scripts/test_approval_chain.py: PASS after adding required ev_plan fallback field
+log_forwarder/test_integration.py: PASS 18/18
+log_forwarder/test_logtest.py: PASS after switching to docker exec against the Wazuh manager container
+wazuh_deploy/test_wazuh.py: PASS after removing pytest/hardcoded credential dependency
+mailcow API shim: PASS 13/13 with MySQL parity
+wazuh-edr-sysmon E2E: PASS 15/15 exact marker
+agentic_cicd_full_demo.py: PASS ticket_id=98 initial_run=16 failed final_run=17 passed remediation_agent=59 task=57 deployment_change=51 completed postmortem=25 ready_for_review active_processes=0
+```
+
+The GitLab proof ran all scanner jobs through GitLab Runner:
+
+- `unit_tests`: success
+- `semgrep_sast`: success
+- `trivy_fs`: success
+- `zap_dast`: success
+- `nuclei_exposure`: success
+- `dashboard_record`: failed on the initial branch because the security gate
+  found high findings, then succeeded on the remediation branch with 0 findings.
+
+The proof also verified runner project attachment, `gitlab-net` executor
+networking, `/zap/wrk` report handling, dashboard change gates, GitLab MR
+creation, final deployment approval, and postmortem artifact creation.
+
+Live GitLab verification:
+
+```text
+project id=15 path=root/agentic-cicd-demo-1778538475
+MR !1 state=opened source=agent/remediate-security-gate target=main
+pipeline 9 ref=main status=failed
+pipeline 9 jobs=unit_tests:success, semgrep_sast:success, trivy_fs:success, zap_dast:success, nuclei_exposure:success, dashboard_record:failed
+pipeline 10 ref=agent/remediate-security-gate status=success
+pipeline 10 jobs=unit_tests:success, semgrep_sast:success, trivy_fs:success, zap_dast:success, nuclei_exposure:success, dashboard_record:success
+dashboard run 11=failed, dashboard run 12=passed
+changes 39 and 40=completed
+```
+
+## Mailcow API Shim
+
+Full operator blueprint: `docs/MAILCOW_API_SHIM.md`.
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+python3 scripts/test_mailcow_api_shim.py --mysql-parity
+
+curl -H "X-API-Key: <from restricted key file or vault>" http://localhost:8081/api/v1/get/domain/all
+curl -H "X-API-Key: <from restricted key file or vault>" http://localhost:8081/api/v1/get/mailbox/all
+curl -H "X-API-Key: <from restricted key file or vault>" http://localhost:8081/api/v1/get/alias/all
+```
+
+Latest verified result on 2026-05-12:
+
+```text
+deploy_mailcow_api.py: DEPLOYMENT SUCCESSFUL
+invalid key: HTTP 401
+missing key: HTTP 401
+valid get/domain/all: HTTP 200, 2 domains
+valid get/mailbox/all: HTTP 200, 11 mailboxes, no password hashes in response
+valid get/alias/all: HTTP 200, 6 aliases
+selector reads: domain=1, mailbox=1, alias=1
+POST to read compatibility endpoint: HTTP 405
+direct MySQL smoke: 2 domains, 11 mailboxes, 6 aliases
+test_mailcow_api_shim.py --mysql-parity: 13 passed, 0 failed
+platform_doctor.py: 18 passed, 0 failed, 0 warned
+keycloak-mailcow bridge E2E: 47 passed, 0 failed, 1 skipped
+```
+
+## Postmortem Evidence Endpoint
+
+```bash
+curl -sS "http://localhost:25480/api/postmortems/evidence/83?task_log_lines=5"
+```
+
+Latest verified result on 2026-05-11:
+
+```text
+ticket_id=83
+notes=6
+attachments=2
+changes=2
+agent_tasks=2
+cicd_runs=2
+postmortems=1
+audit=28
+first_task_has_tail=true
+```
+
+This endpoint exists so postmortem agents can consume scoped evidence directly
+instead of guessing provider-specific note URLs or reading arbitrary files.
+
+## Postmortem Promotion Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_postmortem_promotion.py http://localhost:25480
+```
+
+Covers:
+
+- reviewed postmortem can be promoted into reusable assets
+- knowledge article body includes the structured postmortem sections
+- workflow is created in `draft` with human-review activation guardrails
+- skill proposals become enabled candidate skills
+- ticket context receives a human-readable promotion note
+- audit trail includes `postmortem_promoted`
+- repeat promotion updates the same KB/workflow/skill assets instead of
+  duplicating them
+
+Latest verified result on 2026-05-12:
+
+```text
+ticket_id=109
+postmortem_id=30
+knowledge_article_id=30
+workflow_id=28
+skill_ids=31,32
+second_promotion_actions=knowledge:updated,workflow:updated,skills:updated+updated
+ui_promotion_hooks=present
 ```
 
 ## Agent Auditor Smoke
@@ -203,6 +413,238 @@ Covers:
 - manual auditor poll
 - audit review listing
 - non-blocking progress/recovery supervision path
+
+## Approved Change Auto-Completion Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+docker compose cp scripts/smoke_change_auto_completion.py api:/app/smoke_change_auto_completion.py
+docker compose exec -T api sh -lc 'cd /app && python smoke_change_auto_completion.py'
+```
+
+Covers:
+
+- synthetic completed agent task
+- approved agent-linked remediation change
+- `agent_auditor` sweep
+- automatic transition from `approved` to `completed`
+- evidence persisted in `change_requests.result`
+- audit review entry `approved_change_auto_completed`
+
+Latest verified result:
+
+```text
+ticket_id=87
+agent_id=52
+task_id=50
+change_id=42
+change_status=completed
+result_has_evidence=true
+review=approved_change_auto_completed
+```
+
+## Real Agentic CI/CD Flow
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+SOC_DASHBOARD_URL=http://localhost:25480 \
+AGENT_MODEL=qwen/qwen3.6-27b \
+CICD_DOCKER_NETWORK=host \
+python3 scripts/agentic_cicd_full_demo.py \
+  --base http://localhost:25480 \
+  --host-ip 192.168.50.222 \
+  --timeout 2400
+```
+
+Latest verified result:
+
+```text
+ticket_id=88
+initial_run=13 failed high=1 medium=6 low=6 info=1
+remediation_agent=53 task=51 completed
+remediation_change=43 completed
+final_run=14 passed high=0 critical=0
+deployment_change=44 completed
+postmortem=22 ready_for_review
+ticket_status=resolved
+active_agent_processes=0
+```
+
+Latest verified result on 2026-05-12:
+
+```text
+ticket_id=98
+initial_run=16 failed high=1 medium=6 low=6 info=1 unknown=2
+remediation_agent=59 task=57 completed
+remediation_change=50 completed
+final_run=17 passed high=0 critical=0
+deployment_change=51 completed
+postmortem=25 ready_for_review
+ticket_status=resolved
+active_agent_processes=0
+```
+
+This is a real local-model flow, not just a smoke: Docker scanner containers ran
+Semgrep, Trivy, OWASP ZAP, and Nuclei; the local model edited the test app;
+the fixed branch compiled; the scanner gate reran; changes advanced with
+evidence; and the supervisor generated the postmortem when model postmortem
+attempts stalled on evidence processing.
+
+Latest verified result from a fresh one-line install on 2026-05-12:
+
+```text
+install_target=/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512
+dashboard=http://localhost:25482
+ticket_id=13
+initial_run=5 failed high=1 medium=6 low=6 info=1 unknown=2
+remediation_agent=7 task=7 completed
+remediation_change=8 completed
+final_run=6 passed high=0 critical=0
+deployment_change=9 completed
+postmortem=4 ready_for_review
+mr_artifact=/home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512/agent_work/7/agent-remediation.patch
+active_agent_processes=0
+```
+
+For one-line/container installs, run the DB-coupled change-completion smoke
+inside the API container because it imports the API database module and depends
+on container Python packages:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512
+docker compose exec -T api python smoke_change_auto_completion.py http://localhost:8000
+```
+
+Fresh install regression suite verified on `http://localhost:25482`:
+
+```text
+platform_doctor.py: PASS 18/18
+smoke_setup_platform.py: PASS ticket_id=14
+smoke_provider_adapters.py: PASS ticket_id=15 local_push=local_only
+smoke_service_desk_intake.py: PASS ticket_id=16 change_id=10
+smoke_agentic_system.py: PASS ticket_id=17 local_push_ticket_id=18 change_id=11 postmortem_id=5 workflow_id=3 skill_id=24
+smoke_phishing_workflow_lifecycle.py: PASS ticket_id=19 change_id=12 workflow_id=2 postmortem_id=6
+smoke_cicd_security_pipeline.py: PASS run_id=7 ticket_id=20 change_id=13 provider=gitlab
+smoke_agent_auditor.py: PASS audited=2
+smoke_change_auto_completion.py: PASS ticket_id=21 agent_id=9 task_id=9 change_id=14 completed
+smoke_local_model_agent.py: PASS ticket_id=22 agent_id=10 task_id=10 completed
+smoke_setup_agent.py: PASS ticket_id=23 agent_id=11 task_id=11 completed
+```
+
+## Demo Activity Trail Verification
+
+The dashboard now treats ticket notes as first-class activity alongside audit
+and event rows. This makes demo ticket details easier to follow while retaining
+the full audit trail.
+
+API-level verification on the main dashboard:
+
+```bash
+BASE=http://localhost:25480
+TICKET=$(curl -sS -X POST "$BASE/api/tickets" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Demo activity trail verification","description":"Verify notes appear in activity and audit trail.","provider":"local","sync_provider":false,"created_by":"activity-test"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+
+curl -sS -X POST "$BASE/api/tickets/$TICKET/notes" \
+  -H 'Content-Type: application/json' \
+  -d '{"body":"Manual verification note: normalized note trail should include ticket id and full note body.","author":"activity-test","source":"verification","visibility":"internal"}'
+
+curl -sS "$BASE/api/dashboard/stats"
+curl -sS "$BASE/api/dashboard/audit?limit=20&ticket_id=$TICKET"
+curl -sS "$BASE/api/tickets/$TICKET/context"
+```
+
+Latest verified result:
+
+```text
+ticket_id=100
+context_notes=1
+recent_activity_note_visible=true
+audit_note_visible=true
+audit_sources=event,note
+```
+
+Real local-model verification:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_local_model_agent.py http://localhost:25480 qwen/qwen3.6-27b
+```
+
+Latest verified result:
+
+```text
+ticket_id=101
+agent_id=61
+task_id=59
+status=completed
+total_notes=5
+agent_note_sources=agent,agent-checkpoint,agent-control-plane
+agent_note_titles=Agent assigned; Agent started; local model agent smoke note complete; Agent checkpoint: local-model-agent-smoke; Agent completed
+audit_note_count=5
+active_agent_processes=0
+```
+
+Frontend asset verification:
+
+```text
+node --check frontend/js/dashboard.js: PASS
+served /static/js/dashboard.js contains openAuditTrail
+served / contains the Notes audit source filter
+served /static/css/dashboard.css contains activity-note-body
+```
+
+## Transparent Approval Gate Verification
+
+The demo approval flow should make it obvious that a guardrail exists even when
+the lab is configured to auto-approve.
+
+Verification on the main dashboard:
+
+```bash
+BASE=http://localhost:25480
+TICKET=$(curl -sS -X POST "$BASE/api/tickets" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Demo transparent approval gate verification","description":"Verify approval gates show opened, auto-approved, and completed notes/audit details.","provider":"local","sync_provider":false,"created_by":"approval-gate-test"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+
+CHANGE=$(curl -sS -X POST "$BASE/api/changes/request" \
+  -H 'Content-Type: application/json' \
+  -d "{\"ticket_id\":$TICKET,\"action\":\"demo_block_url\",\"target\":\"https://example.invalid/phish\",\"reason\":\"Demonstrate a guardrailed remediation approval chain.\",\"risk_level\":\"medium\",\"approval_policy\":{\"demo_auto_approval\":true}}" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["change_id"])')
+
+curl -sS -X POST "$BASE/api/changes/$CHANGE/approve" \
+  -H 'Content-Type: application/json' \
+  -d '{"approved_by":"demo-auto-approver","reason":"Demo mode auto-approval to prove the approval gate without waiting for a human."}'
+
+curl -sS -X POST "$BASE/api/changes/$CHANGE/complete" \
+  -H 'Content-Type: application/json' \
+  -d '{"completed_by":"approval-gate-test","result":"No production action executed. Demo gate lifecycle verified with audit and notes."}'
+```
+
+Latest verified result:
+
+```text
+ticket_id=102
+change_id=52
+change_status=completed
+approved_by=demo-auto-approver
+note_count=3
+has_gate_opened_note=true
+has_auto_approved_note=true
+has_completed_note=true
+auto_audit_entries=4
+audit_sources=audit,event,note
+active_agent_processes=0
+```
+
+Frontend asset verification:
+
+```text
+served /static/js/dashboard.js contains Auto-approved demo gate
+served /static/css/dashboard.css contains gate-card
+```
 
 ## Local Model Agent Smoke
 

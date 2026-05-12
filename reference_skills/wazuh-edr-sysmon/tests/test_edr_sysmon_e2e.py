@@ -254,6 +254,46 @@ def test_sysmon_rules_loaded(token, result):
                   f"{total} sysmon rules found" if total > 0 else "No rules found")
 
 
+def test_live_sysmon_config_shape(result):
+    """Verify the live manager has Wazuh 4.14-safe Sysmon decoder/rule XML."""
+    try:
+        proc = subprocess.run(
+            [
+                "docker", "exec", WAZUH_MANAGER_CONTAINER, "sh", "-lc",
+                "cat /var/ossec/etc/decoders/sysmon_decoder.xml; "
+                "printf '\\n---RULE---\\n'; "
+                "cat /var/ossec/etc/rules/sysmon_marker_rules.xml",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception as exc:
+        result.record("Live Sysmon decoder/rule shape", False, str(exc)[:120])
+        return
+    if proc.returncode != 0:
+        result.record("Live Sysmon decoder/rule shape", False, proc.stderr[:120])
+        return
+    decoder, _sep, marker_rule = proc.stdout.partition("---RULE---")
+    valid_decoder = "<decoder name=\"sysmon-reference\">" in decoder and "<location>" not in decoder
+    xml_marker_child = (
+        "<rule id=\"100230\"" in marker_rule
+        and "CODEX_SYSMON_" in marker_rule
+        and "<if_sid>100200</if_sid>" in marker_rule
+    )
+    raw_marker_fallback = (
+        "<rule id=\"100231\"" in marker_rule
+        and "CODEX_SYSMON_" in marker_rule
+    )
+    result.record(
+        "Live Sysmon decoder/rule shape",
+        valid_decoder and xml_marker_child and raw_marker_fallback,
+        "decoder has no <location>; XML marker child and raw marker fallback present"
+        if valid_decoder and xml_marker_child and raw_marker_fallback else "invalid live Sysmon decoder or marker rule",
+    )
+
+
 def test_indexer_health(result):
     """Test 5: Wazuh Indexer is healthy."""
     resp = indexer_request("/_cluster/health")
@@ -279,6 +319,40 @@ def test_search_alerts(result):
     hits = resp.get("hits", {}).get("total", {}).get("value", -1)
     result.record("Alert search works", hits >= 0,
                   f"{hits} alerts found" if hits >= 0 else "Search failed")
+
+
+def test_live_sysmon_alert_flow(result):
+    """Generate a unique harmless marker and verify that exact alert in Wazuh."""
+    marker = f"CODEX_SYSMON_E2E_{int(time.time())}"
+    subprocess.run(
+        ["/usr/bin/logger", "-t", "sysmon", marker],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        timeout=5,
+    )
+    subprocess.run(
+        ["/usr/bin/bash", "-lc", f"printf '%s\\n' '{marker}' >/tmp/{marker}.txt"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        timeout=5,
+    )
+    time.sleep(int(os.environ.get("SYSMON_ALERT_WAIT_SECONDS", "90")))
+    query = {
+        "size": 5,
+        "sort": [{"timestamp": {"order": "desc"}}],
+        "query": {
+            "bool": {
+                "filter": [{"range": {"timestamp": {"gte": "now-15m"}}}],
+                "must": [{"match_phrase": {"full_log": marker}}],
+            }
+        },
+    }
+    resp = indexer_request("/wazuh-alerts-4.x-*/_search", query)
+    hits = resp.get("hits", {}).get("total", {}).get("value", 0)
+    result.record("Fresh Sysmon exact-marker alert flow", hits > 0,
+                  f"{hits} alert(s) for {marker}" if hits > 0 else str(resp)[:160])
 
 
 def test_itop_connectivity(result):
@@ -375,11 +449,13 @@ def main():
     test_indexer_health(result)
     test_indexer_indices(result)
     test_search_alerts(result)
+    test_live_sysmon_alert_flow(result)
     test_itop_connectivity(result)
 
     # Configuration tests
     print("\n--- Configuration ---")
     test_sysmon_rules_loaded(token, result) if token else None
+    test_live_sysmon_config_shape(result)
     test_edr_ar_config(result)
 
     # Integration tests

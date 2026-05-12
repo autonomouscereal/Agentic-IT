@@ -35,6 +35,7 @@ Complete integration between Keycloak 26.x (Identity Provider) and Mailcow (Emai
 | Sync Engine | `scripts/sync_engine.py` | Bidirectional sync: Keycloak users <-> Mailcow mailboxes via MySQL |
 | E2E Test Suite | `scripts/test_integration.py` | 48 tests across 10 categories |
 | Optional HTTP API Shim | `scripts/deploy_mailcow_api.py` | Nonstandard-port nginx/php-fpm API shim; direct MySQL remains canonical |
+| API Shim Regression | `scripts/test_mailcow_api_shim.py` | Auth, selector, password-redaction, and MySQL parity tests for the optional API shim |
 | Environment Template | `.env.example` | Secret template - copy to `.env` before deploying |
 
 ## System Diagram
@@ -80,10 +81,57 @@ Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Ma
 - forward `X-API-Key` to FastCGI as `HTTP_X_API_KEY`
 - set `HTTP_SEC_FETCH_DEST=empty`
 - create the Mailcow `identity_provider` compatibility table if missing
+- install `mailcow_compat_api.php` for read-only `get/domain`, `get/mailbox`, and `get/alias` compatibility when the stock `json_api.php` path returns empty bodies in custom deployments
 - reject invalid API keys with HTTP 401
 - never print API keys in logs
+- use the Mailcow MySQL container environment for SQL setup instead of requiring host-side `MYSQL_ROOT_PASSWORD`
+- write the API key only to the restricted local key file at `api-nginx/.api_key`
 
-If the shim returns empty bodies or degraded responses, keep the direct MySQL bridge as canonical and treat the shim as optional until the site-specific Mailcow web code is fixed.
+The compatibility endpoint still validates `X-API-Key` against the Mailcow
+`api` table and intentionally omits mailbox password hashes from output. Direct
+MySQL remains the canonical fallback for provisioning and write operations.
+
+Deploy or repair the shim:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+```
+
+Run the deeper regression:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/test_mailcow_api_shim.py --mysql-parity
+```
+
+Latest reference verification on 2026-05-12:
+
+- invalid API key returns HTTP `401`
+- valid API key returns HTTP `200`
+- `GET /api/v1/get/domain/all`: `2` domains
+- `GET /api/v1/get/mailbox/all`: `11` mailboxes
+- `GET /api/v1/get/alias/all`: `6` aliases
+- selector reads for domain, mailbox, and alias each return at least one matching object
+- POST to the compatibility read endpoint returns HTTP `405`
+- regression test result: `13 passed, 0 failed`
+- bridge E2E result after API redeploy: `47 passed, 0 failed, 1 skipped`
+
+Operational blueprint:
+
+- Platform doc: `docs/MAILCOW_API_SHIM.md`
+- Deployer: `scripts/deploy_mailcow_api.py`
+- Compatibility PHP: `scripts/mailcow_api_compat.php`
+- Regression: `scripts/test_mailcow_api_shim.py --mysql-parity`
+- Repair-only keyfile helper: `scripts/repair_mailcow_api_keyfile.sh` in the dashboard scripts directory
+
+Provider-agnostic rule:
+
+- Mailcow is the reference email implementation, not the platform contract.
+- The contract is email inventory, phishing-report intake, mailbox context, and optional provisioning.
+- Use the Mailcow HTTP shim for read-only compatibility in this reference stack.
+- Use direct MySQL bridge scripts for Mailcow writes until the target environment exposes a trustworthy write API.
+- For Exchange, Gmail, Proofpoint, Mimecast, or another product, implement the same email-provider capability through an adapter rather than copying Mailcow-specific assumptions into agent prompts.
 
 ## Dovecot Auth Configuration
 

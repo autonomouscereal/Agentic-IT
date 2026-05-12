@@ -74,4 +74,80 @@ cd /path/to/soc-platform
 python3 scripts/platform_doctor.py --base http://localhost:25480
 ```
 
-The doctor is read-only. It validates the dashboard, setup manifest, ticket sorting API, iTop UI when configured, optional Mailcow HTTP API shim, CI/CD scanner bundle, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle. Warnings on the optional Mailcow HTTP shim do not block the direct MySQL Mailcow bridge, which remains the reference deployment's canonical Mailcow path.
+The doctor is read-only. It validates the dashboard, setup manifest, ticket sorting API, provider adapters, iTop UI when configured, optional Mailcow HTTP API domain/mailbox/alias counts, CI/CD scanner bundle, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle. Warnings on the optional Mailcow HTTP shim do not block the direct MySQL Mailcow bridge, which remains the reference deployment's canonical Mailcow path.
+
+## Full Post-Install Regression
+
+The latest full one-line install proof used:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+./install.sh \
+  --profile soc \
+  --source /home/cereal/SOC_TESTING/soc-dashboard \
+  --target /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512 \
+  --dashboard-port 25482 \
+  --db-port 5435 \
+  --project-name soc-dashboard-e2e-20260512 \
+  --ai-base-url http://192.168.50.222:4001 \
+  --model qwen/qwen3.6-27b \
+  --itop-sync-enabled false \
+  --non-interactive
+```
+
+Then run the installed-stack checks:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512
+BASE=http://localhost:25482
+python3 scripts/platform_doctor.py --base "$BASE"
+python3 scripts/smoke_setup_platform.py "$BASE"
+python3 scripts/smoke_provider_adapters.py "$BASE"
+python3 scripts/smoke_service_desk_intake.py "$BASE"
+python3 scripts/smoke_agentic_system.py "$BASE"
+python3 scripts/smoke_phishing_workflow_lifecycle.py "$BASE"
+python3 scripts/smoke_cicd_security_pipeline.py "$BASE"
+python3 scripts/smoke_agent_auditor.py "$BASE"
+docker compose exec -T api python smoke_change_auto_completion.py http://localhost:8000
+python3 scripts/smoke_local_model_agent.py "$BASE" qwen/qwen3.6-27b
+python3 scripts/smoke_setup_agent.py "$BASE" qwen/qwen3.6-27b
+```
+
+Run the real local-model CI/CD remediation demo:
+
+```bash
+SOC_DASHBOARD_URL="$BASE" \
+AGENT_MODEL=qwen/qwen3.6-27b \
+CICD_DOCKER_NETWORK=host \
+python3 scripts/agentic_cicd_full_demo.py \
+  --base "$BASE" \
+  --host-ip 192.168.50.222 \
+  --timeout 2400
+```
+
+Latest verified full demo: ticket `13`, initial gate failed, remediation agent
+`7` completed, final gate passed with zero high/critical findings, changes `8`
+and `9` completed, postmortem `4` reached `ready_for_review`, and
+`/api/agents/processes` returned no active processes.
+
+## Optional Mailcow API Shim
+
+When the setup plan includes the reference Mailcow email module, the platform can also deploy the optional HTTP compatibility shim for tools that expect Mailcow-style API reads. The shim is not the canonical write path; provisioning and Keycloak sync still use the direct MySQL bridge in the reference deployment.
+
+Reference deployment and validation:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+python3 scripts/test_mailcow_api_shim.py --mysql-parity
+```
+
+The shim blueprint is documented in `docs/MAILCOW_API_SHIM.md`. It covers endpoint contracts, security posture, rollback, troubleshooting, and the difference between the Mailcow reference implementation and the provider-agnostic email capability contract.
+
+Latest dry-run proof:
+
+```powershell
+python installer\bootstrap.py --dry-run --profile soc --target C:\Users\cereal\AppData\Local\Temp\soc-platform-dryrun --dashboard-port 25580 --db-port 55433 --ai-base-url http://192.168.50.222:4001 --model qwen/qwen3.6-27b
+```
+
+Expected result: JSON status `dry_run`, dashboard URL `http://localhost:25580`, and no files or containers created.

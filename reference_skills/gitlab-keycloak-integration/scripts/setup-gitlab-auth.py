@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 
 BASE_URL = "http://localhost"
-PAT = os.environ.get("GITLAB_PAT", "${GITLAB_PAT:-<from vault: gitlab_oidc_setup_pat>}")
+PAT = os.environ.get("GITLAB_PAT", "")
 
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False

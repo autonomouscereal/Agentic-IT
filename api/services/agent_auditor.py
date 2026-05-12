@@ -92,6 +92,16 @@ async def _record(agent_id, task_id, ticket_id, severity, finding, recommended_a
 async def _spawn_replacement(agent, task, reason):
     if not AUTO_RECOVER:
         return "audit_only"
+    if task.get("task_type") == "postmortem":
+        from services.postmortem_synthesizer import synthesize_postmortem
+        result = await synthesize_postmortem(
+            agent["ticket_id"],
+            agent.get("id"),
+            task.get("id"),
+            "agent-auditor",
+            reason,
+        )
+        return f"postmortem_synthesized_{result.get('postmortem_id')}"
     if task.get("status") != "running":
         return "audit_only_non_running_task"
     attempts = int(agent.get("attempts") or 0)
@@ -125,6 +135,19 @@ async def _audit_task(row):
         "checkpoints": row.get("checkpoints"),
         "started_at": row.get("started_at"),
     }
+    if task["status"] == "completed":
+        from services import agent_runner
+        completion = await agent_runner.complete_approved_changes_for_task(
+            agent["id"],
+            task["id"],
+            reason="agent_auditor_completed_task_sweep",
+        )
+        if completion.get("completed") and not await _recent_duplicate(task["id"], "approved_change_auto_completed", 60):
+            await _record(agent["id"], task["id"], agent["ticket_id"], "info",
+                          "approved_change_auto_completed", "none",
+                          "auto_completed_changes", False, completion)
+        return
+
     approval_blocked = await _has_pending_approval(agent["id"], agent["ticket_id"])
     checkpoints = _loads(task.get("checkpoints"), [])
     last_seen = _parse_time(task.get("started_at"))
@@ -151,7 +174,18 @@ async def _audit_task(row):
     elif task["status"] == "failed":
         if await _recent_duplicate(task["id"], "agent_task_failed", 15):
             return
-        action = await _spawn_replacement(agent, task, "task failed")
+        if task.get("task_type") == "postmortem":
+            from services.postmortem_synthesizer import synthesize_postmortem
+            result = await synthesize_postmortem(
+                agent["ticket_id"],
+                agent["id"],
+                task["id"],
+                "agent-auditor",
+                "postmortem task failed",
+            )
+            action = f"postmortem_synthesized_{result.get('postmortem_id')}"
+        else:
+            action = await _spawn_replacement(agent, task, "task failed")
         await _record(agent["id"], task["id"], agent["ticket_id"], "warning",
                       "agent_task_failed", "spawn_replacement_agent", action,
                       False, {"attempts": agent.get("attempts") or 0})
@@ -177,6 +211,15 @@ async def audit_once():
         WHERE a.status IN ('spawned', 'running', 'working')
            OR t.status IN ('queued', 'running')
            OR (t.status = 'failed' AND t.created_at > NOW() - INTERVAL '2 hours')
+           OR (
+                t.status = 'completed'
+                AND EXISTS (
+                    SELECT 1 FROM change_requests cr
+                    WHERE cr.agent_id = a.id
+                      AND cr.status = 'approved'
+                      AND (cr.ticket_id = a.ticket_id OR cr.ticket_id IS NULL)
+                )
+           )
         ORDER BY a.started_at DESC
         LIMIT 100
     """)

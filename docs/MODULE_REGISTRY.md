@@ -23,6 +23,23 @@ Every module should describe the capability it provides, not just the product na
 
 Provider-contract modules are intentionally separate from reference products. Mark a provider contract as existing when the customer already has a product for that capability, then either exclude the matching reference module or leave it as a test/sandbox deployment.
 
+## Mailcow Reference Email Module
+
+The Mailcow module is a reference implementation of the email-provider capability. It can be deployed when an environment has no email system or when the platform needs an open-source sandbox for demos and tests.
+
+Important boundaries:
+
+- Direct MySQL through the Keycloak-Mailcow bridge remains the canonical Mailcow write/provisioning path in the reference deployment.
+- The optional Mailcow HTTP API shim is a read-only compatibility surface for domain, mailbox, and alias inventory.
+- The shim should be represented as part of the Mailcow reference module, not as a required platform-wide dependency.
+- If an environment already has Exchange, Gmail, Proofpoint, Mimecast, or another mail security provider, mark the email-provider capability as existing and use or build that provider adapter instead.
+
+Reference docs:
+
+- `docs/MAILCOW_API_SHIM.md`
+- `reference_skills/keycloak-mailcow-bridge/SKILL.md`
+- `reference_skills/mailcow/SKILL.md`
+
 ## Adding A Module
 
 Add an object to `platform/manifest.json` with:

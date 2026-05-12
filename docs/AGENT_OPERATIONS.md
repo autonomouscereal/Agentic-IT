@@ -12,6 +12,7 @@ Agents are not dashboard status flags. A real agent run has:
 - a harness subprocess
 - streamed logs
 - checkpoints
+- human-readable ticket notes
 - audit/event records
 
 The dashboard should let operators answer:
@@ -23,6 +24,34 @@ The dashboard should let operators answer:
 - What was the last checkpoint?
 - Did it request approval before risky work?
 - Did the process clean up after completion?
+- Can a demo viewer follow the story from ticket notes without reading raw logs?
+
+## Demo-Friendly Notes
+
+Agents are instructed to write their own ticket notes, but the control plane
+also writes progress notes so the dashboard stays understandable even when a
+local model is terse.
+
+Automatic notes are written for:
+
+- agent assignment
+- agent start
+- new checkpoint steps
+- approved change auto-completion
+- agent completion
+- agent failure
+- postmortem supervisor fallback
+
+These notes use sources such as `agent-control-plane`, `agent-checkpoint`, and
+`agent-supervisor`. They appear in:
+
+- ticket detail timeline
+- overview recent activity
+- `GET /api/dashboard/audit?source=note`
+- `GET /api/dashboard/audit?ticket_id=<id>`
+
+Use the ticket modal's **Full Audit Trail** action to jump into the Audit page
+with the ticket filter preloaded.
 
 ## Creating Agents
 
@@ -102,6 +131,53 @@ Completion status should be:
 ```
 
 When a checkpoint reaches `done` or `completed`, `task_tracker` completes the task and terminates the harness process.
+
+If the task has approved, agent-linked changes, completion also advances those
+changes to `completed` unless the approval policy explicitly requires manual
+completion. This prevents the stale state where approved remediation work
+finished but the change never moved past `approved`.
+
+Postmortem tasks are learning work, not ticket-resolution ownership. Spawning a
+postmortem agent does not reopen the ticket or replace the ticket's primary
+resolver agent.
+
+If a local-model postmortem task fails or stalls on evidence processing, the
+supervisor can synthesize a bounded `ready_for_review` postmortem from the
+ticket, CI/CD runs, changes, task states, notes, and audit entries:
+
+```bash
+curl -sS -X POST http://localhost:25480/api/postmortems/synthesize/88 \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_id":56,"task_id":54,"reason":"postmortem agent stalled"}'
+```
+
+After review, promote the postmortem into reusable learning assets instead of
+leaving the lesson trapped in a ticket:
+
+```bash
+curl -sS -X POST http://localhost:25480/api/postmortems/25/promote \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "create_knowledge": true,
+    "create_workflow": true,
+    "create_skills": true,
+    "workflow_status": "draft",
+    "created_by": "dashboard",
+    "mark_promoted": true
+  }'
+```
+
+Promotion creates a knowledge article, candidate skills, and a draft workflow
+with `requires_human_review_before_activation=true`. It also writes a ticket
+note and audit/event records so the operator can show exactly how a completed
+ticket became future automation. Production workflow activation remains a
+separate reviewed step.
+
+The operation is idempotent. If an operator clicks Promote again after editing
+the postmortem, the platform updates the same `external_ref=postmortem:{id}`
+knowledge article, same deterministic workflow name, and same deterministic
+skill names. The audit trail still records the repeat promotion as an update so
+there is evidence of what changed without cluttering the reusable asset catalog.
 
 ## Wake
 
@@ -185,4 +261,3 @@ Latest verified local-model smoke:
 - progress: `100`
 - note written through dashboard API: yes
 - active Claude processes after completion: zero
-

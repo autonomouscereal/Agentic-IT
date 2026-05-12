@@ -367,6 +367,7 @@ body {
 
 .activity-text {
     color: var(--text-secondary);
+    overflow-wrap: anywhere;
 }
 
 .activity-text strong {
@@ -855,6 +856,30 @@ body {
     color: var(--text-muted);
 }
 
+.audit-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.inline-link {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--accent-primary);
+    font: inherit;
+    font-size: 11px;
+    padding: 0 2px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.inline-link:hover {
+    color: var(--accent-secondary);
+}
+
 .audit-json {
     margin-top: 6px;
     padding: 8px;
@@ -1091,7 +1116,7 @@ body {
 .modal-body .modal-activity-item {
     display: flex;
     gap: 8px;
-    padding: 4px 0;
+    padding: 7px 0;
     font-size: 12px;
     color: var(--text-muted);
     border-bottom: 1px solid rgba(45, 58, 79, 0.3);
@@ -1099,6 +1124,68 @@ body {
 
 .modal-body .modal-activity-item:last-child {
     border-bottom: none;
+}
+
+.modal-body .modal-activity-item.note-item {
+    color: var(--text-secondary);
+}
+
+.activity-note-body {
+    margin-top: 4px;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+}
+
+.timeline-summary {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-bottom: 8px;
+}
+
+.gate-card {
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--accent-warning);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: rgba(255, 215, 0, 0.04);
+}
+
+.gate-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+}
+
+.gate-card-body {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.gate-card code {
+    color: var(--accent-primary);
+    background: rgba(0, 212, 255, 0.08);
+    border: 1px solid rgba(0, 212, 255, 0.18);
+    border-radius: 4px;
+    padding: 1px 4px;
+}
+
+.gate-meta,
+.gate-reason,
+.gate-result {
+    margin-top: 4px;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.gate-result {
+    color: var(--text-secondary);
 }
 
 .modal-body .modal-actions-bar {

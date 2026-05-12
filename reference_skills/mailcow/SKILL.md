@@ -828,6 +828,40 @@ upstream `json_api.php` expects a `dockerapi` hostname on port 443.
 **Verified in lab:** 2026-05-11. Redis and dockerapi blockers were cleared on
 the AI server API sidecars.
 
+### Error 0b: HTTP API Sidecar Returns Empty Bodies For Real Mailcow Data
+
+**Symptom:** `GET /api/v1/get/domain/all` or `GET /api/v1/get/alias/all`
+returns HTTP `200` with an empty body, or `GET /api/v1/get/mailbox/all`
+returns `{}`, while direct MySQL shows real domains, mailboxes, and aliases.
+
+**Root Cause:** The custom reference deployment does not expose the complete
+upstream Mailcow web/API stack. The stock `json_api.php` path can initialize but
+fail to return useful inventory data in the sidecar context.
+
+**Fix:** Use the compatibility shim documented in
+`docs/MAILCOW_API_SHIM.md` and the Keycloak-Mailcow bridge skill:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+python3 scripts/test_mailcow_api_shim.py --mysql-parity
+```
+
+The shim installs `/web/mailcow_compat_api.php` and routes read-only
+`GET /api/v1/get/domain/*`, `GET /api/v1/get/mailbox/*`, and
+`GET /api/v1/get/alias/*` through it. The endpoint still validates
+`X-API-Key` against the Mailcow `api` table, rejects missing/invalid keys with
+HTTP `401`, rejects POST with HTTP `405`, and omits password hashes from
+mailbox output.
+
+**Verified in lab:** 2026-05-12.
+
+```text
+test_mailcow_api_shim.py --mysql-parity: 13 passed, 0 failed
+platform_doctor.py: 18 passed, 0 failed, 0 warned
+Keycloak-Mailcow bridge E2E: 47 passed, 0 failed, 1 skipped
+```
+
 ### Error 1: Dovecot Infinite "Waiting for Database" Loop
 
 **Symptom:** Dovecot container restarts endlessly, logs show repeated "Waiting for database" messages.

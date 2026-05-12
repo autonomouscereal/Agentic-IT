@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+import json
 from datetime import datetime, timedelta
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 
@@ -6,13 +7,28 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 def _detail_value(details, *keys):
+    if isinstance(details, str):
+        try:
+            details = json.loads(details)
+        except Exception:
+            return None
     if not isinstance(details, dict):
         return None
     for key in keys:
         value = details.get(key)
         if value not in (None, "", []):
             return value
-    return None
+
+
+def _normalize_details(row):
+    details = row.get("details")
+    if isinstance(details, str):
+        try:
+            details = json.loads(details)
+            row["details"] = details
+        except Exception:
+            pass
+    return row.get("details")
 
 
 def _audit_summary(row):
@@ -33,6 +49,15 @@ def _audit_summary(row):
         suffix.append(f"model {model}")
     if status:
         suffix.append(f"status {status}")
+    if row.get("source") == "note":
+        body = _detail_value(details, "body")
+        note_summary = f"{actor} added a note"
+        if target:
+            note_summary = f"{note_summary} on {target}"
+        if body:
+            note_summary = f"{note_summary}: {body[:180]}"
+        return note_summary
+
     summary = f"{actor} {action}".strip()
     if target:
         summary = f"{summary} on {target}"
@@ -67,13 +92,36 @@ async def dashboard_stats():
 
     # Recent activity
     recent_audit = await fetchall("""
-        SELECT id, actor, action, target, details, created_at, 'audit' AS source
-        FROM audit_log
-        UNION ALL
-        SELECT id, COALESCE(actor, 'system') AS actor, action, target, details, created_at, 'event' AS source
-        FROM event_log
-        ORDER BY created_at DESC LIMIT 20
+        SELECT id, actor, action, target, details, created_at, source
+        FROM (
+            SELECT id, actor, action, target, details, created_at, 'audit' AS source
+            FROM audit_log
+            UNION ALL
+            SELECT id, COALESCE(actor, 'system') AS actor, action, target, details, created_at, 'event' AS source
+            FROM event_log
+            UNION ALL
+            SELECT id,
+                   author AS actor,
+                   'ticket_note_added' AS action,
+                   'ticket_' || ticket_id::text AS target,
+                   jsonb_build_object(
+                       'ticket_id', ticket_id,
+                       'note_id', id,
+                       'source', source,
+                       'visibility', visibility,
+                       'body', left(body, 500)
+                   ) AS details,
+                   created_at,
+                   'note' AS source
+            FROM ticket_notes
+        ) activity
+        ORDER BY created_at DESC LIMIT 30
     """)
+    for row in recent_audit:
+        details = _normalize_details(row)
+        row["summary"] = _audit_summary(row)
+        row["ticket_id"] = _detail_value(details, "ticket_id")
+        row["agent_id"] = _detail_value(details, "agent_id")
 
     # Ticket trend (last 7 days)
     ticket_trend = await fetchall("""
@@ -188,16 +236,32 @@ async def audit_log(
             SELECT id, COALESCE(actor, 'system') AS actor, action, target, details, created_at,
                    'event' AS source, category, level
             FROM event_log
+            UNION ALL
+            SELECT id,
+                   author AS actor,
+                   'ticket_note_added' AS action,
+                   'ticket_' || ticket_id::text AS target,
+                   jsonb_build_object(
+                       'ticket_id', ticket_id,
+                       'note_id', id,
+                       'source', source,
+                       'visibility', visibility,
+                       'body', body
+                   ) AS details,
+                   created_at,
+                   'note' AS source,
+                   'ticket-note' AS category,
+                   'info' AS level
+            FROM ticket_notes
         ) entries
         {where_sql}
         ORDER BY created_at DESC LIMIT ${param_idx}
     """, *params, limit)
     for row in rows:
+        details = _normalize_details(row)
         row["summary"] = _audit_summary(row)
-        details = row.get("details")
-        if isinstance(details, dict):
-            row["ticket_id"] = _detail_value(details, "ticket_id")
-            row["agent_id"] = _detail_value(details, "agent_id")
+        row["ticket_id"] = _detail_value(details, "ticket_id")
+        row["agent_id"] = _detail_value(details, "agent_id")
 
     return {"audit": rows, "count": len(rows)}
 

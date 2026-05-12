@@ -16,6 +16,8 @@ http://localhost:8000
 
 All request/response bodies are JSON unless noted. The API uses raw PostgreSQL through `asyncpg`; no application ORM/Pydantic/SQLAlchemy models are used.
 
+External product APIs are documented separately from this dashboard API. The reference Mailcow HTTP compatibility shim is documented in `docs/MAILCOW_API_SHIM.md`; it exposes read-only Mailcow-style domain, mailbox, and alias endpoints on the Mailcow host and is not part of the dashboard API namespace.
+
 ## Health
 
 `GET /health`
@@ -298,8 +300,13 @@ Example:
 `POST /api/changes/{change_id}/approve`
 
 ```json
-{"approved_by": "operator"}
+{"approved_by": "operator", "reason": "Reviewed evidence and approved scoped action."}
 ```
+
+Demo/lab auto-approvers can use an identity such as
+`demo-auto-approver`. The audit payload then includes
+`approval_gate=true`, `approval_mode=demo_auto_approval`, and
+`auto_approved=true`.
 
 `POST /api/changes/{change_id}/reject`
 
@@ -310,18 +317,30 @@ Example:
 `POST /api/changes/{change_id}/complete`
 
 ```json
-{"result": "URL block applied in test environment."}
+{"completed_by": "agent_26", "result": "URL block applied in test environment with verification evidence."}
 ```
+
+Completed changes write both event and audit records. The agent supervisor can
+also auto-complete approved agent-linked changes after a completed task, unless
+the approval policy sets `auto_complete=false` or
+`manual_completion_required=true`.
+
+Change request, approval, rejection, and completion transitions also write
+canonical ticket notes so the ticket timeline shows the approval chain during
+demos and audits.
 
 ## Learning
 
 Postmortems:
 
 - `GET /api/postmortems`
+- `GET /api/postmortems/evidence/{ticket_id}` - compact postmortem evidence for agents, including notes, attachment metadata, change requests, task summaries with bounded log tails, CI/CD runs, prior postmortems, and audit/event entries
 - `GET /api/postmortems/{id}`
+- `POST /api/postmortems/synthesize/{ticket_id}` - supervisor fallback that creates a `ready_for_review` postmortem from bounded evidence when a model postmortem fails or stalls
 - `POST /api/postmortems`
 - `PUT /api/postmortems/{id}`
 - `POST /api/postmortems/{id}/review`
+- `POST /api/postmortems/{id}/promote` - turns an approved/reviewed postmortem into reusable assets: a knowledge article, draft workflow, candidate skills, a ticket note, and audit/event records. The workflow is draft by default and includes an approval policy requiring human review before production activation. Promotion is idempotent by postmortem: repeat calls update the same knowledge article, workflow, and skill records instead of duplicating assets.
 
 Workflows:
 
@@ -368,7 +387,9 @@ Skills:
 
 `GET /api/dashboard/stats`
 
-Overview counts, trends, activity, pending changes.
+Overview counts, trends, pending changes, and recent activity. Recent activity
+includes `audit`, `event`, and `note` sources so the overview feed can show
+human-readable ticket notes during agent work.
 
 `GET /api/dashboard/audit`
 
@@ -385,7 +406,16 @@ Filters:
 - `agent_id`
 - `limit`
 
-Merges `audit_log` and `event_log`.
+Merges `audit_log`, `event_log`, and canonical `ticket_notes`.
+
+`source` values:
+
+- `audit`: durable audit rows.
+- `event`: operational events.
+- `note`: ticket notes, including agent progress notes and agent-authored notes.
+
+`ticket_id` and `agent_id` are normalized from JSON details when available so
+the frontend can deep-link from a ticket detail modal into the full trail.
 
 ## Tools
 
