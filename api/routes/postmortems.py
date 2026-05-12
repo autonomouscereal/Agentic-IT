@@ -614,6 +614,7 @@ async def promote_postmortem(
     if postmortem.get("ticket_id"):
         note = (
             "Postmortem promoted into reusable assets.\n"
+            f"- Postmortem: {postmortem_id}\n"
             f"- Knowledge article: {knowledge_article_id or 'not created'} ({knowledge_action})\n"
             f"- Workflow: {workflow_id or 'not created'} ({workflow_action})\n"
             f"- Skills: {', '.join(str(s) for s in skill_ids) if skill_ids else 'none'}\n"

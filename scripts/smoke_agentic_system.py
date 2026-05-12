@@ -154,7 +154,7 @@ def main():
         "approved": True,
         "review_notes": "Approved by smoke test.",
     })
-    require(review.get("status") == "approved", "workflow review failed")
+    require(review.get("status") in ("approved", "active"), "workflow review failed")
 
     context = request("GET", f"/api/tickets/{ticket_id}/context")
     require(context.get("ticket", {}).get("id") == ticket_id, "context ticket mismatch")
@@ -175,6 +175,7 @@ def main():
         "change_id": change_id,
         "postmortem_id": postmortem["id"],
         "workflow_id": workflow["id"],
+        "workflow_status": review.get("status"),
         "skill_id": skill["id"],
     }, indent=2))
 

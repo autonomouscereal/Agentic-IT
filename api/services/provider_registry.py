@@ -68,6 +68,9 @@ def default_ticket_provider(preferred=None):
     """
     import os
 
+    if preferred == "local":
+        return "local"
+
     candidates = []
     for value in (preferred, os.getenv("DEFAULT_TICKET_PROVIDER"), os.getenv("ACTIVE_TICKET_PROVIDER")):
         if value:
