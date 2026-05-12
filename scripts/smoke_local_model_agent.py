@@ -3,6 +3,9 @@
 This intentionally uses qwen/qwen3.6-27b by default because it is the fast local
 lane in the current lab. It avoids destructive actions and asks the agent to
 exercise ticket context, note writing, and checkpoint completion.
+
+Progress percentage is only a UI hint. This smoke determines health from task
+status plus active process, stream log, checkpoint, notes, and audit evidence.
 """
 import json
 import sys
@@ -29,6 +32,57 @@ def request(method, path, payload=None, timeout=30):
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"{method} {path} failed {exc.code}: {body}") from exc
+
+
+def tail(text, limit=3000):
+    text = text or ""
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
+
+
+def collect_agent_evidence(agent_id, ticket_id, task_id):
+    tasks = request("GET", f"/api/agents/tasks?agent_id={agent_id}")
+    task = (tasks.get("tasks") or [{}])[0]
+    logs = request("GET", f"/api/agents/tasks/{task_id}/logs?lines=160")
+    context = request("GET", f"/api/tickets/{ticket_id}/context")
+    audits = request("GET", f"/api/agents/audits?agent_id={agent_id}&limit=20")
+    processes = request("GET", "/api/agents/processes")
+
+    active_processes = processes.get("active_processes") or []
+    process_rows = processes.get("processes") or []
+    pid = task.get("pid")
+    pid_seen = any(str(row.get("pid")) == str(pid) for row in process_rows if pid)
+
+    notes = [
+        {
+            "id": note.get("id"),
+            "author": note.get("author"),
+            "source": note.get("source"),
+            "body": tail(note.get("body"), 500),
+            "created_at": note.get("created_at"),
+        }
+        for note in context.get("notes", [])
+    ]
+
+    return {
+        "agent_id": agent_id,
+        "ticket_id": ticket_id,
+        "task_id": task_id,
+        "task_status": task.get("status"),
+        "progress_pct_ui_hint": task.get("progress_pct"),
+        "pid": pid,
+        "work_dir": task.get("work_dir"),
+        "checkpoint": task.get("checkpoints"),
+        "active_process_tracked": task_id in active_processes,
+        "pid_seen_in_container": pid_seen,
+        "log_path": logs.get("log_path"),
+        "log_tail": tail(logs.get("content")),
+        "note_count": len(notes),
+        "notes": notes[-5:],
+        "audit_count": audits.get("total", 0),
+        "audits": audits.get("audits", [])[:5],
+    }
 
 
 def main():
@@ -68,16 +122,25 @@ def main():
         status = task.get("status", "")
         progress = task.get("progress_pct", 0)
         if status != last_status:
-            print(json.dumps({"task_id": task_id, "status": status, "progress": progress}))
+            evidence = collect_agent_evidence(agent_id, ticket_id, task_id)
+            print(json.dumps({
+                "task_id": task_id,
+                "status": status,
+                "progress_pct_ui_hint": progress,
+                "active_process_tracked": evidence["active_process_tracked"],
+                "pid_seen_in_container": evidence["pid_seen_in_container"],
+                "note_count": evidence["note_count"],
+                "audit_count": evidence["audit_count"],
+            }))
             last_status = status
         if status in ("completed", "failed", "stopped"):
-            context = request("GET", f"/api/tickets/{ticket_id}/context")
-            note_bodies = [n.get("body", "") for n in context.get("notes", [])]
+            evidence = collect_agent_evidence(agent_id, ticket_id, task_id)
+            note_bodies = [n.get("body", "") for n in evidence.get("notes", [])]
             print(json.dumps({
                 "final_status": status,
-                "progress": progress,
+                "progress_pct_ui_hint": progress,
                 "note_written": any("local model agent smoke note complete" in body for body in note_bodies),
-                "processes": request("GET", "/api/agents/processes"),
+                "evidence": evidence,
             }, indent=2))
             if status != "completed":
                 raise SystemExit(2)

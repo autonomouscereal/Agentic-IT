@@ -742,6 +742,22 @@ note_written=true
 active_process_count=0
 ```
 
+2026-05-12 regression evidence:
+
+- Agents `82` and `83` were spawned by this smoke after the memory hook contract
+  fix.
+- Both agents ended `failed`; their recorded PIDs were gone from the API
+  container.
+- Both checkpoints stayed at the initial `init`/`queued` state even though the
+  task rows showed `progress_pct=40`.
+- Agent `83` did write the required ticket note, proving useful work happened,
+  but it did not update the done checkpoint or finish the exact smoke contract.
+- The smoke script now prints active evidence on status changes and final
+  failure: process snapshot, stream log tail, checkpoint state, ticket notes,
+  and audit reviews. Treat `progress_pct` as `progress_pct_ui_hint` only.
+
+See `docs/AGENT_RUN_FAILURES_2026-05-12.md` for the detailed failure note.
+
 ## Manual Provider Push Smoke
 
 Local provider:

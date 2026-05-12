@@ -1,6 +1,6 @@
 # Agent Operations Runbook
 
-Last updated: 2026-05-11.
+Last updated: 2026-05-12.
 
 ## Operator Mental Model
 
@@ -14,6 +14,18 @@ Agents are not dashboard status flags. A real agent run has:
 - checkpoints
 - human-readable ticket notes
 - audit/event records
+
+Treat `progress_pct` as a UI hint only. It is allowed to lag, jump, or reflect
+the last stream event rather than real work completion. Operator status comes
+from active evidence:
+
+- `agents.status` and `agent_tasks.status`
+- whether the recorded PID is still alive in the API container
+- recent `output.log` stream lines and tool results
+- `checkpoint.json` content and `agent_tasks.checkpoints`
+- ticket notes written by the agent/control plane
+- `audit_log` and `agent_audit_reviews`
+- PostgreSQL memory hook events for the agent workspace, when memory is enabled
 
 The dashboard should let operators answer:
 
@@ -216,6 +228,30 @@ Runner health:
 
 ```bash
 curl -sS http://localhost:25480/api/agents/runner-health
+```
+
+Live process snapshot:
+
+```bash
+curl -sS http://localhost:25480/api/agents/processes
+```
+
+Task stream tail:
+
+```bash
+curl -sS 'http://localhost:25480/api/agents/tasks/<task_id>/logs?lines=200'
+```
+
+Agent auditor evidence:
+
+```bash
+curl -sS 'http://localhost:25480/api/agents/audits?agent_id=<agent_id>&limit=20'
+```
+
+Ticket activity and notes:
+
+```bash
+curl -sS http://localhost:25480/api/tickets/<ticket_id>/context
 ```
 
 Process view:
