@@ -292,12 +292,13 @@ function renderOpsMetrics(metrics) {
     if (!metrics) return;
     const agent = metrics.agent_summary || {};
     const sla = metrics.sla || {};
+    const postmortemSla = metrics.postmortem_sla || {};
     const gates = metrics.approval_gates || {};
     const autoEvents = (metrics.auto_assignment || []).reduce((sum, row) => sum + Number(row.count || 0), 0);
     setText("metric-agent-work", formatDuration(agent.avg_work_seconds || 0));
     setText("metric-agent-work-sub", `${agent.completed || 0}/${agent.tasks || 0} completed, avg gated ${formatDuration(agent.avg_gate_wait_seconds || 0)}`);
     setText("metric-sla", `${sla.compliance_pct ?? 0}%`);
-    setText("metric-sla-sub", `${sla.breached_sla || 0} breached, ${sla.at_risk || 0} at risk`);
+    setText("metric-sla-sub", `${sla.breached_sla || 0} ticket breached, ${postmortemSla.missing_postmortem || 0} PM missing`);
     setText("metric-gates", `${gates.pending || 0} pending`);
     setText("metric-gates-sub", `${gates.completed || 0} completed, avg wait ${formatDuration(gates.avg_wait_seconds || 0)}`);
     setText("metric-automation", String(autoEvents));
@@ -320,6 +321,7 @@ function renderOpsMetrics(metrics) {
         const cicd = metrics.cicd || [];
         slaEl.innerHTML = `
             <div class="metric-row"><span>Open tickets</span><strong>${sla.open_tickets || 0}</strong><span>${sla.within_sla || 0} within SLA</span></div>
+            <div class="metric-row"><span>Postmortems</span><strong>${postmortemSla.compliance_pct ?? 0}%</strong><span>${postmortemSla.within_sla || 0}/${postmortemSla.tickets_requiring_postmortem || 0} within ${postmortemSla.target_hours || 24}h</span></div>
             <div class="metric-row"><span>Workflow runs</span><strong>${metrics.workflows?.runs?.completed || 0}</strong><span>${metrics.workflows?.runs?.failed || 0} failed</span></div>
             <div class="metric-row"><span>CI/CD runs</span><strong>${cicd.reduce((s, r) => s + Number(r.count || 0), 0)}</strong><span>${cicd.map(r => `${r.status}:${r.count}`).join(" ") || "none"}</span></div>
             <div class="metric-row"><span>Tools</span><strong>${metrics.tool_health?.healthy || 0}/${metrics.tool_health?.tools || 0}</strong><span>${metrics.tool_health?.down || 0} down</span></div>

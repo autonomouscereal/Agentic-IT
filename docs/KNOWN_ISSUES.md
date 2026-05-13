@@ -4,6 +4,82 @@ Last updated: 2026-05-13.
 
 ## Fixed In Current Pass
 
+### Postmortem SLA metrics did not track postmortem completion
+
+Status: fixed, deployed, and agentically verified on 2026-05-13.
+
+Problem:
+
+- `GET /api/dashboard/ops-metrics` reported ticket SLA compliance from
+  ticket create-to-resolution time only.
+- The dashboard did not separately measure whether resolved tickets received a
+  required postmortem within the expected learning/review window.
+- This made postmortem follow-through look healthy even when a ticket was
+  resolved without a timely postmortem artifact.
+
+Impact:
+
+- Demo and operations views could overstate SLA health for agentic work because
+  the learning/postmortem phase was invisible to SLA tracking.
+- Agents and operators could miss delayed or missing postmortems after ticket
+  resolution.
+
+Fix:
+
+- Add `postmortem_sla` metrics to `/api/dashboard/ops-metrics`, counting
+  resolved tickets, tickets with postmortems, postmortems created within the
+  configured window, missing postmortems, late postmortems, and compliance
+  percentage.
+- Render the postmortem SLA beside ticket SLA in the overview snapshot.
+- Add regression coverage and live smoke assertions so postmortem SLA cannot
+  silently disappear from the dashboard again.
+
+Verification:
+
+- Local compile, JS syntax, targeted unit tests, and full unit discovery passed.
+- Live AI server compile, JS syntax, targeted unit tests, and
+  `scripts/smoke_operational_metrics.py http://127.0.0.1:25480` passed after
+  deployment.
+- Real local-model self-repair proof completed through dashboard ticket `440`,
+  agent `157`, task `154`, and approval gate `126`.
+- Agent `157` verified `postmortem_sla` values, completed the approved gate,
+  wrote evidence note `755`, updated checkpoint `done` at `100%`, and resolved
+  the ticket.
+
+### Agent prompts allowed inline JSON patterns that the shell guard rejects
+
+Status: fixed and deployed on 2026-05-13.
+
+Problem:
+
+- During ticket `440`, agent `157` twice attempted POST payloads with inline
+  JSON or multiline Python-in-shell commands that triggered the shell guard:
+  `Contains brace with quote character` and `Newline followed by # inside a
+  quoted argument`.
+- The agent recovered on its own by using the Write tool to create JSON payload
+  files, then `curl -d @payload.json`, but the reusable prompts did not teach
+  that pattern.
+
+Impact:
+
+- Slow local agents could waste minutes recovering from preventable shell-guard
+  errors during approval gates, ticket notes, change completion, and other
+  control-plane writes.
+
+Fix:
+
+- Added reusable prompt guidance in `task_prompts.py` and the agent-runner
+  wrapper prompt: for POST payloads, create a JSON file with the Write tool and
+  call `curl -d @payload.json`; do not use Bash heredocs or inline
+  `-d '{...}'` payloads.
+
+Verification:
+
+- Deployed only the shell-guard prompt hunk to the AI server after confirming no
+  active agents.
+- Remote compile, targeted unit tests, operational metrics smoke, and health
+  checks passed after rebuild.
+
 ### Operational metrics, workflow review state, scanner findings, and tool inventory were demo-confusing
 
 Status: fixed and deployed on 2026-05-13.

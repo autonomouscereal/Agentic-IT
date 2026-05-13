@@ -415,6 +415,67 @@ async def ops_metrics():
                ROUND(100.0 * COUNT(*) FILTER (WHERE end_at <= created_at + (sla_hours || ' hours')::interval) / NULLIF(COUNT(*), 0), 1) AS compliance_pct
         FROM ticket_sla
     """)
+    postmortem_sla = await fetchrow("""
+        WITH resolved_tickets AS (
+            SELECT t.id,
+                   t.created_at,
+                   COALESCE(
+                       MAX(at.completed_at) FILTER (
+                           WHERE at.task_type = 'ticket_resolution'
+                             AND at.completed_at IS NOT NULL
+                       ),
+                       t.updated_at
+                   ) AS resolved_at
+            FROM tickets t
+            LEFT JOIN agent_tasks at ON at.ticket_id = t.id
+            WHERE t.created_at > NOW() - INTERVAL '30 days'
+              AND lower(t.status) IN ('resolved', 'closed', 'closed/resolved', 'implemented')
+            GROUP BY t.id, t.created_at, t.updated_at
+        ),
+        first_postmortem AS (
+            SELECT ticket_id,
+                   MIN(created_at) AS first_postmortem_at,
+                   COUNT(*) AS postmortem_count
+            FROM postmortems
+            WHERE ticket_id IS NOT NULL
+            GROUP BY ticket_id
+        ),
+        postmortem_sla AS (
+            SELECT rt.id,
+                   rt.resolved_at,
+                   fp.first_postmortem_at,
+                   COALESCE(fp.postmortem_count, 0) AS postmortem_count,
+                   24 AS target_hours,
+                   rt.resolved_at + INTERVAL '24 hours' AS due_at
+            FROM resolved_tickets rt
+            LEFT JOIN first_postmortem fp ON fp.ticket_id = rt.id
+        )
+        SELECT COUNT(*) AS tickets_requiring_postmortem,
+               COUNT(*) FILTER (WHERE postmortem_count > 0) AS tickets_with_postmortem,
+               COUNT(*) FILTER (
+                   WHERE first_postmortem_at IS NOT NULL
+                     AND first_postmortem_at <= due_at
+               ) AS within_sla,
+               COUNT(*) FILTER (WHERE postmortem_count = 0) AS missing_postmortem,
+               COUNT(*) FILTER (
+                   WHERE (first_postmortem_at IS NOT NULL AND first_postmortem_at > due_at)
+                      OR (first_postmortem_at IS NULL AND NOW() > due_at)
+               ) AS breached_sla,
+               COUNT(*) FILTER (
+                   WHERE first_postmortem_at IS NULL
+                     AND NOW() > resolved_at + (INTERVAL '24 hours' * 0.8)
+                     AND NOW() <= due_at
+               ) AS at_risk,
+               ROUND((AVG(GREATEST(0, EXTRACT(EPOCH FROM (first_postmortem_at - resolved_at)))) FILTER (
+                   WHERE first_postmortem_at IS NOT NULL
+               ))::numeric, 1) AS avg_postmortem_latency_seconds,
+               ROUND(100.0 * COUNT(*) FILTER (
+                   WHERE first_postmortem_at IS NOT NULL
+                     AND first_postmortem_at <= due_at
+               ) / NULLIF(COUNT(*), 0), 1) AS compliance_pct,
+               24 AS target_hours
+        FROM postmortem_sla
+    """)
     gates = await fetchrow("""
         SELECT COUNT(*) AS total,
                COUNT(*) FILTER (WHERE status = 'pending') AS pending,
@@ -475,6 +536,7 @@ async def ops_metrics():
         "agent_summary": agent_summary or {},
         "agent_by_task_type": agent_rows,
         "sla": sla or {},
+        "postmortem_sla": postmortem_sla or {},
         "approval_gates": gates or {},
         "workflows": {**(workflow or {}), "runs": workflow_runs or {}},
         "cicd": cicd,

@@ -120,10 +120,20 @@ aiohttp==3.10.0
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/dashboard/stats` | Overview stats: tickets, agents, changes, tools, recent activity, trends |
+| GET | `/api/dashboard/ops-metrics` | Operational metrics: agent working time, ticket SLA, postmortem SLA, approval gates, workflow runs, CI/CD runs, auto-assignment, and tool health |
 | GET | `/api/dashboard/audit` | Audit log with filters: `actor`, `action`, `limit` |
 | GET | `/api/dashboard/ticket-chart` | Ticket chart data for last N days (default 30), grouped by date and status |
 | GET | `/api/dashboard/agent-performance` | Last 50 finished agents with duration |
 | GET | `/api/dashboard/tool-uptime` | Tool uptime percentages for last N days (default 7) |
+
+`/api/dashboard/ops-metrics` includes two separate SLA views:
+
+- `sla`: ticket create-to-resolution compliance by priority.
+- `postmortem_sla`: resolved tickets that require learning follow-up, first
+  postmortem latency, missing/late postmortems, at-risk postmortems, and
+  compliance against the 24-hour postmortem target. Use this field when
+  checking whether the agentic loop actually completed postmortems after
+  resolving tickets.
 
 ### Tools — `/api/tools`
 

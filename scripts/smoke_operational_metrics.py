@@ -2,6 +2,7 @@
 
 Validates:
 - /api/dashboard/ops-metrics returns agent/SLA/gate/tool sections.
+- postmortem SLA is tracked for resolved tickets with required learning artifacts.
 - agent list timing fields are nonnegative and server-derived.
 - workflow rows expose review_state and linked run counters.
 - tools response excludes ComfyUI and includes setup modules.
@@ -48,9 +49,12 @@ def main():
     require(health.get("status") == "ok", "dashboard health is not ok")
 
     metrics = request("GET", "/api/dashboard/ops-metrics")
-    for key in ("agent_summary", "agent_by_task_type", "sla", "approval_gates", "workflows", "cicd", "tool_health"):
+    for key in ("agent_summary", "agent_by_task_type", "sla", "postmortem_sla", "approval_gates", "workflows", "cicd", "tool_health"):
         require(key in metrics, f"ops metrics missing {key}")
     require(isinstance(metrics["agent_by_task_type"], list), "agent task metrics should be a list")
+    postmortem_sla = metrics["postmortem_sla"]
+    for key in ("tickets_requiring_postmortem", "within_sla", "missing_postmortem", "breached_sla", "compliance_pct", "target_hours"):
+        require(key in postmortem_sla, f"postmortem SLA missing {key}")
 
     agents = request("GET", "/api/agents?status=finished").get("agents", [])
     sample_agent = agents[0] if agents else {}
@@ -104,6 +108,12 @@ def main():
         "status": "passed",
         "base": BASE,
         "ops_task_types": len(metrics["agent_by_task_type"]),
+        "postmortem_sla": {
+            "required": postmortem_sla.get("tickets_requiring_postmortem"),
+            "within_sla": postmortem_sla.get("within_sla"),
+            "missing": postmortem_sla.get("missing_postmortem"),
+            "compliance_pct": postmortem_sla.get("compliance_pct"),
+        },
         "workflow_sample": workflows[0].get("review_state"),
         "cicd_run_id": record["id"],
         "zap_status": tool_results["owasp_zap"]["status"],

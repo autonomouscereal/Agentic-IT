@@ -638,6 +638,10 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Request approval: `POST /api/changes/request`
   - Required JSON: `{{"agent_id": <agent_instance_id>, "ticket_id": {ticket.get('id', '{ticket_id}')}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {{"auto_complete": false}}}}`
   - Do not use `title` or `description` fields for change requests.
+- The shell guard blocks inline JSON with quoted braces. For POST payloads,
+  use the Write tool to create a JSON file, then run a simple Bash curl command
+  with `-d @payload.json`. Do not create JSON payloads with Bash heredocs or
+  inline `-d '{{...}}'`.
 - Poll approval: `GET /api/changes/{{change_id}}/status`
 - Complete approved lab/demo containment when no concrete provider adapter is available: `POST /api/changes/{{change_id}}/complete` with JSON `{{"actor": "agent-<agent_instance_id>", "result": "lab-safe evidence and production adapter note"}}`, then add a ticket note.
 - Persist postmortems: `POST /api/postmortems`
