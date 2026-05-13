@@ -79,6 +79,18 @@ def _normalize_ticket_class(ticket_class):
     return value
 
 
+def _effective_local_status(provider_status, local_status=None, has_active_agent=False):
+    """Preserve active dashboard work when provider sync lags local agent state."""
+    provider_value = (provider_status or "").strip()
+    local_value = (local_status or "").strip()
+    terminal = {"resolved", "closed", "rejected", "completed", "cancelled", "canceled"}
+    if has_active_agent and provider_value.lower() not in terminal:
+        if local_value in {"awaiting_user_response", "pending_approval"}:
+            return local_value
+        return "in_progress"
+    return provider_value
+
+
 _async_session = None
 
 
@@ -219,11 +231,25 @@ class iTopProvider(TicketProvider):
             "assignee_team": fields.get("team_name", ""),
         }
 
-        exists = await fetchval(
-            "SELECT id FROM tickets WHERE itop_ref = $1 AND itop_class = $2",
+        existing_ticket = await fetchrow(
+            """
+            SELECT t.id, t.status,
+                   EXISTS (
+                       SELECT 1 FROM agents a
+                       WHERE a.ticket_id = t.id
+                         AND a.status IN ('spawned', 'running', 'working', 'stalled')
+                   ) AS has_active_agent
+            FROM tickets t
+            WHERE t.itop_ref = $1 AND t.itop_class = $2
+            """,
             str(key_val), ticket_class
         )
-        if exists:
+        if existing_ticket:
+            local_status = _effective_local_status(
+                ticket_data["status"],
+                existing_ticket.get("status"),
+                bool(existing_ticket.get("has_active_agent")),
+            )
             await execute("""
                 UPDATE tickets SET
                     title = $1, description = $2, status = $3, priority = $4,
@@ -233,11 +259,11 @@ class iTopProvider(TicketProvider):
                     provider_payload = $11, synced_at = NOW(), updated_at = NOW()
                 WHERE itop_ref = $9 AND itop_class = $10
             """, ticket_data["title"], ticket_data["description"],
-                ticket_data["status"], ticket_data["priority"],
+                local_status, ticket_data["priority"],
                 ticket_data["impact"], ticket_data["urgency"],
                 ticket_data["assignee"], ticket_data["assignee_team"],
                 str(key_val), ticket_class, json_dumps(obj_data))
-            ticket_id = exists
+            ticket_id = existing_ticket["id"]
         else:
             ticket_id = await fetchval("""
                 INSERT INTO tickets (itop_ref, itop_class, title, description, status,

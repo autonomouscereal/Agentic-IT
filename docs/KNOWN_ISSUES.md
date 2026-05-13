@@ -1247,6 +1247,40 @@ Verified:
 - Live API rebuild is deferred until active agent `123` completes, to avoid
   disrupting the running EDR/SIEM proof.
 
+### Provider sync can overwrite local in-progress agent state
+
+Status: fixed in source, live API rebuild deferred until agent `123` completes.
+
+Problem:
+
+- The compact evidence showed ticket `354` as `in_progress` immediately after
+  auto-assignment.
+- Later dashboard ticket detail showed `status: new` while agent `123` was still
+  working because iTop sync mirrored the provider-side status back over the
+  dashboard's local working state.
+
+Impact:
+
+- Operators may see an actively worked ticket as `new`, which makes the demo and
+  audit story confusing.
+- This can also make agent completion/closure verification harder because local
+  and provider states are not clearly separated.
+
+Fix:
+
+- Preserve or derive an active local workflow state while an agent is assigned,
+  and push/pull provider status transitions explicitly rather than letting
+  provider sync hide active dashboard work.
+- Existing iTop sync now derives an effective local status: active-agent tickets
+  keep `in_progress`, `awaiting_user_response`, or `pending_approval` unless the
+  provider reports a terminal status such as `resolved` or `closed`.
+
+Verified:
+
+- Local `python -m unittest tests.test_itop_sync_status tests.test_auto_assignment tests.test_itop_outbound`: PASS.
+- Source synced to the remote tree; container rebuild waits for the active EDR
+  proof agent to finish.
+
 ### iTop outbound creation needs environment-specific defaults
 
 Incident/UserRequest creation requires iTop org/caller defaults. This is intentional. Configure:

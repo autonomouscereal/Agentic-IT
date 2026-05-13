@@ -914,4 +914,9 @@ agent auditor:
   manual sweep returned audited=14
   agent 123 finding=agent_progress_ok
   agent recovered after a rejected multiline inline-python command by trying a simpler approach
+provider sync status guard:
+  issue: iTop sync could mirror provider status "new" over an active dashboard agent ticket
+  source fix: active-agent tickets preserve local in_progress/waiting state unless provider status is terminal
+  local tests: python -m unittest tests.test_itop_sync_status tests.test_auto_assignment tests.test_itop_outbound -> PASS
+  live deployment: source synced; API rebuild deferred until active agent 123 completes
 ```
