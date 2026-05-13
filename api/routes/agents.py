@@ -38,10 +38,10 @@ async def list_agents(
                task.task_type AS task_type,
                task.work_dir AS task_work_dir,
                task.error_message AS task_error_message,
-               GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(a.heartbeat, a.started_at, NOW())))) AS idle_seconds,
-               GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(a.finished_at, NOW()) - COALESCE(a.started_at, NOW())))) AS running_seconds,
-               GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(task.completed_at, NOW()) - COALESCE(task.started_at, task.created_at, NOW())))
-                   - COALESCE(gates.gate_wait_seconds, 0)) AS task_working_seconds,
+               CASE WHEN a.status = 'stalled' THEN 0 ELSE GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(a.heartbeat, a.started_at, NOW())))) END AS idle_seconds,
+               CASE WHEN a.status = 'stalled' THEN 0 ELSE GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(a.finished_at, NOW()) - COALESCE(a.started_at, NOW())))) END AS running_seconds,
+               CASE WHEN a.status = 'stalled' THEN 0 ELSE GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(task.completed_at, NOW()) - COALESCE(task.started_at, task.created_at, NOW())))
+                   - COALESCE(gates.gate_wait_seconds, 0)) END AS task_working_seconds,
                COALESCE(gates.gate_wait_seconds, 0) AS gate_wait_seconds
         FROM agents a
         LEFT JOIN tickets t ON a.ticket_id = t.id

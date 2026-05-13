@@ -1,6 +1,7 @@
 // SOC Dashboard - Agent Management
 
 const activeStatuses = ['spawned', 'running', 'working'];
+const waitingStatuses = ['pending_approval', 'awaiting_access', 'awaiting_user_response', 'blocked'];
 const stalledStatuses = ['stalled'];
 const finishedStatuses = ['finished', 'failed', 'stopped', 'terminated', 'resolved'];
 
@@ -14,16 +15,30 @@ async function loadAgents() {
     if (!grid) return;
 
     const agents = data.agents || [];
-    const active = agents.filter(a => activeStatuses.includes(a.status));
+    const queued = agents.filter(a => isQueuedAgent(a));
+    const active = agents.filter(a => activeStatuses.includes(a.status) && !isQueuedAgent(a));
+    const waiting = agents.filter(a => waitingStatuses.includes(a.status));
     const stalled = agents.filter(a => stalledStatuses.includes(a.status));
     const history = agents.filter(a => finishedStatuses.includes(a.status));
 
     let html = "";
 
+    // Queued agents section
+    if (queued.length > 0) {
+        html += `<div class="agent-section-header queued">Queued Agents (${queued.length})</div>`;
+        html += queued.map(a => renderAgentCard(a, false)).join("");
+    }
+
     // Active agents section
     if (active.length > 0) {
         html += `<div class="agent-section-header">Active Agents (${active.length})</div>`;
         html += active.map(a => renderAgentCard(a, false)).join("");
+    }
+
+    // Waiting agents section
+    if (waiting.length > 0) {
+        html += `<div class="agent-section-header waiting">Waiting On Gate (${waiting.length})</div>`;
+        html += waiting.map(a => renderAgentCard(a, false)).join("");
     }
 
     // Stalled agents section
@@ -48,7 +63,7 @@ async function loadAgents() {
     grid.innerHTML = html;
 
     // Update badge
-    setText("agent-count", active.length);
+    setText("agent-count", active.length + queued.length + waiting.length);
 }
 
 async function loadAgentAuditor() {
@@ -74,10 +89,10 @@ async function runAgentAuditOnce() {
 }
 
 function renderAgentCard(a, isStalled) {
-    const running = Number.isFinite(Number(a.running_seconds)) ? formatDuration(a.running_seconds) : "-";
-    const working = Number.isFinite(Number(a.task_working_seconds)) ? formatDuration(a.task_working_seconds) : "-";
-    const gated = Number.isFinite(Number(a.gate_wait_seconds)) ? formatDuration(a.gate_wait_seconds) : "-";
+    const workSeconds = a.status === "stalled" ? 0 : a.task_working_seconds;
+    const workTime = Number.isFinite(Number(workSeconds)) ? formatDuration(workSeconds) : "-";
     const stalledClass = isStalled ? " stalled" : "";
+    const displayStatus = agentDisplayStatus(a);
 
     let actionButtons = `<button class="btn btn-sm" onclick="viewAgentDetail(${a.id})">Detail</button>`;
 
@@ -97,14 +112,12 @@ function renderAgentCard(a, isStalled) {
     <div class="agent-card${stalledClass}" id="agent-card-${a.id}">
         <div class="agent-card-header">
             <span class="agent-id">Agent #${a.id}</span>
-            <span class="status-badge ${statusClass(a.status)}">${a.status}</span>
+            <span class="status-badge ${statusClass(displayStatus)}">${escHtml(displayStatus)}</span>
         </div>
         <div class="agent-ticket">${renderAgentTicketLink(a)}</div>
         <div class="agent-meta">
             <span>Model: ${a.model || "-"}</span>
-            <span>Runtime: ${running}</span>
-            <span>Work: ${working}</span>
-            <span>Gated: ${gated}</span>
+            <span>Total work time: ${workTime}</span>
         </div>
         ${renderTaskSummary(a)}
         <div class="agent-actions">
@@ -112,6 +125,15 @@ function renderAgentCard(a, isStalled) {
         </div>
     </div>
     `;
+}
+
+function isQueuedAgent(a) {
+    return a?.task_status === "queued" && (a.status === "spawned" || a.status === "running");
+}
+
+function agentDisplayStatus(a) {
+    if (isQueuedAgent(a)) return "queued";
+    return a?.status || "unknown";
 }
 
 function renderAgentTicketLink(a) {

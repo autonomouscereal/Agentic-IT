@@ -38,6 +38,7 @@ def load_dashboard_route(calls):
                 "tickets_requiring_postmortem": 3,
                 "tickets_with_postmortem": 2,
                 "within_sla": 2,
+                "total_postmortems": 7,
                 "missing_postmortem": 1,
                 "breached_sla": 0,
                 "at_risk": 1,
@@ -78,6 +79,7 @@ class OpsMetricsPostmortemSlaTests(unittest.TestCase):
 
         self.assertIn("postmortem_sla", result)
         self.assertEqual(result["postmortem_sla"]["tickets_requiring_postmortem"], 3)
+        self.assertEqual(result["postmortem_sla"]["total_postmortems"], 7)
         self.assertEqual(result["postmortem_sla"]["missing_postmortem"], 1)
         queries = "\n".join(query for _, query in calls)
         self.assertIn("first_postmortem", queries)

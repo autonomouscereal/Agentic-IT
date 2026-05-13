@@ -309,10 +309,10 @@ function renderOpsMetrics(metrics) {
         const rows = metrics.agent_by_task_type || [];
         taskEl.innerHTML = rows.length ? rows.map(row => `
             <div class="metric-row">
-                <span>${escHtml(row.task_type || "task")}</span>
+                <span>${escHtml(agentTaskMetricLabel(row.task_type || "task"))}</span>
                 <strong>${formatDuration(row.avg_work_seconds || 0)}</strong>
                 <span>${row.completed_tasks || 0}/${row.total_tasks || 0} done</span>
-                <span>p95 ${formatDuration(row.p95_work_seconds || 0)}</span>
+                <span title="95th percentile working time: 95% of completed tasks of this type finished at or below this time.">95% under ${formatDuration(row.p95_work_seconds || 0)}</span>
             </div>
         `).join("") : '<div class="learning-meta">No agent task metrics yet.</div>';
     }
@@ -321,12 +321,34 @@ function renderOpsMetrics(metrics) {
         const cicd = metrics.cicd || [];
         slaEl.innerHTML = `
             <div class="metric-row"><span>Open tickets</span><strong>${sla.open_tickets || 0}</strong><span>${sla.within_sla || 0} within SLA</span></div>
-            <div class="metric-row"><span>Postmortems</span><strong>${postmortemSla.compliance_pct ?? 0}%</strong><span>${postmortemSla.within_sla || 0}/${postmortemSla.tickets_requiring_postmortem || 0} within ${postmortemSla.target_hours || 24}h</span></div>
+            <div class="metric-row"><span>Postmortems</span><strong>${postmortemSla.total_postmortems || 0}</strong><span>${postmortemSla.within_sla || 0}/${postmortemSla.tickets_requiring_postmortem || 0} within ${postmortemSla.target_hours || 24}h</span><span>${postmortemSla.compliance_pct ?? 0}% SLA</span></div>
             <div class="metric-row"><span>Workflow runs</span><strong>${metrics.workflows?.runs?.completed || 0}</strong><span>${metrics.workflows?.runs?.failed || 0} failed</span></div>
-            <div class="metric-row"><span>CI/CD runs</span><strong>${cicd.reduce((s, r) => s + Number(r.count || 0), 0)}</strong><span>${cicd.map(r => `${r.status}:${r.count}`).join(" ") || "none"}</span></div>
+            <div class="metric-row"><span>CI/CD runs</span><strong>${cicd.reduce((s, r) => s + Number(r.count || 0), 0)}</strong><span class="metric-status-list">${renderMetricStatusList(cicd)}</span></div>
             <div class="metric-row"><span>Tools</span><strong>${metrics.tool_health?.healthy || 0}/${metrics.tool_health?.tools || 0}</strong><span>${metrics.tool_health?.down || 0} down</span></div>
         `;
     }
+}
+
+function agentTaskMetricLabel(taskType) {
+    const labels = {
+        ticket_resolution: "Ticket resolution",
+        ticket_resolution_continuation: "Ticket continuation",
+        postmortem: "Postmortem agent task",
+        workflow_build: "Workflow build",
+        workflow_rerun: "Workflow rerun",
+        ad_hoc: "Ad hoc task",
+        source_self_repair_smoke: "Source self-repair",
+        source_self_repair_smoke_hardened: "Source self-repair hardened",
+    };
+    return labels[taskType] || String(taskType || "task").replace(/_/g, " ");
+}
+
+function renderMetricStatusList(rows) {
+    if (!rows || rows.length === 0) return "none";
+    return rows.map(row => {
+        const status = row.status || "unknown";
+        return `<span class="metric-status-chip ${statusClass(status)}">${escHtml(status)} <strong>${Number(row.count || 0)}</strong></span>`;
+    }).join("");
 }
 
 function setText(id, value) {

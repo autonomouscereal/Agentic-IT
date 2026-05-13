@@ -48,12 +48,15 @@ Agent timing definitions:
 
 - `running_seconds`: server-derived wall time from agent start to finish/now,
   clamped at zero so browser clock skew cannot show negative durations.
+  This is retained for diagnostics and is zero for stalled agents.
 - `idle_seconds`: server-derived time since the latest heartbeat or start time,
-  clamped at zero.
+  clamped at zero. This is diagnostic only and is zero for stalled agents.
 - `gate_wait_seconds`: approval/user-response/change wait time associated with
   the task window.
 - `task_working_seconds`: task runtime minus gate wait, clamped at zero. Use
   this for "how long did the agent work" SLA/efficiency conversations.
+  The Agents tab labels this as `Total work time` and does not show idle/gate
+  wait timers as primary card metrics.
 
 Dashboard operational cards currently show:
 
@@ -134,6 +137,60 @@ curl -sS -X POST http://localhost:25480/api/agents/create-from-prompt \
 
 - Free prompt from dashboard.
 - Still creates a canonical local ticket for auditability.
+
+## Agent And Task Statuses
+
+Agent status and task status are related but not identical:
+
+- `agents.status` is the operator lifecycle for an agent instance.
+- `agent_tasks.status` is the runnable work item state for that agent.
+- `progress_pct` is not status. It is only a coarse UI hint.
+
+Agent statuses:
+
+- `spawned`: agent row exists and the task is queued or about to start.
+- `running` / `working`: the harness has started and recent process, stream,
+  checkpoint, note, or audit evidence should be used to judge activity.
+- `pending_approval`: the agent intentionally stopped behind a change approval
+  gate. This is not stalled.
+- `awaiting_access`: the agent hit a permission wall and created or referenced
+  an access request. This is not stalled.
+- `awaiting_user_response`: the agent asked the requester for information and
+  should resume after the response arrives. This is not stalled.
+- `blocked`: the agent stopped at another durable wait state that requires
+  operator or workflow action.
+- `stalled`: watchdog/monitor evidence says the agent stopped producing useful
+  heartbeat/output outside an approval, access, or user-response gate. Stalled
+  cards report `Total work time` as `0s` until a replacement run is started.
+- `finished`: the task completed and final evidence was recorded.
+- `failed`: the harness or supervisor failed the task.
+- `stopped`: an operator stopped the task through the dashboard/API.
+- `terminated`: a prior agent instance was replaced, unassigned, or restarted.
+- `resolved`: legacy terminal value retained for old rows only.
+
+Task statuses:
+
+- `queued`: waiting for the bounded local-model lane or priority queue.
+- `running`: process is active or being tracked.
+- `pending_approval`, `awaiting_access`, `awaiting_user_response`, `blocked`:
+  durable wait states from checkpoint guard logic.
+- `completed`: task reached final `done` / `100%` or supervisor-confirmed
+  completion evidence.
+- `failed` / `stopped`: terminal non-success states.
+
+Dashboard category mapping:
+
+- Queued Agents: task `queued` with agent `spawned` or `running`.
+- Active Agents: agent `spawned`, `running`, or `working`, excluding queued
+  tasks.
+- Waiting On Gate: agent `pending_approval`, `awaiting_access`,
+  `awaiting_user_response`, or `blocked`.
+- Stalled Agents: agent `stalled` only.
+- Agent History: `finished`, `failed`, `stopped`, `terminated`, and legacy
+  `resolved`.
+
+These categories are intended to be non-overlapping in the UI. An agent behind
+approval belongs in `Waiting On Gate`; it should not be counted as stalled.
 
 ## Checkpoint Protocol
 

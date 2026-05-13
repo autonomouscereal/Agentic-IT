@@ -412,6 +412,23 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertIn("a.ticket_id = $2", query)
         self.assertEqual(args, ("failed", 312))
 
+    def test_list_agents_zeroes_stalled_timing_fields(self):
+        module = load_agents_route()
+        queries = []
+
+        async def fetchall(query, *args):
+            queries.append(query)
+            return []
+
+        module.fetchall = fetchall
+
+        asyncio.run(module.list_agents())
+
+        query = queries[0]
+        self.assertIn("CASE WHEN a.status = 'stalled' THEN 0 ELSE GREATEST", query)
+        self.assertIn("END AS running_seconds", query)
+        self.assertIn("END AS task_working_seconds", query)
+
     def test_detect_completed_ticket_resolution_from_dashboard_evidence(self):
         module = load_agent_runner()
         calls = []

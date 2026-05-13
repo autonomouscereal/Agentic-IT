@@ -367,6 +367,28 @@ body {
     font-size: 13px;
 }
 
+.metric-status-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.metric-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(255, 255, 255, 0.04);
+    white-space: nowrap;
+}
+
+.metric-status-chip strong {
+    font-size: 12px;
+}
+
 /* Charts */
 .charts-row {
     display: grid;
@@ -1205,6 +1227,16 @@ body {
 .agent-section-header.stalled {
     border-bottom-color: rgba(255, 215, 0, 0.4);
     color: var(--accent-warning);
+}
+
+.agent-section-header.queued {
+    border-bottom-color: rgba(0, 212, 255, 0.3);
+    color: var(--accent-primary);
+}
+
+.agent-section-header.waiting {
+    border-bottom-color: rgba(168, 85, 247, 0.35);
+    color: #a855f7;
 }
 
 .agent-section-header.history {

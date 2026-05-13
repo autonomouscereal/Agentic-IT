@@ -456,6 +456,11 @@ async def ops_metrics():
                    WHERE first_postmortem_at IS NOT NULL
                      AND first_postmortem_at <= due_at
                ) AS within_sla,
+               (
+                   SELECT COUNT(*)
+                   FROM postmortems
+                   WHERE created_at > NOW() - INTERVAL '30 days'
+               ) AS total_postmortems,
                COUNT(*) FILTER (WHERE postmortem_count = 0) AS missing_postmortem,
                COUNT(*) FILTER (
                    WHERE (first_postmortem_at IS NOT NULL AND first_postmortem_at > due_at)
