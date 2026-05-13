@@ -389,6 +389,57 @@ body {
     font-size: 12px;
 }
 
+.agent-task-runtime-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+}
+
+.agent-task-runtime-card {
+    display: grid;
+    gap: 8px;
+    min-height: 124px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(45, 58, 79, 0.72);
+    border-radius: 6px;
+}
+
+.agent-task-name {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.agent-task-main {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.agent-task-value {
+    color: var(--accent-secondary);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.agent-task-label {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.agent-task-stats {
+    display: grid;
+    gap: 4px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.agent-task-stats strong {
+    color: var(--text-primary);
+}
+
 /* Charts */
 .charts-row {
     display: grid;

@@ -307,14 +307,24 @@ function renderOpsMetrics(metrics) {
     const taskEl = document.getElementById("agent-task-metrics");
     if (taskEl) {
         const rows = metrics.agent_by_task_type || [];
-        taskEl.innerHTML = rows.length ? rows.map(row => `
-            <div class="metric-row">
-                <span>${escHtml(agentTaskMetricLabel(row.task_type || "task"))}</span>
-                <strong>${formatDuration(row.avg_work_seconds || 0)}</strong>
-                <span>${row.completed_tasks || 0}/${row.total_tasks || 0} done</span>
-                <span title="95th percentile working time: 95% of completed tasks of this type finished at or below this time.">95% under ${formatDuration(row.p95_work_seconds || 0)}</span>
+        taskEl.innerHTML = rows.length ? `
+            <div class="agent-task-runtime-grid">
+                ${rows.map(row => `
+                    <div class="agent-task-runtime-card">
+                        <div class="agent-task-name">${escHtml(agentTaskMetricLabel(row.task_type || "task"))}</div>
+                        <div class="agent-task-main">
+                            <span class="agent-task-value">${formatDuration(row.avg_work_seconds || 0)}</span>
+                            <span class="agent-task-label">avg work time</span>
+                        </div>
+                        <div class="agent-task-stats">
+                            <span><strong>${row.completed_tasks || 0}</strong> completed</span>
+                            <span><strong>${row.total_tasks || 0}</strong> task runs</span>
+                            <span title="95th percentile working time: 95% of completed task runs of this type finished at or below this time."><strong>${formatDuration(row.p95_work_seconds || 0)}</strong> 95% under</span>
+                        </div>
+                    </div>
+                `).join("")}
             </div>
-        `).join("") : '<div class="learning-meta">No agent task metrics yet.</div>';
+        ` : '<div class="learning-meta">No agent task metrics yet.</div>';
     }
     const slaEl = document.getElementById("sla-tool-metrics");
     if (slaEl) {

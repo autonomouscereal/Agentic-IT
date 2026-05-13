@@ -65,9 +65,19 @@ Dashboard operational cards currently show:
 - pending approval gates and average gate wait.
 - automation activity, active workflows, and healthy tool count.
 
-Task-type rows include total/completed counts, average working time, and p95
-working time. These values are intentionally calculated by PostgreSQL on the
-server so every browser sees the same nonnegative numbers.
+Agent Task Runtime cards are task-run metrics, not artifact inventory. For
+example, `Postmortem agent task` counts postmortem agent task runs; the actual
+number of postmortem records lives in the SLA / Tool Snapshot `Postmortems`
+row from `postmortem_sla.total_postmortems`. Each task-runtime card shows:
+
+- average working time, with gate wait removed.
+- completed task runs.
+- total task runs.
+- `95% under`, the 95th percentile working time. In plain English, 95% of
+  completed task runs of that type finished at or below that time.
+
+These values are intentionally calculated by PostgreSQL on the server so every
+browser sees the same nonnegative numbers.
 
 ## Demo-Friendly Notes
 

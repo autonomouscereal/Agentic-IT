@@ -130,10 +130,17 @@ aiohttp==3.10.0
 
 - `sla`: ticket create-to-resolution compliance by priority.
 - `postmortem_sla`: resolved tickets that require learning follow-up, first
-  postmortem latency, missing/late postmortems, at-risk postmortems, and
-  compliance against the 24-hour postmortem target. Use this field when
-  checking whether the agentic loop actually completed postmortems after
-  resolving tickets.
+  postmortem latency, missing/late postmortems, at-risk postmortems,
+  `total_postmortems`, and compliance against the 24-hour postmortem target.
+  Use this field when checking whether the agentic loop actually completed
+  postmortem artifacts after resolving tickets.
+
+The Overview `Agent Task Runtime` cards are task-run metrics, not artifact
+inventory. `Postmortem agent task` means postmortem-agent runs, while the
+actual postmortem artifact count is shown in the SLA / Tool Snapshot
+`Postmortems` row from `postmortem_sla.total_postmortems`. `95% under` is the
+95th percentile working time: 95% of completed task runs of that type finished
+at or below that time.
 
 ### Tools — `/api/tools`
 

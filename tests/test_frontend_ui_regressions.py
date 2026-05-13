@@ -40,6 +40,9 @@ class FrontendUiRegressionTests(unittest.TestCase):
     def test_ops_metrics_labels_postmortem_tasks_and_renders_status_chips(self):
         self.assertIn("function agentTaskMetricLabel(taskType)", self.dashboard_js)
         self.assertIn('postmortem: "Postmortem agent task"', self.dashboard_js)
+        self.assertIn("agent-task-runtime-card", self.dashboard_js)
+        self.assertIn("avg work time", self.dashboard_js)
+        self.assertIn("task runs", self.dashboard_js)
         self.assertIn("95% under", self.dashboard_js)
         self.assertIn("postmortemSla.total_postmortems", self.dashboard_js)
         self.assertIn("function renderMetricStatusList(rows)", self.dashboard_js)
