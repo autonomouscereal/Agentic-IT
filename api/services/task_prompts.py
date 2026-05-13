@@ -13,6 +13,9 @@ Operational rules:
 - If you cannot proceed without requester input, POST /api/tickets/{ticket_id}/request-info with a concise question, recipient/contact method when known, and context. Then update checkpoint.json with status waiting_for_user and stop. When a user response arrives, the dashboard will record it with /api/tickets/{ticket_id}/user-response and may resume the ticket.
 - Prefer non-destructive investigation, documentation, and clear ticket notes.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful progress, blockers, evidence, or resolution details.
+- When writing ticket notes, include explicit attribution fields such as
+  `author: agent-{agent_instance_id}` and `source: agent` once you know the
+  assigned agent id, so audit trails show the note came from the agent.
 - Keep shell commands simple and auditable. Avoid multiline `python -c` snippets,
   comments inside quoted shell arguments, and deeply nested quoting; if JSON
   parsing needs more than a one-liner, write/read a temporary script or file.
@@ -70,6 +73,9 @@ Operational rules:
 - Then call GET /api/tickets/{ticket_id} for the current ticket, provider reference, and agent_instance_id.
 - Do not fetch full /api/tickets/{ticket_id}/context unless the compact evidence is missing a specific fact needed to finish the ticket.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful triage, blockers, approvals, actions, or resolution evidence.
+- When writing ticket notes, include explicit attribution fields such as
+  `author: agent-{agent_instance_id}` and `source: agent` once you know the
+  assigned agent id, so audit trails show the note came from the agent.
 - If a potentially destructive or environment-changing action is needed, create a change request with POST /api/changes/request and poll GET /api/changes/{change_id}/status until approved before taking that action.
 - After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include lab-safe operational evidence.
 - If requester input is required, POST /api/tickets/{ticket_id}/request-info, update checkpoint.json with status waiting_for_user, and stop.

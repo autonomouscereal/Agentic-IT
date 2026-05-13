@@ -1281,6 +1281,34 @@ Verified:
 - Source synced to the remote tree; container rebuild waits for the active EDR
   proof agent to finish.
 
+### Agent-created notes can default to dashboard author
+
+Status: fixed in source, live API rebuild deferred until agent `123` completes.
+
+Problem:
+
+- Agent `123` posted triage note `456`, but the note defaulted to
+  `author=dashboard` and `source=dashboard` because the request did not include
+  explicit note attribution.
+
+Impact:
+
+- The note body is useful, but audit readability suffers because an agent action
+  can look like a human dashboard note.
+
+Fix:
+
+- Tighten ticket-agent prompts so agent note requests include
+  `author=agent-{agent_instance_id}` and `source=agent` or
+  `agent-control-plane` whenever the agent writes progress, triage, or
+  resolution evidence.
+
+Verified:
+
+- Local `python -m py_compile api/services/task_prompts.py api/services/itop_sync.py`: PASS.
+- Source synced to the remote tree; container rebuild waits for the active EDR
+  proof agent to finish.
+
 ### iTop outbound creation needs environment-specific defaults
 
 Incident/UserRequest creation requires iTop org/caller defaults. This is intentional. Configure:

@@ -919,4 +919,9 @@ provider sync status guard:
   source fix: active-agent tickets preserve local in_progress/waiting state unless provider status is terminal
   local tests: python -m unittest tests.test_itop_sync_status tests.test_auto_assignment tests.test_itop_outbound -> PASS
   live deployment: source synced; API rebuild deferred until active agent 123 completes
+agent note attribution:
+  issue: agent triage note 456 defaulted to author/source dashboard
+  source fix: ticket-agent prompts now require explicit author=agent-{agent_instance_id} and source=agent on note writes
+  local compile: python -m py_compile api/services/task_prompts.py api/services/itop_sync.py -> PASS
+  live deployment: source synced; API rebuild deferred until active agent 123 completes
 ```
