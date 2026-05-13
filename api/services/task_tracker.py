@@ -232,12 +232,21 @@ async def _sync_task_status(task):
             "UPDATE agents SET status = 'finished', finished_at = NOW() WHERE id = $1",
             task["agent_id"],
         )
+        from services import agent_runner
+        provider_close = {"status": "skipped", "reason": "not_ticket_resolution"}
         if task.get("task_type") == "ticket_resolution":
             await execute(
                 "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
                 task["ticket_id"],
             )
-        from services import agent_runner
+            close_fn = getattr(agent_runner, "_close_provider_ticket_if_needed", None)
+            if close_fn:
+                provider_close = await close_fn(
+                    task["ticket_id"],
+                    task["agent_id"],
+                    task["id"],
+                    output or "Resolved by SOC agent via checkpoint tracker.",
+                )
         change_completion = await agent_runner.complete_approved_changes_for_task(
             task["agent_id"],
             task["id"],
@@ -249,6 +258,7 @@ async def _sync_task_status(task):
                             "ticket_id": task["ticket_id"],
                             "auto_completed_changes": change_completion.get("completed", []),
                             "auto_complete_skipped": change_completion.get("skipped", []),
+                            "provider_close": provider_close,
                         })
 
         if broadcast_fn:

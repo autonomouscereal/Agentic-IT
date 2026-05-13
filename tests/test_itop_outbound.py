@@ -129,6 +129,101 @@ class iTopOutboundTests(unittest.TestCase):
         self.assertEqual(keys, [3, 42, 198])
         self.assertEqual(len(calls), 1)
 
+    def test_close_ticket_prefers_provider_ref_for_outbound_itop_tickets(self):
+        module = load_itop_sync()
+        calls = []
+        updates = []
+
+        async def fake_fetchrow(query, *args):
+            self.assertIn("COALESCE(provider_ref, itop_ref)", query)
+            return {"itop_ref": "170", "itop_class": "Incident", "status": "assigned"}
+
+        async def fake_itop_request(operation, **fields):
+            calls.append((operation, fields))
+            return {"code": 0}
+
+        async def fake_execute(*args):
+            updates.append(args)
+
+        module.fetchrow = fake_fetchrow
+        module.itop_request = fake_itop_request
+        module.execute = fake_execute
+
+        provider = module.iTopProvider()
+        result = asyncio.run(provider.close_ticket(127, "provider close proof"))
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(calls[0][1]["key"], "170")
+        self.assertEqual(calls[0][1]["class"], "Incident")
+        self.assertTrue(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in updates))
+
+    def test_close_ticket_assigns_with_empty_fields_before_resolve(self):
+        module = load_itop_sync()
+        calls = []
+
+        async def fake_fetchrow(query, *args):
+            return {"itop_ref": "239", "itop_class": "Incident", "status": "new"}
+
+        async def fake_itop_request(operation, **fields):
+            calls.append((operation, fields))
+            if fields.get("stimulus") == "ev_resolve" and len(calls) == 1:
+                return {"code": 1, "message": "Invalid stimulus: ev_resolve in state new"}
+            if operation == "core/get":
+                return {"code": 0, "objects": {"Incident::239": {"fields": {"status": "assigned"}}}}
+            return {"code": 0}
+
+        module.fetchrow = fake_fetchrow
+        module.itop_request = fake_itop_request
+
+        provider = module.iTopProvider()
+        result = asyncio.run(provider.close_ticket(367, "provider close proof"))
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(calls[1][1]["stimulus"], "ev_assign")
+        self.assertEqual(calls[1][1]["fields"], {})
+        self.assertEqual(calls[2][0], "core/get")
+        self.assertEqual(calls[2][1]["output_fields"], "status")
+        self.assertEqual(calls[3][1]["stimulus"], "ev_resolve")
+        self.assertEqual(calls[3][1]["fields"], {
+            "resolution_code": "assistance",
+            "solution": "provider close proof",
+        })
+
+    def test_close_ticket_waits_for_assignment_state_before_resolve_retry(self):
+        module = load_itop_sync()
+        calls = []
+        sleeps = []
+
+        async def fake_fetchrow(query, *args):
+            return {"itop_ref": "240", "itop_class": "Incident", "status": "new"}
+
+        async def fake_sleep(seconds):
+            sleeps.append(seconds)
+
+        async def fake_itop_request(operation, **fields):
+            calls.append((operation, fields))
+            if fields.get("stimulus") == "ev_resolve" and len(calls) == 1:
+                return {"code": 1, "message": "Invalid stimulus: ev_resolve in state new"}
+            if operation == "core/get" and len(sleeps) == 0:
+                return {"code": 0, "objects": {"Incident::240": {"fields": {"status": "new"}}}}
+            if operation == "core/get":
+                return {"code": 0, "objects": {"Incident::240": {"fields": {"status": "assigned"}}}}
+            return {"code": 0}
+
+        module.fetchrow = fake_fetchrow
+        module.itop_request = fake_itop_request
+        original_sleep = module.asyncio.sleep
+        module.asyncio.sleep = fake_sleep
+        try:
+            provider = module.iTopProvider()
+            result = asyncio.run(provider.close_ticket(368, "provider close proof"))
+        finally:
+            module.asyncio.sleep = original_sleep
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(sleeps, [1])
+        self.assertEqual(calls[-1][1]["stimulus"], "ev_resolve")
+
     def test_full_sync_imports_without_auto_assigning_historical_rows(self):
         module = load_itop_sync()
         provider = module.iTopProvider()

@@ -4,6 +4,177 @@ Last updated: 2026-05-13.
 
 ## Fixed In Current Pass
 
+### Ticket close proof v2 was local-only despite end-to-end wording
+
+Status: fixed and verified, found from marker
+`CODEX_TICKET_CLOSE_PROOF_V2_1778629496` / dashboard ticket `342`.
+
+Problem:
+
+- The test created ticket `342` with `provider=local`,
+  `sync_provider=false`, and `provider_sync_status=local_only`.
+- The title claimed "controlled agent completion with full evidence note
+  retention", but the test evidence did not include an iTop object, provider
+  close, forced sync, or direct iTop read.
+- iTop search for the marker returned zero matching `Incident` and
+  `UserRequest` objects, which is expected for that local-only ticket.
+
+Impact:
+
+- The proof was valid only for local dashboard closure and note retention, not
+  for end-to-end dashboard-to-iTop synchronization.
+- Demo notes could overstate what was proven and hide a real provider-sync
+  regression if one appeared later.
+
+Fix:
+
+- Replace the close proof with an iTop-backed end-to-end variant that creates
+  the ticket with `provider=itop` / `sync_provider=true`, requires
+  `provider_sync_status=synced`, runs the agent, forces `/api/tickets/{id}/sync`,
+  and directly reads the matching iTop object to assert `resolved` plus solution
+  text.
+
+Verification:
+
+- Replacement proof marker `CODEX_ITOP_CLOSE_PROOF_1778645781` created
+  dashboard ticket `368`, synced to iTop Incident `240`, spawned local-model
+  agent `131`, retained evidence notes `551` and `552`, completed task `128`,
+  and direct iTop read confirmed `status=resolved` with the marker in
+  `solution`.
+- Final clean proof marker `CODEX_ITOP_CLOSE_PROOF_1778648936` created
+  dashboard ticket `373`, synced to iTop Incident `245` / `I-000254`, spawned
+  local-model agent `135`, retained evidence notes `574` and `575`, completed
+  task `132`, direct iTop read confirmed `status=resolved`,
+  `resolution_code=assistance`, and marker-bearing solution text, and the
+  ticket notes contained zero `Provider close failed` entries.
+- The replacement test is `scripts/smoke_itop_agent_close_e2e.py`; it refuses
+  local-only tickets by requiring `provider=itop`,
+  `provider_sync_status=synced`, a numeric provider ref, evidence notes, forced
+  sync, and direct iTop state verification.
+
+### iTop-backed ticket create can persist then return HTTP 500
+
+Status: fixed and verified, found while replacing the local-only close proof
+with marker `CODEX_ITOP_CLOSE_PROOF_1778645039`.
+
+Problem:
+
+- `scripts/smoke_itop_agent_close_e2e.py` called `POST /api/tickets` with
+  `provider=itop` and `sync_provider=true`.
+- The API returned HTTP 500, but the dashboard row was still created as ticket
+  `367` with `provider=itop`, `provider_ref=239`, `itop_ref=239`,
+  `provider_sync_status=synced`, and status `new`.
+
+Impact:
+
+- A caller can think ticket creation failed even though an iTop object exists.
+- E2E tests abort before assigning the agent, leaving a synced but unworked
+  ticket behind.
+
+Fix:
+
+- Cast provider placeholders consistently as varchar in the ticket provider
+  update path so asyncpg does not infer mixed `text`/`varchar` parameter types.
+- Keep outbound iTop provider metadata mirrored into both provider-neutral
+  columns and legacy `itop_ref` / `itop_class` columns for older dashboard
+  views and close helpers.
+
+Verification:
+
+- Fresh proof marker `CODEX_ITOP_CLOSE_PROOF_1778647301` created ticket `371`
+  and iTop Incident `243` without HTTP 500.
+- Final proof marker `CODEX_ITOP_CLOSE_PROOF_1778648936` created ticket `373`
+  and iTop Incident `245` without HTTP 500; API logs after the rerun contained
+  no `AmbiguousParameterError` entries.
+
+### iTop provider close used solution fields during assignment
+
+Status: fixed and verified, found during iTop-backed close proof marker
+`CODEX_ITOP_CLOSE_PROOF_1778645039` / dashboard ticket `367` / iTop Incident
+`239` / agent `130`.
+
+Problem:
+
+- Agent `130` completed the proof steps and wrote evidence notes `542` and
+  `543`, then checkpoint note `544`.
+- The dashboard resolved ticket `367` locally, but provider close failed with:
+  `Invalid stimulus: 'ev_resolve' on the object I-000248 in state 'new'`.
+- The fallback assignment call was sending the Incident `solution` field along
+  with `ev_assign`; iTop assignment stimuli require empty fields. The solution
+  belongs only on the subsequent `ev_resolve`.
+
+Impact:
+
+- iTop-backed dashboard tickets can remain `new` in iTop while showing
+  `resolved` locally if they were never assigned before provider close.
+
+Fix:
+
+- Change the fallback `ev_assign` call to use empty fields, wait until iTop
+  reports the object has left `new`, then retry `ev_resolve` with
+  `resolution_code=assistance` and `solution` populated.
+- Retry the provider close wrapper once when iTop returns a transient invalid
+  stimulus/state error so the dashboard does not write a false failure note
+  moments before the provider state catches up.
+
+Verification:
+
+- Unit coverage added for provider-ref close, empty-field assignment fallback,
+  assignment-state polling before resolve retry, and transient close retry
+  without writing a provider failure note.
+- Live ticket `368` eventually resolved in iTop, but still produced note `554`
+  from the old immediate retry path. A clean rerun after redeploy must show no
+  false `Provider close failed` note.
+- Clean proof marker `CODEX_ITOP_CLOSE_PROOF_1778648936`: ticket `373`, agent
+  `135`, task `132`, iTop Incident `245` / `I-000254`; notes `572`-`577`
+  retained assignment/start/evidence/checkpoint/completion with
+  `provider_close_failed_notes=0`, event log has `provider_close_complete`, and
+  direct iTop read returned `status=resolved`,
+  `resolution_code=assistance`, and solution marker text.
+
+### Agent auditor can miss live agents stuck after oversized evidence fetch
+
+Status: fixed and deployed, found while preserving unrelated live agent
+`132` / ticket `369`.
+
+Problem:
+
+- Agent `132` was heartbeating and the dashboard auditor reported
+  `agent_progress_ok`, but direct task log/checkpoint inspection showed it had
+  only read `checkpoint.json`, fetched a large
+  `/api/postmortems/evidence/369?task_log_lines=0` payload, and left
+  `checkpoint.json` at `init`.
+- The audit endpoint currently overweights process/heartbeat freshness and does
+  not treat unchanged checkpoint state plus no new output as a distinct
+  "needs steering" condition.
+
+Impact:
+
+- Slow local-model agents can appear healthy while actually stalled on oversized
+  context or analysis, and the UI percent can remain misleading.
+
+Fix:
+
+- Add auditor logic that compares checkpoint timestamp/step, task-log growth,
+  and recent ticket notes before declaring progress healthy.
+- Rank and trim postmortem evidence workflows/knowledge by ticket terms so an
+  EDR/Sysmon ticket is not handed mostly phishing artifacts just because all
+  assets are `Incident` class.
+- Keep this as a corrective watchdog, not a hard timeout: it should write a
+  review finding and optionally steer/restart through explicit policy while
+  exempting approval gates and user-response waits.
+
+Verification:
+
+- Local validation added for Sysmon evidence term extraction, relevance ranking,
+  and stale-checkpoint auditor findings.
+- Agent `132` was stopped through the dashboard API with explicit audit reason
+  after repeated inspection showed heartbeat/output but no checkpoint progress
+  or agent triage notes; no raw process kill was used.
+- Rebuilt the live API with `agent_checkpoint_not_advancing` and ranked compact
+  evidence enabled. Final close proof then completed with no active-agent
+  leftovers.
+
 ### Agent audit history lacked terminal completion review
 
 Status: fixed and deployed, found while auditing ticket `366` / agent `129`

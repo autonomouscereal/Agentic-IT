@@ -21,6 +21,41 @@ def _truncate(value, limit=1500):
     return text[:limit] + f"... [truncated {len(text) - limit} chars]"
 
 
+def _evidence_terms(ticket):
+    text = " ".join([
+        str(ticket.get("title") or ""),
+        str(ticket.get("description") or ""),
+        str(ticket.get("provider_class") or ""),
+        str(ticket.get("itop_class") or ""),
+    ]).lower()
+    stop = {
+        "alert", "ticket", "incident", "request", "level", "source", "destination",
+        "agent", "timestamp", "rule", "created", "system", "unknown", "status",
+    }
+    terms = []
+    for term in re.findall(r"[a-z0-9][a-z0-9_.-]{3,}", text):
+        term = term.strip("._-")
+        if term and term not in stop and term not in terms:
+            terms.append(term)
+    return terms[:10]
+
+
+def _score_evidence_item(item, terms, fields):
+    haystack = " ".join(str(item.get(field) or "").lower() for field in fields)
+    return sum(1 for term in terms if term in haystack)
+
+
+def _rank_evidence_items(items, terms, fields, limit=5, fallback=3):
+    rows = list(items or [])
+    if not rows:
+        return rows
+    scored = [(_score_evidence_item(row, terms, fields), row) for row in rows]
+    matches = [row for score, row in sorted(scored, key=lambda item: item[0], reverse=True) if score > 0]
+    if matches:
+        return matches[:limit]
+    return rows[:fallback]
+
+
 def _loads(value, default):
     if value is None:
         return default
@@ -242,6 +277,7 @@ async def get_postmortem_evidence(
     if not ticket:
         return {"error": "Ticket not found"}
     compact_ticket_payload(ticket)
+    evidence_terms = _evidence_terms(ticket)
 
     notes = await fetchall("""
         SELECT id, source, author, visibility, body, created_at
@@ -344,13 +380,20 @@ async def get_postmortem_evidence(
         ORDER BY
           CASE status WHEN 'active' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
           updated_at DESC
-        LIMIT 10
+        LIMIT 25
     """, ticket_class)
+    workflows = _rank_evidence_items(
+        workflows,
+        evidence_terms,
+        ("name", "description", "blueprint", "test_plan", "test_results"),
+        limit=5,
+        fallback=3,
+    )
     for workflow in workflows:
-        workflow["description"] = _truncate(workflow.get("description"), 500)
-        workflow["blueprint"] = _truncate(workflow.get("blueprint"), 1800)
-        workflow["test_plan"] = _truncate(workflow.get("test_plan"), 800)
-        workflow["test_results"] = _truncate(workflow.get("test_results"), 800)
+        workflow["description"] = _truncate(workflow.get("description"), 320)
+        workflow["blueprint"] = _truncate(workflow.get("blueprint"), 900)
+        workflow["test_plan"] = _truncate(workflow.get("test_plan"), 450)
+        workflow["test_results"] = _truncate(workflow.get("test_results"), 450)
     knowledge_articles = await fetchall("""
         SELECT id, title, category, source, tags, external_ref, body, updated_at
         FROM knowledge_articles
@@ -362,10 +405,17 @@ async def get_postmortem_evidence(
             OR body ILIKE $2
           )
         ORDER BY updated_at DESC
-        LIMIT 10
+        LIMIT 25
     """, ticket_class, f"%{ticket_class or ''}%")
+    knowledge_articles = _rank_evidence_items(
+        knowledge_articles,
+        evidence_terms,
+        ("title", "category", "tags", "body"),
+        limit=5,
+        fallback=3,
+    )
     for article in knowledge_articles:
-        article["body"] = _truncate(article.get("body"), 1800)
+        article["body"] = _truncate(article.get("body"), 900)
     audit = await fetchall("""
         SELECT id, actor, action, target, details, created_at, 'audit' AS source
         FROM audit_log
@@ -392,9 +442,11 @@ async def get_postmortem_evidence(
         "workflows": workflows,
         "knowledge_articles": knowledge_articles,
         "audit": audit,
+        "evidence_terms": evidence_terms,
         "guidance": {
             "use_this_endpoint_first": True,
             "review_reusable_workflows_before_planning": True,
+            "evidence_ranked_by_ticket_terms": True,
             "write_result_to": "POST /api/postmortems",
             "required_status": "ready_for_review",
         },

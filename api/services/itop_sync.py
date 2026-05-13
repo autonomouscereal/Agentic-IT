@@ -19,6 +19,7 @@ ITOP_PASSWORD = os.getenv("ITOP_PASSWORD", "")
 ITOP_DEFAULT_ORG_ID = os.getenv("ITOP_DEFAULT_ORG_ID", "").strip()
 ITOP_DEFAULT_CALLER_ID = os.getenv("ITOP_DEFAULT_CALLER_ID", "").strip()
 ITOP_SECURITY_TEAM_ID = os.getenv("ITOP_SECURITY_TEAM_ID", "").strip()
+ITOP_STIMULUS_STATE_WAIT_SECONDS = int(os.getenv("ITOP_STIMULUS_STATE_WAIT_SECONDS", "30"))
 
 # Fast discovery interval - how often to check for new tickets
 DISCOVERY_INTERVAL = int(os.getenv("ITOP_DISCOVERY_INTERVAL", "2"))
@@ -551,13 +552,19 @@ class iTopProvider(TicketProvider):
     async def close_ticket(self, ticket_id: int, notes: str) -> dict:
         """Close a ticket in iTop via stimulus."""
         ticket = await fetchrow(
-            "SELECT itop_ref, itop_class, status FROM tickets WHERE id = $1",
+            """
+            SELECT COALESCE(provider_ref, itop_ref) AS itop_ref,
+                   COALESCE(provider_class, itop_class) AS itop_class,
+                   status
+            FROM tickets
+            WHERE id = $1
+            """,
             ticket_id
         )
         if not ticket:
             return {"error": "Ticket not found"}
 
-        fields = {"solution": notes}
+        fields = {"resolution_code": "assistance", "solution": notes}
         stimulus_result = await itop_request("core/apply_stimulus", **{
             "class": ticket["itop_class"],
             "key": ticket["itop_ref"],
@@ -572,16 +579,36 @@ class iTopProvider(TicketProvider):
                 "key": ticket["itop_ref"],
                 "stimulus": "ev_assign",
                 "comment": "Assigning before dashboard-driven resolution.",
-                "fields": fields,
+                "fields": {},
             })
             if assign_result.get("code") == 0:
-                stimulus_result = await itop_request("core/apply_stimulus", **{
-                    "class": ticket["itop_class"],
-                    "key": ticket["itop_ref"],
-                    "stimulus": "ev_resolve",
-                    "comment": notes,
-                    "fields": fields,
-                })
+                assigned_or_resolved = False
+                for _ in range(max(1, ITOP_STIMULUS_STATE_WAIT_SECONDS)):
+                    state_result = await itop_request("core/get", **{
+                        "class": ticket["itop_class"],
+                        "key": ticket["itop_ref"],
+                        "output_fields": "status",
+                    })
+                    state_objects = state_result.get("objects") or {}
+                    state_fields = {}
+                    if state_objects:
+                        state_fields = next(iter(state_objects.values())).get("fields") or {}
+                    if state_fields.get("status") in ("resolved", "closed"):
+                        stimulus_result = {"code": 0, "message": "Already resolved in iTop"}
+                        assigned_or_resolved = True
+                        break
+                    if state_fields.get("status") == "assigned":
+                        assigned_or_resolved = True
+                        break
+                    await asyncio.sleep(1)
+                if assigned_or_resolved and stimulus_result.get("message") != "Already resolved in iTop":
+                    stimulus_result = await itop_request("core/apply_stimulus", **{
+                        "class": ticket["itop_class"],
+                        "key": ticket["itop_ref"],
+                        "stimulus": "ev_resolve",
+                        "comment": notes,
+                        "fields": fields,
+                    })
 
         if stimulus_result.get("code") == 0:
             await execute(

@@ -15,6 +15,7 @@ from services.event_logger import log_event
 
 AUDIT_INTERVAL = int(os.getenv("AGENT_AUDIT_INTERVAL", "60"))
 NO_PROGRESS_MINUTES = int(os.getenv("AGENT_AUDIT_NO_PROGRESS_MINUTES", "30"))
+CHECKPOINT_STALE_MINUTES = int(os.getenv("AGENT_AUDIT_CHECKPOINT_STALE_MINUTES", "15"))
 MAX_RECOVERY_ATTEMPTS = int(os.getenv("AGENT_AUDIT_MAX_RECOVERY_ATTEMPTS", "2"))
 AUTO_RECOVER = os.getenv("AGENT_AUDITOR_AUTO_RECOVER", "false").lower() in ("1", "true", "yes", "on")
 
@@ -74,6 +75,32 @@ def _latest_activity(task):
         seen.append(_file_mtime(os.path.join(task["work_dir"], "checkpoint.json")))
     valid = [item for item in seen if item]
     return max(valid) if valid else None
+
+
+def _latest_checkpoint(task):
+    checkpoints = _loads(task.get("checkpoints"), [])
+    if checkpoints and isinstance(checkpoints[-1], dict):
+        return checkpoints[-1]
+    if task.get("work_dir"):
+        checkpoint_path = os.path.join(task["work_dir"], "checkpoint.json")
+        try:
+            with open(checkpoint_path, "r", encoding="utf-8") as handle:
+                value = json.load(handle)
+                if isinstance(value, dict):
+                    return value
+        except (OSError, json.JSONDecodeError):
+            return None
+    return None
+
+
+def _checkpoint_age_minutes(task):
+    checkpoint = _latest_checkpoint(task)
+    checkpoint_time = _as_aware_utc((checkpoint or {}).get("timestamp"))
+    started_at = _as_aware_utc(task.get("started_at"))
+    baseline = checkpoint_time or started_at
+    if not baseline:
+        return None, checkpoint
+    return (datetime.now(timezone.utc) - baseline).total_seconds() / 60, checkpoint
 
 
 async def _has_pending_approval(agent_id, ticket_id):
@@ -296,6 +323,32 @@ async def _audit_task(row):
                               "change_request",
                           ],
                       })
+    elif task["status"] == "running":
+        checkpoint_age, checkpoint = _checkpoint_age_minutes(task)
+        checkpoint_step = (checkpoint or {}).get("step")
+        checkpoint_status = (checkpoint or {}).get("status")
+        waiting_statuses = {"waiting_for_user", "awaiting_user", "approval_pending", "waiting_for_approval"}
+        if (
+            checkpoint_age is not None
+            and checkpoint_age > CHECKPOINT_STALE_MINUTES
+            and checkpoint_status not in waiting_statuses
+            and not await _recent_duplicate(task["id"], "agent_checkpoint_not_advancing", 30)
+        ):
+            await _record(agent["id"], task["id"], agent["ticket_id"], "warning",
+                          "agent_checkpoint_not_advancing",
+                          "inspect_or_steer_agent_without_timeout",
+                          None, False, {
+                              "checkpoint_age_minutes": checkpoint_age,
+                              "threshold_minutes": CHECKPOINT_STALE_MINUTES,
+                              "checkpoint_step": checkpoint_step,
+                              "checkpoint_status": checkpoint_status,
+                              "latest_activity_age_minutes": age_minutes,
+                              "note": (
+                                  "Heartbeat or output may still be fresh; this is a corrective "
+                                  "audit signal, not a wall-clock timeout."
+                              ),
+                          })
+            return
     elif task["status"] == "failed":
         if await _recent_duplicate(task["id"], "agent_task_failed", 120):
             return

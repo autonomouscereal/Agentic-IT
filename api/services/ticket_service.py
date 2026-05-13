@@ -182,7 +182,9 @@ async def create_ticket(
         else:
             await execute("""
                 UPDATE tickets
-                SET provider = $1,
+                SET provider = $1::varchar,
+                    itop_ref = CASE WHEN lower($1::varchar) = 'itop' THEN COALESCE($2, itop_ref) ELSE itop_ref END,
+                    itop_class = CASE WHEN lower($1::varchar) = 'itop' THEN COALESCE($3, itop_class) ELSE itop_class END,
                     provider_ref = COALESCE($2, provider_ref),
                     provider_class = COALESCE($3, provider_class),
                     provider_url = COALESCE($4, provider_url),
@@ -261,7 +263,9 @@ async def push_to_provider(ticket_id, provider=None):
     else:
         await execute("""
             UPDATE tickets
-            SET provider = $1,
+            SET provider = $1::varchar,
+                itop_ref = CASE WHEN lower($1::varchar) = 'itop' THEN COALESCE($2, itop_ref) ELSE itop_ref END,
+                itop_class = CASE WHEN lower($1::varchar) = 'itop' THEN COALESCE($3, itop_class) ELSE itop_class END,
                 provider_ref = COALESCE($2, provider_ref),
                 provider_class = COALESCE($3, provider_class),
                 provider_url = COALESCE($4, provider_url),

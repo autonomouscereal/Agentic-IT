@@ -269,6 +269,48 @@ def load_postmortems_route():
 
 
 class AgentLifecycleGuardTests(unittest.TestCase):
+    def test_provider_close_retries_transient_itop_invalid_stimulus(self):
+        module = load_agent_runner()
+        calls = []
+        notes = []
+        events = []
+
+        async def fetchrow(query, *args):
+            return {"provider": "itop", "provider_ref": "244", "status": "resolved"}
+
+        async def sleep(seconds):
+            calls.append(("sleep", seconds))
+
+        async def add_agent_note(*args, **kwargs):
+            notes.append((args, kwargs))
+
+        async def log_event(*args, **kwargs):
+            events.append((args, kwargs))
+
+        class Provider:
+            async def close_ticket(self, ticket_id, note_text):
+                calls.append(("close", ticket_id, note_text))
+                close_count = len([item for item in calls if item[0] == "close"])
+                if close_count == 1:
+                    return {"error": "Invalid stimulus: 'ev_resolve' on the object I-000253 in state 'new'"}
+                return {"status": "resolved"}
+
+        itop_sync = types.ModuleType("services.itop_sync")
+        itop_sync.iTopProvider = Provider
+        sys.modules["services.itop_sync"] = itop_sync
+
+        module.fetchrow = fetchrow
+        module.asyncio.sleep = sleep
+        module._add_agent_note = add_agent_note
+        module.log_event = log_event
+
+        result = asyncio.run(module._close_provider_ticket_if_needed(372, 134, 131, "done"))
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual([item[0] for item in calls], ["close", "sleep", "close"])
+        self.assertEqual(notes, [])
+        self.assertEqual(events[0][0][3], "provider_close_complete")
+
     def test_spawn_with_semaphore_skips_stopped_queued_task(self):
         module = load_agent_runner()
         events = []

@@ -317,6 +317,9 @@ async def _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, notes):
     try:
         from services.itop_sync import iTopProvider
         result = await iTopProvider().close_ticket(ticket_id, notes or "Resolved by SOC agent.")
+        if result.get("error") and "Invalid stimulus" in str(result.get("error")):
+            await asyncio.sleep(2)
+            result = await iTopProvider().close_ticket(ticket_id, notes or "Resolved by SOC agent.")
     except Exception as exc:
         result = {"error": str(exc)}
 

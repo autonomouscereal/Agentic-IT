@@ -4,6 +4,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -127,6 +128,55 @@ class AgentAuditorTests(unittest.TestCase):
         self.assertEqual(details["open_changes"], 0)
         self.assertEqual(details["completed_changes"], 3)
         self.assertEqual(details["postmortems"], 1)
+
+    def test_running_task_with_stale_checkpoint_gets_corrective_audit(self):
+        module = load_agent_auditor()
+        records = []
+
+        async def recent_duplicate(task_id, finding, minutes=15):
+            return None
+
+        async def has_pending_approval(agent_id, ticket_id):
+            return False
+
+        async def ticket_has_other_active_agent(ticket_id, agent_id):
+            return None
+
+        async def record(*args, **kwargs):
+            records.append((args, kwargs))
+
+        now = datetime.now(timezone.utc)
+        stale = (now - timedelta(minutes=45)).isoformat()
+        fresh = (now - timedelta(minutes=1)).isoformat()
+
+        module._recent_duplicate = recent_duplicate
+        module._has_pending_approval = has_pending_approval
+        module._ticket_has_other_active_agent = ticket_has_other_active_agent
+        module._record = record
+
+        row = {
+            "agent_id": 132,
+            "ticket_id": 369,
+            "model": "qwen/qwen3.6-27b",
+            "selected_model": "qwen/qwen3.6-27b",
+            "attempts": 0,
+            "task_id": 129,
+            "task_status": "running",
+            "prompt": "work ticket",
+            "task_type": "ticket_resolution",
+            "checkpoints": [{"step": "init", "status": "queued", "timestamp": stale}],
+            "started_at": stale,
+            "completed_at": None,
+            "agent_heartbeat": fresh,
+            "work_dir": None,
+            "latest_note_at": None,
+            "latest_change_at": None,
+        }
+        asyncio.run(module._audit_task(row))
+
+        self.assertEqual(records[0][0][4], "agent_checkpoint_not_advancing")
+        self.assertEqual(records[0][0][5], "inspect_or_steer_agent_without_timeout")
+        self.assertGreater(records[0][0][8]["checkpoint_age_minutes"], 15)
 
 
 if __name__ == "__main__":
