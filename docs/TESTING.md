@@ -880,3 +880,38 @@ auto-assignment cap proof:
   second_ticket=352 skipped reason=auto_assignment_capacity_reached
   active_after_stop=0
 ```
+
+EDR/Sysmon live rerun after harness and Sysmon noise fixes:
+
+```text
+neutral provider-health harness:
+  generic iTop health ticket title now avoids EDR/SIEM/Sysmon keywords
+  expected behavior: no accidental RACI security auto-assignment
+Sysmon/Wazuh ingestion fix:
+  removed broad shell/script suffix selectors from lab Sysmon config
+  added match-nothing ProcessTerminate rule to suppress EventID 5 queue flood
+  rotated /var/log/sysmon/sysmon.log and restarted Sysmon + Wazuh manager internals
+EDR test:
+  command: SYSMON_ALERT_WAIT_SECONDS=90 python3 reference_skills/wazuh-edr-sysmon/tests/test_edr_sysmon_e2e.py
+  result: 16/16 passed
+  marker: CODEX_SYSMON_E2E_1778632686
+  marker_alerts: 2
+SIEM bridge after poll:
+  siem_connected=true
+  ticketing_connected=true
+  processed_alerts=574
+  ticket_correlation_keys=2
+  alert_count=74
+  ticket_count=72
+  error_count=0
+auto-assignment/queue proof:
+  active agent remained exactly 1
+  active_agent=123
+  active_ticket=354
+  active_task=120
+  skipped_while_busy=tickets 355,356,357,358,359 with auto_assignment_capacity_reached
+agent auditor:
+  manual sweep returned audited=14
+  agent 123 finding=agent_progress_ok
+  agent recovered after a rejected multiline inline-python command by trying a simpler approach
+```

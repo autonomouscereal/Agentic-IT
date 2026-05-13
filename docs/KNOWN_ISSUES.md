@@ -1158,6 +1158,95 @@ Next action:
 - Reconcile the Tools page from the setup manifest so unused modules are hidden
   or explicitly labeled optional/not configured.
 
+### Fresh Sysmon exact-marker alert intermittently misses Wazuh Indexer
+
+Status: fixed in the reference lab profile during the 2026-05-12 EDR/Sysmon live rerun.
+
+Problem:
+
+- The EDR/Sysmon E2E test passed 15/16 after the neutral iTop harness fix.
+- The remaining failure is `Fresh Sysmon exact-marker alert flow`: the test
+  generated a harmless `CODEX_SYSMON_*` marker but did not find a matching
+  Wazuh Indexer alert within the 90-second wait window.
+- This is the same symptom as the earlier queue/logcollector delay, so the next
+  diagnostic step is to trace the marker through Sysmon hot log, Wazuh
+  logcollector, manager alerts, and Indexer ingestion before changing rules.
+
+Impact:
+
+- The provider health-check ticket no longer causes accidental RACI
+  auto-assignment, but the real endpoint telemetry proof is not yet reliable
+  enough for a clean demo.
+
+Diagnostic path used:
+
+- Capture the exact marker from the rerun, confirm whether it reached
+  `/var/log/sysmon/sysmon.log`, inspect Wazuh manager/logcollector warnings, and
+  rerun after correcting the ingestion path.
+
+Update:
+
+- Rerun marker `CODEX_SYSMON_E2E_1778632057` was present in
+  `/var/log/sysmon/sysmon.log` as both the logger line and Sysmon file-create
+  XML.
+- No matching Wazuh archive/alert hits were found.
+- `wazuh-manager` reported inactive and localhost Indexer connection refused
+  during the trace, so the immediate blocker is Wazuh service availability, not
+  Sysmon marker generation.
+- Container inspection corrected the service read: Wazuh is Dockerized and the
+  manager container is running. The manager sees `/var/log/sysmon/sysmon.log`,
+  but `wazuh-analysisd` logged `Input queue is full`, and no marker was found in
+  manager archives/alerts. The active blocker is noisy Sysmon ingestion
+  overwhelming Wazuh analysis, so the reference Sysmon config needs to be
+  tightened for the E2E marker path before rerun.
+
+Fix:
+
+- Removed broad `/bin/bash -c`, `/bin/sh -c`, `.sh`, and `.py` selectors from
+  the lab Sysmon profile.
+- Added an explicit match-nothing `ProcessTerminate` include rule because
+  SysmonForLinux was otherwise emitting EventID 5 process-termination noise and
+  filling the Wazuh analysis queue.
+- Rotated the hot Sysmon log and restarted Sysmon plus Wazuh manager internals.
+
+Verified:
+
+- Hot Sysmon log stayed quiet after restart.
+- EDR/Sysmon E2E rerun passed `16/16`.
+- Exact marker `CODEX_SYSMON_E2E_1778632686` produced 2 Wazuh alerts.
+- SIEM bridge remained healthy with `error_count=0` and processed the marker
+  during the next poll.
+
+### Agent Bash path validation rejects multiline inline Python
+
+Status: active, found during real agent work on ticket `354` / agent `123`.
+
+Problem:
+
+- The agent correctly moved from compact evidence to deeper Wazuh context, but
+  generated a multiline `python3 -c` shell snippet containing a `#` comment
+  inside a quoted argument.
+- The harness rejected it with `Newline followed by # inside a quoted argument
+  can hide arguments from path validation`.
+
+Impact:
+
+- This is a good safety rejection, but local agents may waste cycles or stall if
+  their prompts do not steer them toward simpler command shapes.
+
+Fix:
+
+- Add a harness instruction telling agents to avoid multiline inline
+  `python -c`/shell comments and to use simple `curl` calls or write temporary
+  scripts/files when parsing JSON is required.
+
+Verified:
+
+- Local `python -m py_compile api/services/task_prompts.py` passed.
+- Current agent recovered from the rejected command by trying a simpler approach.
+- Live API rebuild is deferred until active agent `123` completes, to avoid
+  disrupting the running EDR/SIEM proof.
+
 ### iTop outbound creation needs environment-specific defaults
 
 Incident/UserRequest creation requires iTop org/caller defaults. This is intentional. Configure:

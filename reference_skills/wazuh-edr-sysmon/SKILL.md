@@ -60,6 +60,14 @@ This skill packages endpoint telemetry and response assets for the modular SOC p
   installs a logrotate policy at `/etc/logrotate.d/sysmon-edr`; keep the
   `su syslog adm` directive because `/var/log/sysmon` is group-writable in the
   reference deployment and logrotate will refuse to rotate without it.
+- Keep the reference Sysmon config high signal. Broad shell/file suffix rules
+  such as every `/bin/bash -c`, `.sh`, or `.py` event can overwhelm
+  `wazuh-analysisd` in a Docker-heavy lab and starve deterministic marker tests.
+  The default lab config keeps `CODEX_SYSMON` marker coverage plus a small set of
+  suspicious paths, tools, ports, persistence files, and profile writes.
+- SysmonForLinux can emit noisy process-termination events when the event class
+  is omitted. Keep an explicit match-nothing `ProcessTerminate` include rule in
+  the lab config so EventID 5 does not fill the Wazuh analysis queue.
 - A green config smoke is not enough. The E2E test now triggers harmless local
   endpoint activity and verifies an exact `CODEX_SYSMON_*` marker in Wazuh
   Indexer.
@@ -73,6 +81,10 @@ This skill packages endpoint telemetry and response assets for the modular SOC p
   in `/var/log/sysmon/sysmon.log`, Wazuh manager logcollector opening that path,
   no queue-full warnings in `ossec.log`, and recent `rule.groups=sysmon` hits in
   `wazuh-alerts-4.x-*`.
+- Keep iTop/API health-check incidents neutral. Do not include EDR, SIEM, or
+  Sysmon keywords in generic provider-test ticket titles/descriptions; otherwise
+  dashboard RACI auto-assignment may correctly treat the test artifact as a real
+  security alert.
 
 ## Test Entry Points
 

@@ -20,9 +20,11 @@
       <Image condition="contains">/john</Image>
       <Image condition="contains">/hashcat</Image>
       <CommandLine condition="contains">CODEX_SYSMON</CommandLine>
-      <CommandLine condition="contains">/bin/bash -c</CommandLine>
-      <CommandLine condition="contains">/bin/sh -c</CommandLine>
     </ProcessCreate>
+
+    <ProcessTerminate onmatch="include">
+      <Image condition="is">__codex_no_process_terminate_match__</Image>
+    </ProcessTerminate>
 
     <NetworkConnect onmatch="include">
       <DestinationPort condition="is">4444</DestinationPort>
@@ -42,8 +44,6 @@
       <TargetFilename condition="begin with">/tmp/CODEX_SYSMON</TargetFilename>
       <TargetFilename condition="end with">.bashrc</TargetFilename>
       <TargetFilename condition="end with">.profile</TargetFilename>
-      <TargetFilename condition="end with">.sh</TargetFilename>
-      <TargetFilename condition="end with">.py</TargetFilename>
     </FileCreate>
   </EventFiltering>
 </Sysmon>

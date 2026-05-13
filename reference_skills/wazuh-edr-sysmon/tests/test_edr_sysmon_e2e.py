@@ -364,19 +364,24 @@ def test_itop_connectivity(result):
 
 
 def test_itop_create_incident(result):
-    """Test 9: Can create test incident in iTop."""
+    """Test 9: Can create a neutral test incident in iTop.
+
+    Keep the title/description free of EDR/SIEM/Sysmon keywords so dashboard
+    RACI auto-assignment does not mistake this provider health check for a real
+    security alert workflow.
+    """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     resp = itop_request("core/create", {
         "class": "Incident",
         "fields": {
-            "title": f"EDR E2E Test Incident {datetime.now().isoformat()}",
-            "description": "End-to-end test for EDR+Sysmon pipeline",
+            "title": f"Provider API Health Check Incident {datetime.now().isoformat()}",
+            "description": "End-to-end ticketing provider API health check.",
             "impact": 2,
             "urgency": 2,
             "org_id": 1,
             "caller_id": 1
         },
-        "comment": "EDR E2E test"
+        "comment": "Provider API health check"
     })
     code = resp.get("code", -1)
     result.record("iTop test incident creation", code == 0,
