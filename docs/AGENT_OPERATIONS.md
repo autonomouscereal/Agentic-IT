@@ -236,12 +236,16 @@ Current reference defaults:
 MAX_CONCURRENT_AGENTS=1
 AGENT_TIMEOUT_MINUTES=0
 AGENT_NO_OUTPUT_STALL_SECONDS=3600
+AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE=1
 ```
 
 `AGENT_TIMEOUT_MINUTES=0` disables the fixed wall-clock process timeout.
 `AGENT_NO_OUTPUT_STALL_SECONDS` is a configurable silent-harness guard. It is
 not a progress timer: agents that are streaming output, using tools, updating
 checkpoints, or writing notes should continue.
+`AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE=1` keeps RACI-driven auto-assignment from
+queueing several same-rule local agents while one Security Operations/EDR agent
+is already active. Set it higher, or `0` for unlimited, in faster environments.
 
 Runner health:
 

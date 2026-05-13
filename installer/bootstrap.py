@@ -133,6 +133,7 @@ def write_env(target, args, dry_run=False):
         "MAX_CONCURRENT_AGENTS": "1",
         "AGENT_TIMEOUT_MINUTES": "0",
         "AGENT_NO_OUTPUT_STALL_SECONDS": "3600",
+        "AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE": "1",
         "AGENT_AUDITOR_AUTO_RECOVER": "false",
         "AGENT_HARNESS": "claude-code",
         "AGENT_PERMISSION_MODE": "acceptEdits",

@@ -274,6 +274,19 @@ Fix:
   first ticket for that incident.
 - Added unit coverage proving two Sysmon marker alerts with different rules but
   the same marker produce one ticket and one correlated event.
+- RACI auto-assignment now also enforces
+  `AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE=1` by default so related EDR/SIEM tickets
+  do not queue several same-rule local agents while one matching agent is
+  already active.
+
+Verified:
+
+- Recovery marker `CODEX_SYSMON_E2E_RECOVERY_1778630817` produced two Wazuh
+  alerts but one bridge correlation key after the next poll.
+- Live cap proof tickets `351` and `352` showed the first same-rule ticket
+  assigned agent `122`; the second skipped with
+  `auto_assignment_capacity_reached`. The proof agent was stopped immediately
+  after verification.
 
 ### Mailcow HTTP API shim missing compatibility pieces
 

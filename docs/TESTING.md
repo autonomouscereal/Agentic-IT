@@ -865,3 +865,18 @@ BRIDGE_CORRELATION_WINDOW=300
 processed_alerts=552
 ticket_correlation_keys=0 before next marker run
 ```
+
+Live recovery/fanout proof:
+
+```text
+EDR rerun before recovery: 15/16, exact marker missing after 90s
+root cause evidence: marker present in /var/log/sysmon/sysmon.log, absent from Wazuh Indexer
+recovery: logrotate /etc/logrotate.d/sysmon-edr + Wazuh manager/logcollector restart
+recovery marker: CODEX_SYSMON_E2E_RECOVERY_1778630817
+indexed alerts: 2 (rules 100230 and 100231)
+bridge state after poll: ticket_correlation_keys=1
+auto-assignment cap proof:
+  first_ticket=351 assigned agent=122
+  second_ticket=352 skipped reason=auto_assignment_capacity_reached
+  active_after_stop=0
+```

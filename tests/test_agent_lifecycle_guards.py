@@ -180,6 +180,37 @@ def load_tickets_route():
     return module
 
 
+def load_auto_assignment_service():
+    database = types.ModuleType("database")
+    database.fetchall = None
+    database.fetchrow = None
+    database.execute = None
+    sys.modules["database"] = database
+
+    services = types.ModuleType("services")
+    sys.modules["services"] = services
+
+    event_logger = types.ModuleType("services.event_logger")
+
+    async def log_event(*args, **kwargs):
+        return None
+
+    event_logger.log_event = log_event
+    sys.modules["services.event_logger"] = event_logger
+
+    task_prompts = types.ModuleType("services.task_prompts")
+    task_prompts.build_auto_assignment_prompt = lambda ticket, extra_prompt=None: "auto prompt"
+    sys.modules["services.task_prompts"] = task_prompts
+
+    spec = importlib.util.spec_from_file_location(
+        "tested_auto_assignment",
+        ROOT / "api" / "services" / "auto_assignment.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_postmortems_route():
     fastapi = types.ModuleType("fastapi")
 
@@ -518,6 +549,64 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertEqual(result["status"], "created")
         self.assertIn("Agent closure proof - triage", calls[0][1])
         self.assertIn("Full evidence body from local agent", calls[0][1])
+
+    def test_auto_assignment_skips_when_rule_capacity_reached(self):
+        module = load_auto_assignment_service()
+        events = []
+
+        ticket = {
+            "id": 350,
+            "title": "[SIEM] Sysmon: Network connection from suspicious binary",
+            "description": "EDR marker test",
+            "itop_class": "Incident",
+            "provider_class": "Incident",
+            "assignee_team": "",
+        }
+        rule = {
+            "id": 17,
+            "name": "EDR/SIEM security alert",
+            "assignment_group": "Security Operations",
+            "keywords": '["sysmon", "edr", "siem alert"]',
+            "ticket_class": "Incident",
+            "auto_agent_model": "qwen/qwen3.6-27b",
+            "auto_agent_prompt": "bounded prompt",
+        }
+        active = {
+            "agent_id": 114,
+            "ticket_id": 343,
+            "title": "[SIEM] SysmonForLinux: Connection to suspicious port potential C2",
+            "description": "EDR marker test already running",
+            "itop_class": "Incident",
+            "provider_class": "Incident",
+            "assignee_team": "",
+        }
+
+        async def fetchrow(query, *args):
+            if "SELECT * FROM tickets" in query:
+                return ticket
+            return None
+
+        async def fetchall(query, *args):
+            if "FROM service_raci_rules" in query:
+                return [rule]
+            if "FROM agents a" in query:
+                return [active]
+            return []
+
+        async def log_event(*args):
+            events.append(args)
+
+        module.fetchrow = fetchrow
+        module.fetchall = fetchall
+        module.log_event = log_event
+        module.DEFAULT_MAX_ACTIVE_PER_RULE = 1
+
+        result = asyncio.run(module.maybe_auto_assign(350, source="unit-test"))
+
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "auto_assignment_capacity_reached")
+        self.assertEqual(result["active_agent_ids"], [114])
+        self.assertTrue(any(event[3] == "auto_assignment_capacity_reached" for event in events))
 
     def test_no_output_watchdog_stops_silent_process(self):
         module = load_agent_runner()

@@ -1,5 +1,6 @@
 """Policy-driven automatic agent assignment for incoming tickets."""
 import json
+import os
 
 from database import fetchall, fetchrow, execute
 from services.event_logger import log_event
@@ -7,6 +8,7 @@ from services.task_prompts import build_auto_assignment_prompt
 
 
 DEFAULT_MODEL = "qwen/qwen3.6-27b"
+DEFAULT_MAX_ACTIVE_PER_RULE = int(os.getenv("AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE", "1") or "1")
 
 
 def _as_list(value):
@@ -87,6 +89,38 @@ async def maybe_auto_assign(ticket_id, source="ticket_event"):
             "provider": ticket.get("provider"),
         })
         return {"status": "skipped", "reason": "no_matching_policy"}
+
+    max_active_per_rule = DEFAULT_MAX_ACTIVE_PER_RULE
+    if max_active_per_rule > 0:
+        active_rows = await fetchall("""
+            SELECT a.id AS agent_id, t.id AS ticket_id, t.title, t.description,
+                   t.itop_class, t.provider_class, t.assignee_team
+            FROM agents a
+            JOIN tickets t ON t.id = a.ticket_id
+            WHERE a.status IN ('spawned', 'running', 'working')
+              AND t.id <> $1
+            ORDER BY a.started_at DESC
+        """, ticket_id)
+        matching_active = [
+            row for row in active_rows
+            if _score_rule(rule, row) > 0
+        ]
+        if len(matching_active) >= max_active_per_rule:
+            await log_event("agent", "info", source, "auto_assignment_capacity_reached", f"ticket_{ticket_id}", {
+                "rule_id": rule.get("id"),
+                "rule_name": rule.get("name"),
+                "score": score,
+                "max_active_per_rule": max_active_per_rule,
+                "active_agent_ids": [row.get("agent_id") for row in matching_active[:10]],
+            })
+            return {
+                "status": "skipped",
+                "reason": "auto_assignment_capacity_reached",
+                "rule_id": rule.get("id"),
+                "score": score,
+                "max_active_per_rule": max_active_per_rule,
+                "active_agent_ids": [row.get("agent_id") for row in matching_active[:10]],
+            }
 
     model = rule.get("auto_agent_model") or DEFAULT_MODEL
     extra_prompt = rule.get("auto_agent_prompt") or (
