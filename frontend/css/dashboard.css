@@ -651,14 +651,25 @@ body {
 }
 
 .agent-ticket {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
     font-size: 13px;
     color: var(--text-secondary);
     margin-bottom: 12px;
+    min-height: 20px;
+}
+
+.agent-ticket-ref {
+    color: var(--text-muted);
+    font-size: 11px;
 }
 
 .agent-meta {
     display: flex;
     gap: 16px;
+    flex-wrap: wrap;
     font-size: 12px;
     color: var(--text-muted);
     margin-bottom: 12px;

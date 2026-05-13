@@ -74,7 +74,6 @@ async function runAgentAuditOnce() {
 }
 
 function renderAgentCard(a, isStalled) {
-    const idle = Number.isFinite(Number(a.idle_seconds)) ? formatDuration(a.idle_seconds) : "-";
     const running = Number.isFinite(Number(a.running_seconds)) ? formatDuration(a.running_seconds) : "-";
     const working = Number.isFinite(Number(a.task_working_seconds)) ? formatDuration(a.task_working_seconds) : "-";
     const gated = Number.isFinite(Number(a.gate_wait_seconds)) ? formatDuration(a.gate_wait_seconds) : "-";
@@ -100,10 +99,9 @@ function renderAgentCard(a, isStalled) {
             <span class="agent-id">Agent #${a.id}</span>
             <span class="status-badge ${statusClass(a.status)}">${a.status}</span>
         </div>
-        <div class="agent-ticket">${escHtml(a.ticket_title || "No ticket")}</div>
+        <div class="agent-ticket">${renderAgentTicketLink(a)}</div>
         <div class="agent-meta">
             <span>Model: ${a.model || "-"}</span>
-            <span>Idle: ${idle}</span>
             <span>Runtime: ${running}</span>
             <span>Work: ${working}</span>
             <span>Gated: ${gated}</span>
@@ -114,6 +112,14 @@ function renderAgentCard(a, isStalled) {
         </div>
     </div>
     `;
+}
+
+function renderAgentTicketLink(a) {
+    if (!a.ticket_id) return escHtml(a.ticket_title || "No ticket");
+    const ticketId = Number(a.ticket_id);
+    const title = escHtml(a.ticket_title || "Untitled ticket");
+    const ref = a.ticket_itop_ref ? ` <span class="agent-ticket-ref">${escHtml(a.ticket_itop_ref)}</span>` : "";
+    return `<button class="inline-link" onclick="viewTicket(${ticketId})">Ticket #${ticketId}</button><span>${ref} ${title}</span>`;
 }
 
 function renderTaskSummary(a) {
@@ -139,10 +145,13 @@ async function viewAgentDetail(id) {
     document.getElementById("modal-title").textContent = `Agent #${data.id}`;
     const task = data.current_task || null;
     const checkpoints = normalizeCheckpoints(task?.checkpoints);
+    const ticketLink = data.ticket_id
+        ? `<button class="inline-link" onclick="viewTicket(${Number(data.ticket_id)})">#${Number(data.ticket_id)}</button> ${escHtml(data.ticket_title || "-")} (${escHtml(data.ticket_itop_ref || "-")})`
+        : `${escHtml(data.ticket_title || "-")} (${escHtml(data.ticket_itop_ref || "-")})`;
     document.getElementById("modal-body").innerHTML = `
         <div class="detail-row"><span class="detail-label">Status:</span><span class="status-badge ${statusClass(data.status)}">${data.status}</span></div>
         <div class="detail-row"><span class="detail-label">Model:</span><span>${data.model}</span></div>
-        <div class="detail-row"><span class="detail-label">Ticket:</span><span>${escHtml(data.ticket_title || "-")} (${data.ticket_itop_ref || "-"})</span></div>
+        <div class="detail-row"><span class="detail-label">Ticket:</span><span>${ticketLink}</span></div>
         <div class="detail-row"><span class="detail-label">Started:</span><span>${formatDate(data.started_at)}</span></div>
         <div class="detail-row"><span class="detail-label">Heartbeat:</span><span>${formatTime(data.heartbeat)}</span></div>
         ${data.error_message ? `<div class="detail-row"><span class="detail-label">Error:</span><span style="color:var(--accent-danger)">${escHtml(data.error_message)}</span></div>` : ""}

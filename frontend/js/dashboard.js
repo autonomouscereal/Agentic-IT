@@ -52,9 +52,20 @@ function applyAuditUrlFilters() {
     const q = params.get("audit_q");
     const source = params.get("audit_source");
     const level = params.get("audit_level");
+    let hadAuditParams = false;
     if (q && document.getElementById("audit-filter-text")) document.getElementById("audit-filter-text").value = q;
     if (source && document.getElementById("audit-filter-source")) document.getElementById("audit-filter-source").value = source;
     if (level && document.getElementById("audit-filter-level")) document.getElementById("audit-filter-level").value = level;
+    hadAuditParams = !!(q || source || level);
+    if (hadAuditParams) clearAuditUrlParams();
+}
+
+function clearAuditUrlParams() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("audit_q");
+    url.searchParams.delete("audit_source");
+    url.searchParams.delete("audit_level");
+    history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 function openAuditTrail(query, source = "") {
@@ -65,11 +76,7 @@ function openAuditTrail(query, source = "") {
     if (text) text.value = query || "";
     if (sourceEl) sourceEl.value = source || "";
     if (levelEl) levelEl.value = "";
-    const url = new URL(window.location.href);
-    url.searchParams.set("audit_q", query || "");
-    if (source) url.searchParams.set("audit_source", source);
-    else url.searchParams.delete("audit_source");
-    history.replaceState(null, "", url);
+    clearAuditUrlParams();
     loadAudit();
 }
 
@@ -323,6 +330,31 @@ function renderOpsMetrics(metrics) {
 function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
+}
+
+function decodeHtmlEntities(text) {
+    return String(text || "")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;|&apos;/gi, "'")
+        .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+        .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
+}
+
+function cleanTicketDescription(value) {
+    const raw = String(value || "");
+    if (!raw) return "";
+    return decodeHtmlEntities(raw)
+        .replace(/<\s*br\s*\/?>/gi, "\n")
+        .replace(/<\/\s*(p|div|li|tr|h[1-6])\s*>/gi, "\n")
+        .replace(/<[^>]*>/g, "")
+        .replace(/\r/g, "")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
 }
 
 // Load pending changes for overview page
@@ -1053,6 +1085,7 @@ async function loadAudit() {
 async function viewTicket(id) {
     const data = await apiGet(`/api/tickets/${id}`);
     if (!data) return;
+    const description = cleanTicketDescription(data.description);
 
     document.getElementById("modal-title").textContent = `Ticket #${data.id} - ${data.itop_class || "Incident"}::${data.itop_ref}`;
 
@@ -1109,7 +1142,7 @@ async function viewTicket(id) {
             ${data.external_url ? `<div class="detail-row"><span class="detail-label">External:</span><span><a class="ticket-link" href="${escAttr(data.external_url)}" target="_blank" rel="noopener">${escHtml(data.external_url)}</a></span></div>` : ""}
             <div class="detail-row"><span class="detail-label">Created:</span><span>${formatDate(data.created_at)}</span></div>
             <div class="detail-row"><span class="detail-label">Updated:</span><span>${formatDate(data.updated_at)}</span></div>
-            ${data.description ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Description:</span><span style="white-space:pre-wrap">${escHtml(data.description)}</span></div>` : ""}
+            ${description ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Description:</span><span style="white-space:pre-wrap">${escHtml(description)}</span></div>` : ""}
         </div>
         ${agentSection}
         ${changesSection}
