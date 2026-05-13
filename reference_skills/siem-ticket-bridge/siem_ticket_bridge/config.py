@@ -59,11 +59,17 @@ BRIDGE_ENV_MAP = {
     "severity_map_file": f"{ENV_PREFIX}_SEVERITY_MAP_FILE",
     "log_level": f"{ENV_PREFIX}_LOG_LEVEL",
     "log_file": f"{ENV_PREFIX}_LOG_FILE",
+    "log_max_bytes": f"{ENV_PREFIX}_LOG_MAX_BYTES",
+    "log_backup_count": f"{ENV_PREFIX}_LOG_BACKUP_COUNT",
     "state_file": f"{ENV_PREFIX}_STATE_FILE",
     "enabled": f"{ENV_PREFIX}_ENABLED",
     "batch_size": f"{ENV_PREFIX}_BATCH_SIZE",
+    "max_tickets_per_poll": f"{ENV_PREFIX}_MAX_TICKETS_PER_POLL",
     "dedup_window": f"{ENV_PREFIX}_DEDUP_WINDOW",
+    "processed_retention_seconds": f"{ENV_PREFIX}_PROCESSED_RETENTION_SECONDS",
+    "max_processed_alerts": f"{ENV_PREFIX}_MAX_PROCESSED_ALERTS",
     "correlation_window": f"{ENV_PREFIX}_CORRELATION_WINDOW",
+    "suppression_rules_file": f"{ENV_PREFIX}_SUPPRESSION_RULES_FILE",
 }
 
 
@@ -161,10 +167,19 @@ def build_bridge_config(overrides: Optional[Dict[str, Any]] = None) -> Dict[str,
         "severity_map_file": _env_str(BRIDGE_ENV_MAP["severity_map_file"], "severity_map.json"),
         "log_level": _env_str(BRIDGE_ENV_MAP["log_level"], "INFO"),
         "log_file": _env_str(BRIDGE_ENV_MAP["log_file"], "/var/log/siem-ticket-bridge/bridge.log"),
+        "log_max_bytes": _env_int(BRIDGE_ENV_MAP["log_max_bytes"], 10 * 1024 * 1024),
+        "log_backup_count": _env_int(BRIDGE_ENV_MAP["log_backup_count"], 5),
         "state_file": _env_str(BRIDGE_ENV_MAP["state_file"], "/var/lib/siem-ticket-bridge/state.json"),
         "batch_size": _env_int(BRIDGE_ENV_MAP["batch_size"], 50),
+        "max_tickets_per_poll": _env_int(BRIDGE_ENV_MAP["max_tickets_per_poll"], 10),
         "dedup_window": _env_int(BRIDGE_ENV_MAP["dedup_window"], 3600),
+        "processed_retention_seconds": _env_int(BRIDGE_ENV_MAP["processed_retention_seconds"], 86400),
+        "max_processed_alerts": _env_int(BRIDGE_ENV_MAP["max_processed_alerts"], 20000),
         "correlation_window": _env_int(BRIDGE_ENV_MAP["correlation_window"], 300),
+        "suppression_rules_file": _env_str(
+            BRIDGE_ENV_MAP["suppression_rules_file"],
+            "/etc/siem-ticket-bridge/suppression_rules.json",
+        ),
     }
     if overrides:
         cfg.update(overrides)

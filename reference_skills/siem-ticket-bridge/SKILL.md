@@ -51,6 +51,16 @@ Wazuh SIEM (port 26500/26920) ──> Bridge Orchestrator (polling daemon) ─�
 - **Env-Only Config**: All credentials via `.env` file, zero hardcoded secrets
 - **Stdlib Only**: Python standard library — no pip dependencies
 - **Deduplication + Correlation**: Exact alert dedup plus cross-rule incident correlation with configurable time windows and JSON state persistence. Explicit `correlation_key` values and markers such as `CODEX_*` collapse related alerts into one ticket.
+- **Backpressure Controls**: `BRIDGE_BATCH_SIZE` limits Wazuh fetch size and
+  `BRIDGE_MAX_TICKETS_PER_POLL` limits ticket creation bursts. Deferred alerts
+  are not marked processed, so later polls can pick them up after capacity clears.
+- **False-Positive Suppression Rules**: `BRIDGE_SUPPRESSION_RULES_FILE` points
+  to approved precise suppression rules. Rules must have `approved_by`,
+  `reason`, and exact match criteria such as `rule_id` plus `field_contains`;
+  disabled/example rules do nothing.
+- **Log Retention**: `BRIDGE_LOG_MAX_BYTES` and `BRIDGE_LOG_BACKUP_COUNT`
+  configure the Python rotating handler. The deploy assets also install
+  `/etc/logrotate.d/siem-ticket-bridge` for system-level log retention.
 
 ### Severity Mapping
 
@@ -114,6 +124,10 @@ All via `.env` file on server. Key prefixes:
 - `BRIDGE_TICKETING_*` — iTop host, port, credentials, scheme, API path
 - `BRIDGE_*` — poll interval, log level, state file, dedup window, correlation window
 - `BRIDGE_CORRELATION_WINDOW` — default `300` seconds; related cross-rule alerts with an explicit marker/correlation key are attached to the first ticket instead of creating duplicate tickets
+- `BRIDGE_MAX_TICKETS_PER_POLL` — default `10`; prevents iTop/dashboard ticket floods during alert bursts
+- `BRIDGE_PROCESSED_RETENTION_SECONDS` — default `86400`; age limit for dedupe keys
+- `BRIDGE_MAX_PROCESSED_ALERTS` — default `20000`; count limit for dedupe keys
+- `BRIDGE_SUPPRESSION_RULES_FILE` — approved precise false-positive suppression rules
 
 ## Adding New Backends
 
@@ -126,6 +140,30 @@ All via `.env` file on server. Key prefixes:
 1. Create `siem_ticket_bridge/ticketing/my_connector.py` implementing `TicketingConnector`
 2. Register in `siem_ticket_bridge/ticketing/__init__.py`: `register_connector("my", MyConnector)`
 3. Set `BRIDGE_TICKETING_TYPE=my` in .env
+
+## Health, Rotation, and False Positives
+
+Reference health check:
+
+```bash
+cd /home/cereal/SOC_TESTING/siem-ticket-bridge
+source .env
+python3 deploy/check_bridge_health.py
+```
+
+False-positive handling:
+
+1. Prove benign context from ticket evidence, rule metadata, and telemetry.
+2. Write a ticket note with rule id, exact benign pattern, checked evidence,
+   residual risk, and why no containment is required.
+3. Propose suppression only through a change request with exact match criteria,
+   expiry/review date, rollback, and tests that malicious variants still alert.
+4. Never blanket-suppress a phishing, EDR, or SIEM rule.
+
+Verified 2026-05-13: deterministic false-positive smoke created ticket `429`,
+change `124`, postmortem `63`, and workflow `59`; fresh Sysmon marker created
+iTop Incident `275`, dashboard ticket `431`, auto-assigned agent `151`, and
+resolved both dashboard and iTop after classification.
 
 ## Test Suite
 

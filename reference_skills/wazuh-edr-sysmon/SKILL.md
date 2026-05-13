@@ -56,10 +56,11 @@ This skill packages endpoint telemetry and response assets for the modular SOC p
   `/etc/rsyslog.d/10-sysmon-forward.conf` so `programname == "sysmon"` records
   land in `/var/log/sysmon/sysmon.log`.
 - Keep the Sysmon hot log small. A very large historical file can fill the Wazuh
-  logcollector queue and delay fresh alert indexing. The Linux deployment script
-  installs a logrotate policy at `/etc/logrotate.d/sysmon-edr`; keep the
-  `su syslog adm` directive because `/var/log/sysmon` is group-writable in the
-  reference deployment and logrotate will refuse to rotate without it.
+  logcollector/analysis queue and delay fresh alert indexing. The Linux
+  deployment script installs a logrotate policy at `/etc/logrotate.d/sysmon-edr`
+  with `size 32M`, `rotate 14`, `copytruncate`, and `su syslog adm`. Move
+  `sysmon.log.archive.*` files into `/var/log/sysmon/archive` so historical
+  archives cannot be confused with hot collector input.
 - Keep the reference Sysmon config high signal. Broad shell/file suffix rules
   such as every `/bin/bash -c`, `.sh`, or `.py` event can overwhelm
   `wazuh-analysisd` in a Docker-heavy lab and starve deterministic marker tests.
@@ -81,10 +82,20 @@ This skill packages endpoint telemetry and response assets for the modular SOC p
   in `/var/log/sysmon/sysmon.log`, Wazuh manager logcollector opening that path,
   no queue-full warnings in `ossec.log`, and recent `rule.groups=sysmon` hits in
   `wazuh-alerts-4.x-*`.
+- If a Sysmon/EDR alert is a diagnostic marker or proven benign activity, agents
+  may classify it as a false positive only after documenting the exact rule id,
+  benign source/pattern, evidence checked, and residual risk. Suppression/rule
+  tuning must be a precise, approval-gated change with expiry, rollback, and a
+  malicious-variant regression test; never blanket-suppress EDR rules.
 - Keep iTop/API health-check incidents neutral. Do not include EDR, SIEM, or
   Sysmon keywords in generic provider-test ticket titles/descriptions; otherwise
   dashboard RACI auto-assignment may correctly treat the test artifact as a real
   security alert.
+- Verified 2026-05-13: Wazuh/Sysmon E2E passed 16/16. Fresh marker
+  `CODEX_SYSMON_E2E_1778680907` produced Wazuh alerts, SIEM bridge created iTop
+  Incident `275`, dashboard imported ticket `431`, auto-assigned local-model
+  agent `151`, classified the diagnostic marker as false positive, created
+  postmortem `64`, and resolved iTop `I-000284`.
 
 ## Test Entry Points
 

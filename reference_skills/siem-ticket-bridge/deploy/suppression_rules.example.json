@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "id": "example-internal-training-portal",
+      "enabled": false,
+      "rule_id": "100601",
+      "field_contains": [
+        "training.example.internal",
+        "internal training portal"
+      ],
+      "reason": "Example only: enable after an agent investigation proves the alert is a repeat false positive for an approved internal training portal.",
+      "approved_by": "",
+      "expires_at": "2026-12-31T00:00:00Z"
+    }
+  ]
+}

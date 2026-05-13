@@ -1176,5 +1176,50 @@ Important fixes discovered during this rerun:
   packages.
 - Setup tickets now call `ticket_service.create_ticket(..., auto_assign=False)`.
   `spawn_agent=false` is review-only and cannot leak into RACI auto-assignment.
+
+2026-05-13 Wazuh/Sysmon bridge stability, false-positive, and priority queue proof:
+
+- Live issue documented in `docs/KNOWN_ISSUES.md`: Wazuh previously logged
+  `wazuh-analysisd: WARNING: Input queue is full`, Sysmon had a 16 GB historical
+  archive in the hot log directory, and the SIEM ticket bridge had no installed
+  system logrotate policy.
+- Fixed bridge backpressure/state/logging: `BRIDGE_MAX_TICKETS_PER_POLL`,
+  timestamped dedupe state, processed-alert retention, approved suppression
+  rules file, bridge health JSON, and `/etc/logrotate.d/siem-ticket-bridge`.
+- Fixed Sysmon hot-log hygiene: deployment now moves `sysmon.log.archive.*` to
+  `/var/log/sysmon/archive` and tightens logrotate to `size 32M`, `rotate 14`.
+- Fixed runner scheduling: queued agents are dequeued by priority rank, so P1/P2
+  ticket-resolution work can overtake lower-priority queued work when
+  `MAX_CONCURRENT_AGENTS` caps the local model lane.
+- Local tests:
+  `python -m unittest reference_skills.siem-ticket-bridge.tests.test_bridge -v`
+  passed 44 tests, 3 live skipped.
+- Local tests:
+  `python -m unittest tests.test_agent_lifecycle_guards -v` passed 17 tests,
+  including priority queue ordering.
+- Remote bridge tests:
+  `PYTHONPATH=. python3 -m unittest tests.test_bridge -v` passed 44 tests,
+  3 live skipped.
+- Remote dashboard tests:
+  `python3 -m unittest tests.test_agent_lifecycle_guards -v` passed 17 tests.
+- Deterministic false-positive workflow:
+  `python3 scripts/smoke_false_positive_suppression_workflow.py
+  http://localhost:25480` passed with ticket `429`, change `124`,
+  postmortem `63`, workflow `59`.
+- Real local-model false-positive classification:
+  ticket `430`, agent `150`, task `147`, completed with required
+  false-positive note present.
+- Wazuh/Sysmon E2E:
+  `SYSMON_ALERT_WAIT_SECONDS=90 python3
+  reference_skills/wazuh-edr-sysmon/tests/test_edr_sysmon_e2e.py` passed 16/16
+  with marker `CODEX_SYSMON_E2E_1778680907`.
+- Full bridge-to-agent proof:
+  fresh marker produced iTop Incident `275` / `I-000284`, dashboard ticket
+  `431`, auto-assigned agent `151`, task `148`, false-positive notes `708`,
+  `709`, `711`, postmortem `64`, dashboard status `resolved`, and direct iTop
+  status `resolved`.
+- Post-fix bridge health:
+  `python3 deploy/check_bridge_health.py` returned `status: ok`, recent poll,
+  `error_count: 0`, and `backpressure_count: 0`.
 - `report_phish/test_smtp_server.py` uses a Python 3.12-compatible socketserver
   SMTP sink instead of the removed stdlib `smtpd` module.

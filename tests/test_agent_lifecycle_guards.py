@@ -687,6 +687,46 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertIn("produced no output", state["reason"])
         self.assertNotEqual(returncode, 0)
 
+    def test_ticket_priority_rank_orders_high_priority_before_low(self):
+        module = load_agent_runner()
+
+        self.assertLess(module._ticket_priority_rank("P1"), module._ticket_priority_rank("P4"))
+        self.assertGreater(
+            module._ticket_priority_rank("P1", "postmortem"),
+            module._ticket_priority_rank("P1", "ticket_resolution"),
+        )
+
+    def test_agent_priority_queue_dequeues_high_priority_first(self):
+        module = load_agent_runner()
+        ran = []
+        events = []
+
+        async def fake_spawn(work_dir, prompt, task_id, agent_id):
+            ran.append((task_id, agent_id, prompt))
+
+        async def fake_log_event(*args):
+            events.append(args)
+
+        async def exercise():
+            module._agent_queue = asyncio.PriorityQueue()
+            module._queue_workers = set()
+            module._spawn_with_semaphore = fake_spawn
+            module.log_event = fake_log_event
+            await module._agent_queue.put((3, 1, "/tmp/low", "low", 10, 20))
+            await module._agent_queue.put((0, 2, "/tmp/high", "high", 11, 21))
+            worker = asyncio.create_task(module._agent_queue_worker())
+            await module._agent_queue.join()
+            worker.cancel()
+            try:
+                await worker
+            except asyncio.CancelledError:
+                pass
+
+        asyncio.run(exercise())
+
+        self.assertEqual([item[0] for item in ran], [11, 10])
+        self.assertTrue(any(event[3] == "agent_queue_dequeued" for event in events))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -159,6 +159,11 @@ The reference AI server currently runs slow local models. Do not use short wall-
 
 - `AGENT_TIMEOUT_MINUTES=0`: no fixed wall-clock kill for valid local-model work.
 - `MAX_CONCURRENT_AGENTS=1`: one active dashboard agent in the current lab so queued tasks do not saturate the local model.
+- Agent launch is priority-queued inside the runner. Lower rank runs first:
+  P1/critical/emergency, then P2/high, then P3/medium/normal, then P4/low.
+  Postmortem/workflow-build/rerun tasks are ranked after same-priority ticket
+  resolution work, so high-priority tickets can overtake lower-priority queued
+  work when the local model lane is capped.
 - `AGENT_NO_OUTPUT_STALL_SECONDS=3600`: configurable no-output stall guard. This is a last-resort harness-hang guard, not a progress timer; streaming or tool-using agents should continue.
 - The agent auditor is the primary supervision path. Judge status from task logs, checkpoints, notes, audit entries, and process state, not from percent alone.
 - Before rebuilding the API container, check `/api/agents/active` and `/api/agents/processes`. Stop only agents in your current test swim lane, with an explicit audit reason.
@@ -312,6 +317,20 @@ The dashboard uses `api/services/itop_sync.py` for outbound provider create. It 
 - If iTop cannot provide org/caller context, the canonical ticket records `provider_sync_status=create_failed` with `provider_last_error`.
 
 Verified on 2026-05-12: direct dashboard creates produced `UserRequest::169` and `Incident::170` with `provider_sync_status=synced`, `org_id=1`, `caller_id=94`, and `team_id=65`.
+
+## Latest Stability Proof
+
+Verified on 2026-05-13:
+
+- Bridge logrotate installed at `/etc/logrotate.d/siem-ticket-bridge`.
+- Sysmon hot directory cleaned so the 16 GB historical archive lives under
+  `/var/log/sysmon/archive`, with active log rotation tightened to 32 MB.
+- `reference_skills/wazuh-edr-sysmon/tests/test_edr_sysmon_e2e.py` passed
+  16/16 using fresh marker `CODEX_SYSMON_E2E_1778680907`.
+- Bridge created iTop Incident `275`; dashboard imported ticket `431`; RACI
+  auto-assigned local-model agent `151`; agent classified the diagnostic marker
+  as false positive, wrote notes `708`, `709`, `711`, postmortem `64`, and
+  resolved dashboard + iTop `I-000284`.
 
 ## Management Commands
 

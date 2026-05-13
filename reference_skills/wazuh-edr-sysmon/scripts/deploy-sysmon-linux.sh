@@ -53,6 +53,9 @@ fi
 # Step 4: Install or update the Sysmon service and configuration.
 log "Configuring SysmonForLinux service..."
 install -d -m 0775 -o syslog -g adm "$(dirname "$SYSMON_LOG")"
+install -d -m 0750 -o syslog -g adm "$(dirname "$SYSMON_LOG")/archive"
+find "$(dirname "$SYSMON_LOG")" -maxdepth 1 -type f -name 'sysmon.log.archive.*' -size +1M \
+    -exec mv -t "$(dirname "$SYSMON_LOG")/archive" {} + 2>/dev/null || true
 touch "$SYSMON_LOG"
 chown syslog:adm "$SYSMON_LOG"
 chmod 0664 "$SYSMON_LOG"
@@ -92,8 +95,8 @@ cat > /etc/logrotate.d/sysmon-edr << EOF
 $SYSMON_LOG {
     su syslog adm
     daily
-    rotate 7
-    size 256M
+    rotate 14
+    size 32M
     missingok
     notifempty
     copytruncate

@@ -1994,6 +1994,56 @@ The current iTop discovery strategy scans numeric keys. It works for the lab but
 
 Migrations are additive/idempotent. There is no first-class rollback tool yet.
 
+### Wazuh/Sysmon bridge queue and log retention gaps
+
+Status: fixed and verified on 2026-05-13.
+
+Problem:
+
+- Wazuh manager logged `wazuh-analysisd: WARNING: Input queue is full` after
+  Sysmon ingestion, so high-volume endpoint telemetry can starve fresh alert
+  processing.
+- The reference Sysmon host still had a 16 GB historical
+  `/var/log/sysmon/sysmon.log.archive.*` file in the hot Sysmon directory.
+  Wazuh only watches `sysmon.log`, but keeping huge old files in the active log
+  path makes diagnostics and future collector changes risky.
+- The SIEM ticket bridge had Python file rotation, but no installed system
+  logrotate policy for `/var/log/siem-ticket-bridge/*.log`; the systemd stderr
+  sidecar log could grow without a platform-level retention guard.
+- The bridge state stores dedupe keys as an unordered set, so count pruning is
+  not time-aware enough for sustained alert volume.
+
+Impact:
+
+- A noisy Sysmon rule or replayed historical log can clog Wazuh analysis queues.
+- Bridge and endpoint logs can consume disk over long-running demo or customer
+  deployments.
+- Operators have weak health signals for alert backlog, dedupe pressure, and
+  log growth.
+
+Fix:
+
+- Add bridge logrotate deployment assets plus configurable rotating file
+  handler limits.
+- Add time-aware processed-alert retention, per-poll ticket creation caps, and
+  bridge status metrics for backlog/log pressure.
+- Move historical Sysmon archives out of the hot collection path and tighten
+  Sysmon logrotate/test guidance.
+- Add false-positive classification and suppression-proposal workflow tests so
+  agents can recommend precise rule tuning behind approval gates instead of
+  blanket suppressions.
+
+Verification:
+
+- Bridge unit suite passed locally and on AI server: 44 tests, 3 live skipped.
+- Dashboard agent lifecycle suite passed locally and on AI server, including
+  priority queue ordering tests.
+- `deploy/check_bridge_health.py` returned `status: ok`, `error_count: 0`, and
+  `backpressure_count: 0`.
+- Wazuh/Sysmon E2E passed 16/16 with a fresh marker; bridge created iTop
+  Incident `275`, dashboard imported ticket `431`, auto-assigned agent `151`,
+  and both dashboard/iTop were resolved after false-positive classification.
+
 ### Model-backed smoke runner queued overlapping local agents
 
 Status: fixed in test harness, found during the 2026-05-13 full dashboard smoke

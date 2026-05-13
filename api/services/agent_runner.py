@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import time
 import urllib.request
+import itertools
 from datetime import datetime, timedelta
 from database import execute, fetchrow, fetchval, fetchall
 from services.event_logger import log_event
@@ -48,6 +49,9 @@ AGENT_NO_OUTPUT_STALL_SECONDS = _env_int(
 )
 
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_AGENTS)
+_agent_queue = asyncio.PriorityQueue()
+_queue_counter = itertools.count()
+_queue_workers = set()
 _active_processes = {}
 _model_config = None
 
@@ -212,6 +216,58 @@ def _loads(value, default):
 
 def _split_guard_paths(value):
     return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+def _ticket_priority_rank(priority, task_type="ticket_resolution"):
+    """Return lower-is-more-urgent queue rank for agent scheduling."""
+    normalized = str(priority or "").strip().upper()
+    rank_map = {
+        "P1": 0,
+        "CRITICAL": 0,
+        "EMERGENCY": 0,
+        "1": 0,
+        "P2": 1,
+        "HIGH": 1,
+        "2": 1,
+        "P3": 2,
+        "MEDIUM": 2,
+        "NORMAL": 2,
+        "3": 2,
+        "P4": 3,
+        "LOW": 3,
+        "4": 3,
+    }
+    rank = rank_map.get(normalized, 2)
+    if task_type in ("postmortem", "workflow_build", "workflow_rerun"):
+        rank += 2
+    return rank
+
+
+def _ensure_queue_workers():
+    """Start bounded priority queue workers for this event loop."""
+    desired = max(1, int(MAX_CONCURRENT_AGENTS or 1))
+    live = {task for task in _queue_workers if not task.done()}
+    _queue_workers.clear()
+    _queue_workers.update(live)
+    while len(_queue_workers) < desired:
+        task = asyncio.create_task(_agent_queue_worker())
+        _queue_workers.add(task)
+
+
+async def _agent_queue_worker():
+    """Run queued agent tasks in priority order."""
+    while True:
+        priority_rank, sequence, work_dir, prompt, task_id, agent_id = await _agent_queue.get()
+        try:
+            await log_event("agent", "info", f"agent_{agent_id}", "agent_queue_dequeued",
+                            f"task_{task_id}", {
+                                "priority_rank": priority_rank,
+                                "sequence": sequence,
+                                "queued_depth": _agent_queue.qsize(),
+                            })
+            await _spawn_with_semaphore(work_dir, prompt, task_id, agent_id)
+        finally:
+            _agent_queue.task_done()
 
 
 def _curl_guard_script(real_curl, blocked_paths=None, max_output_bytes=None):
@@ -872,8 +928,14 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
         work_dir, task_id,
     )
 
+    priority_rank = _ticket_priority_rank(ticket.get("priority"), task_type)
     await log_event("agent", "info", f"agent_{agent_id}", "spawn_requested",
-                    f"ticket_{ticket_id}", {"model": model, "task_id": task_id})
+                    f"ticket_{ticket_id}", {
+                        "model": model,
+                        "task_id": task_id,
+                        "priority": ticket.get("priority"),
+                        "priority_rank": priority_rank,
+                    })
     await _add_agent_note(
         ticket_id,
         agent_id,
@@ -881,12 +943,20 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
         "Agent assigned",
         (
             f"Agent `{agent_id}` was assigned with model `{model}` for `{task_type}`. "
-            "The runner provisioned an isolated workspace and queued the task."
+            f"The runner provisioned an isolated workspace and queued the task with priority rank `{priority_rank}`."
         ),
     )
 
-    # Spawn in background with semaphore
-    asyncio.create_task(_spawn_with_semaphore(work_dir, prompt, task_id, agent_id))
+    _ensure_queue_workers()
+    sequence = next(_queue_counter)
+    await _agent_queue.put((priority_rank, sequence, work_dir, prompt, task_id, agent_id))
+    await log_event("agent", "info", f"agent_{agent_id}", "agent_queue_enqueued",
+                    f"task_{task_id}", {
+                        "priority": ticket.get("priority"),
+                        "priority_rank": priority_rank,
+                        "sequence": sequence,
+                        "queued_depth": _agent_queue.qsize(),
+                    })
 
     return {
         "status": "spawned",
@@ -894,6 +964,7 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
         "task_id": task_id,
         "ticket_id": ticket_id,
         "model": model,
+        "priority_rank": priority_rank,
     }
 
 
