@@ -76,6 +76,24 @@ def _is_agent_process_alive(pid):
     return "claude" in cmdline or "anthropic-ai" in cmdline or "node" in cmdline
 
 
+def _runner_is_managing_task(task_id):
+    """Return true while the runner coroutine owns process finalization.
+
+    The OS PID can disappear before agent_runner has drained stdout/stderr and
+    written the real exit result. Treating that small window as an orphan races
+    the runner and replaces useful failure details with a generic process-dead
+    message.
+    """
+    if not task_id:
+        return False
+    try:
+        from services import agent_runner
+    except Exception:
+        return False
+    active = getattr(agent_runner, "_active_processes", {}) or {}
+    return task_id in active
+
+
 def _as_aware_utc(value):
     if not value:
         return None
@@ -380,7 +398,7 @@ async def track_loop():
             )
             for task in (tasks or []):
                 if task["status"] == "running":
-                    if task.get("pid") and not _is_agent_process_alive(task.get("pid")):
+                    if task.get("pid") and not _is_agent_process_alive(task.get("pid")) and not _runner_is_managing_task(task.get("id")):
                         await _mark_orphaned(task, "Agent process is no longer running in the API container")
                         continue
                     await _sync_task_status(task)

@@ -40,6 +40,17 @@ def load_task_tracker():
 
 
 class TaskTrackerProviderCloseTests(unittest.TestCase):
+    def test_runner_owned_task_is_not_orphaned_when_pid_exits(self):
+        module = load_task_tracker()
+        process = object()
+        agent_runner = types.ModuleType("services.agent_runner")
+        agent_runner._active_processes = {149: process}
+        sys.modules["services.agent_runner"] = agent_runner
+        sys.modules["services"].agent_runner = agent_runner
+
+        self.assertTrue(module._runner_is_managing_task(149))
+        self.assertFalse(module._runner_is_managing_task(150))
+
     def test_completed_checkpoint_closes_itop_provider_ticket(self):
         module = load_task_tracker()
         executes = []

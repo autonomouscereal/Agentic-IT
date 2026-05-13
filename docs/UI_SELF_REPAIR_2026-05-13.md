@@ -67,12 +67,14 @@ Result:
 
 Known issue:
 
-- Self-repair/local-model ticket agents can exit immediately after the init
-  event without producing tool output or an approval gate. The task tracker
-  correctly marks the task failed, but the runner currently lacks enough stderr
-  or exit-code detail in the surfaced ticket evidence to explain why the model
-  stopped. Add richer process-exit telemetry before relying on autonomous
-  dashboard self-repair demos.
+- The task tracker can race the runner when a child PID exits. If `/proc/<pid>`
+  disappears before `agent_runner` drains output and records the real exit
+  result, the tracker marks the task failed with the generic orphan message
+  `Agent process is no longer running in the API container`. That obscures the
+  actual exit code/output and can make a real harness/model exit look like a
+  tracker diagnosis. The fix is to skip orphan marking while
+  `agent_runner._active_processes` still owns that task, then let the runner
+  record the real completion or failure.
 
 Important coordination note:
 
