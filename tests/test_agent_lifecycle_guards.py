@@ -528,6 +528,20 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertEqual(module._ensure_list('["one", "two"]'), ["one", "two"])
         self.assertEqual(module._ensure_list({"name": "guard"}), [{"name": "guard"}])
 
+    def test_postmortem_text_fields_accept_list_and_dict_agent_payloads(self):
+        module = load_postmortems_route()
+
+        self.assertEqual(module._ensure_text(None), "")
+        self.assertEqual(module._ensure_text("already text"), "already text")
+        self.assertEqual(
+            module._ensure_text(["rerun phishing test", {"name": "approve gates", "description": "required"}]),
+            "- rerun phishing test\n- approve gates: required",
+        )
+        self.assertEqual(
+            module._ensure_text({"root_cause": "agent sent list-shaped improvements"}),
+            '{"root_cause": "agent sent list-shaped improvements"}',
+        )
+
     def test_ticket_notes_accept_content_alias_from_agents(self):
         module = load_tickets_route()
         calls = []

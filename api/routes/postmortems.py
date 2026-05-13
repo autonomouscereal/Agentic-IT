@@ -1,6 +1,7 @@
 import os
 import json
 import re
+from typing import Any
 
 from fastapi import APIRouter, Body, Query
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
@@ -73,6 +74,19 @@ def _ensure_list(value):
         except json.JSONDecodeError:
             return [text]
     return [value]
+
+
+def _ensure_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)):
+        lines = _text_lines(list(value))
+        return "\n".join(lines)
+    if isinstance(value, dict):
+        return json_dumps(value)
+    return str(value)
 
 
 def _postmortem_article_body(postmortem, ticket, skill_ids, workflow_name):
@@ -319,6 +333,39 @@ async def get_postmortem_evidence(
         postmortem["summary"] = _truncate(postmortem.get("summary"), 1800)
         postmortem["improvements"] = _truncate(postmortem.get("improvements"), 1800)
         postmortem["workflow_proposal"] = _truncate(postmortem.get("workflow_proposal"), 1800)
+    ticket_class = _ticket_class(ticket)
+    workflows = await fetchall("""
+        SELECT id, name, description, ticket_class, trigger_type, status,
+               version, blueprint, test_plan, test_results, approval_policy,
+               skill_ids, updated_at
+        FROM agent_workflows
+        WHERE status IN ('active', 'approved', 'tested')
+          AND ($1::varchar IS NULL OR ticket_class = $1 OR ticket_class IS NULL)
+        ORDER BY
+          CASE status WHEN 'active' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+          updated_at DESC
+        LIMIT 10
+    """, ticket_class)
+    for workflow in workflows:
+        workflow["description"] = _truncate(workflow.get("description"), 500)
+        workflow["blueprint"] = _truncate(workflow.get("blueprint"), 1800)
+        workflow["test_plan"] = _truncate(workflow.get("test_plan"), 800)
+        workflow["test_results"] = _truncate(workflow.get("test_results"), 800)
+    knowledge_articles = await fetchall("""
+        SELECT id, title, category, source, tags, external_ref, body, updated_at
+        FROM knowledge_articles
+        WHERE enabled = true
+          AND (
+            $1::varchar IS NULL
+            OR category = $1
+            OR tags::text ILIKE $2
+            OR body ILIKE $2
+          )
+        ORDER BY updated_at DESC
+        LIMIT 10
+    """, ticket_class, f"%{ticket_class or ''}%")
+    for article in knowledge_articles:
+        article["body"] = _truncate(article.get("body"), 1800)
     audit = await fetchall("""
         SELECT id, actor, action, target, details, created_at, 'audit' AS source
         FROM audit_log
@@ -342,9 +389,12 @@ async def get_postmortem_evidence(
         "agent_tasks": tasks,
         "cicd_runs": cicd_runs,
         "postmortems": postmortems,
+        "workflows": workflows,
+        "knowledge_articles": knowledge_articles,
         "audit": audit,
         "guidance": {
             "use_this_endpoint_first": True,
+            "review_reusable_workflows_before_planning": True,
             "write_result_to": "POST /api/postmortems",
             "required_status": "ready_for_review",
         },
@@ -400,16 +450,21 @@ async def create_postmortem(
     agent_id: int = Body(None),
     task_id: int = Body(None),
     status: str = Body("draft"),
-    summary: str = Body(""),
-    went_well: str = Body(""),
-    improvements: str = Body(""),
-    workflow_proposal: str = Body(""),
+    summary: Any = Body(""),
+    went_well: Any = Body(""),
+    improvements: Any = Body(""),
+    workflow_proposal: Any = Body(""),
     skill_proposals=Body([]),
     test_cases=Body([]),
     guardrails=Body([]),
-    documentation: str = Body(""),
+    documentation: Any = Body(""),
     created_by: str = Body("dashboard"),
 ):
+    summary = _ensure_text(summary)
+    went_well = _ensure_text(went_well)
+    improvements = _ensure_text(improvements)
+    workflow_proposal = _ensure_text(workflow_proposal)
+    documentation = _ensure_text(documentation)
     skill_proposals = _ensure_list(skill_proposals)
     test_cases = _ensure_list(test_cases)
     guardrails = _ensure_list(guardrails)

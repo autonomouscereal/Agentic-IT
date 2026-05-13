@@ -4,6 +4,88 @@ Last updated: 2026-05-13.
 
 ## Fixed In Current Pass
 
+### Postmortem create endpoint rejected list-shaped text fields
+
+Status: fixed and deployed, found during workflow reuse proof ticket `366` /
+agent `129` / task `126`.
+
+Problem:
+
+- Agent `129` completed triage, approval gates, lab-safe containment evidence,
+  and final resolution on phishing ticket `366`, then attempted to persist the
+  postmortem at `2026-05-13T03:39:11Z`.
+- The local model sent `improvements` as a JSON list. FastAPI rejected the
+  request before route code ran because `POST /api/postmortems` annotated text
+  fields as strict strings.
+
+Impact:
+
+- A real agent can complete the operational work but fail the learning artifact
+  step, which prevents the ticket from proving the full
+  ticket -> workflow reuse -> postmortem loop.
+
+Fix:
+
+- `POST /api/postmortems` now accepts text fields as generic JSON and normalizes
+  `summary`, `went_well`, `improvements`, `workflow_proposal`, and
+  `documentation` to strings before inserting.
+- Ticket, postmortem, and runner prompts now document the exact accepted
+  postmortem body fields and require text fields to be strings while arrays stay
+  arrays.
+
+Verification:
+
+- Agent `129` self-corrected the payload shape, created postmortem `49`, set
+  task `126` to `completed` / `100%`, and closed dashboard ticket `366`.
+- Rebuilt the live API after confirming `/api/agents/active` returned zero
+  agents.
+- Live deploy smoke posted a list/dict-shaped postmortem payload, verified it
+  normalized to text, then deleted only the smoke row (`postmortem 50`).
+- Local validation: `python -m py_compile api\routes\postmortems.py
+  api\services\task_prompts.py api\services\agent_runner.py` and
+  `python -m unittest tests.test_agent_lifecycle_guards
+  tests.test_auto_assignment tests.test_itop_sync_status` passed.
+
+### Compact postmortem evidence omits active workflows
+
+Status: fixed, deployed, and verified through workflow reuse ticket `366`,
+found during post-promotion rerun ticket `365` / agent `128`.
+
+Problem:
+
+- Postmortem `47` was promoted into knowledge article `44`, skills `55` and
+  `56`, and active workflow `46`.
+- New phishing ticket `365` correctly exposed workflow `46` through
+  `GET /api/tickets/365/context`.
+- Agent `128` followed the bounded-evidence instruction and first called
+  `GET /api/postmortems/evidence/365?task_log_lines=0`, but that compact
+  evidence response did not include active workflows or promoted knowledge.
+
+Impact:
+
+- The reusable workflow may be active and visible in full ticket context while
+  still being absent from the compact evidence path that local agents are told
+  to prefer.
+- This can make "postmortem -> workflow -> future ticket uses workflow" appear
+  unreliable even when workflow promotion itself worked.
+
+Fix:
+
+- Add relevant active/tested/approved workflows, promoted postmortems, and
+  knowledge articles to the compact evidence endpoint.
+- Update prompts to tell agents that bounded evidence includes reusable
+  workflows and must be checked before drafting a fresh plan.
+
+Verification:
+
+- `GET /api/postmortems/evidence/365?task_log_lines=0` returned active workflow
+  `46` and knowledge article `44`.
+- Fresh ticket `366` / agent `129` used compact evidence first, saw workflow
+  `46`, followed it, completed gates `106`-`108`, wrote resolution note `537`,
+  created postmortem `49`, and closed the ticket.
+- Forced dashboard sync and direct iTop read confirmed dashboard ticket `366`
+  and iTop Incident `238` / `I-000247` were both `resolved`.
+
 ### Acceptance reruns could hit API before restart finished
 
 Problem:

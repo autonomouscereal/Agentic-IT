@@ -572,6 +572,7 @@ You are an SOC agent assigned to resolve the following ticket.
 Use the canonical dashboard API for ticket context, notes, approvals, postmortems, and workflows:
 - Base URL inside this runner: `{DASHBOARD_API_BASE}`
 - Preferred bounded evidence: `GET /api/postmortems/evidence/{ticket.get('id', '{ticket_id}')}?task_log_lines=0`
+  - This includes relevant active/tested/approved reusable workflows and knowledge articles; follow matching active/approved workflows first and note any deviation.
 - Ticket detail: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}`
 - Broader ticket context only when needed: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}/context`
 - Add ticket notes: `POST /api/tickets/{ticket.get('id', '{ticket_id}')}/notes`
@@ -585,7 +586,7 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 
 Treat iTop, ServiceNow, Jira, and local-only tickets as providers behind the dashboard API. Do not call provider-specific APIs unless the ticket context or a skill explicitly requires it.
 Do not fetch broad schema, docs, or tool inventory endpoints such as `/openapi.json`, `/api/tools`, `/api/tools/status`, `/docs`, or `/redoc`. The runner blocks those calls because they have caused local models to stall on oversized context. Use the bounded ticket/evidence endpoints above.
-When posting a postmortem, `skill_proposals`, `test_cases`, and `guardrails` must be JSON arrays, not strings.
+When posting a postmortem, use the exact body fields `ticket_id`, `agent_id`, `task_id`, `status`, `summary`, `went_well`, `improvements`, `workflow_proposal`, `skill_proposals`, `test_cases`, `guardrails`, `documentation`, and `created_by`. Text fields must be strings. `skill_proposals`, `test_cases`, and `guardrails` must be JSON arrays, not strings. Put timeline, root cause, residual risk, and evidence details into the text fields instead of inventing extra top-level fields.
 
 ## Checkpoint Protocol
 After each major step, write your progress to `checkpoint.json` in your work directory.

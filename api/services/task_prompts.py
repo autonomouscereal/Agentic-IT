@@ -44,6 +44,7 @@ Produce:
 - Documentation updates needed for operators.
 
 Persist the postmortem with POST /api/postmortems and mark it ready_for_review when complete. Include ticket_id, agent_id when known, and task_id from checkpoint.json so the supervisor can verify the artifact.
+Use the exact postmortem body fields: ticket_id, agent_id, task_id, status, summary, went_well, improvements, workflow_proposal, skill_proposals, test_cases, guardrails, documentation, created_by. Text fields must be strings; skill_proposals, test_cases, and guardrails must be JSON arrays. Fold timeline, root cause, residual risk, and evidence details into summary, improvements, or documentation instead of sending extra top-level fields.
 Do not deploy new automation directly. If automation creation is requested, create a follow-up workflow-build task or ticket and mark it for human review before production use.
 Update checkpoint.json as you work. The file already exists; read checkpoint.json directly before writing it.
 """
@@ -71,7 +72,7 @@ AUTO_ASSIGNMENT_PROMPT = """Work this auto-assigned ticket to completion with bo
 Operational rules:
 - Read checkpoint.json directly before doing work.
 - Use API base URL http://localhost:8000 inside the runner.
-- First call GET /api/postmortems/evidence/{ticket_id}?task_log_lines=0 and use that compact evidence as the primary source of truth.
+- First call GET /api/postmortems/evidence/{ticket_id}?task_log_lines=0 and use that compact evidence as the primary source of truth. It includes relevant reusable workflows and knowledge articles; if an active/approved/tested workflow matches this ticket, follow it first and document any deviation.
 - Then call GET /api/tickets/{ticket_id} for the current ticket, provider reference, and agent_instance_id.
 - Do not fetch full /api/tickets/{ticket_id}/context unless the compact evidence is missing a specific fact needed to finish the ticket.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful triage, blockers, approvals, actions, or resolution evidence.
