@@ -180,6 +180,17 @@ function formatDate(iso) {
     return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function formatDuration(seconds) {
+    const value = Math.max(0, Math.floor(Number(seconds) || 0));
+    if (value < 60) return `${value}s`;
+    const minutes = Math.floor(value / 60);
+    if (minutes < 60) return `${minutes}m ${value % 60}s`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 48) return `${hours}h ${minutes % 60}m`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h`;
+}
+
 function statusClass(status) {
     if (!status) return "";
     return "status-" + status.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z-]/g, "");
@@ -229,7 +240,10 @@ function renderGateSummary(change) {
 
 // Load dashboard stats
 async function loadDashboardStats() {
-    const data = await apiGet("/api/dashboard/stats");
+    const [data, metrics] = await Promise.all([
+        apiGet("/api/dashboard/stats"),
+        apiGet("/api/dashboard/ops-metrics"),
+    ]);
     if (!data) return;
 
     // Update stat cards
@@ -264,6 +278,46 @@ async function loadDashboardStats() {
 
     // Load pending changes section
     loadPendingChanges();
+    renderOpsMetrics(metrics);
+}
+
+function renderOpsMetrics(metrics) {
+    if (!metrics) return;
+    const agent = metrics.agent_summary || {};
+    const sla = metrics.sla || {};
+    const gates = metrics.approval_gates || {};
+    const autoEvents = (metrics.auto_assignment || []).reduce((sum, row) => sum + Number(row.count || 0), 0);
+    setText("metric-agent-work", formatDuration(agent.avg_work_seconds || 0));
+    setText("metric-agent-work-sub", `${agent.completed || 0}/${agent.tasks || 0} completed, avg gated ${formatDuration(agent.avg_gate_wait_seconds || 0)}`);
+    setText("metric-sla", `${sla.compliance_pct ?? 0}%`);
+    setText("metric-sla-sub", `${sla.breached_sla || 0} breached, ${sla.at_risk || 0} at risk`);
+    setText("metric-gates", `${gates.pending || 0} pending`);
+    setText("metric-gates-sub", `${gates.completed || 0} completed, avg wait ${formatDuration(gates.avg_wait_seconds || 0)}`);
+    setText("metric-automation", String(autoEvents));
+    setText("metric-automation-sub", `${metrics.workflows?.active || 0} active workflows, ${metrics.tool_health?.healthy || 0}/${metrics.tool_health?.tools || 0} tools healthy`);
+
+    const taskEl = document.getElementById("agent-task-metrics");
+    if (taskEl) {
+        const rows = metrics.agent_by_task_type || [];
+        taskEl.innerHTML = rows.length ? rows.map(row => `
+            <div class="metric-row">
+                <span>${escHtml(row.task_type || "task")}</span>
+                <strong>${formatDuration(row.avg_work_seconds || 0)}</strong>
+                <span>${row.completed_tasks || 0}/${row.total_tasks || 0} done</span>
+                <span>p95 ${formatDuration(row.p95_work_seconds || 0)}</span>
+            </div>
+        `).join("") : '<div class="learning-meta">No agent task metrics yet.</div>';
+    }
+    const slaEl = document.getElementById("sla-tool-metrics");
+    if (slaEl) {
+        const cicd = metrics.cicd || [];
+        slaEl.innerHTML = `
+            <div class="metric-row"><span>Open tickets</span><strong>${sla.open_tickets || 0}</strong><span>${sla.within_sla || 0} within SLA</span></div>
+            <div class="metric-row"><span>Workflow runs</span><strong>${metrics.workflows?.runs?.completed || 0}</strong><span>${metrics.workflows?.runs?.failed || 0} failed</span></div>
+            <div class="metric-row"><span>CI/CD runs</span><strong>${cicd.reduce((s, r) => s + Number(r.count || 0), 0)}</strong><span>${cicd.map(r => `${r.status}:${r.count}`).join(" ") || "none"}</span></div>
+            <div class="metric-row"><span>Tools</span><strong>${metrics.tool_health?.healthy || 0}/${metrics.tool_health?.tools || 0}</strong><span>${metrics.tool_health?.down || 0} down</span></div>
+        `;
+    }
 }
 
 function setText(id, value) {
@@ -370,15 +424,34 @@ async function loadWorkflows() {
             <td>${w.id}</td>
             <td>${escHtml(w.name)}</td>
             <td>${escHtml(w.ticket_class || "-")}</td>
-            <td><span class="status-badge ${statusClass(w.status)}">${escHtml(w.status)}</span></td>
+            <td>
+                <span class="status-badge ${statusClass(w.status)}">${escHtml(workflowStatusLabel(w))}</span>
+                <div class="module-meta">${workflowReviewHint(w)}</div>
+            </td>
             <td>${w.version || 1}</td>
-            <td>${formatTime(w.updated_at)}</td>
+            <td>${formatTime(w.updated_at)}<div class="module-meta">${w.run_count || 0} runs / ${w.completed_run_count || 0} complete</div></td>
             <td>
                 <button class="btn btn-sm" onclick="viewWorkflow(${w.id})">Detail</button>
-                ${w.status !== "approved" ? `<button class="btn btn-sm btn-success" onclick="reviewWorkflow(${w.id}, true)">Approve</button>` : ""}
+                ${w.status !== "active" ? `<button class="btn btn-sm btn-success" onclick="reviewWorkflow(${w.id}, true)">Approve</button>` : ""}
             </td>
         </tr>
     `).join("");
+}
+
+function workflowStatusLabel(w) {
+    if (w.review_state === "active_approved") return "Active";
+    if (w.review_state === "active_missing_review") return "Active - review missing";
+    if (w.review_state === "tested_needs_approval") return "Tested - approval needed";
+    if (w.review_state === "ready_for_review") return "Ready for review";
+    return w.status || "draft";
+}
+
+function workflowReviewHint(w) {
+    if (w.review_state === "active_approved") return `approved by ${escHtml(w.reviewed_by || "reviewer")}`;
+    if (w.review_state === "active_missing_review") return "inconsistent: active without reviewed_at";
+    if (w.review_state === "tested_needs_approval") return "tested but not active until approved";
+    if (w.status === "draft") return "draft, not used for automatic work";
+    return escHtml(w.review_state || "");
 }
 
 async function loadIntake() {
@@ -390,13 +463,13 @@ async function loadIntake() {
     if (raciList && raci) {
         const rules = raci.rules || [];
         raciList.innerHTML = rules.slice(0, 20).map(rule => `
-            <div class="learning-item">
-                <div><strong>${escHtml(rule.name)}</strong> <span class="source-badge local">${escHtml(rule.ticket_class)}</span></div>
-                <div>${escHtml(rule.assignment_group)} &middot; ${rule.approval_required ? "approval required" : "no approval gate"}</div>
-                <div class="learning-meta">R: ${escHtml(rule.responsible)} / A: ${escHtml(rule.accountable)}</div>
-                <div class="modal-actions-bar inline-actions">
-                    <button class="inline-link" onclick="editRaciRule(${rule.id})">edit</button>
-                    <button class="inline-link" onclick="disableRaciRule(${rule.id})">disable</button>
+        <div class="learning-item">
+            <div><strong>${escHtml(rule.name)}</strong> <span class="source-badge local">${escHtml(rule.ticket_class)}</span></div>
+            <div>${escHtml(rule.assignment_group)} &middot; ${rule.approval_required ? "approval required" : "no approval gate"}</div>
+            <div class="learning-meta">R: ${escHtml(rule.responsible)} / A: ${escHtml(rule.accountable)} &middot; auto-agent ${rule.auto_assign_agent ? "on" : "off"}</div>
+            <div class="modal-actions-bar inline-actions">
+                <button class="inline-link" onclick="editRaciRule(${rule.id})">edit</button>
+                <button class="inline-link" onclick="disableRaciRule(${rule.id})">disable</button>
                 </div>
             </div>
         `).join("");
@@ -513,6 +586,7 @@ async function createRaciRule() {
     const accountable = prompt("Accountable:", "Service Desk Manager");
     if (accountable === null) return;
     const approval_required = confirm("Require approval gate for this route?");
+    const auto_assign_agent = confirm("Automatically assign an agent when this rule matches?");
     const result = await apiPost("/api/intake/raci/rules", {
         name,
         intent: intent || "general",
@@ -525,6 +599,9 @@ async function createRaciRule() {
         consulted: [],
         informed: [],
         approval_required,
+        auto_assign_agent,
+        auto_agent_model: document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b",
+        auto_agent_prompt: auto_assign_agent ? `Auto-work ${assignment_group || "assigned group"} tickets that match ${intent || "this route"} using compact ticket evidence, approval gates, notes, and final closure.` : null,
         risk_level: approval_required ? "medium" : "low",
         knowledge_tags: [intent || "general"],
         enabled: true,
@@ -540,11 +617,13 @@ async function editRaciRule(id) {
     if (priority === null) return;
     const risk_level = prompt("Risk level:", "low");
     if (risk_level === null) return;
+    const auto_assign_agent = confirm("Enable automatic agent assignment for this route?");
     const result = await apiPut(`/api/intake/raci/rules/${id}`, {
         assignment_group,
         responsible: assignment_group,
         priority,
         risk_level,
+        auto_assign_agent,
     });
     if (result?.error) alert(result.error);
     loadIntake();
@@ -590,12 +669,41 @@ function repoExternalUrl(provider, repoRef) {
 }
 
 function severitySummary(findings) {
-    const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0 };
     (Array.isArray(findings) ? findings : []).forEach(f => {
         const sev = String(f.severity || "info").toLowerCase();
         counts[counts[sev] === undefined ? "info" : sev] += 1;
     });
     return Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(" ");
+}
+
+function scannerDisplayName(tool) {
+    return ({ semgrep: "Semgrep", trivy: "Trivy", owasp_zap: "OWASP ZAP", nuclei: "Nuclei" })[tool] || tool;
+}
+
+function renderScannerSummary(scannerSummary) {
+    const entries = Object.entries(scannerSummary || {});
+    if (!entries.length) return '<div class="learning-meta">No scanner summary recorded.</div>';
+    return entries.map(([tool, summary]) => {
+        const findings = summary.findings || [];
+        const status = summary.status || "not_recorded";
+        return `
+            <div class="scanner-card">
+                <div class="scanner-card-head">
+                    <strong>${escHtml(scannerDisplayName(tool))}</strong>
+                    <span class="status-badge ${statusClass(status)}">${escHtml(status)}</span>
+                </div>
+                <div class="learning-meta">${severitySummary(findings)} &middot; ${summary.finding_count || 0} findings</div>
+                ${findings.length ? findings.slice(0, 8).map(f => `
+                    <div class="finding-row">
+                        <span class="status-badge ${statusClass(f.severity || "info")}">${escHtml(f.severity || "info")}</span>
+                        <span>${escHtml(f.title || f.rule_id || f.message || "finding")}</span>
+                        <code>${escHtml(f.path || f.url || f.package || "")}</code>
+                    </div>
+                `).join("") : '<div class="learning-meta">Scanner completed with no recorded findings.</div>'}
+            </div>
+        `;
+    }).join("");
 }
 
 async function viewCicdRun(id) {
@@ -617,7 +725,11 @@ async function viewCicdRun(id) {
             <div class="detail-row" style="flex-direction:column"><span class="detail-label">Summary:</span><pre class="task-output">${escHtml(data.summary || "")}</pre></div>
         </div>
         <div class="modal-section">
-            <div class="section-title">Reports</div>
+            <div class="section-title">Scanner Results</div>
+            ${renderScannerSummary(data.scanner_summary || {})}
+        </div>
+        <div class="modal-section">
+            <div class="section-title">Reports & Raw Payload</div>
             ${links.length ? links.map(l => `<div class="modal-activity-item"><span>${escHtml(l.tool)}</span><a class="ticket-link" href="${escAttr(l.url)}" target="_blank" rel="noopener">${escHtml(l.label)}</a></div>`).join("") : '<div class="learning-meta">No report links recorded. Scanner JSON is still stored in the run record below.</div>'}
             <pre class="task-output">${escHtml(JSON.stringify({ findings, tool_results: data.tool_results || {} }, null, 2))}</pre>
         </div>
@@ -726,15 +838,44 @@ async function loadPostmortems() {
         <tr>
             <td>${p.id}</td>
             <td>${escHtml(p.ticket_title || p.ticket_id || "-")}</td>
-            <td><span class="status-badge ${statusClass(p.status)}">${escHtml(p.status)}</span></td>
+            <td><span class="status-badge ${statusClass(p.status)}">${learningStatusLabel(p.status)}</span><div class="module-meta">${learningStatusHint(p.status)}</div></td>
             <td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.summary || "-")}</td>
             <td>${formatTime(p.updated_at || p.created_at)}</td>
             <td>
-                <button class="btn btn-sm" onclick="promotePostmortem(${p.id})">Promote</button>
+                ${p.status === "approved" || p.status === "ready_for_review" ? `<button class="btn btn-sm" onclick="promotePostmortem(${p.id})">Create Assets</button>` : ""}
+                ${p.status !== "approved" && p.status !== "promoted" ? `<button class="inline-link" onclick="reviewPostmortem(${p.id}, true)">approve</button>` : ""}
                 <button class="inline-link" onclick="openAuditTrail('postmortem_${p.id}')">audit</button>
             </td>
         </tr>
     `).join("");
+}
+
+function learningStatusLabel(status) {
+    return ({
+        draft: "Draft",
+        ready_for_review: "Ready for review",
+        approved: "Approved",
+        promoted: "Assets created",
+        needs_revision: "Needs revision",
+    })[status] || escHtml(status || "draft");
+}
+
+function learningStatusHint(status) {
+    return ({
+        draft: "agent draft, not reviewed",
+        ready_for_review: "waiting for human approval",
+        approved: "approved; assets can be created",
+        promoted: "knowledge/workflow/skills already generated",
+        needs_revision: "sent back for edits",
+    })[status] || "";
+}
+
+async function reviewPostmortem(id, approved) {
+    const review_notes = prompt(approved ? "Approval notes:" : "Revision notes:", "");
+    if (review_notes === null) return;
+    const result = await apiPost(`/api/postmortems/${id}/review`, { approved, review_notes, reviewed_by: "dashboard" });
+    if (result?.error) alert(result.error);
+    loadLearning();
 }
 
 async function promotePostmortem(postmortemId) {
@@ -838,7 +979,7 @@ async function loadTools() {
     const grid = document.getElementById("tools-grid");
     if (!grid) return;
 
-    grid.innerHTML = data.tools.map(t => `
+    const toolCards = data.tools.map(t => `
         <div class="tool-card">
             <div class="tool-card-header">
                 <span class="tool-name">${escHtml(t.name)}</span>
@@ -849,7 +990,19 @@ async function loadTools() {
             ${t.host ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">${t.host}:${t.port || 'N/A'}</div>` : ""}
             ${t.last_check ? `<div style="font-size:11px;color:var(--text-muted)">Last check: ${formatTime(t.last_check)}</div>` : ""}
         </div>
-    `).join("");
+    `);
+    const moduleCards = (data.setup_modules || []).map(m => `
+        <div class="tool-card integration-card">
+            <div class="tool-card-header">
+                <span class="tool-name">${escHtml(m.name || m.id)}</span>
+                <span class="status-badge ${statusClass(m.status)}">${escHtml(m.status || "blueprint")}</span>
+            </div>
+            <div class="tool-type">${escHtml(m.category || "integration")}</div>
+            <div class="tool-desc">${escHtml(m.provider_contract || m.skill || "Provider module")}</div>
+            <div class="learning-meta">${(m.health_checks || []).slice(0, 3).map(escHtml).join(" / ") || "No health checks declared"}</div>
+        </div>
+    `);
+    grid.innerHTML = [...toolCards, ...moduleCards].join("") || '<div class="tool-empty">No tools or integrations configured</div>';
 }
 
 // Load audit log
@@ -976,19 +1129,47 @@ async function viewWorkflow(id) {
         <div class="modal-section">
             <div class="section-title">Workflow</div>
             <div class="detail-row"><span class="detail-label">Name:</span><span>${escHtml(data.name)}</span></div>
-            <div class="detail-row"><span class="detail-label">Status:</span><span class="status-badge ${statusClass(data.status)}">${escHtml(data.status)}</span></div>
+            <div class="detail-row"><span class="detail-label">Status:</span><span class="status-badge ${statusClass(data.status)}">${escHtml(workflowStatusLabel(data))}</span></div>
+            <div class="detail-row"><span class="detail-label">Review:</span><span>${workflowReviewHint(data)}</span></div>
             <div class="detail-row"><span class="detail-label">Class:</span><span>${escHtml(data.ticket_class || "-")}</span></div>
             <div class="detail-row"><span class="detail-label">Version:</span><span>${data.version || 1}</span></div>
             <div class="detail-row" style="flex-direction:column"><span class="detail-label">Blueprint:</span><pre class="task-output">${escHtml(data.blueprint || "")}</pre></div>
             ${data.test_plan ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Test Plan:</span><pre class="task-output">${escHtml(data.test_plan)}</pre></div>` : ""}
             ${data.test_results ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Test Results:</span><pre class="task-output">${escHtml(data.test_results)}</pre></div>` : ""}
         </div>
+        <div class="modal-section">
+            <div class="section-title">Tickets / Test Runs</div>
+            ${(data.runs || []).length ? data.runs.map(r => `
+                <div class="modal-activity-item">
+                    <span>#${r.id}</span>
+                    <span>
+                        <span class="status-badge ${statusClass(r.status)}">${escHtml(r.status)}</span>
+                        ${r.ticket_id ? `<button class="inline-link" onclick="viewTicket(${r.ticket_id})">ticket ${r.ticket_id}</button>` : "no ticket"}
+                        ${escHtml(r.ticket_title || "")}
+                    </span>
+                </div>
+            `).join("") : '<div class="learning-meta">No tickets or test runs linked yet.</div>'}
+        </div>
         <div class="modal-actions-bar">
             <button class="btn btn-sm btn-success" onclick="reviewWorkflow(${data.id}, true)">Approve</button>
             <button class="btn btn-sm btn-danger" onclick="reviewWorkflow(${data.id}, false)">Request Revision</button>
+            <button class="btn btn-sm btn-warning" onclick="rerunWorkflow(${data.id})">Rerun on Ticket</button>
         </div>
     `;
     document.getElementById("ticket-modal").classList.add("active");
+}
+
+async function rerunWorkflow(id) {
+    const ticketId = prompt("Ticket id to rerun this workflow on:");
+    if (!ticketId) return;
+    const model = document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b";
+    const result = await apiPost(`/api/workflows/${id}/rerun`, { ticket_id: Number(ticketId), model, created_by: "dashboard" });
+    if (result?.error) alert(result.error);
+    else {
+        alert(`Workflow rerun started as run ${result.run_id}, agent ${result.agent_id || "-"}.`);
+        closeModal("ticket-modal");
+        navigateTo("agents");
+    }
 }
 
 // Load activity log for a ticket (appends to modal)

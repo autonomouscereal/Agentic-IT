@@ -37,16 +37,32 @@ async def list_agents(
                task.progress_pct AS task_progress_pct,
                task.task_type AS task_type,
                task.work_dir AS task_work_dir,
-               task.error_message AS task_error_message
+               task.error_message AS task_error_message,
+               GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(a.heartbeat, a.started_at, NOW())))) AS idle_seconds,
+               GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(a.finished_at, NOW()) - COALESCE(a.started_at, NOW())))) AS running_seconds,
+               GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(task.completed_at, NOW()) - COALESCE(task.started_at, task.created_at, NOW())))
+                   - COALESCE(gates.gate_wait_seconds, 0)) AS task_working_seconds,
+               COALESCE(gates.gate_wait_seconds, 0) AS gate_wait_seconds
         FROM agents a
         LEFT JOIN tickets t ON a.ticket_id = t.id
         LEFT JOIN LATERAL (
-            SELECT id, status, progress_pct, task_type, work_dir, error_message
+            SELECT id, status, progress_pct, task_type, work_dir, error_message,
+                   started_at, completed_at, created_at
             FROM agent_tasks
             WHERE agent_id = a.id
             ORDER BY created_at DESC
             LIMIT 1
         ) task ON true
+        LEFT JOIN LATERAL (
+            SELECT SUM(
+                GREATEST(0, EXTRACT(EPOCH FROM (
+                    COALESCE(cr.approved_at, NOW()) - COALESCE(cr.requested_at, NOW())
+                )))
+            ) AS gate_wait_seconds
+            FROM change_requests cr
+            WHERE cr.agent_id = a.id
+              AND cr.status IN ('pending', 'approved', 'completed', 'rejected')
+        ) gates ON true
         {where_sql}
         ORDER BY a.started_at DESC
     """, *params)
@@ -59,7 +75,9 @@ async def active_agents():
     rows = await fetchall("""
         SELECT a.*, t.title AS ticket_title, t.itop_ref AS ticket_itop_ref,
                task.id AS current_task_id, task.status AS task_status,
-               task.progress_pct AS task_progress_pct
+               task.progress_pct AS task_progress_pct,
+               GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(a.heartbeat, a.started_at, NOW())))) AS idle_seconds,
+               GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(a.started_at, NOW())))) AS running_seconds
         FROM agents a
         LEFT JOIN tickets t ON a.ticket_id = t.id
         LEFT JOIN LATERAL (

@@ -44,6 +44,51 @@ def _gate_status(findings, tool_results):
     return "passed"
 
 
+def _canonical_tool(name):
+    value = str(name or "").lower().replace("-", "_")
+    if value in ("zap", "owasp_zap", "zap_baseline", "owasp_zap_baseline"):
+        return "owasp_zap"
+    if value in ("semgrep", "semgrep_sast"):
+        return "semgrep"
+    if value in ("trivy", "trivy_fs", "trivy_image"):
+        return "trivy"
+    if value in ("nuclei", "projectdiscovery_nuclei"):
+        return "nuclei"
+    return value or "unknown"
+
+
+def _normalize_tool_results(tool_results):
+    normalized = {}
+    for raw_name, raw_result in (tool_results or {}).items():
+        name = _canonical_tool(raw_name)
+        result = dict(raw_result) if isinstance(raw_result, dict) else {"status": "unknown", "raw": raw_result}
+        status = str(result.get("status") or "unknown").lower()
+        exit_code = result.get("exit_code", result.get("returncode"))
+        if name == "owasp_zap" and status == "error" and str(exit_code) == "2":
+            result["status"] = "completed_with_findings"
+            result["note"] = result.get("note") or "ZAP baseline exit code 2 means warnings/findings, not scanner execution failure."
+        normalized[name] = result
+    for expected in ("semgrep", "trivy", "owasp_zap", "nuclei"):
+        normalized.setdefault(expected, {"status": "not_recorded"})
+    return normalized
+
+
+def _scanner_summary(findings, tool_results):
+    findings = findings if isinstance(findings, list) else []
+    tool_results = _normalize_tool_results(tool_results or {})
+    summary = {}
+    for tool, result in tool_results.items():
+        rows = [f for f in findings if _canonical_tool(f.get("tool") or f.get("scanner")) == tool]
+        summary[tool] = {
+            "status": result.get("status") if isinstance(result, dict) else "unknown",
+            "finding_count": len(rows),
+            "severity_counts": _severity_counts(rows),
+            "findings": rows,
+            "result": result,
+        }
+    return summary
+
+
 def _repo_url(provider, repo_ref):
     ref = repo_ref or ""
     if ref.startswith("http://") or ref.startswith("https://"):
@@ -95,9 +140,10 @@ async def get_run(run_id: int):
     if not row:
         return {"error": "CI/CD security run not found"}
     row["findings"] = _loads(row.get("findings"), [])
-    row["tool_results"] = _loads(row.get("tool_results"), {})
+    row["tool_results"] = _normalize_tool_results(_loads(row.get("tool_results"), {}))
     row["repo_url"] = _repo_url(row.get("provider"), row.get("repo_ref"))
     row["report_links"] = _report_links(row.get("tool_results"))
+    row["scanner_summary"] = _scanner_summary(row["findings"], row["tool_results"])
     related = await fetchall("""
         SELECT id, provider, repo_ref, branch, commit_sha, status, summary,
                findings, tool_results, ticket_id, change_id, created_at
@@ -112,9 +158,10 @@ async def get_run(run_id: int):
     """, run_id, row.get("ticket_id"), row.get("repo_ref"))
     for item in related:
         item["findings"] = _loads(item.get("findings"), [])
-        item["tool_results"] = _loads(item.get("tool_results"), {})
+        item["tool_results"] = _normalize_tool_results(_loads(item.get("tool_results"), {}))
         item["repo_url"] = _repo_url(item.get("provider"), item.get("repo_ref"))
         item["report_links"] = _report_links(item.get("tool_results"))
+        item["scanner_summary"] = _scanner_summary(item["findings"], item["tool_results"])
     row["related_runs"] = related
     return row
 
@@ -123,7 +170,7 @@ async def get_run(run_id: int):
 async def record_run(body: dict = Body({})):
     body = body or {}
     findings = body.get("findings") or []
-    tool_results = body.get("tool_results") or {}
+    tool_results = _normalize_tool_results(body.get("tool_results") or {})
     status = body.get("status") or _gate_status(findings, tool_results)
     provider = body.get("provider") or "gitlab"
     repo_ref = body.get("repo_ref") or body.get("repo") or "unknown"

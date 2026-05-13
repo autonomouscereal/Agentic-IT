@@ -19,6 +19,11 @@ Jenkins, or a local agent task.
 High or critical findings fail the gate. Scanner errors are marked
 `needs_review`. Missing optional DAST targets are recorded as skipped.
 
+OWASP ZAP baseline exit code `2` is not a scanner execution failure. It means
+baseline warnings/findings were discovered. The dashboard records this as
+`completed_with_findings` and then lets the severity gate decide whether the
+overall run passes, fails, or needs review.
+
 ## Scripts
 
 ```bash
@@ -80,6 +85,19 @@ curl -sS -X POST "$SOC_DASHBOARD_URL/api/cicd/runs" \
 Posting a run with `create_ticket=true` creates an evidence ticket. Posting with
 `require_change=true` creates a pending change gate before production deploy.
 
+Run detail returns:
+
+- `tool_results`: normalized scanner result map with canonical keys
+  `semgrep`, `trivy`, `owasp_zap`, and `nuclei`.
+- `scanner_summary`: findings grouped by scanner with severity counts and
+  scanner status.
+- `report_links`: artifact/report links extracted from scanner result metadata.
+- `related_runs`: before/after runs for the same ticket or repository.
+
+The UI shows scanner cards separately so a demo operator can say exactly which
+tool found what, which tools ran cleanly, and which reports prove the before and
+after state.
+
 ## GitLab Default
 
 The dashboard exposes a starter `.gitlab-ci.yml` at:
@@ -96,11 +114,16 @@ change approvals together for production changes.
 
 ```bash
 python3 scripts/smoke_cicd_security_pipeline.py http://localhost:25480
+python3 scripts/smoke_operational_metrics.py http://localhost:25480
 ```
 
 Expected: the smoke test confirms the GitLab template, runs the local pipeline
 script in artifact mode, records the run, creates a dashboard ticket, and
 creates a pending deployment approval gate.
+
+The operational metrics smoke additionally posts a synthetic ZAP code-2 result
+and asserts the dashboard normalizes it to `completed_with_findings` with all
+four scanner summary groups present.
 
 ## Full Agentic Remediation Demo
 

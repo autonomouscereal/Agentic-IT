@@ -36,6 +36,8 @@ async def list_tools():
             "status": module.get("status"),
             "deployable": module.get("deployable"),
             "health_checks": module.get("health_checks", []),
+            "skill": module.get("skill"),
+            "provider_contract": module.get("provider_contract"),
         }
         for module in manifest.get("modules", [])
         if module.get("status") in ("implemented", "blueprint") and module.get("id") not in ("comfyui",)

@@ -137,6 +137,24 @@
                     </div>
                 </div>
 
+                <div class="ops-metrics-grid" id="ops-metrics-grid">
+                    <div class="metric-card"><div class="metric-label">Agent Work Avg</div><div class="metric-value" id="metric-agent-work">-</div><div class="metric-sub" id="metric-agent-work-sub">working time, gate wait removed</div></div>
+                    <div class="metric-card"><div class="metric-label">SLA Compliance</div><div class="metric-value" id="metric-sla">-</div><div class="metric-sub" id="metric-sla-sub">30 day ticket window</div></div>
+                    <div class="metric-card"><div class="metric-label">Approval Gates</div><div class="metric-value" id="metric-gates">-</div><div class="metric-sub" id="metric-gates-sub">pending / avg wait</div></div>
+                    <div class="metric-card"><div class="metric-label">Automation</div><div class="metric-value" id="metric-automation">-</div><div class="metric-sub" id="metric-automation-sub">auto assignment events</div></div>
+                </div>
+
+                <div class="charts-row metric-charts-row">
+                    <div class="chart-card wide">
+                        <div class="chart-header"><h3>Agent Throughput By Task</h3></div>
+                        <div class="metric-table" id="agent-task-metrics">Loading agent metrics...</div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header"><h3>SLA / Tool Snapshot</h3></div>
+                        <div class="metric-table" id="sla-tool-metrics">Loading SLA metrics...</div>
+                    </div>
+                </div>
+
                 <!-- Charts Row -->
                 <div class="charts-row">
                     <div class="chart-card wide">

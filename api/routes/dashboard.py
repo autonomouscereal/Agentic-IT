@@ -322,6 +322,166 @@ async def agent_performance():
     """)
     return {"agents": rows}
 
+
+@router.get("/ops-metrics")
+async def ops_metrics():
+    """Return operational metrics for agents, gates, SLAs, workflows, CI/CD, and tools."""
+    agent_rows = await fetchall("""
+        WITH task_gate_wait AS (
+            SELECT at.id AS task_id,
+                   COALESCE(SUM(
+                       GREATEST(0, EXTRACT(EPOCH FROM (
+                           COALESCE(cr.approved_at, at.completed_at, NOW()) - COALESCE(cr.requested_at, NOW())
+                       )))
+                   ), 0) AS gate_wait_seconds
+            FROM agent_tasks at
+            LEFT JOIN change_requests cr
+              ON cr.agent_id = at.agent_id
+             AND cr.ticket_id = at.ticket_id
+             AND cr.requested_at >= COALESCE(at.started_at, at.created_at)
+             AND cr.requested_at <= COALESCE(at.completed_at, NOW())
+             AND cr.status IN ('pending', 'approved', 'completed', 'rejected')
+            GROUP BY at.id
+        )
+        SELECT at.task_type,
+               COUNT(*) AS total_tasks,
+               COUNT(*) FILTER (WHERE at.status = 'completed') AS completed_tasks,
+               ROUND(AVG(GREATEST(0, EXTRACT(EPOCH FROM (
+                   COALESCE(at.completed_at, NOW()) - COALESCE(at.started_at, at.created_at, NOW())
+               )) - COALESCE(tgw.gate_wait_seconds, 0)))::numeric, 1) AS avg_work_seconds,
+               ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY GREATEST(0, EXTRACT(EPOCH FROM (
+                   COALESCE(at.completed_at, NOW()) - COALESCE(at.started_at, at.created_at, NOW())
+               )) - COALESCE(tgw.gate_wait_seconds, 0)))::numeric, 1) AS p50_work_seconds,
+               ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY GREATEST(0, EXTRACT(EPOCH FROM (
+                   COALESCE(at.completed_at, NOW()) - COALESCE(at.started_at, at.created_at, NOW())
+               )) - COALESCE(tgw.gate_wait_seconds, 0)))::numeric, 1) AS p95_work_seconds,
+               ROUND(AVG(COALESCE(tgw.gate_wait_seconds, 0))::numeric, 1) AS avg_gate_wait_seconds
+        FROM agent_tasks at
+        LEFT JOIN task_gate_wait tgw ON tgw.task_id = at.id
+        WHERE at.created_at > NOW() - INTERVAL '30 days'
+        GROUP BY at.task_type
+        ORDER BY completed_tasks DESC, total_tasks DESC
+        LIMIT 12
+    """)
+    agent_summary = await fetchrow("""
+        WITH task_gate_wait AS (
+            SELECT at.id AS task_id,
+                   COALESCE(SUM(
+                       GREATEST(0, EXTRACT(EPOCH FROM (
+                           COALESCE(cr.approved_at, at.completed_at, NOW()) - COALESCE(cr.requested_at, NOW())
+                       )))
+                   ), 0) AS gate_wait_seconds
+            FROM agent_tasks at
+            LEFT JOIN change_requests cr
+              ON cr.agent_id = at.agent_id
+             AND cr.ticket_id = at.ticket_id
+             AND cr.requested_at >= COALESCE(at.started_at, at.created_at)
+             AND cr.requested_at <= COALESCE(at.completed_at, NOW())
+             AND cr.status IN ('pending', 'approved', 'completed', 'rejected')
+            GROUP BY at.id
+        )
+        SELECT COUNT(*) AS tasks,
+               COUNT(*) FILTER (WHERE at.status = 'completed') AS completed,
+               ROUND(AVG(GREATEST(0, EXTRACT(EPOCH FROM (
+                   COALESCE(at.completed_at, NOW()) - COALESCE(at.started_at, at.created_at, NOW())
+               )) - COALESCE(tgw.gate_wait_seconds, 0)))::numeric, 1) AS avg_work_seconds,
+               ROUND(AVG(COALESCE(tgw.gate_wait_seconds, 0))::numeric, 1) AS avg_gate_wait_seconds
+        FROM agent_tasks at
+        LEFT JOIN task_gate_wait tgw ON tgw.task_id = at.id
+        WHERE at.created_at > NOW() - INTERVAL '30 days'
+    """)
+    sla = await fetchrow("""
+        WITH ticket_sla AS (
+            SELECT id, status, priority, created_at, updated_at,
+                   CASE
+                     WHEN upper(COALESCE(priority::text, '')) IN ('P1', '1', 'CRITICAL') THEN 4
+                     WHEN upper(COALESCE(priority::text, '')) IN ('P2', '2', 'HIGH') THEN 8
+                     WHEN upper(COALESCE(priority::text, '')) IN ('P3', '3', 'MEDIUM') THEN 24
+                     ELSE 72
+                   END AS sla_hours,
+                   CASE WHEN lower(status) IN ('resolved', 'closed', 'closed/resolved', 'implemented') THEN updated_at ELSE NOW() END AS end_at
+            FROM tickets
+            WHERE created_at > NOW() - INTERVAL '30 days'
+        )
+        SELECT COUNT(*) AS tickets,
+               COUNT(*) FILTER (WHERE lower(status) NOT IN ('resolved', 'closed', 'closed/resolved', 'implemented')) AS open_tickets,
+               COUNT(*) FILTER (WHERE end_at <= created_at + (sla_hours || ' hours')::interval) AS within_sla,
+               COUNT(*) FILTER (WHERE end_at > created_at + (sla_hours || ' hours')::interval) AS breached_sla,
+               COUNT(*) FILTER (
+                   WHERE lower(status) NOT IN ('resolved', 'closed', 'closed/resolved', 'implemented')
+                     AND end_at > created_at + ((sla_hours * 0.8) || ' hours')::interval
+                     AND end_at <= created_at + (sla_hours || ' hours')::interval
+               ) AS at_risk,
+               ROUND(100.0 * COUNT(*) FILTER (WHERE end_at <= created_at + (sla_hours || ' hours')::interval) / NULLIF(COUNT(*), 0), 1) AS compliance_pct
+        FROM ticket_sla
+    """)
+    gates = await fetchrow("""
+        SELECT COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+               COUNT(*) FILTER (WHERE status = 'approved') AS approved,
+               COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+               COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
+               ROUND(AVG(GREATEST(0, EXTRACT(EPOCH FROM (
+                   COALESCE(approved_at, NOW()) - COALESCE(requested_at, NOW())
+               ))))::numeric, 1) AS avg_wait_seconds
+        FROM change_requests
+        WHERE requested_at > NOW() - INTERVAL '30 days'
+    """)
+    workflow = await fetchrow("""
+        SELECT COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE status IN ('active', 'approved')) AS active,
+               COUNT(*) FILTER (WHERE status = 'tested') AS tested,
+               COUNT(*) FILTER (WHERE status IN ('draft', 'ready_for_review')) AS review_queue
+        FROM agent_workflows
+    """)
+    workflow_runs = await fetchrow("""
+        SELECT COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE status IN ('completed', 'passed')) AS completed,
+               COUNT(*) FILTER (WHERE status IN ('failed', 'error')) AS failed
+        FROM workflow_runs
+        WHERE created_at > NOW() - INTERVAL '30 days'
+    """)
+    cicd = await fetchall("""
+        SELECT status, COUNT(*) AS count
+        FROM cicd_security_runs
+        WHERE created_at > NOW() - INTERVAL '30 days'
+        GROUP BY status
+        ORDER BY count DESC
+    """)
+    auto_assignment = await fetchall("""
+        SELECT action, COUNT(*) AS count
+        FROM event_log
+        WHERE category = 'agent'
+          AND action LIKE 'auto_assignment%'
+          AND created_at > NOW() - INTERVAL '30 days'
+        GROUP BY action
+        ORDER BY count DESC
+    """)
+    tool_health = await fetchrow("""
+        SELECT COUNT(*) AS tools,
+               COUNT(*) FILTER (WHERE COALESCE(tc.status, t.status, 'unknown') = 'healthy') AS healthy,
+               COUNT(*) FILTER (WHERE COALESCE(tc.status, t.status, 'unknown') = 'down') AS down,
+               COUNT(*) FILTER (WHERE COALESCE(tc.status, t.status, 'unknown') NOT IN ('healthy', 'down')) AS degraded_or_unknown
+        FROM tools t
+        LEFT JOIN LATERAL (
+            SELECT status FROM tool_checks
+            WHERE tool_id = t.id
+            ORDER BY timestamp DESC
+            LIMIT 1
+        ) tc ON true
+        WHERE lower(t.name) <> 'comfyui'
+    """)
+    return {
+        "agent_summary": agent_summary or {},
+        "agent_by_task_type": agent_rows,
+        "sla": sla or {},
+        "approval_gates": gates or {},
+        "workflows": {**(workflow or {}), "runs": workflow_runs or {}},
+        "cicd": cicd,
+        "auto_assignment": auto_assignment,
+        "tool_health": tool_health or {},
+    }
+
 @router.get("/tool-uptime")
 async def tool_uptime(days: int = 7):
     since = datetime.now() - timedelta(days=days)

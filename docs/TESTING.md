@@ -12,7 +12,8 @@ node --check .\soc-dashboard\frontend\js\dashboard.js
 node --check .\soc-dashboard\frontend\js\agents.js
 node --check .\soc-dashboard\frontend\js\charts.js
 node --check .\soc-dashboard\frontend\js\websocket.js
-python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\smoke_provider_adapters.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py .\soc-dashboard\scripts\agentic_cicd_full_demo.py .\soc-dashboard\scripts\agentic_gitlab_cicd_demo.py .\soc-dashboard\scripts\platform_doctor.py .\soc-dashboard\scripts\repair_agent_supervision_env.py
+python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashboard\scripts\smoke_local_model_agent.py .\soc-dashboard\scripts\smoke_service_desk_intake.py .\soc-dashboard\scripts\smoke_cicd_security_pipeline.py .\soc-dashboard\scripts\smoke_agent_auditor.py .\soc-dashboard\scripts\smoke_provider_adapters.py .\soc-dashboard\scripts\smoke_operational_metrics.py .\soc-dashboard\scripts\run_cicd_security_pipeline.py .\soc-dashboard\scripts\agentic_cicd_full_demo.py .\soc-dashboard\scripts\agentic_gitlab_cicd_demo.py .\soc-dashboard\scripts\platform_doctor.py .\soc-dashboard\scripts\repair_agent_supervision_env.py
+python -m unittest discover -s .\soc-dashboard\tests -p "test_*.py"
 ```
 
 ## Prohibited Pattern Sweep
@@ -46,7 +47,7 @@ Expected:
 
 `platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, provider adapters, iTop UI reachability, Mailcow HTTP API domain/mailbox/alias counts, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence.
 
-Latest verified result on 2026-05-12:
+Latest verified result on 2026-05-13:
 
 ```text
 platform_doctor.py: PASS 18, WARN 0, FAIL 0
@@ -54,6 +55,64 @@ runner timeout_minutes: 0
 default_model: qwen/qwen3.6-27b
 effective_anthropic_base_url: http://192.168.50.222:4001
 ```
+
+## Operational Metrics Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_operational_metrics.py http://localhost:25480
+```
+
+Covers:
+
+- `/api/dashboard/ops-metrics` sections for agent work, SLA, gates, workflows,
+  CI/CD, auto-assignment, and tool health.
+- server-derived nonnegative agent idle/runtime/working/gated seconds.
+- workflow `review_state` and run counters.
+- dynamic tools/setup-module inventory with ComfyUI excluded.
+- CI/CD scanner grouping and OWASP ZAP baseline exit code `2` normalization.
+
+Latest verified result on 2026-05-13:
+
+```text
+status=passed
+cicd_run_id=26
+zap_status=completed_with_findings
+setup_modules=38
+negative_agent_timing_fields=0
+```
+
+## Current Live Agentic Proofs
+
+Latest verified on 2026-05-13 after the operational metrics deployment:
+
+```text
+Phishing auto-assignment:
+  dashboard_ticket=410
+  agent=148
+  task=145 completed/100
+  change=119 completed
+  final_note=682
+  postmortem=61
+  dashboard_status=resolved
+
+SIEM -> iTop -> dashboard -> agent:
+  iTop_incident=267 / I-000276
+  dashboard_ticket=422
+  agent=149
+  task=146 completed/100
+  approval_gate=123 approved_by=codex-live-test-approver completed
+  triage_note=687
+  postmortem=62
+  dashboard_status=resolved
+  forced_provider_sync=synced
+  direct_iTop_status=resolved
+  direct_iTop_solution contains agent completion summary
+```
+
+Both runs were monitored with `/api/agents/audits/run`; the auditor raised
+checkpoint-age warnings while heartbeat/output/note activity was fresh, and no
+wall-clock timeout or process kill was used.
 
 ## Cross-Platform Demo Credential Smoke
 
@@ -217,6 +276,49 @@ providers: generic-webhook, itop, jira, local, servicenow
 local_push: local_only
 servicenow: fail-closed not configured
 jira: fail-closed not configured
+```
+
+For real outbound iTop proof, include `--itop-create`:
+
+```bash
+python3 scripts/smoke_provider_adapters.py http://localhost:25480 --itop-create
+```
+
+Latest verified on 2026-05-13: dashboard tickets `420` and `421` synced to
+iTop provider refs `265` and `266`.
+
+## Live Bridge Regression
+
+Bridge tests must be run from their own directories so relative config and
+`.env` files load correctly.
+
+```bash
+cd /home/cereal/SOC_TESTING/siem-ticket-bridge
+PYTHONPATH=. python3 -m unittest tests.test_bridge -v
+set -a; source .env; set +a
+PYTHONPATH=. python3 -m siem_ticket_bridge.bridge --test-connection
+PYTHONPATH=. python3 tests/test_ticket_e2e.py
+
+cd /home/cereal/SOC_TESTING/soc_bridge
+python3 tests/test_end_to_end.py
+python3 tests/test_itop_connector.py
+python3 tests/test_mailcow_connector.py
+
+cd /home/cereal/iam-bridge && python3 scripts/test_bridge.py
+cd /home/cereal/keycloak-mailcow-bridge && python3 scripts/test_integration.py
+cd /home/cereal/keycloak-mailcow-bridge && python3 scripts/test_mailcow_api_shim.py
+cd /home/cereal/keycloak-manager && python3 scripts/test_keycloak.py
+```
+
+Latest verified on 2026-05-13:
+
+```text
+siem-ticket-bridge: 41 unit tests OK, connection OK, E2E direct iTop ticket 267
+soc-bridge: 11 + 22 + 13 tests OK
+iam-bridge: 23 tests OK
+keycloak-mailcow bridge: 47 passed, 1 expected skip
+mailcow api shim: 10 tests OK
+keycloak-manager: 26 tests OK
 ```
 
 ## CI/CD Security Pipeline Smoke

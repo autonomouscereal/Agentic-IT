@@ -1,6 +1,6 @@
 # Agent Operations Runbook
 
-Last updated: 2026-05-12.
+Last updated: 2026-05-13.
 
 ## Operator Mental Model
 
@@ -37,6 +37,34 @@ The dashboard should let operators answer:
 - Did it request approval before risky work?
 - Did the process clean up after completion?
 - Can a demo viewer follow the story from ticket notes without reading raw logs?
+
+## Real-Time Metrics
+
+The overview calls `GET /api/dashboard/ops-metrics` for operator and demo
+metrics. The goal is to show how the autonomous system is actually performing,
+not just whether a process exists.
+
+Agent timing definitions:
+
+- `running_seconds`: server-derived wall time from agent start to finish/now,
+  clamped at zero so browser clock skew cannot show negative durations.
+- `idle_seconds`: server-derived time since the latest heartbeat or start time,
+  clamped at zero.
+- `gate_wait_seconds`: approval/user-response/change wait time associated with
+  the task window.
+- `task_working_seconds`: task runtime minus gate wait, clamped at zero. Use
+  this for "how long did the agent work" SLA/efficiency conversations.
+
+Dashboard operational cards currently show:
+
+- average agent working time, with gate wait removed.
+- 30-day SLA compliance, breach count, and at-risk count.
+- pending approval gates and average gate wait.
+- automation activity, active workflows, and healthy tool count.
+
+Task-type rows include total/completed counts, average working time, and p95
+working time. These values are intentionally calculated by PostgreSQL on the
+server so every browser sees the same nonnegative numbers.
 
 ## Demo-Friendly Notes
 

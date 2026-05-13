@@ -4,6 +4,91 @@ Last updated: 2026-05-13.
 
 ## Fixed In Current Pass
 
+### Operational metrics, workflow review state, scanner findings, and tool inventory were demo-confusing
+
+Status: fixed and deployed on 2026-05-13.
+
+Problem:
+
+- The Agents tab showed negative idle/running seconds when browser and server
+  clocks diverged.
+- Overview lacked working-time metrics that excluded approval/user-response
+  gate wait.
+- Workflow rows could show `active` while still looking like they were waiting
+  on approval, and operators could not see linked tickets/test runs from the
+  workflow detail.
+- CI/CD run detail mixed scanner findings together and treated OWASP ZAP
+  baseline exit code `2` as a scanner error instead of warnings/findings.
+- Learning status labels like `promote`, `ready_for_review`, and `approved`
+  were ambiguous.
+- Tools did not clearly show setup modules/bridges/integrations.
+- RACI rules could not easily expose automatic agent assignment policy.
+
+Fix:
+
+- Added `GET /api/dashboard/ops-metrics` with agent working time, gate wait,
+  SLA compliance, approval gate wait, workflow run counts, CI/CD counts,
+  auto-assignment counts, and tool health.
+- Agents now return server-derived nonnegative `idle_seconds`,
+  `running_seconds`, `task_working_seconds`, and `gate_wait_seconds`.
+- Workflows now expose `review_state`, run counters, linked ticket/test runs,
+  and a reviewed rerun API for tested/active workflows.
+- CI/CD run detail now normalizes scanner names, groups findings by scanner,
+  always shows Semgrep/Trivy/OWASP ZAP/Nuclei result slots, and maps ZAP code
+  `2` to `completed_with_findings`.
+- Learning labels now say Draft / Ready For Review / Approved Learning /
+  Assets Created with plain hints.
+- Tools now render both health-checked tools and setup modules; ComfyUI remains
+  hidden from the operator tools dashboard.
+- RACI CRUD now exposes the `auto_assign_agent` hook and default model/prompt.
+
+Verification:
+
+- Local compile: `python -m py_compile api\routes\agents.py
+  api\routes\dashboard.py api\routes\workflows.py api\routes\cicd.py
+  api\routes\tools.py`: PASS.
+- JavaScript syntax: `node --check frontend\js\dashboard.js` and companion
+  frontend files: PASS.
+- Unit tests: `python -m unittest discover -s tests -p "test_*.py"`:
+  43 tests PASS.
+- Live smoke: `python scripts\smoke_operational_metrics.py
+  http://192.168.50.222:25480`: PASS, created CI/CD run `26`,
+  verified `zap_status=completed_with_findings`, four scanner summary groups,
+  `setup_modules=38`, and no negative agent timing fields.
+
+### Bridge E2E tests can falsely fail when launched outside their configured context
+
+Status: documented and rerun correctly on 2026-05-13.
+
+Problem:
+
+- Running `/home/cereal/SOC_TESTING/siem-ticket-bridge/tests/test_ticket_e2e.py`
+  directly from an unrelated working directory did not load the bridge `.env`
+  and reported `SIEM connected: False`, `Ticketing connected: False`.
+
+Impact:
+
+- The bridge looked broken even though the service and connectors were healthy.
+
+Fix:
+
+- Treat bridge tests as context-sensitive: run from the bridge directory with
+  `PYTHONPATH=.` and load `.env` for live connection/E2E tests.
+
+Verification:
+
+- `cd /home/cereal/SOC_TESTING/siem-ticket-bridge && PYTHONPATH=. python3 -m
+  unittest tests.test_bridge -v`: 41 tests PASS, 3 live tests skipped.
+- `source .env && PYTHONPATH=. python3 -m siem_ticket_bridge.bridge
+  --test-connection`: Wazuh and iTop connected, `error_count=0`.
+- `source .env && PYTHONPATH=. python3 tests/test_ticket_e2e.py`: PASS;
+  direct iTop ticket `267` created.
+- SOC bridge suites: 11 + 22 + 13 tests PASS.
+- IAM bridge: 23 tests PASS.
+- Keycloak-Mailcow bridge: 47 PASS, 1 expected skip.
+- Mailcow API shim: 10 tests PASS.
+- Keycloak manager: 26 tests PASS.
+
 ### Ticket close proof v2 was local-only despite end-to-end wording
 
 Status: fixed and verified, found from marker

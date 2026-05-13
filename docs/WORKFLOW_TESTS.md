@@ -36,6 +36,26 @@ This verifies:
 - Unified ticket context contains changes, workflows, and postmortems.
 - Audit records exist for the lifecycle.
 
+## Workflow Review And Rerun Semantics
+
+Workflow status and approval state are shown separately enough for an operator
+to understand what can run:
+
+- `draft`: not ready for live use.
+- `ready_for_review`: assets exist and need review.
+- `tested_needs_approval`: test output exists, but activation still requires
+  approval.
+- `active_approved`: reviewed workflow can be used for future tickets.
+- `active_missing_review`: legacy or imported active workflow that should be
+  reviewed before demoing as approved automation.
+
+Workflow list/detail now includes run counters and linked ticket/test runs.
+Detail also exposes **Rerun on Ticket**, which calls
+`POST /api/workflows/{workflow_id}/rerun` for workflows in `tested`, `approved`,
+or `active` state. The rerun creates a `workflow_runs` row and spawns an agent
+with the workflow blueprint, current ticket context, and the workflow run id it
+must complete.
+
 ## Agentic System Smoke
 
 ```bash
@@ -67,8 +87,9 @@ This creates a provider-agnostic setup ticket, assigns a short local-model agent
 3. Secret/prohibited dependency sweep.
 4. Installer dry-run.
 5. Rebuild and health check.
-6. Setup plane smoke.
-7. Phishing lifecycle smoke.
-8. Agentic system smoke.
-9. Local model agent smoke.
-10. Setup agent smoke.
+6. Operational metrics smoke.
+7. Setup plane smoke.
+8. Phishing lifecycle smoke.
+9. Agentic system smoke.
+10. Local model agent smoke.
+11. Setup agent smoke.

@@ -15,16 +15,40 @@ async def list_workflows(
     params = []
     idx = 1
     if status:
-        where.append(f"status = ${idx}")
+        where.append(f"w.status = ${idx}")
         params.append(status)
         idx += 1
     if ticket_class:
-        where.append(f"(ticket_class = ${idx} OR ticket_class IS NULL)")
+        where.append(f"(w.ticket_class = ${idx} OR w.ticket_class IS NULL)")
         params.append(ticket_class)
         idx += 1
     where_sql = "WHERE " + " AND ".join(where) if where else ""
     rows = await fetchall(
-        f"SELECT * FROM agent_workflows {where_sql} ORDER BY updated_at DESC LIMIT ${idx}",
+        f"""
+        SELECT w.*,
+               COALESCE(run_stats.run_count, 0) AS run_count,
+               COALESCE(run_stats.completed_count, 0) AS completed_run_count,
+               COALESCE(run_stats.failed_count, 0) AS failed_run_count,
+               run_stats.latest_run_at,
+               CASE
+                 WHEN w.status IN ('active', 'approved') AND w.reviewed_at IS NOT NULL THEN 'active_approved'
+                 WHEN w.status IN ('active', 'approved') THEN 'active_missing_review'
+                 WHEN w.status = 'tested' THEN 'tested_needs_approval'
+                 WHEN w.status = 'ready_for_review' THEN 'ready_for_review'
+                 ELSE w.status
+               END AS review_state
+        FROM agent_workflows w
+        LEFT JOIN LATERAL (
+            SELECT COUNT(*) AS run_count,
+                   COUNT(*) FILTER (WHERE status IN ('completed', 'passed')) AS completed_count,
+                   COUNT(*) FILTER (WHERE status IN ('failed', 'error')) AS failed_count,
+                   MAX(created_at) AS latest_run_at
+            FROM workflow_runs wr
+            WHERE wr.workflow_id = w.id
+        ) run_stats ON true
+        {where_sql}
+        ORDER BY w.updated_at DESC LIMIT ${idx}
+        """,
         *params, limit,
     )
     return {"workflows": rows, "total": len(rows)}
@@ -36,10 +60,23 @@ async def get_workflow(workflow_id: int):
     if not row:
         return {"error": "Workflow not found"}
     runs = await fetchall(
-        "SELECT * FROM workflow_runs WHERE workflow_id = $1 ORDER BY created_at DESC LIMIT 25",
+        """
+        SELECT wr.*, t.title AS ticket_title, t.status AS ticket_status,
+               t.provider, t.provider_ref, t.itop_ref, t.itop_class
+        FROM workflow_runs wr
+        LEFT JOIN tickets t ON t.id = wr.ticket_id
+        WHERE wr.workflow_id = $1
+        ORDER BY wr.created_at DESC LIMIT 25
+        """,
         workflow_id,
     )
     row["runs"] = runs
+    row["review_state"] = (
+        "active_approved" if row.get("status") in ("active", "approved") and row.get("reviewed_at")
+        else "active_missing_review" if row.get("status") in ("active", "approved")
+        else "tested_needs_approval" if row.get("status") == "tested"
+        else row.get("status")
+    )
     return row
 
 
@@ -146,6 +183,43 @@ async def review_workflow(
     await log_event("workflow", "info", reviewed_by, "workflow_reviewed",
                     f"workflow_{workflow_id}", {"status": status})
     return {"status": status, "id": workflow_id}
+
+
+@router.post("/{workflow_id}/rerun")
+async def rerun_workflow(
+    workflow_id: int,
+    ticket_id: int = Body(...),
+    model: str = Body("qwen/qwen3.6-27b"),
+    created_by: str = Body("dashboard"),
+):
+    workflow = await fetchrow("SELECT * FROM agent_workflows WHERE id = $1", workflow_id)
+    ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
+    if not workflow:
+        return {"error": "Workflow not found"}
+    if not ticket:
+        return {"error": "Ticket not found"}
+    if workflow.get("status") not in ("active", "approved", "tested"):
+        return {"error": "Workflow must be tested or active before rerun"}
+    run_id = await fetchval("""
+        INSERT INTO workflow_runs (workflow_id, ticket_id, status, started_at)
+        VALUES ($1, $2, 'running', NOW())
+        RETURNING id
+    """, workflow_id, ticket_id)
+    prompt = (
+        f"Rerun workflow `{workflow['name']}` version {workflow.get('version') or 1} on ticket {ticket_id}.\n\n"
+        f"Workflow blueprint:\n{workflow.get('blueprint') or ''}\n\n"
+        "Use the dashboard ticket context first. Create approval gates before risky actions. "
+        f"Record workflow run {run_id} completion with POST /api/workflows/runs/{run_id}/complete."
+    )
+    from services import agent_runner
+    result = await agent_runner.spawn_agent(ticket_id, model, prompt, "workflow_rerun")
+    await execute(
+        "UPDATE workflow_runs SET agent_id = $1, task_id = $2 WHERE id = $3",
+        result.get("agent_id"), result.get("task_id"), run_id,
+    )
+    await log_event("workflow", "info", created_by, "workflow_rerun_started",
+                    f"workflow_run_{run_id}", {"workflow_id": workflow_id, "ticket_id": ticket_id, **result})
+    return {"status": "started", "run_id": run_id, **result}
 
 
 @router.post("/{workflow_id}/runs")

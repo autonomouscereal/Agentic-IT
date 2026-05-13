@@ -74,8 +74,10 @@ async function runAgentAuditOnce() {
 }
 
 function renderAgentCard(a, isStalled) {
-    const idle = a.heartbeat ? Math.floor((Date.now() - new Date(a.heartbeat).getTime()) / 1000) : "-";
-    const running = a.started_at ? Math.floor((Date.now() - new Date(a.started_at).getTime()) / 1000) : "-";
+    const idle = Number.isFinite(Number(a.idle_seconds)) ? formatDuration(a.idle_seconds) : "-";
+    const running = Number.isFinite(Number(a.running_seconds)) ? formatDuration(a.running_seconds) : "-";
+    const working = Number.isFinite(Number(a.task_working_seconds)) ? formatDuration(a.task_working_seconds) : "-";
+    const gated = Number.isFinite(Number(a.gate_wait_seconds)) ? formatDuration(a.gate_wait_seconds) : "-";
     const stalledClass = isStalled ? " stalled" : "";
 
     let actionButtons = `<button class="btn btn-sm" onclick="viewAgentDetail(${a.id})">Detail</button>`;
@@ -101,8 +103,10 @@ function renderAgentCard(a, isStalled) {
         <div class="agent-ticket">${escHtml(a.ticket_title || "No ticket")}</div>
         <div class="agent-meta">
             <span>Model: ${a.model || "-"}</span>
-            <span>Idle: ${idle}s</span>
-            <span>Running: ${running}s</span>
+            <span>Idle: ${idle}</span>
+            <span>Runtime: ${running}</span>
+            <span>Work: ${working}</span>
+            <span>Gated: ${gated}</span>
         </div>
         ${renderTaskSummary(a)}
         <div class="agent-actions">
