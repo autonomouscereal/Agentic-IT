@@ -469,7 +469,7 @@ class AgentLifecycleGuardTests(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    def test_successful_ticket_resolution_closes_ticket(self):
+    def test_successful_agent_completion_does_not_close_ticket_implicitly(self):
         module = load_agent_runner()
         executes = []
         events = []
@@ -519,7 +519,7 @@ class AgentLifecycleGuardTests(unittest.TestCase):
 
         asyncio.run(module._spawn_with_semaphore("/tmp/work", "prompt", 201, 301))
 
-        self.assertTrue(any("UPDATE tickets SET status = 'resolved'" in call[0] and call[1] == 444 for call in executes))
+        self.assertFalse(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in executes))
         self.assertTrue(any(event[3] == "agent_completed" for event in events))
 
     def test_curl_guard_blocks_broad_dashboard_endpoints(self):
@@ -695,6 +695,31 @@ class AgentLifecycleGuardTests(unittest.TestCase):
             module._ticket_priority_rank("P1", "postmortem"),
             module._ticket_priority_rank("P1", "ticket_resolution"),
         )
+
+    def test_checkpoint_wait_gate_blocks_completion(self):
+        module = load_agent_runner()
+
+        checkpoint = {
+            "step": "waiting-for-devsecops-access",
+            "status": "waiting_for_access",
+            "output": "Repository API returned 403",
+            "progress_pct": 45,
+        }
+
+        self.assertTrue(module._checkpoint_blocks_completion(checkpoint))
+        self.assertEqual(module._blocked_task_status(checkpoint), "awaiting_access")
+
+    def test_done_checkpoint_does_not_block_completion(self):
+        module = load_agent_runner()
+
+        checkpoint = {
+            "step": "access-resume-complete",
+            "status": "done",
+            "output": "Access grant verified and ticket resolved",
+            "progress_pct": 100,
+        }
+
+        self.assertFalse(module._checkpoint_blocks_completion(checkpoint))
 
     def test_agent_priority_queue_dequeues_high_priority_first(self):
         module = load_agent_runner()

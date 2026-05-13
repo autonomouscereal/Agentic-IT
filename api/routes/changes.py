@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Query, Body
 from datetime import datetime, timedelta
+import json
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.event_logger import log_event
 
@@ -31,6 +32,26 @@ def _completion_actor_from_body(body):
     return "dashboard"
 
 
+def _loads_json(value, default=None):
+    if value is None:
+        return default if default is not None else {}
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default if default is not None else {}
+    return default if default is not None else {}
+
+
+def _access_policy(change):
+    policy = _loads_json((change or {}).get("approval_policy"), {})
+    if not isinstance(policy, dict) or not policy.get("access_request"):
+        return None
+    return policy
+
+
 async def _add_gate_note(ticket_id, change_id, title, body, actor="approval-gate", source="approval-gate"):
     if not ticket_id:
         return None
@@ -47,6 +68,76 @@ async def _add_gate_note(ticket_id, change_id, title, body, actor="approval-gate
                         "title": title,
                     })
     return note_id
+
+
+async def _sync_access_request_status(change, status, actor, evidence=None):
+    policy = _access_policy(change)
+    if not policy:
+        return {"status": "not_access_request"}
+    change_id = change.get("id")
+    if status == "approved":
+        access_request = await fetchrow("""
+            UPDATE access_requests
+            SET status = 'approved',
+                approval_actor = $1,
+                updated_at = NOW()
+            WHERE change_id = $2
+            RETURNING *
+        """, actor, change_id)
+    elif status == "completed":
+        access_request = await fetchrow("""
+            UPDATE access_requests
+            SET status = 'granted',
+                grant_evidence = $1,
+                updated_at = NOW()
+            WHERE change_id = $2
+            RETURNING *
+        """, evidence or "", change_id)
+    elif status == "rejected":
+        access_request = await fetchrow("""
+            UPDATE access_requests
+            SET status = 'rejected',
+                approval_actor = $1,
+                grant_evidence = $2,
+                updated_at = NOW()
+            WHERE change_id = $3
+            RETURNING *
+        """, actor, evidence or "", change_id)
+    else:
+        return {"status": "ignored", "requested_status": status}
+
+    if not access_request:
+        return {"status": "missing_access_request", "change_id": change_id}
+
+    title = {
+        "approved": "Access gate approved",
+        "completed": "Access granted",
+        "rejected": "Access gate rejected",
+    }.get(status, "Access request updated")
+    body = "\n".join([
+        f"Access request `{access_request['id']}` moved to `{access_request['status']}`.",
+        f"Resource: `{access_request['resource']}`.",
+        f"Permission: `{access_request['permission']}`.",
+        f"Actor: `{actor}`.",
+        f"Evidence: {evidence or 'Approval status update recorded.'}",
+    ])
+    await _add_gate_note(access_request.get("parent_ticket_id"), change_id, title, body, actor, "access-request")
+    if access_request.get("access_ticket_id"):
+        await _add_gate_note(access_request.get("access_ticket_id"), change_id, title, body, actor, "access-request")
+        if status in ("completed", "rejected"):
+            await execute("""
+                UPDATE tickets
+                SET status = $1, updated_at = NOW()
+                WHERE id = $2
+            """, "resolved" if status == "completed" else "closed", access_request.get("access_ticket_id"))
+    await log_event("access", "info", actor, f"access_request_{status}",
+                    f"access_request_{access_request['id']}", {
+                        "change_id": change_id,
+                        "parent_ticket_id": access_request.get("parent_ticket_id"),
+                        "access_ticket_id": access_request.get("access_ticket_id"),
+                        "status": access_request.get("status"),
+                    })
+    return {"status": access_request.get("status"), "access_request_id": access_request.get("id")}
 
 
 async def _resume_agent_after_approval(change, approved_by):
@@ -325,6 +416,7 @@ async def approve_change(change_id: int, body: dict = Body({})):
     if approval_reason:
         note_body += f"\nApproval reason: {approval_reason}"
     await _add_gate_note(change["ticket_id"], change_id, note_title, note_body, approved_by, "approval-gate")
+    await _sync_access_request_status({**change, "id": change_id}, "approved", approved_by, approval_reason)
 
     resume = await _resume_agent_after_approval({**change, "id": change_id}, approved_by)
     return {"status": "approved", "change_id": change_id, "resume": resume}
@@ -369,6 +461,7 @@ async def reject_change(
         rejected_by,
         "approval-gate",
     )
+    await _sync_access_request_status({**change, "id": change_id}, "rejected", rejected_by, reason)
 
     return {"status": "rejected", "change_id": change_id}
 
@@ -413,5 +506,6 @@ async def complete_change(change_id: int, body: dict = Body({})):
         actor,
         "approval-gate",
     )
+    await _sync_access_request_status({**change, "id": change_id}, "completed", actor, result)
 
     return {"status": "completed", "change_id": change_id}

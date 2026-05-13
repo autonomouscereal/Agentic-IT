@@ -16,6 +16,19 @@
       "skipped_paths": 0
     },
     {
+      "name": "account-access-workflow",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\account-access-workflow",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 2944,
+          "sha256": "ffbf55d28447ab7bda5671bf0263419b6ec87001957c745c7a75d734ef1387cd"
+        }
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
+    },
+    {
       "name": "cicd-security-pipeline",
       "source": "C:\\Users\\cereal\\.agents\\skills\\cicd-security-pipeline",
       "files": [

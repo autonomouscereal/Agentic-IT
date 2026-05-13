@@ -10,6 +10,9 @@ database.fetchval = None
 database.json_dumps = lambda value: value
 sys.modules["database"] = database
 
+services = types.ModuleType("services")
+sys.modules["services"] = services
+
 event_logger = types.ModuleType("services.event_logger")
 event_logger.log_event = None
 sys.modules["services.event_logger"] = event_logger
@@ -17,6 +20,10 @@ sys.modules["services.event_logger"] = event_logger
 ticket_links = types.ModuleType("services.ticket_links")
 ticket_links.external_ticket_url = lambda ticket: ""
 sys.modules["services.ticket_links"] = ticket_links
+
+workflow_keys = types.ModuleType("services.workflow_keys")
+workflow_keys.workflow_key_for_ticket = lambda ticket: "incident:test"
+sys.modules["services.workflow_keys"] = workflow_keys
 
 from api.services.ticket_service import compact_ticket_payload
 

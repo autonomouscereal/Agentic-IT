@@ -189,6 +189,56 @@ async def add_ticket_attachment(
         ticket_id, filename, content_type, storage_ref, sha256, size_bytes, note_id, metadata
     )
 
+
+@router.get("/{ticket_id}/access-requests")
+async def list_ticket_access_requests(ticket_id: int):
+    rows = await fetchall("""
+        SELECT ar.*, at.title AS access_ticket_title, at.status AS access_ticket_status,
+               at.provider AS access_ticket_provider, at.provider_ref AS access_ticket_provider_ref,
+               cr.status AS change_status, cr.approved_by, cr.approved_at, cr.result AS change_result
+        FROM access_requests ar
+        LEFT JOIN tickets at ON at.id = ar.access_ticket_id
+        LEFT JOIN change_requests cr ON cr.id = ar.change_id
+        WHERE ar.parent_ticket_id = $1 OR ar.access_ticket_id = $1
+        ORDER BY ar.created_at DESC
+    """, ticket_id)
+    return {"access_requests": rows, "total": len(rows)}
+
+
+@router.post("/{ticket_id}/access-request")
+async def create_ticket_access_request(
+    ticket_id: int,
+    resource: str = Body(...),
+    permission: str = Body(...),
+    reason: str = Body(""),
+    agent_id: int = Body(None),
+    requester: str = Body(None),
+    account_ref: str = Body(None),
+    assignment_group: str = Body("Identity & Access"),
+    risk_level: str = Body("medium"),
+    sync_provider: bool = Body(None),
+    created_by: str = Body("agent-access-request"),
+):
+    """Create an auditable access request and approval gate for a blocker.
+
+    Agents use this when they hit a real permission wall. The child ticket is
+    routed to the owning access group, while the approval gate remains linked to
+    the original ticket/agent so approval resumes the original work.
+    """
+    return await ticket_service.create_access_request(
+        parent_ticket_id=ticket_id,
+        resource=resource,
+        permission=permission,
+        reason=reason,
+        agent_id=agent_id,
+        requester=requester,
+        account_ref=account_ref,
+        assignment_group=assignment_group,
+        risk_level=risk_level,
+        sync_provider=sync_provider,
+        created_by=created_by,
+    )
+
 @router.post("/{ticket_id}/sync")
 async def sync_ticket(ticket_id: int):
     ticket = await fetchrow("SELECT provider, provider_ref, provider_class, itop_ref, itop_class FROM tickets WHERE id = $1", ticket_id)
@@ -206,6 +256,87 @@ async def push_ticket_to_provider(ticket_id: int, body: dict = Body(None)):
     """Create/update the provider-side ticket from the canonical dashboard ticket."""
     provider = (body or {}).get("provider")
     return await ticket_service.push_to_provider(ticket_id, provider)
+
+
+@router.post("/{ticket_id}/status")
+async def update_ticket_status(
+    ticket_id: int,
+    status: str = Body(...),
+    actor: str = Body("dashboard"),
+    reason: str = Body(""),
+    close_provider: bool = Body(False),
+):
+    """Explicitly update ticket status.
+
+    Agent task completion does not imply ticket closure. Agents and operators
+    call this endpoint only when the workflow/deployment policy says the ticket
+    should move to a new state.
+    """
+    ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
+    if not ticket:
+        return {"error": "Ticket not found"}
+
+    normalized = (status or "").strip().lower()
+    allowed = {
+        "new", "assigned", "in_progress", "awaiting_user_response",
+        "pending_approval", "awaiting_access", "blocked", "resolved",
+        "closed", "closed/resolved", "implemented", "rejected", "cancelled",
+        "canceled",
+    }
+    if normalized not in allowed:
+        raise HTTPException(status_code=400, detail=f"Unsupported ticket status: {status}")
+
+    provider_result = {"status": "skipped", "reason": "not_requested"}
+    terminal_status = normalized in {"resolved", "closed", "closed/resolved", "implemented"}
+    if close_provider and terminal_status:
+        provider_name = ticket.get("provider") or "local"
+        provider_result = await provider_registry.close_ticket(
+            provider_name,
+            ticket_id,
+            reason or f"Ticket marked {normalized} by {actor}.",
+        )
+        if provider_result.get("error"):
+            await log_event("sync", "warning", actor, "provider_close_failed",
+                            f"ticket_{ticket_id}", {
+                                "status": normalized,
+                                "provider": provider_name,
+                                "error": provider_result.get("error"),
+                            })
+            return {"error": "provider_close_failed", "provider_result": provider_result}
+
+    await execute(
+        "UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2",
+        normalized,
+        ticket_id,
+    )
+    note_body = "\n".join([
+        f"Ticket status changed to `{normalized}`",
+        f"Actor: {actor}",
+        "",
+        reason or "No reason provided.",
+    ]).strip()
+    note = await ticket_service.add_note(
+        ticket_id,
+        note_body,
+        author=actor,
+        source="ticket-status",
+        visibility="internal",
+        external_ref=f"status:{normalized}:{ticket_id}",
+    )
+    await log_event("ticket", "info", actor, "ticket_status_updated",
+                    f"ticket_{ticket_id}", {
+                        "status": normalized,
+                        "reason": reason,
+                        "note_id": note.get("id"),
+                        "close_provider": close_provider,
+                        "provider_result": provider_result,
+                    })
+    return {
+        "status": normalized,
+        "ticket_id": ticket_id,
+        "note_id": note.get("id"),
+        "provider_result": provider_result,
+    }
 
 @router.post("/sync-all")
 async def sync_all(body=Body(None)):

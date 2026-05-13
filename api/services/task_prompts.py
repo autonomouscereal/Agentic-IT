@@ -1,6 +1,24 @@
 """Prompt builders for ticket, postmortem, and workflow agent tasks."""
 
 
+TICKET_CLOSURE_RULE = """Ticket closure rule:
+- Agent/task completion does not close the ticket automatically.
+- Leave the ticket open when the workflow, deployment policy, or human review
+  model requires a human layer after agent work.
+- Default workflow behavior is agent-initiated closure: when all requested work,
+  approval gates, evidence notes, and verification steps are complete, call
+  POST /api/tickets/{ticket_id}/status yourself with `status`, `actor`,
+  `reason`, and `close_provider` as appropriate before the final `done`
+  checkpoint.
+- Opt out of closure only when the ticket/workflow/deployment explicitly
+  requires human review, requester response, more access, or a manual provider
+  handoff. In that case leave a note explaining why the ticket remains open.
+- Use `close_provider: true` when the external ticketing record should also be
+  resolved/closed; use `close_provider: false` when only the dashboard state
+  should change or a human/provider handoff is required.
+"""
+
+
 FAST_TICKET_PROMPT = """Work this ticket end to end as quickly as possible.
 
 Operational rules:
@@ -12,6 +30,7 @@ Operational rules:
 - Change request body shape is exactly: {"agent_id": <agent_instance_id>, "ticket_id": {ticket_id}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {"auto_complete": false}}. Do not use title/description fields for change requests.
 - The shell guard blocks inline JSON that contains quoted braces. For POST payloads, use the Write tool to create a JSON file, then run a simple Bash curl command with `-d @payload.json`. Do not create JSON payloads with Bash heredocs or inline `-d '{...}'`.
 - After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include compile/test/diff or operational evidence in the result.
+- If you hit a permission wall, access denied response, missing role, missing group membership, or a resource you cannot inspect with current credentials, do not bypass it. POST /api/tickets/{ticket_id}/access-request with agent_id, resource, permission, requester/account_ref when known, reason, assignment_group, and risk_level. Add a note saying exactly what is blocked, update checkpoint.json with status waiting_for_access and progress below 100, then stop. After the access gate is approved, re-read context, verify the grant evidence or lab-safe grant note, complete the access change with evidence, and continue the original task.
 - If investigation proves an alert is a false positive, classify it that way in a ticket note with the exact evidence, affected rule id/signature, observed benign source, and residual risk. Do not suppress anything unless the benign pattern is precise and repeatable. For suppression/rule tuning, create a change request first, include the proposed exact match criteria, expiration/review date, rollback, and a test plan proving the tuned rule still catches malicious variants.
 - In lab/demo runs, if no concrete provider action adapter is available for an approved containment action, do not browse broad tool inventory. Complete the approved gate with explicit simulated control evidence, add a ticket note, and name the production adapter that would perform the real operation.
 - If you cannot proceed without requester input, POST /api/tickets/{ticket_id}/request-info with a concise question, recipient/contact method when known, and context. Then update checkpoint.json with status waiting_for_user and stop. When a user response arrives, the dashboard will record it with /api/tickets/{ticket_id}/user-response and may resume the ticket.
@@ -24,6 +43,10 @@ Operational rules:
   comments inside quoted shell arguments, and deeply nested quoting; if JSON
   parsing needs more than a one-liner, write/read a temporary script or file.
 - Update checkpoint.json after major steps. Use status `running` for intermediate checkpoints. Only use status `done` or `completed` with progress_pct `100` after all approval gates are completed, final notes are written, and the ticket is ready to close. The file already exists; read checkpoint.json directly before writing it.
+- Agent completion alone does not resolve the ticket. Default to explicit
+  agent-initiated closure with POST /api/tickets/{ticket_id}/status after the
+  final evidence note when the work is complete; leave it open only when the
+  workflow/deployment policy requires human review or another wait state.
 - When complete, summarize root cause, evidence, actions taken, residual risk, and recommended follow-up.
 """
 
@@ -85,6 +108,7 @@ Operational rules:
 - Change request body shape is exactly: {"agent_id": <agent_instance_id>, "ticket_id": {ticket_id}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {"auto_complete": false}}. Do not use title/description fields for change requests.
 - The shell guard blocks inline JSON that contains quoted braces. For POST payloads, use the Write tool to create a JSON file, then run a simple Bash curl command with `-d @payload.json`. Do not create JSON payloads with Bash heredocs or inline `-d '{...}'`.
 - After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include lab-safe operational evidence.
+- If you hit a permission wall, access denied response, missing role, missing group membership, or a resource you cannot inspect with current credentials, do not bypass it. POST /api/tickets/{ticket_id}/access-request with agent_id, resource, permission, requester/account_ref when known, reason, assignment_group, and risk_level. Add a note saying exactly what is blocked, update checkpoint.json with status waiting_for_access and progress below 100, then stop. After the access gate is approved, re-read context, verify the grant evidence or lab-safe grant note, complete the access change with evidence, and continue the original task.
 - If the evidence proves a false positive, write a false-positive classification note with exact matching evidence and residual risk. Only propose suppression/rule tuning through a change request with precise match terms, expiry/review date, rollback, and tests; never blanket-suppress a rule or source.
 - In lab/demo runs, if no concrete provider action adapter is available for an approved containment action, do not browse broad tool inventory. Complete the approved gate with explicit simulated control evidence, add a ticket note, and name the production adapter that would perform the real operation.
 - If requester input is required, POST /api/tickets/{ticket_id}/request-info, update checkpoint.json with status waiting_for_user, and stop.
@@ -92,6 +116,10 @@ Operational rules:
   comments inside quoted shell arguments, and deeply nested quoting; if JSON
   parsing needs more than a one-liner, write/read a temporary script or file.
 - Update checkpoint.json after major steps. Use status `running` for intermediate checkpoints. Only use status `done` or `completed` with progress_pct `100` after all approval gates are completed, final notes are written, and the ticket is ready to close.
+- Agent completion alone does not resolve the ticket. Default to explicit
+  agent-initiated closure with POST /api/tickets/{ticket_id}/status after the
+  final evidence note when the work is complete; leave it open only when the
+  workflow/deployment policy requires human review or another wait state.
 """
 
 
@@ -99,8 +127,9 @@ def build_ticket_resolution_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
         FAST_TICKET_PROMPT,
+        TICKET_CLOSURE_RULE,
         "",
-        f"Ticket to resolve: {title}",
+        f"Ticket to work: {title}",
     ]
     if extra_prompt:
         body.extend(["", "Additional operator instruction:", extra_prompt])
@@ -111,9 +140,10 @@ def build_auto_assignment_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
         AUTO_ASSIGNMENT_PROMPT,
+        TICKET_CLOSURE_RULE,
         "",
         f"Ticket id: {ticket.get('id')}",
-        f"Ticket to resolve: {title}",
+        f"Ticket to work: {title}",
     ]
     if extra_prompt:
         body.extend(["", "RACI auto-assignment instruction:", extra_prompt])

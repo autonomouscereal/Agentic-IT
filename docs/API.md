@@ -82,6 +82,7 @@ Returns the full agent context bundle:
 - knowledge articles
 - matching workflows
 - global skills
+- access requests linked to the ticket or created from the ticket
 
 `POST /api/tickets/{ticket_id}/notes`
 
@@ -99,6 +100,32 @@ Example:
 `POST /api/tickets/{ticket_id}/attachments`
 
 Stores attachment metadata only. Binary storage should be external.
+
+`GET /api/tickets/{ticket_id}/access-requests`
+
+Lists permission-wall access requests linked to this ticket, including the child
+access ticket, approval gate, and grant status.
+
+`POST /api/tickets/{ticket_id}/access-request`
+
+Creates a child access request ticket assigned to the owning RACI group and a
+change approval gate linked to the original ticket/agent. Approval of that gate
+resumes the original ticket when no active task is already running.
+
+Example:
+
+```json
+{
+  "agent_id": 123,
+  "resource": "GitLab project demo/private-infra",
+  "permission": "Developer repository read access",
+  "account_ref": "agent-123",
+  "assignment_group": "DevSecOps",
+  "risk_level": "medium",
+  "sync_provider": false,
+  "reason": "Repository API returned 403; least-privilege read access is required before evidence can be reviewed."
+}
+```
 
 `POST /api/tickets/{ticket_id}/request-info`
 
@@ -131,6 +158,27 @@ Example:
 ```json
 {"provider": "itop"}
 ```
+
+`POST /api/tickets/{ticket_id}/status`
+
+Explicit ticket status update. Agent completion does not close tickets
+automatically; default ticket workflows make the agent call this endpoint after
+final evidence and verification. Human-review deployments can skip the call or
+set `close_provider: false` when the external record should remain open.
+
+Example:
+
+```json
+{
+  "status": "resolved",
+  "actor": "agent-159",
+  "reason": "All approved containment steps completed, tests passed, residual risk documented.",
+  "close_provider": true
+}
+```
+
+Use `close_provider: false` when the dashboard status should change but the
+external ITSM record should remain open for human review.
 
 `POST /api/tickets/{ticket_id}/assign-agent`
 

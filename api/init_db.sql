@@ -221,6 +221,7 @@ CREATE TABLE IF NOT EXISTS agent_workflows (
     ticket_class VARCHAR(100),
     trigger_type VARCHAR(80) NOT NULL DEFAULT 'manual',
     status VARCHAR(40) NOT NULL DEFAULT 'draft',
+    workflow_key VARCHAR(160),
     version INTEGER NOT NULL DEFAULT 1,
     blueprint TEXT NOT NULL,
     test_plan TEXT,
@@ -329,6 +330,25 @@ CREATE TABLE IF NOT EXISTS service_intake_sessions (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS access_requests (
+    id SERIAL PRIMARY KEY,
+    parent_ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    access_ticket_id INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
+    agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    change_id INTEGER REFERENCES change_requests(id) ON DELETE SET NULL,
+    requester VARCHAR(240),
+    account_ref VARCHAR(240),
+    resource VARCHAR(300) NOT NULL,
+    permission VARCHAR(240) NOT NULL,
+    reason TEXT,
+    assignment_group VARCHAR(160) NOT NULL DEFAULT 'Identity & Access',
+    status VARCHAR(40) NOT NULL DEFAULT 'pending_approval',
+    approval_actor VARCHAR(160),
+    grant_evidence TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS cicd_security_runs (
     id SERIAL PRIMARY KEY,
     provider VARCHAR(100) NOT NULL DEFAULT 'local',
@@ -430,6 +450,8 @@ INSERT INTO service_raci_rules (
     ('Phishing report', 'phishing', '["phish", "phishing", "suspicious email", "malicious email", "reported email", "bad link", "email header"]', 'Incident', 'P2', 'Security Operations', 'Security Operations', 'Security Operations Manager', '["Email Operations", "Identity & Access"]', '["Compliance & Audit"]', true, 'Approve mailbox search, message quarantine, URL block, or account containment before execution.', 'medium', '["phishing", "email", "incident-response"]'),
     ('Account locked or MFA help', 'identity-help', '["locked out", "password reset", "mfa", "2fa", "authenticator", "cannot login", "access denied"]', 'UserRequest', 'P3', 'Identity & Access', 'Identity & Access', 'IAM Service Owner', '["Service Desk"]', '["Security Operations"]', false, null, 'low', '["iam", "service-desk"]'),
     ('Access request', 'access-request', '["need access", "grant access", "permission", "role", "group membership", "shared mailbox", "distribution group"]', 'UserRequest', 'P3', 'Identity & Access', 'Identity & Access', 'Data Owner', '["Compliance & Audit"]', '["Requester Manager"]', true, 'Approve entitlement, role, or group membership change before execution.', 'medium', '["iam", "approval", "least-privilege"]'),
+    ('GitLab repository access', 'repo-access', '["gitlab access", "repository access", "repo permission", "merge request access", "maintainer role", "developer role", "pipeline access"]', 'UserRequest', 'P3', 'DevSecOps', 'DevSecOps', 'Repository Owner', '["Identity & Access", "Compliance & Audit"]', '["Requester Manager"]', true, 'Approve repository role or project membership before granting access.', 'medium', '["iam", "gitlab", "least-privilege", "devsecops"]'),
+    ('SIEM analyst access', 'siem-access', '["wazuh access", "siem access", "alert index access", "security dashboard access", "read alerts", "analyst role", "wazuh dashboard"]', 'UserRequest', 'P2', 'Identity & Access', 'Identity & Access', 'Security Operations Manager', '["Security Operations", "Compliance & Audit"]', '["Requester Manager"]', true, 'Approve SIEM read role, alert index access, or dashboard group membership before granting access.', 'medium', '["iam", "siem", "wazuh", "least-privilege"]'),
     ('Service outage', 'outage', '["down", "outage", "unavailable", "cannot reach", "service offline", "site broken", "network down"]', 'Incident', 'P1', 'Infrastructure Operations', 'Infrastructure Operations', 'Infrastructure Manager', '["Network Operations", "Business Applications"]', '["Security Operations", "Compliance & Audit"]', true, 'Approve production restart, failover, firewall, DNS, or routing change before execution.', 'high', '["incident", "availability", "change-management"]'),
     ('EDR/SIEM security alert', 'edr-siem-alert', '["wazuh", "sysmon", "edr", "siem alert", "security breach", "critical security", "suricata", "zeek", "malware", "endpoint alert"]', 'Incident', 'P1', 'Security Operations', 'Security Operations', 'Security Operations Manager', '["Endpoint Support", "Infrastructure Operations", "Identity & Access"]', '["Compliance & Audit"]', true, 'Approve endpoint containment, account disablement, network block, or active response before execution.', 'high', '["edr", "siem", "incident-response", "endpoint"]'),
     ('Endpoint issue', 'endpoint-support', '["laptop", "desktop", "workstation", "edr", "sysmon", "agent missing", "software install"]', 'UserRequest', 'P3', 'Endpoint Support', 'Endpoint Support', 'Endpoint Service Owner', '["Security Operations"]', '[]', false, null, 'low', '["endpoint", "support"]'),
@@ -541,6 +563,14 @@ VALUES
         'Before substantial work, search shared memory for relevant prior context with the agent-memory skill or scripts/agent_memory.py. After meaningful completion, store a concise durable note with the outcome, test evidence, changed files, and any caveats. Do not store secrets; use redacted placeholders or vault references.',
         true,
         true
+    ),
+    (
+        'permission-wall-access-request',
+        'Escalate permission blockers into auditable access request tickets and approval gates, then resume the original ticket after approval.',
+        'identity-access',
+        'When a ticket cannot proceed because the agent lacks a required role, group, system, repository, mailbox, or SIEM permission, do not work around the control. POST /api/tickets/{ticket_id}/access-request with agent_id, resource, permission, requester/account, reason, and assignment_group. Add a ticket note saying you are waiting for access, update checkpoint.json with status waiting_for_access and progress below 100, then stop. After approval, re-read the ticket context, verify the approved grant evidence or lab-safe grant note, complete the access change with evidence, and resume the original task.',
+        true,
+        true
     )
 ON CONFLICT (name) DO UPDATE SET
     description = EXCLUDED.description,
@@ -575,6 +605,10 @@ CREATE INDEX IF NOT EXISTS idx_postmortems_ticket_id ON postmortems(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_postmortems_status ON postmortems(status);
 CREATE INDEX IF NOT EXISTS idx_agent_workflows_status ON agent_workflows(status);
 CREATE INDEX IF NOT EXISTS idx_agent_workflows_ticket_class ON agent_workflows(ticket_class);
+CREATE INDEX IF NOT EXISTS idx_agent_workflows_workflow_key ON agent_workflows(workflow_key);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_agent_workflows_active_workflow_key
+    ON agent_workflows(workflow_key)
+    WHERE workflow_key IS NOT NULL AND status IN ('active', 'approved');
 CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_dashboard_users_provider ON dashboard_users(provider, provider_ref);
 CREATE INDEX IF NOT EXISTS idx_dashboard_user_roles_user ON dashboard_user_roles(user_id);
@@ -584,6 +618,9 @@ CREATE INDEX IF NOT EXISTS idx_service_raci_rules_intent ON service_raci_rules(i
 CREATE INDEX IF NOT EXISTS idx_service_raci_rules_auto_agent ON service_raci_rules(auto_assign_agent) WHERE enabled = true;
 CREATE INDEX IF NOT EXISTS idx_service_intake_ticket ON service_intake_sessions(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_service_intake_created ON service_intake_sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_access_requests_parent ON access_requests(parent_ticket_id);
+CREATE INDEX IF NOT EXISTS idx_access_requests_access_ticket ON access_requests(access_ticket_id);
+CREATE INDEX IF NOT EXISTS idx_access_requests_change ON access_requests(change_id);
 CREATE INDEX IF NOT EXISTS idx_cicd_security_runs_created ON cicd_security_runs(created_at);
 CREATE INDEX IF NOT EXISTS idx_cicd_security_runs_ticket ON cicd_security_runs(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_agent_audit_reviews_agent ON agent_audit_reviews(agent_id);

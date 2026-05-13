@@ -141,8 +141,10 @@ def main():
 3. Run: curl -s http://localhost:8000/api/tickets/{ticket_id}/context
 4. Post note one with: curl -s -X POST http://localhost:8000/api/tickets/{ticket_id}/notes -H "Content-Type: application/json" -d '{{"author":"agent-itop-close-proof","source":"agent","visibility":"internal","body":"{args.marker} evidence note 1: iTop-backed ticket context read and retained."}}'
 5. Post note two with: curl -s -X POST http://localhost:8000/api/tickets/{ticket_id}/notes -H "Content-Type: application/json" -d '{{"author":"agent-itop-close-proof","source":"agent","visibility":"internal","body":"{args.marker} evidence note 2: ready for provider close verification."}}'
-6. Read checkpoint.json again, then write checkpoint.json with step complete, status done, progress_pct 100, output "{args.marker} provider close proof complete", and an ISO timestamp.
-7. Reply with exactly: {args.marker} provider close proof complete
+6. Create a file named status_payload.json containing exactly this JSON: {{"status":"resolved","actor":"agent-itop-close-proof","reason":"{args.marker} provider close proof complete after retained evidence notes.","close_provider":true}}
+7. Run: curl -s -X POST http://localhost:8000/api/tickets/{ticket_id}/status -H "Content-Type: application/json" -d @status_payload.json
+8. Read checkpoint.json again, then write checkpoint.json with step complete, status done, progress_pct 100, output "{args.marker} provider close proof complete", and an ISO timestamp.
+9. Reply with exactly: {args.marker} provider close proof complete
 """
     spawn = request(base, "POST", f"/api/tickets/{ticket_id}/assign-agent", {
         "model": args.model,

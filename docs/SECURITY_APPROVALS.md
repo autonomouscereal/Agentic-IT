@@ -107,6 +107,28 @@ The control plane also has a deterministic fallback:
 Auto-completion writes the compiled evidence into `change_requests.result` and
 records both `event_log` and `audit_log` entries with actor `agent-supervisor`.
 
+## Account Access Gates
+
+Permission walls use the same approval table, but are created through the
+ticket-scoped access request API:
+
+```bash
+curl -sS -X POST http://localhost:25480/api/tickets/<ticket_id>/access-request \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id":123,"resource":"Wazuh Dashboard","permission":"SIEM analyst read access","assignment_group":"Identity & Access","reason":"Agent received access denied while reviewing alert evidence."}'
+```
+
+This creates:
+
+- a child `UserRequest` ticket assigned to the access-owning group.
+- a parent-ticket change gate with `approval_policy.access_request=true`.
+- an `access_requests` row tying parent ticket, child ticket, agent, and change
+  gate together for audit.
+
+Approval of the gate resumes the original ticket agent. Completion of the gate
+marks the access request as `granted` and writes grant evidence to both parent
+and child ticket timelines.
+
 ## Demo Transparency
 
 Every change request is presented as an approval gate in the ticket timeline.

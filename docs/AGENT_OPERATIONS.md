@@ -158,24 +158,41 @@ Agents must update `checkpoint.json` after major steps:
 }
 ```
 
-Completion status should be:
+Task completion status should be:
 
 ```json
 {
   "step": "done",
   "status": "done",
-  "output": "Ticket resolved and notes written.",
+  "output": "Agent work complete and notes written.",
   "progress_pct": 100,
   "timestamp": "2026-05-11T12:05:00"
 }
 ```
 
-When a checkpoint reaches `done` or `completed`, `task_tracker` completes the task and terminates the harness process.
+When a checkpoint reaches `done` or `completed`, `task_tracker` completes the
+agent task and terminates the harness process. This does not resolve the
+ticket by itself.
 
 If the task has approved, agent-linked changes, completion also advances those
 changes to `completed` unless the approval policy explicitly requires manual
 completion. This prevents the stale state where approved remediation work
 finished but the change never moved past `approved`.
+
+Ticket closure is a separate workflow decision, but the default ticket-agent
+workflow is still to close the ticket explicitly when the work is truly done.
+Agents or operators call `POST /api/tickets/{ticket_id}/status` when the ticket
+should move to `resolved`, `closed`, or another state. Set `close_provider:
+true` only when the external ticketing record should also be closed.
+Deployments that require human review, requester response, access grants, or
+manual provider handoff can leave tickets open after the agent task finishes,
+but the agent must write a note explaining that handoff.
+
+Below-100 wait checkpoints are intentionally not completion. If an agent writes
+`waiting_for_access`, `pending_approval`, `pending_access`, `blocked`,
+`access_denied`, or `needs_access`, the runner records a waiting/blocked task
+state, keeps the ticket unresolved, and writes an operator note. This is the
+durable handoff point for access grants, approval gates, and user follow-up.
 
 Postmortem tasks are learning work, not ticket-resolution ownership. Spawning a
 postmortem agent does not reopen the ticket or replace the ticket's primary
@@ -380,3 +397,35 @@ records the outbound request as a user-visible note and moves the ticket to
 `awaiting_user_response`. When a reply is received through
 `/api/tickets/<ticket_id>/user-response`, the ticket returns to the previous
 status and the assigned agent can be resumed if no task is active.
+
+## Permission Walls And Access Requests
+
+When an agent cannot continue because it lacks a role, group membership, system
+permission, repository access, mailbox permission, or SIEM/index access, it
+should create an access request instead of bypassing the control:
+
+```bash
+curl -sS -X POST http://localhost:25480/api/tickets/<ticket_id>/access-request \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": 123,
+    "resource": "GitLab project demo/private-infra",
+    "permission": "Developer repository read access",
+    "account_ref": "agent-123",
+    "assignment_group": "DevSecOps",
+    "risk_level": "medium",
+    "reason": "Repository API returned 403; least-privilege read access is required."
+  }'
+```
+
+The dashboard creates a child access request ticket and a parent-ticket approval
+gate. The agent writes `waiting_for_access` to `checkpoint.json` and stops.
+When the gate is approved, the approval handler resumes the original ticket if
+no active task is already running. The resumed agent verifies the grant evidence,
+marks the access gate complete, and continues the original work.
+
+Seeded RACI access rules:
+
+- `GitLab repository access` routes to DevSecOps and the repository owner.
+- `SIEM analyst access` routes to Identity & Access with Security Operations as
+  accountable owner.

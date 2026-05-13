@@ -232,7 +232,8 @@ async def _sync_task_status(task):
     if is_new_checkpoint and step != "init":
         await _add_checkpoint_note(task, step, status, output, progress)
 
-    # Complete ticket if agent finished
+    # Complete agent/task bookkeeping. Ticket closure is an explicit
+    # agent/operator/workflow action, not a side effect of task completion.
     if task_status == "completed":
         if task.get("pid"):
             try:
@@ -251,20 +252,7 @@ async def _sync_task_status(task):
             task["agent_id"],
         )
         from services import agent_runner
-        provider_close = {"status": "skipped", "reason": "not_ticket_resolution"}
-        if task.get("task_type") == "ticket_resolution":
-            await execute(
-                "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
-                task["ticket_id"],
-            )
-            close_fn = getattr(agent_runner, "_close_provider_ticket_if_needed", None)
-            if close_fn:
-                provider_close = await close_fn(
-                    task["ticket_id"],
-                    task["agent_id"],
-                    task["id"],
-                    output or "Resolved by SOC agent via checkpoint tracker.",
-                )
+        provider_close = {"status": "skipped", "reason": "ticket_closure_requires_explicit_action"}
         change_completion = await agent_runner.complete_approved_changes_for_task(
             task["agent_id"],
             task["id"],

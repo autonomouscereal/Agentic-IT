@@ -55,6 +55,19 @@ List RACI:
 curl -sS "$SOC_DASHBOARD_URL/api/intake/raci"
 ```
 
+When an agent hits a permission wall while working a different ticket, use the
+access-request path instead of a generic note:
+
+```bash
+curl -sS -X POST "$SOC_DASHBOARD_URL/api/tickets/$TICKET_ID/access-request" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id":123,"resource":"GitLab project demo/private-infra","permission":"Developer repository read access","assignment_group":"DevSecOps","reason":"Repository API returned 403; least-privilege access is required."}'
+```
+
+This creates a child access ticket, approval gate, and resume hook for the
+original ticket. Seeded examples include `GitLab repository access` and
+`SIEM analyst access`.
+
 ## Default RACI Groups
 
 The fresh install seeds ten sample groups:

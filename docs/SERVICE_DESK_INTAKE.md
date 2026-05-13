@@ -33,6 +33,19 @@ Auto-agent assignment is a RACI rule setting, not a hardcoded phishing shortcut:
 The seeded phishing rule auto-assigns Security Operations phishing incidents.
 Most other seeded rules stay manual until an operator enables them.
 
+Access request routes are seeded for common permission walls:
+
+- `GitLab repository access`: repository/project role requests route to
+  DevSecOps, consult Identity & Access and Compliance, and require owner
+  approval before membership changes.
+- `SIEM analyst access`: Wazuh/SIEM read-role or alert-index access routes to
+  Identity & Access, consults Security Operations and Compliance, and requires
+  approval before access is granted.
+
+Agents should use `POST /api/tickets/{ticket_id}/access-request` when they hit
+an access denied condition during another ticket. That creates the child access
+ticket and the approval gate that resumes the original work after approval.
+
 ## API
 
 - `GET /api/intake/raci`
@@ -94,3 +107,10 @@ model time, but still verifies that the phishing RACI rule advertises
 
 For post-creation clarification and resume behavior, see
 `docs/USER_RESPONSE_WORKFLOW.md`.
+
+For permission-wall access escalation and resume behavior, run:
+
+```bash
+python3 scripts/smoke_access_request_control_plane.py http://localhost:25480
+python3 scripts/agentic_access_request_resume_demo.py http://localhost:25480 qwen/qwen3.6-27b
+```

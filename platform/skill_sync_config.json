@@ -3,6 +3,7 @@
   "description": "Production-relevant skills that belong in the portable platform bundle. Media, torrenting, ComfyUI, and unrelated creative skills are intentionally excluded.",
   "skills": [
     "ai-proxy",
+    "account-access-workflow",
     "cicd-security-pipeline",
     "credential-vault",
     "gitlab-keycloak-integration",

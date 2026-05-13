@@ -203,6 +203,40 @@ def _append_checkpoint(existing, checkpoint):
     return checkpoints
 
 
+def _checkpoint_blocks_completion(checkpoint):
+    """Return True when an agent intentionally stopped at a durable wait gate."""
+    if not checkpoint:
+        return False
+    status = str(checkpoint.get("status") or "").strip().lower()
+    step = str(checkpoint.get("step") or "").strip().lower()
+    try:
+        progress = int(checkpoint.get("progress_pct") or 0)
+    except (TypeError, ValueError):
+        progress = 0
+    if progress >= 100 or status in ("done", "completed"):
+        return False
+    waiting_markers = (
+        "waiting_for_",
+        "pending_approval",
+        "pending_access",
+        "blocked",
+        "access_denied",
+        "needs_access",
+    )
+    return status.startswith(waiting_markers) or step.startswith(waiting_markers)
+
+
+def _blocked_task_status(checkpoint):
+    status = str((checkpoint or {}).get("status") or "").strip().lower()
+    if "access" in status:
+        return "awaiting_access"
+    if "approval" in status:
+        return "pending_approval"
+    if "user" in status:
+        return "awaiting_user_response"
+    return "blocked"
+
+
 def _loads(value, default):
     if value is None:
         return default
@@ -358,7 +392,7 @@ async def _add_agent_note(ticket_id, agent_id, task_id, title, body, source="age
 
 
 async def _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, notes):
-    """Best-effort provider close after successful ticket-resolution work."""
+    """Best-effort provider close for explicit agent/operator close actions."""
     if not ticket_id:
         return {"status": "skipped", "reason": "missing_ticket_id"}
     ticket = await fetchrow(
@@ -387,7 +421,7 @@ async def _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, notes):
             agent_id,
             task_id,
             "Provider close failed",
-            f"The dashboard resolved this ticket locally, but provider close failed: {result.get('error')}",
+            f"The explicit ticket close was recorded locally, but provider close failed: {result.get('error')}",
             source="agent-control-plane",
         )
     else:
@@ -1013,13 +1047,56 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
         result = await _run_agent(work_dir, prompt, task_id)
         checkpoint = await _mirror_checkpoint_to_task(task_id, agent_id, work_dir)
         checkpoint_done = bool(checkpoint and checkpoint.get("status") in ("done", "completed"))
+        checkpoint_blocked = _checkpoint_blocks_completion(checkpoint)
         task_meta = await fetchrow(
             "SELECT ticket_id, task_type, started_at FROM agent_tasks WHERE id = $1",
             task_id,
         )
 
         # Update task and agent status
-        if result["exit_code"] == 0 or checkpoint_done:
+        if checkpoint_blocked:
+            blocked_status = _blocked_task_status(checkpoint)
+            blocked_summary = (checkpoint or {}).get("output") or "Agent stopped at a durable wait gate."
+            await execute(
+                "UPDATE agent_tasks SET status = $1, output = $2, completed_at = NOW(), "
+                "progress_pct = GREATEST(progress_pct, $3) WHERE id = $4",
+                blocked_status,
+                _tail_text(result.get("stdout", "")) or blocked_summary,
+                int((checkpoint or {}).get("progress_pct") or 50),
+                task_id,
+            )
+            await execute(
+                "UPDATE agents SET status = $1, heartbeat = NOW(), error_message = $2, finished_at = NOW() WHERE id = $3",
+                blocked_status,
+                blocked_summary[:500],
+                agent_id,
+            )
+            if task_meta and task_meta.get("ticket_id"):
+                ticket_status = "pending_approval" if blocked_status == "pending_approval" else blocked_status
+                await execute(
+                    "UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2",
+                    ticket_status,
+                    task_meta.get("ticket_id"),
+                )
+                await _add_agent_note(
+                    task_meta.get("ticket_id"),
+                    agent_id,
+                    task_id,
+                    "Agent waiting",
+                    (
+                        f"Agent `{agent_id}` stopped at `{blocked_status}` instead of resolving the ticket. "
+                        f"Checkpoint: `{(checkpoint or {}).get('step', 'unknown')}`. "
+                        f"Reason: {blocked_summary[:900]}"
+                    ),
+                    "agent-control-plane",
+                )
+            await log_event("agent", "info", f"agent_{agent_id}", "agent_waiting_at_gate",
+                            f"task_{task_id}", {
+                                "ticket_id": (task_meta or {}).get("ticket_id"),
+                                "blocked_status": blocked_status,
+                                "checkpoint": checkpoint,
+                            })
+        elif result["exit_code"] == 0 or checkpoint_done:
             if task_meta and task_meta.get("task_type") == "postmortem":
                 postmortem_count = await fetchval("""
                     SELECT COUNT(*) FROM postmortems
@@ -1076,17 +1153,6 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 "UPDATE agents SET status = 'finished', heartbeat = NOW(), finished_at = NOW() WHERE id = $1",
                 agent_id,
             )
-            if task_meta and task_meta.get("task_type") == "ticket_resolution":
-                await execute(
-                    "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
-                    task_meta.get("ticket_id"),
-                )
-                await _close_provider_ticket_if_needed(
-                    task_meta.get("ticket_id"),
-                    agent_id,
-                    task_id,
-                    summary[:1500] or "Resolved by SOC agent.",
-                )
             change_completion = await complete_approved_changes_for_task(
                 agent_id,
                 task_id,
@@ -1128,16 +1194,6 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 await execute(
                     "UPDATE agents SET status = 'finished', heartbeat = NOW(), error_message = NULL, finished_at = NOW() WHERE id = $1",
                     agent_id,
-                )
-                await execute(
-                    "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
-                    recovered_completion["ticket_id"],
-                )
-                await _close_provider_ticket_if_needed(
-                    recovered_completion["ticket_id"],
-                    agent_id,
-                    task_id,
-                    summary[:1500] or "Resolved by SOC agent after supervisor recovery.",
                 )
                 await log_event("agent", "warning", f"agent_{agent_id}", "agent_completion_recovered",
                                 f"task_{task_id}", {

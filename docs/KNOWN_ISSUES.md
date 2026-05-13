@@ -4,6 +4,84 @@ Last updated: 2026-05-13.
 
 ## Fixed In Current Pass
 
+### Agent completion implicitly resolved tickets
+
+Status: fixed locally and ready for deployment on 2026-05-13.
+
+Problem:
+
+- `agent_runner` and `task_tracker` treated completed ticket-resolution tasks as
+  permission to set the parent ticket to `resolved` and close the iTop provider
+  record.
+- That made a harness lifecycle event equivalent to a business/workflow
+  decision.
+
+Impact:
+
+- Deployments that require a human review layer after agent work could have
+  tickets closed too early.
+- Source-repair, postmortem, workflow-build, and partial remediation tasks could
+  look complete at the ticket level even when the intended workflow required
+  a human verifier or follow-up.
+
+Fix:
+
+- Agent/task completion now only completes agent bookkeeping and approved
+  agent-linked changes.
+- Ticket status changes are explicit through `POST /api/tickets/{ticket_id}/status`.
+- Agents are prompted to default to calling that endpoint when they are
+  confident the work is complete, all gates/evidence are done, and no
+  human-review/wait-state policy says to leave the ticket open.
+- External provider closure is opt-in through `close_provider: true` on the
+  explicit status update.
+
+Verification:
+
+- Added regression coverage proving successful agent completion and checkpoint
+  completion no longer issue `UPDATE tickets SET status = 'resolved'`.
+- Added status endpoint tests proving canonical status updates do not close the
+  provider unless `close_provider=true`.
+- Added prompt regression coverage proving the default workflow contract is
+  agent-initiated closure, while human review remains an explicit opt-out.
+
+### Agent runtime advertised git but did not install git
+
+Status: fixed locally and ready for deployment on 2026-05-13.
+
+Problem:
+
+- Dashboard agents were allowed to run `Bash(git *)`, and source/CI/CD workflows
+  require git for diffs, patch artifacts, GitLab remediation, and audit
+  evidence.
+- The API/agent Docker image installed curl, procps, Node, and Claude Code but
+  did not install the `git` binary.
+- During ticket `442`, agent `159` successfully diagnosed and fixed the failing
+  source test, but its required `git diff` evidence command failed with
+  `Exit code 127` / `git: command not found`.
+
+Impact:
+
+- CI/CD and GitLab remediation agents could repair files but fail to produce
+  normal git evidence inside the runtime.
+- Source self-repair demos could look incomplete even after compile and unit
+  tests passed.
+
+Fix:
+
+- Add `git` to the API/agent runtime image in `api/Dockerfile`.
+- Add a regression test asserting the runtime image installs git.
+- Add a reusable source self-repair marker utility and test so future agentic
+  source-edit proofs have a tiny deterministic target.
+
+Verification:
+
+- Ticket `442`, agent `159`, task `156`, and change `128` proved the agentic
+  source edit itself end to end: approval was requested and approved, the agent
+  created `scripts/agentic_self_repair_marker.py`, compile passed, unit test
+  passed, note `770` was written, and checkpoint finished at `done` / `100%`.
+- The remaining git evidence gap is now covered by local regression test
+  `tests/test_agentic_self_repair_marker.py`.
+
 ### Postmortem SLA metrics did not track postmortem completion
 
 Status: fixed, deployed, and agentically verified on 2026-05-13.
@@ -79,6 +157,34 @@ Verification:
   active agents.
 - Remote compile, targeted unit tests, operational metrics smoke, and health
   checks passed after rebuild.
+
+### Agents could look complete after stopping at an access or approval wait gate
+
+Status: fixed and verification in progress on 2026-05-13.
+
+Problem:
+
+- The runner treated a zero-exit harness process as completed even when
+  `checkpoint.json` said `waiting_for_access`, `pending_approval`, or another
+  below-100 wait state.
+- That could make a permission-blocked ticket look resolved before an access
+  owner approved and granted the required role.
+
+Fix:
+
+- Added a wait-gate checkpoint guard in `agent_runner`. Below-100
+  `waiting_for_*`, `pending_approval`, `pending_access`, `blocked`,
+  `access_denied`, and `needs_access` checkpoints now leave the task and agent
+  in a blocked/waiting status instead of resolving the ticket.
+- Added `access_requests`, `POST /api/tickets/{id}/access-request`, and
+  approval-gate synchronization so a blocked agent can create a child access
+  ticket, wait for approval, and resume the original ticket after approval.
+- Seeded `GitLab repository access` and `SIEM analyst access` RACI rules.
+
+Verification:
+
+- Pending in this pass: unit tests, control-plane smoke, and real local-model
+  access-resume proof.
 
 ### Operational metrics, workflow review state, scanner findings, and tool inventory were demo-confusing
 
@@ -2069,6 +2175,40 @@ The current iTop discovery strategy scans numeric keys. It works for the lab but
 ### No database rollback system
 
 Migrations are additive/idempotent. There is no first-class rollback tool yet.
+
+### Duplicate active workflows per use case
+
+Status: being fixed and verified on 2026-05-13.
+
+Problem:
+
+- Postmortem promotion names workflows with the postmortem id, so repeated
+  phishing or SIEM/EDR postmortems can create many separate workflows for the
+  same use case.
+- The live dashboard had multiple phishing-like workflows in `approved` or
+  `active` state while `phishing-smoke-lifecycle` remained `tested` /
+  `tested_needs_approval` despite being the workflow with the most completed
+  run evidence.
+- False-positive refinements were promoted into a separate phishing-related
+  workflow instead of becoming notes/refinements on the canonical phishing or
+  SIEM false-positive workflow lineage.
+
+Impact:
+
+- Agents and operators can see conflicting workflows for the same ticket type.
+- A workflow that is only `tested` can look like the one being used, while older
+  approved workflows remain active.
+- Postmortem learning becomes fragmented across duplicate articles/workflows.
+
+Fix plan:
+
+- Add a canonical `workflow_key` and enforce only one active/approved workflow
+  per key.
+- Make postmortem promotion find and update the canonical workflow for the use
+  case instead of minting a new active workflow for every postmortem.
+- Demote duplicate active workflows during review/promotion and reconcile the
+  live phishing workflow set so `phishing-smoke-lifecycle` is the canonical
+  active workflow.
 
 ### Wazuh/Sysmon bridge queue and log retention gaps
 

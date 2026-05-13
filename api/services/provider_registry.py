@@ -118,6 +118,15 @@ async def create_ticket(provider_name, ticket_id, fields):
     return await provider.create_ticket(ticket_id, fields)
 
 
+async def close_ticket(provider_name, ticket_id, notes):
+    provider = await get_provider(provider_name)
+    if not provider:
+        return {"error": f"Provider not registered: {provider_name}"}
+    if not hasattr(provider, "close_ticket"):
+        return {"error": f"Provider does not support close: {provider_name}"}
+    return await provider.close_ticket(ticket_id, notes)
+
+
 async def full_sync(provider_name="itop"):
     provider = await get_provider(provider_name)
     if not provider:

@@ -51,7 +51,7 @@ class TaskTrackerProviderCloseTests(unittest.TestCase):
         self.assertTrue(module._runner_is_managing_task(149))
         self.assertFalse(module._runner_is_managing_task(150))
 
-    def test_completed_checkpoint_closes_itop_provider_ticket(self):
+    def test_completed_checkpoint_does_not_close_ticket_implicitly(self):
         module = load_task_tracker()
         executes = []
         events = []
@@ -69,9 +69,9 @@ class TaskTrackerProviderCloseTests(unittest.TestCase):
         async def complete_approved_changes_for_task(*args, **kwargs):
             return {"completed": [], "skipped": []}
 
-        async def close_provider(ticket_id, agent_id, task_id, notes):
-            provider_closes.append((ticket_id, agent_id, task_id, notes))
-            return {"status": "resolved"}
+        async def close_provider(*args, **kwargs):
+            provider_closes.append((args, kwargs))
+            raise AssertionError("provider close should require an explicit ticket status action")
 
         agent_runner = types.ModuleType("services.agent_runner")
         agent_runner.complete_approved_changes_for_task = complete_approved_changes_for_task
@@ -103,10 +103,13 @@ class TaskTrackerProviderCloseTests(unittest.TestCase):
             }
             asyncio.run(module._sync_task_status(task))
 
-        self.assertEqual(provider_closes, [(342, 113, 110, "provider close proof complete")])
-        self.assertTrue(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in executes))
+        self.assertEqual(provider_closes, [])
+        self.assertFalse(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in executes))
         completed_event = [event for event in events if event[3] == "task_completed"][0]
-        self.assertEqual(completed_event[5]["provider_close"]["status"], "resolved")
+        self.assertEqual(
+            completed_event[5]["provider_close"]["reason"],
+            "ticket_closure_requires_explicit_action",
+        )
 
 
 if __name__ == "__main__":

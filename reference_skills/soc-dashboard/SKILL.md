@@ -181,8 +181,47 @@ The reference AI server currently runs slow local models. Do not use short wall-
 - Task/checkpoint completion is intentionally strict: `done` / `completed`
   checkpoints below `100%` are ignored. Agents must use `running` for
   intermediate checkpoints, then final `done` at `100%` only after approval
-  gates, ticket notes, postmortem/workflow evidence, and provider closure are
-  complete.
+  gates, ticket notes, and required evidence are complete.
+- Agent/task completion does not automatically resolve the parent ticket.
+  Closure is an explicit workflow/deployment decision. Default ticket workflows
+  have the agent call `POST /api/tickets/{ticket_id}/status` after final
+  evidence and verification. Human-review, requester-wait, access-gated, or
+  manual-provider-handoff deployments can leave the ticket open with an
+  explanatory note; use `close_provider: true` only when the external ITSM
+  record should also close.
+- Source-code and CI/CD agents require git in the runtime. If a prompt asks for
+  `git diff`, `git status`, patch artifacts, merge request evidence, or GitLab
+  remediation, verify `git --version` inside the agent/API container before the
+  run. Missing git is a harness defect, not a model limitation.
+
+### Agentic Source Self-Repair Smoke
+
+Use this pattern when proving that the dashboard can repair its own source code
+or a customer-local customization:
+
+1. Create an isolated source copy under `/app/agent_work/<agent_id>/source-repo`.
+2. Seed a failing unit test first; do not hand the model a patch.
+3. Require every source command to use
+   `cd /app/agent_work/<agent_id>/source-repo && <command>` because Bash calls
+   do not preserve cwd between tool uses.
+4. Require a low-risk approval gate before the agent edits source.
+5. After approval, require compile/unit verification plus `git status --short`
+   and `git diff -- <changed-files>` evidence.
+6. Reconcile the agent-created patch back into the product repo only after an
+   operator verifies the isolated workspace output.
+
+Latest proof, 2026-05-13:
+
+- First attempt ticket `441` / agent `158` found the stateless-cwd prompt
+  defect and was stopped in-lane after repeating the same verification error.
+- Hardened retry ticket `442` / agent `159` / task `156` / change `128`
+  succeeded: the local model diagnosed the failing test, requested approval,
+  wrote `scripts/agentic_self_repair_marker.py`, passed compile and unit tests,
+  completed the gate, wrote note `770`, and finished with checkpoint `done` at
+  `100%`.
+- The run also exposed missing `git` in the API image. `api/Dockerfile` now
+  installs git so source, CI/CD, GitLab, and patch-evidence flows have the tool
+  they are already allowed to call.
 
 ### Current Real-Flow Proofs
 

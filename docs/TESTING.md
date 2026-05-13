@@ -255,6 +255,39 @@ Covers:
 - restoration of the previous ticket status
 - agent-resume-ready note and context behavior
 
+## Access Request Resume Smoke
+
+Control-plane proof:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/smoke_access_request_control_plane.py http://localhost:25480
+```
+
+Covers:
+
+- `/api/tickets/{id}/access-request`
+- child access request ticket creation
+- `access_requests` audit row
+- approval gate approval/completion
+- access request status changing to `granted`
+- parent and child ticket notes with grant evidence
+
+Real local-model proof:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/agentic_access_request_resume_demo.py http://localhost:25480 qwen/qwen3.6-27b
+```
+
+Covers:
+
+- an actual dashboard agent simulating a 403 permission wall
+- agent-created access request and `waiting_for_access` checkpoint
+- runner preserving the waiting state instead of resolving the ticket
+- approval-driven resume of the original ticket
+- resumed agent completing the access gate and resolving the ticket
+
 ## Provider Adapter Smoke
 
 ```bash
