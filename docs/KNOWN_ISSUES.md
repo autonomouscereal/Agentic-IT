@@ -1,6 +1,6 @@
 # Known Issues And Fix Log
 
-Last updated: 2026-05-12.
+Last updated: 2026-05-13.
 
 ## Fixed In Current Pass
 
@@ -1373,6 +1373,213 @@ Verified:
   `{"status":"synced","itop_ref":"226","itop_class":"Incident","is_new":false,"ticket_id":354,"auto_assignment":null}`.
 - Ticket `354` evidence remained dashboard `resolved` with provider payload
   status `resolved`.
+
+### Phishing agent resolved after triage only
+
+Status: fixed and verified, found during report-phish live flow on ticket `361` / agent `124`.
+
+Problem:
+
+- The report-phish bridge flow worked mechanically: SOC bridge created iTop
+  Incident `233`, Mailcow notification was sent, dashboard synced the ticket,
+  agent `124` auto-assigned, wrote attributed triage note `462`, completed task
+  `121`, and iTop provider status synced as `resolved`.
+- The agent did not create approval-gated containment actions such as URL block,
+  mailbox/message quarantine simulation, user notification, or credential reset
+  review. It resolved after triage only.
+
+Impact:
+
+- This is not yet a strong end-to-end phishing-response proof. It proves intake,
+  sync, attribution, and closure, but not full remediation workflow behavior.
+
+Fix:
+
+- Tighten the phishing RACI/workflow instruction so phishing agents must either
+  create approval-gated containment/recovery changes or explicitly document why
+  no containment is required.
+- The seeded phishing/Security Operations RACI prompt now requires URL block,
+  mailbox search/quarantine, password/session review, or an explicit
+  no-containment justification before resolution.
+- Ticket-resolution prompts now give the exact change request schema and final
+  closure rules.
+
+Verified:
+
+- Live report-phish rerun marker `CODEX_PHISH_E2E_1778637511` created iTop
+  Incident `236` / `I-000245`, dashboard ticket `364`, agent `127`, and task
+  `124`.
+- Agent `127` wrote triage note `491`, created approval gates `100`, `101`, and
+  `102`, resumed after approval, completed all three changes with lab-safe
+  containment evidence, wrote resolution note `502`, created postmortem `47`,
+  and finished at `100%`.
+- Dashboard ticket `364` and direct iTop Incident `236` both ended `resolved`.
+
+### Progress supervisors use checkpoint-only stale detection
+
+Status: fixed and verified, found while auditing report-phish rerun ticket `362` / agent
+`125`.
+
+Problem:
+
+- Agent `125` is alive and heartbeating while working through the stricter
+  phishing flow, and it wrote attributed triage note `468`.
+- The task tracker and agent auditor still evaluate "no progress" primarily
+  from the latest `checkpoint.json` timestamp.
+- Local models can spend a long time generating or using tools without updating
+  the checkpoint file, especially when queued behind slow local inference.
+
+Impact:
+
+- A valid local-model run can be marked failed or recommended for replacement
+  even though the harness is heartbeating, output is being appended, or ticket
+  notes/change gates are moving.
+
+Fix:
+
+- Update task tracker and agent auditor activity calculations to use the newest
+  evidence across checkpoint timestamp, agent heartbeat, output log mtime, and
+  ticket note/change activity.
+- Keep `STUCK_TIMEOUT_MINUTES` and `AGENT_AUDIT_NO_PROGRESS_MINUTES`
+  configurable, but do not treat checkpoint silence alone as failure while the
+  agent is otherwise demonstrably alive.
+- `task_tracker` and `agent_auditor` now compute latest activity across
+  checkpoint timestamp, agent heartbeat, output log mtime, checkpoint file mtime,
+  ticket notes, and change request activity.
+- The auditor records `progress_sources` in no-progress findings so operators can
+  understand what evidence was evaluated.
+
+Verified:
+
+- During ticket `364`, the auditor recorded `agent_waiting_on_approval` while
+  gates were pending and did not mark the heartbeating local model as failed
+  while notes, approvals, and output log activity were moving.
+- The same run completed cleanly with task `124` at `100%`.
+
+### Agent change requests failed due missing request schema
+
+Status: fixed and verified, found during report-phish rerun ticket `362` / agent `125`.
+
+Problem:
+
+- Agent `125` correctly attempted to create three approval-gated phishing
+  containment changes: URL block, mailbox search/quarantine, and password
+  reset/session revocation.
+- It posted fields such as `title` and `description` to
+  `POST /api/changes/request`, but that endpoint requires `action`, `target`,
+  and `reason`.
+- The API returned validation errors for all three attempts, so no
+  `change_requests` rows were created on the first try.
+
+Impact:
+
+- The RACI prompt is directionally correct, but the harness prompt is still too
+  implicit for slow local agents. Agents can attempt the right workflow and
+  still fail because they guessed the endpoint contract.
+
+Fix:
+
+- Add the exact change request JSON shape to ticket-resolution prompts:
+  `agent_id`, `ticket_id`, `action`, `target`, `reason`, optional
+  `risk_level`, optional `approval_policy`.
+- Standard and auto-assignment ticket prompts now include the exact
+  `POST /api/changes/request` body and warn agents not to use `title` /
+  `description` for change request creation.
+- Agent workspaces also include the same schema in `CLAUDE.md`.
+
+Verified:
+
+- Agent `127` created change requests `100`, `101`, and `102` on ticket `364`
+  without schema validation errors.
+
+### Approved phishing gates lack bounded lab action contract
+
+Status: fixed and verified for lab/demo execution, found during report-phish rerun ticket `362` / agent `125`.
+
+Problem:
+
+- Agent `125` successfully self-corrected and created three approval gates
+  after the initial schema error:
+  - change `94`: `url_block` on `phish-example.test`
+  - change `95`: `mailbox_quarantine` on `demo.user@mailcow.local`
+  - change `96`: `password_reset` on `demo.user@mailcow.local`
+- All three were approved by `codex-e2e-lab-approver`.
+- After approval, the agent began broad tool discovery (`/api/tools`, workspace
+  listing) instead of using a bounded lab-safe execution contract.
+
+Impact:
+
+- The approval boundary works, but approved action execution is still too vague
+  for local agents. The system needs either concrete provider action adapters
+  or explicit lab-action semantics for demos.
+
+Fix:
+
+- Update prompts so agents do not discover broad tool inventory after approval.
+- For approved lab/demo actions without a concrete provider adapter, agents
+  should complete the gate with explicit simulated control evidence, add a
+  ticket note, and state exactly which production adapter would perform the real
+  operation.
+- Longer term: add provider action adapters for URL blocking, Mailcow search /
+  quarantine, and IAM password reset/session revocation.
+- Per-agent curl guards block broad dashboard schema/tool inventory endpoints
+  such as `/api/tools`, `/openapi.json`, `/docs`, and `/redoc`.
+- Prompts now tell agents to complete approved lab/demo containment gates with
+  explicit control evidence and name the production adapter when no concrete
+  provider action adapter exists yet.
+
+Verified:
+
+- Agent `127` completed gate `100` with URL-block evidence and DNS/proxy
+  production-adapter guidance.
+- Agent `127` completed gate `101` with mailbox search/quarantine evidence and
+  Mailcow/Rspamd production-adapter guidance.
+- Agent `127` completed gate `102` with password reset/session revocation
+  evidence and Keycloak production-adapter guidance.
+
+### Intermediate checkpoint marked ticket resolved before changes completed
+
+Status: fixed and verified, found during post-fix report-phish rerun ticket `363` / agent
+`126`.
+
+Problem:
+
+- Agent `126` correctly wrote triage note `479` and created approval gates
+  `97`, `98`, and `99` using the fixed `action` / `target` / `reason` schema.
+- The gates were manually approved by `codex-e2e-lab-approver`.
+- Before executing or completing those approved gates, the agent wrote
+  `checkpoint.json` with `status: "done"` but only `progress_pct: 30`.
+- The task tracker treated any `done` checkpoint as final completion, marked
+  task `123` completed, set ticket `363` to `resolved`, and left changes
+  `97`-`99` in `approved` state with no result.
+
+Impact:
+
+- A ticket can close while approved containment actions remain unfinished. This
+  fails the E2E phishing workflow requirement and makes dashboard state
+  misleading.
+
+Fix:
+
+- Update task tracker so `done` / `completed` checkpoint states only finalize a
+  task when `progress_pct >= 100`.
+- Update agent prompts so intermediate steps use `running` and only final
+  completion uses `done` with progress `100` after open changes are completed,
+  final notes are written, and provider closure is ready.
+- `task_tracker` now ignores `done` / `completed` checkpoints below `100%`,
+  records `checkpoint_done_ignored_before_100`, and keeps the task running.
+- Prompts now require intermediate checkpoints to use `running`; final
+  completion must be `done` at `100%` after approval gates, notes, and provider
+  closure are complete.
+
+Verified:
+
+- Agent `127` wrote an intermediate `running` checkpoint at `35%` while changes
+  `100`-`102` were pending/approved, and ticket `364` stayed `in_progress`.
+- Only after changes `100`-`102`, resolution note `502`, and postmortem `47`
+  existed did agent `127` write final checkpoint `resolution_complete` with
+  `status=done` and `progress_pct=100`; task `124` then completed and ticket
+  `364` resolved.
 
 ### iTop outbound creation needs environment-specific defaults
 

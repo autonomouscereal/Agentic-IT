@@ -76,6 +76,46 @@ def _is_agent_process_alive(pid):
     return "claude" in cmdline or "anthropic-ai" in cmdline or "node" in cmdline
 
 
+def _as_aware_utc(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        try:
+            dt = datetime.fromisoformat(str(value))
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _file_mtime(path):
+    if not path:
+        return None
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(path), timezone.utc)
+    except OSError:
+        return None
+
+
+def _latest_activity(task, checkpoints):
+    seen = [
+        _as_aware_utc(task.get("started_at")),
+        _as_aware_utc(task.get("heartbeat")),
+        _as_aware_utc(task.get("latest_note_at")),
+        _as_aware_utc(task.get("latest_change_at")),
+    ]
+    if checkpoints and isinstance(checkpoints[-1], dict):
+        seen.append(_as_aware_utc(checkpoints[-1].get("timestamp")))
+    if task.get("work_dir"):
+        seen.append(_file_mtime(os.path.join(task["work_dir"], "output.log")))
+        seen.append(_file_mtime(os.path.join(task["work_dir"], "checkpoint.json")))
+    valid = [item for item in seen if item]
+    return max(valid) if valid else None
+
+
 async def _mark_orphaned(task, reason):
     await execute(
         "UPDATE agent_tasks SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
@@ -138,12 +178,21 @@ async def _sync_task_status(task):
         existing[-1]["output"] = output[:500] if output else existing[-1].get("output", "")
         existing[-1]["timestamp"] = cp.get("timestamp", datetime.now().isoformat())
 
-    # Map checkpoint status to task status
+    # Map checkpoint status to task status. Local models sometimes use "done"
+    # for an intermediate step; only 100% progress is terminal.
     task_status = "running"
-    if status in ("done", "completed"):
+    if status in ("done", "completed") and int(progress or 0) >= 100:
         task_status = "completed"
     elif status == "error":
         task_status = "failed"
+    elif status in ("done", "completed"):
+        await log_event("agent", "warning", f"agent_{task['agent_id']}",
+                        "checkpoint_done_ignored_before_100", f"task_{task['id']}", {
+                            "ticket_id": task["ticket_id"],
+                            "step": step,
+                            "status": status,
+                            "progress_pct": progress,
+                        })
 
     await execute(
         "UPDATE agent_tasks SET checkpoints = $1, progress_pct = GREATEST(progress_pct, $2), status = $3 WHERE id = $4",
@@ -244,10 +293,28 @@ async def _sync_task_status(task):
 
 
 async def _detect_stuck_tasks():
-    """Find tasks with no checkpoint update for STUCK_TIMEOUT_MINUTES."""
+    """Find tasks with no evidence of activity for STUCK_TIMEOUT_MINUTES."""
     tasks = await fetchall(
-        "SELECT id, agent_id, ticket_id, checkpoints, started_at FROM agent_tasks "
-        "WHERE status = 'running'"
+        """
+        SELECT t.id, t.agent_id, t.ticket_id, t.checkpoints, t.started_at,
+               t.work_dir, t.pid, a.heartbeat,
+               (
+                 SELECT MAX(n.created_at)
+                 FROM ticket_notes n
+                 WHERE n.ticket_id = t.ticket_id
+                   AND (n.author = ('agent-' || t.agent_id::text)
+                        OR n.source LIKE 'agent%')
+               ) AS latest_note_at,
+               (
+                 SELECT MAX(cr.requested_at)
+                 FROM change_requests cr
+                 WHERE cr.ticket_id = t.ticket_id
+                   AND (cr.agent_id = t.agent_id OR cr.agent_id IS NULL)
+               ) AS latest_change_at
+        FROM agent_tasks t
+        JOIN agents a ON a.id = t.agent_id
+        WHERE t.status = 'running'
+        """
     )
     for task in (tasks or []):
         cps = task.get("checkpoints") or []
@@ -257,19 +324,12 @@ async def _detect_stuck_tasks():
             except json.JSONDecodeError:
                 cps = []
 
-        last_seen = task.get("started_at")
-        if cps and isinstance(cps[-1], dict) and cps[-1].get("timestamp"):
-            try:
-                last_seen = datetime.fromisoformat(cps[-1]["timestamp"])
-            except ValueError:
-                pass
+        last_seen = _latest_activity(task, cps)
 
         if not last_seen:
             continue
 
-        now = datetime.now(last_seen.tzinfo or timezone.utc)
-        if last_seen.tzinfo is None:
-            now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         if now - last_seen > timedelta(minutes=STUCK_TIMEOUT_MINUTES):
             await execute(
@@ -285,7 +345,17 @@ async def _detect_stuck_tasks():
                 task["agent_id"],
             )
             await log_event("agent", "warning", f"agent_{task['agent_id']}",
-                            "task_stuck", f"task_{task['id']}")
+                            "task_stuck", f"task_{task['id']}", {
+                                "last_activity_at": last_seen.isoformat(),
+                                "threshold_minutes": STUCK_TIMEOUT_MINUTES,
+                                "progress_sources": [
+                                    "checkpoint",
+                                    "agent_heartbeat",
+                                    "output_log_mtime",
+                                    "ticket_note",
+                                    "change_request",
+                                ],
+                            })
 
 
 async def track_loop():

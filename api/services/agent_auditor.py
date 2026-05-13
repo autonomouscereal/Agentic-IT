@@ -41,10 +41,39 @@ def _parse_time(value):
         return None
 
 
-def _now_for(value):
-    if value and value.tzinfo:
-        return datetime.now(value.tzinfo)
-    return datetime.now(timezone.utc)
+def _as_aware_utc(value):
+    parsed = _parse_time(value)
+    if not parsed:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _file_mtime(path):
+    if not path:
+        return None
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(path), timezone.utc)
+    except OSError:
+        return None
+
+
+def _latest_activity(task):
+    checkpoints = _loads(task.get("checkpoints"), [])
+    seen = [
+        _as_aware_utc(task.get("started_at")),
+        _as_aware_utc(task.get("agent_heartbeat")),
+        _as_aware_utc(task.get("latest_note_at")),
+        _as_aware_utc(task.get("latest_change_at")),
+    ]
+    if checkpoints and isinstance(checkpoints[-1], dict):
+        seen.append(_as_aware_utc(checkpoints[-1].get("timestamp")))
+    if task.get("work_dir"):
+        seen.append(_file_mtime(os.path.join(task["work_dir"], "output.log")))
+        seen.append(_file_mtime(os.path.join(task["work_dir"], "checkpoint.json")))
+    valid = [item for item in seen if item]
+    return max(valid) if valid else None
 
 
 async def _has_pending_approval(agent_id, ticket_id):
@@ -162,6 +191,10 @@ async def _audit_task(row):
         "task_type": row.get("task_type"),
         "checkpoints": row.get("checkpoints"),
         "started_at": row.get("started_at"),
+        "agent_heartbeat": row.get("agent_heartbeat"),
+        "work_dir": row.get("work_dir"),
+        "latest_note_at": row.get("latest_note_at"),
+        "latest_change_at": row.get("latest_change_at"),
     }
     if task["status"] == "completed":
         from services import agent_runner
@@ -186,13 +219,10 @@ async def _audit_task(row):
         return
 
     approval_blocked = await _has_pending_approval(agent["id"], agent["ticket_id"])
-    checkpoints = _loads(task.get("checkpoints"), [])
-    last_seen = _parse_time(task.get("started_at"))
-    if checkpoints and isinstance(checkpoints[-1], dict):
-        last_seen = _parse_time(checkpoints[-1].get("timestamp")) or last_seen
+    last_seen = _latest_activity(task)
     age_minutes = None
     if last_seen:
-        age_minutes = (_now_for(last_seen) - (last_seen if last_seen.tzinfo else last_seen.replace(tzinfo=timezone.utc))).total_seconds() / 60
+        age_minutes = (datetime.now(timezone.utc) - last_seen).total_seconds() / 60
 
     if approval_blocked:
         if not await _recent_duplicate(task["id"], "agent_waiting_on_approval", 30):
@@ -207,7 +237,18 @@ async def _audit_task(row):
         action = await _spawn_replacement(agent, task, f"no progress for {age_minutes:.1f} minutes")
         await _record(agent["id"], task["id"], agent["ticket_id"], "warning",
                       "agent_no_progress", "spawn_replacement_agent", action,
-                      False, {"age_minutes": age_minutes, "threshold_minutes": NO_PROGRESS_MINUTES})
+                      False, {
+                          "age_minutes": age_minutes,
+                          "threshold_minutes": NO_PROGRESS_MINUTES,
+                          "last_activity_at": last_seen.isoformat() if last_seen else None,
+                          "progress_sources": [
+                              "checkpoint",
+                              "agent_heartbeat",
+                              "output_log_mtime",
+                              "ticket_note",
+                              "change_request",
+                          ],
+                      })
     elif task["status"] == "failed":
         if await _recent_duplicate(task["id"], "agent_task_failed", 120):
             return
@@ -239,7 +280,20 @@ async def audit_once():
     rows = await fetchall("""
         SELECT a.id AS agent_id, a.ticket_id, a.model, a.selected_model, a.attempts,
                t.id AS task_id, t.status AS task_status, t.prompt, t.task_type,
-               t.checkpoints, t.started_at
+               t.checkpoints, t.started_at, t.work_dir, a.heartbeat AS agent_heartbeat,
+               (
+                 SELECT MAX(n.created_at)
+                 FROM ticket_notes n
+                 WHERE n.ticket_id = a.ticket_id
+                   AND (n.author = ('agent-' || a.id::text)
+                        OR n.source LIKE 'agent%')
+               ) AS latest_note_at,
+               (
+                 SELECT MAX(cr.requested_at)
+                 FROM change_requests cr
+                 WHERE cr.ticket_id = a.ticket_id
+                   AND (cr.agent_id = a.id OR cr.agent_id IS NULL)
+               ) AS latest_change_at
         FROM agents a
         JOIN LATERAL (
             SELECT * FROM agent_tasks

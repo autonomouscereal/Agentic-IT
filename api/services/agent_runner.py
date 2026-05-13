@@ -576,7 +576,10 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Broader ticket context only when needed: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}/context`
 - Add ticket notes: `POST /api/tickets/{ticket.get('id', '{ticket_id}')}/notes`
 - Request approval: `POST /api/changes/request`
+  - Required JSON: `{{"agent_id": <agent_instance_id>, "ticket_id": {ticket.get('id', '{ticket_id}')}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {{"auto_complete": false}}}}`
+  - Do not use `title` or `description` fields for change requests.
 - Poll approval: `GET /api/changes/{{change_id}}/status`
+- Complete approved lab/demo containment when no concrete provider adapter is available: `POST /api/changes/{{change_id}}/complete` with JSON `{{"actor": "agent-<agent_instance_id>", "result": "lab-safe evidence and production adapter note"}}`, then add a ticket note.
 - Persist postmortems: `POST /api/postmortems`
 - Persist workflows: `POST /api/workflows`
 
@@ -587,6 +590,7 @@ When posting a postmortem, `skill_proposals`, `test_cases`, and `guardrails` mus
 ## Checkpoint Protocol
 After each major step, write your progress to `checkpoint.json` in your work directory.
 Format: {{"step": "...", "status": "running|done|error", "output": "...", "progress_pct": N, "timestamp": "..."}}
+Use status `running` for intermediate checkpoints. Only use status `done` with `progress_pct: 100` after approved changes are completed, final notes are written, and the ticket is ready to close.
 The runner always creates `checkpoint.json` before you start. Read `checkpoint.json` directly before writing it; do not spend a turn searching or globbing for it.
 
 Do not hardcode passwords, API keys, tokens, or plaintext secrets. Use the credential vault or environment variables.

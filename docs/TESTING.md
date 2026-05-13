@@ -1,6 +1,6 @@
 # Testing Runbook
 
-Last updated: 2026-05-12.
+Last updated: 2026-05-13.
 
 ## Local Source Validation
 
@@ -133,6 +133,53 @@ Covers:
 - non-matching tickets remain in the manual queue
 - tickets with an existing agent are not duplicated
 - an internal ticket note is recorded for the assignment
+
+## Real Report-Phish Agentic E2E
+
+This is the current live proof that the bridge and local model path work beyond
+smoke tests.
+
+Flow exercised:
+
+- Report-phish CLI/email path created a phishing report marker
+  `CODEX_PHISH_E2E_1778637511`.
+- SOC bridge created iTop Incident `236` (`I-000245`) and dashboard ticket
+  `364`.
+- RACI auto-assignment spawned local-model agent `127`, task `124`.
+- Agent wrote triage note `491`.
+- Agent created approval gates `100`, `101`, and `102`.
+- `codex-e2e-lab-approver` approved all three gates.
+- Agent resumed automatically, completed all three gates, wrote resolution note
+  `502`, created postmortem `47`, and wrote final checkpoint
+  `resolution_complete` at `100%`.
+- Dashboard ticket `364` resolved and direct iTop read confirmed Incident `236`
+  status `resolved`, resolution code `assistance`, with the agent summary in
+  the provider solution field.
+
+Evidence:
+
+```text
+marker=CODEX_PHISH_E2E_1778637511
+itop_incident=236
+itop_ref=I-000245
+dashboard_ticket=364
+agent=127
+task=124
+triage_note=491
+changes=100:block phishing URL, 101:search/quarantine mailbox, 102:password reset/session review
+approver=codex-e2e-lab-approver
+resolution_note=502
+postmortem=47
+final_status=dashboard resolved, iTop resolved
+```
+
+Guardrail evidence:
+
+- The auditor recorded `agent_waiting_on_approval` while gates were pending.
+- Intermediate checkpoint stayed `running` at `35%`; the ticket did not close
+  until the final `done` checkpoint at `100%`.
+- Lab-safe change results name the production adapters that should execute real
+  URL block, mailbox quarantine, and IAM password/session operations.
 
 ## Awaiting User Response Smoke
 

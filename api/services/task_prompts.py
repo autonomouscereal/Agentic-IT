@@ -9,7 +9,9 @@ Operational rules:
 - Keep scanning for user notes or ticket updates while working. If the ticketing provider cannot expose notes yet, state that gap in the checkpoint and continue with available context.
 - Do not create a reusable workflow unless the task explicitly asks for workflow creation or automation.
 - If a potentially destructive or environment-changing action is needed, create a change request with POST /api/changes/request and poll GET /api/changes/{change_id}/status until approved before taking that action.
+- Change request body shape is exactly: {"agent_id": <agent_instance_id>, "ticket_id": {ticket_id}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {"auto_complete": false}}. Do not use title/description fields for change requests.
 - After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include compile/test/diff or operational evidence in the result.
+- In lab/demo runs, if no concrete provider action adapter is available for an approved containment action, do not browse broad tool inventory. Complete the approved gate with explicit simulated control evidence, add a ticket note, and name the production adapter that would perform the real operation.
 - If you cannot proceed without requester input, POST /api/tickets/{ticket_id}/request-info with a concise question, recipient/contact method when known, and context. Then update checkpoint.json with status waiting_for_user and stop. When a user response arrives, the dashboard will record it with /api/tickets/{ticket_id}/user-response and may resume the ticket.
 - Prefer non-destructive investigation, documentation, and clear ticket notes.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful progress, blockers, evidence, or resolution details.
@@ -19,7 +21,7 @@ Operational rules:
 - Keep shell commands simple and auditable. Avoid multiline `python -c` snippets,
   comments inside quoted shell arguments, and deeply nested quoting; if JSON
   parsing needs more than a one-liner, write/read a temporary script or file.
-- Update checkpoint.json after major steps. The file already exists; read checkpoint.json directly before writing it.
+- Update checkpoint.json after major steps. Use status `running` for intermediate checkpoints. Only use status `done` or `completed` with progress_pct `100` after all approval gates are completed, final notes are written, and the ticket is ready to close. The file already exists; read checkpoint.json directly before writing it.
 - When complete, summarize root cause, evidence, actions taken, residual risk, and recommended follow-up.
 """
 
@@ -77,12 +79,14 @@ Operational rules:
   `author: agent-{agent_instance_id}` and `source: agent` once you know the
   assigned agent id, so audit trails show the note came from the agent.
 - If a potentially destructive or environment-changing action is needed, create a change request with POST /api/changes/request and poll GET /api/changes/{change_id}/status until approved before taking that action.
+- Change request body shape is exactly: {"agent_id": <agent_instance_id>, "ticket_id": {ticket_id}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {"auto_complete": false}}. Do not use title/description fields for change requests.
 - After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include lab-safe operational evidence.
+- In lab/demo runs, if no concrete provider action adapter is available for an approved containment action, do not browse broad tool inventory. Complete the approved gate with explicit simulated control evidence, add a ticket note, and name the production adapter that would perform the real operation.
 - If requester input is required, POST /api/tickets/{ticket_id}/request-info, update checkpoint.json with status waiting_for_user, and stop.
 - Keep shell commands simple and auditable. Avoid multiline `python -c` snippets,
   comments inside quoted shell arguments, and deeply nested quoting; if JSON
   parsing needs more than a one-liner, write/read a temporary script or file.
-- Update checkpoint.json after major steps. When complete, set status done and progress_pct 100.
+- Update checkpoint.json after major steps. Use status `running` for intermediate checkpoints. Only use status `done` or `completed` with progress_pct `100` after all approval gates are completed, final notes are written, and the ticket is ready to close.
 """
 
 

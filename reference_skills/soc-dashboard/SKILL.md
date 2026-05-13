@@ -163,6 +163,33 @@ The reference AI server currently runs slow local models. Do not use short wall-
 - The agent auditor is the primary supervision path. Judge status from task logs, checkpoints, notes, audit entries, and process state, not from percent alone.
 - Before rebuilding the API container, check `/api/agents/active` and `/api/agents/processes`. Stop only agents in your current test swim lane, with an explicit audit reason.
 - Per-agent curl guards block broad dashboard schema/tool endpoints (`/openapi.json`, `/api/tools`, `/docs`, `/redoc`) and cap oversized curl output so local agents stay on bounded ticket/evidence context.
+- Task/checkpoint completion is intentionally strict: `done` / `completed`
+  checkpoints below `100%` are ignored. Agents must use `running` for
+  intermediate checkpoints, then final `done` at `100%` only after approval
+  gates, ticket notes, postmortem/workflow evidence, and provider closure are
+  complete.
+
+### Current Real-Flow Proofs
+
+Latest live report-phish proof, verified 2026-05-13 UTC:
+
+- Marker `CODEX_PHISH_E2E_1778637511`.
+- iTop Incident `236` / `I-000245`, dashboard ticket `364`.
+- Local-model agent `127`, task `124`.
+- Agent wrote triage note `491`, created approval gates `100`, `101`, and
+  `102`, resumed after `codex-e2e-lab-approver` approval, completed the three
+  gates with lab-safe evidence, wrote resolution note `502`, created postmortem
+  `47`, and finished at `100%`.
+- Direct iTop read confirmed Incident `236` status `resolved`, solution populated
+  from the agent completion summary.
+
+Latest live EDR/Sysmon proof, verified 2026-05-12:
+
+- Marker `CODEX_SYSMON_E2E_1778632686`.
+- EDR/Sysmon E2E passed `16/16`, produced two Wazuh alerts, bridged to dashboard
+  ticket `354`, and local-model agent `123` resolved the ticket.
+- Provider close and forced single-ticket sync kept dashboard and iTop status
+  `resolved`.
 
 ## Database Schema
 
