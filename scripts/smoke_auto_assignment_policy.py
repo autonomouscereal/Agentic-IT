@@ -96,6 +96,8 @@ async def fake_fetchrow(query, *args):
 async def fake_fetchall(query, *args):
     if "FROM service_raci_rules" in query:
         return RULES
+    if "FROM agents a" in query and "JOIN tickets t" in query:
+        return []
     raise AssertionError(f"unexpected fetchall: {query}")
 
 

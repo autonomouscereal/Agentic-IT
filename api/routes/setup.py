@@ -72,6 +72,7 @@ async def create_setup_ticket(
         provider="local",
         sync_provider=sync_provider,
         created_by="setup-wizard",
+        auto_assign=False,
     )
     await ticket_service.add_note(
         ticket["id"],

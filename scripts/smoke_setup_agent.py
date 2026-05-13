@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create a setup ticket and run a short model-backed setup agent proof."""
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -9,6 +10,10 @@ import urllib.request
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:25480"
 MODEL = sys.argv[2] if len(sys.argv) > 2 else "qwen/qwen3.6-27b"
+AGENT_WAIT_SECONDS = int(os.environ.get("AGENT_SMOKE_WAIT_SECONDS", "3600"))
+IDLE_WAIT_SECONDS = int(os.environ.get("AGENT_SMOKE_IDLE_WAIT_SECONDS", "3600"))
+POLL_SECONDS = int(os.environ.get("AGENT_SMOKE_POLL_SECONDS", "15"))
+STOP_ON_TIMEOUT = os.environ.get("AGENT_SMOKE_STOP_ON_TIMEOUT", "").lower() in ("1", "true", "yes")
 
 
 def request(method, path, payload=None, timeout=30):
@@ -27,7 +32,43 @@ def request(method, path, payload=None, timeout=30):
         raise RuntimeError(f"{method} {path} failed {exc.code}: {body}") from exc
 
 
+def latest_agent_task(agent_id):
+    tasks = request("GET", f"/api/agents/tasks?agent_id={agent_id}")
+    rows = tasks.get("tasks") or []
+    return rows[0] if rows else {}
+
+
+def wait_for_idle_agent_lane():
+    deadline = time.time() + IDLE_WAIT_SECONDS
+    last_count = None
+    while time.time() < deadline:
+        active = request("GET", "/api/agents/active")
+        count = active.get("count", 0)
+        if count != last_count:
+            print(json.dumps({
+                "waiting_for_agent_lane": count,
+                "active_agents": [
+                    {
+                        "id": row.get("id"),
+                        "ticket_id": row.get("ticket_id"),
+                        "status": row.get("status"),
+                        "task_status": row.get("task_status"),
+                        "progress_pct_ui_hint": row.get("task_progress_pct"),
+                    }
+                    for row in active.get("agents", [])
+                ],
+            }))
+            request("POST", "/api/agents/audits/run", {})
+            last_count = count
+        if count == 0:
+            return
+        time.sleep(POLL_SECONDS)
+    raise SystemExit("Agent lane did not become idle before setup agent smoke spawn")
+
+
 def main():
+    wait_for_idle_agent_lane()
+
     setup = request("POST", "/api/setup/ticket", {
         "profile": "soc",
         "existing_tools": [
@@ -57,11 +98,25 @@ def main():
         "model": MODEL,
         "prompt": prompt,
     })
-    agent_id = spawn["agent_id"]
-    task_id = spawn["task_id"]
+    if "agent_id" not in spawn or "task_id" not in spawn:
+        agent_id = spawn.get("agent_id")
+        task = latest_agent_task(agent_id) if agent_id else {}
+        if not agent_id or not task.get("id"):
+            raise SystemExit(f"agent spawn failed or was deferred: {spawn}")
+        task_id = task["id"]
+        print(json.dumps({
+            "attached_to_existing_agent": True,
+            "ticket_id": ticket_id,
+            "agent_id": agent_id,
+            "task_id": task_id,
+            "spawn_response": spawn,
+        }))
+    else:
+        agent_id = spawn["agent_id"]
+        task_id = spawn["task_id"]
     print(json.dumps({"ticket_id": ticket_id, "agent_id": agent_id, "task_id": task_id, "model": MODEL}))
 
-    deadline = time.time() + 720
+    deadline = time.time() + AGENT_WAIT_SECONDS
     last_status = ""
     while time.time() < deadline:
         tasks = request("GET", f"/api/agents/tasks?agent_id={agent_id}")
@@ -86,10 +141,20 @@ def main():
             if status != "completed" or not note_written:
                 raise SystemExit(2)
             return
-        time.sleep(10)
+        time.sleep(POLL_SECONDS)
 
-    request("POST", f"/api/agents/{agent_id}/stop", {"reason": "setup_agent_smoke_timeout"})
-    raise SystemExit("Timed out waiting for setup agent smoke")
+    request("POST", "/api/agents/audits/run", {})
+    print(json.dumps({
+        "wait_window_expired": True,
+        "stop_on_timeout": STOP_ON_TIMEOUT,
+        "agent_id": agent_id,
+        "ticket_id": ticket_id,
+        "task_id": task_id,
+        "task": request("GET", f"/api/agents/tasks?agent_id={agent_id}"),
+    }, indent=2))
+    if STOP_ON_TIMEOUT:
+        request("POST", f"/api/agents/{agent_id}/stop", {"reason": "setup_agent_smoke_wait_window_expired"})
+    raise SystemExit("Setup agent smoke wait window expired")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,42 @@ PostgreSQL connection settings as the service:
 """
 import asyncio
 import json
+import os
+import subprocess
+import sys
 import time
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def dispatch_to_api_container_if_needed():
+    if os.environ.get("DB_HOST") or Path("/app/database.py").exists():
+        return
+    if not (ROOT / "docker-compose.yml").exists():
+        return
+
+    target = "/app/smoke_change_auto_completion.py"
+    subprocess.run(
+        ["docker", "compose", "cp", str(Path(__file__).resolve()), f"api:{target}"],
+        cwd=ROOT,
+        check=True,
+    )
+    completed = subprocess.run(
+        ["docker", "compose", "exec", "-T", "api", "python", target],
+        cwd=ROOT,
+        check=False,
+    )
+    raise SystemExit(completed.returncode)
+
+
+dispatch_to_api_container_if_needed()
+
+if Path("/app/database.py").exists():
+    sys.path.insert(0, "/app")
+else:
+    sys.path.insert(0, str(ROOT / "api"))
 
 from database import execute, fetchrow, fetchval
 from services import agent_auditor

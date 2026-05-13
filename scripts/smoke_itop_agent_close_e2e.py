@@ -8,6 +8,7 @@ local-only smoke.
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -63,12 +64,42 @@ def latest_task(base, agent_id):
     return rows[0] if rows else {}
 
 
+def wait_for_idle_agent_lane(base, wait_seconds, poll_seconds):
+    deadline = time.time() + wait_seconds
+    last_count = None
+    while time.time() < deadline:
+        active = request(base, "GET", "/api/agents/active")
+        count = active.get("count", 0)
+        if count != last_count:
+            print(json.dumps({
+                "waiting_for_agent_lane": count,
+                "active_agents": [
+                    {
+                        "id": row.get("id"),
+                        "ticket_id": row.get("ticket_id"),
+                        "status": row.get("status"),
+                        "task_status": row.get("task_status"),
+                        "progress_pct_ui_hint": row.get("task_progress_pct"),
+                    }
+                    for row in active.get("agents", [])
+                ],
+            }))
+            request(base, "POST", "/api/agents/audits/run", {})
+            last_count = count
+        if count == 0:
+            return
+        time.sleep(poll_seconds)
+    raise SystemExit("Agent lane did not become idle before iTop close proof spawn")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("base", nargs="?", default="http://localhost:25480")
     parser.add_argument("--model", default="qwen/qwen3.6-27b")
-    parser.add_argument("--timeout-seconds", type=int, default=3600)
-    parser.add_argument("--poll-seconds", type=int, default=15)
+    parser.add_argument("--timeout-seconds", type=int, default=int(os.environ.get("AGENT_SMOKE_WAIT_SECONDS", "3600")))
+    parser.add_argument("--idle-wait-seconds", type=int, default=int(os.environ.get("AGENT_SMOKE_IDLE_WAIT_SECONDS", "3600")))
+    parser.add_argument("--poll-seconds", type=int, default=int(os.environ.get("AGENT_SMOKE_POLL_SECONDS", "15")))
+    parser.add_argument("--stop-on-timeout", action="store_true", default=os.environ.get("AGENT_SMOKE_STOP_ON_TIMEOUT", "").lower() in ("1", "true", "yes"))
     parser.add_argument("--marker", default=f"CODEX_ITOP_CLOSE_PROOF_{int(time.time())}")
     parser.add_argument("--ticket-id", type=int, default=None)
     parser.add_argument(
@@ -77,6 +108,8 @@ def main():
     )
     args = parser.parse_args()
     base = args.base.rstrip("/")
+
+    wait_for_idle_agent_lane(base, args.idle_wait_seconds, args.poll_seconds)
 
     if args.ticket_id:
         ticket = request(base, "GET", f"/api/tickets/{args.ticket_id}")
@@ -146,7 +179,16 @@ def main():
 
     task = latest_task(base, agent_id)
     if task.get("status") != "completed":
-        request(base, "POST", f"/api/agents/{agent_id}/stop", {"reason": "itop_agent_close_e2e_timeout"})
+        request(base, "POST", "/api/agents/audits/run")
+        print(json.dumps({
+            "wait_window_expired": True,
+            "stop_on_timeout": args.stop_on_timeout,
+            "agent_id": agent_id,
+            "ticket_id": ticket_id,
+            "task": task,
+        }, indent=2))
+        if args.stop_on_timeout:
+            request(base, "POST", f"/api/agents/{agent_id}/stop", {"reason": "itop_agent_close_e2e_wait_window_expired"})
         raise SystemExit(f"agent did not complete: {task}")
 
     request(base, "POST", "/api/agents/audits/run")

@@ -1908,3 +1908,88 @@ The current iTop discovery strategy scans numeric keys. It works for the lab but
 ### No database rollback system
 
 Migrations are additive/idempotent. There is no first-class rollback tool yet.
+
+### Model-backed smoke runner queued overlapping local agents
+
+Status: fixed in test harness, found during the 2026-05-13 full dashboard smoke
+rerun.
+
+Problem:
+
+- The previous ad hoc full-smoke runner continued through model-backed tests
+  while auto-assigned agent `136` was still actively working ticket `381`.
+- It spawned additional queued smoke agents (`139`, `140`) behind the
+  one-agent local model lane.
+- `smoke_local_model_agent.py` and `smoke_setup_agent.py` used fixed 720-second
+  wait windows and attempted to stop agents when the wrapper expired, which is
+  wrong for slow local models and queued lab environments.
+
+Fix:
+
+- Stop only the superseded smoke runner processes in this test lane.
+- Stop queued smoke agents through `POST /api/agents/{id}/stop` with an audit
+  reason; do not kill the active working agent.
+- `smoke_local_model_agent.py`, `smoke_setup_agent.py`, and
+  `smoke_itop_agent_close_e2e.py` now wait for `/api/agents/active` to become
+  empty before spawning model-backed work.
+- Model-backed smoke wait windows default to `AGENT_SMOKE_WAIT_SECONDS=3600`
+  and `AGENT_SMOKE_IDLE_WAIT_SECONDS=3600`.
+- Smoke wrappers no longer stop a still-running agent on wait-window expiry
+  unless `AGENT_SMOKE_STOP_ON_TIMEOUT=true` is explicitly set. They run the
+  auditor and print evidence instead.
+- `smoke_change_auto_completion.py` self-dispatches into the API container when
+  launched from the host, so it uses the installed `asyncpg`/raw PostgreSQL
+  runtime without requiring host packages.
+
+Verification:
+
+- Queued smoke agents `139` and `140` were stopped via dashboard API and
+  `/api/agents/active` returned only the active worker, then zero after worker
+  completion.
+- Agent `136` completed ticket `381` end to end: triage note `597`, completed
+  approval gate/change `109`, final resolution note `604`, and terminal
+  `checkpoint.json` with `status=done`, `progress_pct=100`.
+- Fresh serialized smoke run `serial_20260512_234803` started with the patched
+  runner and waits for active agents between model-backed phases.
+
+### Setup ticket ignored spawn_agent=false through RACI auto-assignment
+
+Status: fixed, deployed, and verified on 2026-05-13.
+
+Problem:
+
+- `POST /api/setup/ticket` accepted `spawn_agent=false`, but created the setup
+  ticket through the generic ticket facade with default `auto_assign=true`.
+- The setup plan text contains provider names such as SIEM/EDR, so the EDR/SIEM
+  RACI rule matched the setup NormalChange and spawned agent `145` even though
+  the setup smoke intentionally requested no automatic agent.
+- The spawned agent belonged to this test lane, but it received the wrong
+  auto-assignment prompt for a platform setup ticket.
+
+Impact:
+
+- Setup and installer smoke tests can leak into the live local-model queue.
+- Operators lose the ability to create review-only setup tickets without
+  consuming agent capacity.
+
+Fix:
+
+- `api/routes/setup.py` now calls `ticket_service.create_ticket(...,
+  auto_assign=False)` for setup tickets. Setup agent creation is controlled only
+  by the explicit `spawn_agent` flag in the setup endpoint.
+- `scripts/smoke_setup_platform.py` now asserts setup tickets do not receive an
+  auto-assigned agent when `spawn_agent=false`.
+
+Verification:
+
+- API container rebuilt with the patched setup route.
+- `python3 scripts/smoke_setup_platform.py http://localhost:25480`: PASS,
+  created setup ticket `407`, and `/api/agents/active` remained `0`.
+- `python3 scripts/smoke_setup_agent.py http://localhost:25480`: PASS, created
+  ticket `408`, explicitly assigned agent `146`, completed task `143` at
+  `100%`, wrote the setup context proof note, and left no active process.
+- `python3 scripts/smoke_itop_agent_close_e2e.py http://localhost:25480
+  --marker CODEX_ITOP_CLOSE_RERUN_20260513_065044`: PASS, created dashboard
+  ticket `409` synced to iTop Incident `262` / `I-000271`, agent `147`
+  completed task `144`, dashboard and iTop both ended `resolved`, and the iTop
+  solution contained the marker.

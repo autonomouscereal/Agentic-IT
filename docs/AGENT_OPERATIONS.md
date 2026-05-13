@@ -247,6 +247,21 @@ checkpoints, or writing notes should continue.
 queueing several same-rule local agents while one Security Operations/EDR agent
 is already active. Set it higher, or `0` for unlimited, in faster environments.
 
+Model-backed smoke and acceptance scripts must serialize against the live local
+model lane. Before spawning a smoke agent, wait for `/api/agents/active` to
+return `count=0`, run the auditor while waiting, and record the active agent ids
+in the log. In the reference lab, use:
+
+```text
+AGENT_SMOKE_WAIT_SECONDS=3600
+AGENT_SMOKE_IDLE_WAIT_SECONDS=3600
+AGENT_SMOKE_STOP_ON_TIMEOUT=false
+```
+
+The smoke wrapper's wait window is evidence reporting only. It must not stop a
+streaming or tool-using agent unless an operator explicitly sets
+`AGENT_SMOKE_STOP_ON_TIMEOUT=true` for that run.
+
 Runner health:
 
 ```bash

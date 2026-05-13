@@ -8,6 +8,7 @@ Progress percentage is only a UI hint. This smoke determines health from task
 status plus active process, stream log, checkpoint, notes, and audit evidence.
 """
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -16,6 +17,10 @@ import urllib.request
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:25480"
 MODEL = sys.argv[2] if len(sys.argv) > 2 else "qwen/qwen3.6-27b"
+AGENT_WAIT_SECONDS = int(os.environ.get("AGENT_SMOKE_WAIT_SECONDS", "3600"))
+IDLE_WAIT_SECONDS = int(os.environ.get("AGENT_SMOKE_IDLE_WAIT_SECONDS", "3600"))
+POLL_SECONDS = int(os.environ.get("AGENT_SMOKE_POLL_SECONDS", "15"))
+STOP_ON_TIMEOUT = os.environ.get("AGENT_SMOKE_STOP_ON_TIMEOUT", "").lower() in ("1", "true", "yes")
 
 
 def request(method, path, payload=None, timeout=30):
@@ -41,6 +46,34 @@ def tail(text, limit=3000):
     return text[-limit:]
 
 
+def wait_for_idle_agent_lane():
+    deadline = time.time() + IDLE_WAIT_SECONDS
+    last_count = None
+    while time.time() < deadline:
+        active = request("GET", "/api/agents/active")
+        count = active.get("count", 0)
+        if count != last_count:
+            print(json.dumps({
+                "waiting_for_agent_lane": count,
+                "active_agents": [
+                    {
+                        "id": row.get("id"),
+                        "ticket_id": row.get("ticket_id"),
+                        "status": row.get("status"),
+                        "task_status": row.get("task_status"),
+                        "progress_pct_ui_hint": row.get("task_progress_pct"),
+                    }
+                    for row in active.get("agents", [])
+                ],
+            }))
+            request("POST", "/api/agents/audits/run", {})
+            last_count = count
+        if count == 0:
+            return
+        time.sleep(POLL_SECONDS)
+    raise SystemExit("Agent lane did not become idle before local model smoke spawn")
+
+
 def collect_agent_evidence(agent_id, ticket_id, task_id):
     tasks = request("GET", f"/api/agents/tasks?agent_id={agent_id}")
     task = (tasks.get("tasks") or [{}])[0]
@@ -52,7 +85,17 @@ def collect_agent_evidence(agent_id, ticket_id, task_id):
     active_processes = processes.get("active_processes") or []
     process_rows = processes.get("processes") or []
     pid = task.get("pid")
-    pid_seen = any(str(row.get("pid")) == str(pid) for row in process_rows if pid)
+    pid_seen = False
+    if pid:
+        for row in process_rows:
+            if isinstance(row, dict):
+                row_pid = row.get("pid")
+            else:
+                parts = str(row).split()
+                row_pid = parts[0] if parts else None
+            if str(row_pid) == str(pid):
+                pid_seen = True
+                break
 
     notes = [
         {
@@ -86,6 +129,8 @@ def collect_agent_evidence(agent_id, ticket_id, task_id):
 
 
 def main():
+    wait_for_idle_agent_lane()
+
     ticket = request("POST", "/api/tickets", {
         "title": f"Local model agent smoke {int(time.time())}",
         "description": "Agent should read context, add a ticket note, and mark checkpoint done.",
@@ -114,7 +159,7 @@ def main():
 
     print(json.dumps({"spawned": True, "ticket_id": ticket_id, "agent_id": agent_id, "task_id": task_id, "model": MODEL}))
 
-    deadline = time.time() + 720
+    deadline = time.time() + AGENT_WAIT_SECONDS
     last_status = ""
     while time.time() < deadline:
         tasks = request("GET", f"/api/agents/tasks?agent_id={agent_id}")
@@ -145,10 +190,14 @@ def main():
             if status != "completed":
                 raise SystemExit(2)
             return
-        time.sleep(10)
+        time.sleep(POLL_SECONDS)
 
-    request("POST", f"/api/agents/{agent_id}/stop", {"reason": "local_model_smoke_timeout"})
-    raise SystemExit("Timed out waiting for local model agent smoke")
+    evidence = collect_agent_evidence(agent_id, ticket_id, task_id)
+    request("POST", "/api/agents/audits/run", {})
+    print(json.dumps({"wait_window_expired": True, "stop_on_timeout": STOP_ON_TIMEOUT, "evidence": evidence}, indent=2))
+    if STOP_ON_TIMEOUT:
+        request("POST", f"/api/agents/{agent_id}/stop", {"reason": "local_model_smoke_wait_window_expired"})
+    raise SystemExit("Local model agent smoke wait window expired")
 
 
 if __name__ == "__main__":

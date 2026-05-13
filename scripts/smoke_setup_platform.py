@@ -63,6 +63,11 @@ def main():
         "spawn_agent": False,
     })
     assert_true(ticket.get("ticket", {}).get("id"), "setup ticket was not created")
+    assert_true(not ticket["ticket"].get("agent_id"), "setup ticket auto-assigned an agent despite spawn_agent=false")
+    assert_true(
+        ticket["ticket"].get("auto_assignment", {}).get("status") != "assigned",
+        "setup ticket incorrectly ran RACI auto-assignment",
+    )
 
     dry_run = subprocess.run(
         [sys.executable, str(ROOT / "installer" / "bootstrap.py"), "--dry-run", "--no-start", "--profile", "minimal", "--target", str(ROOT / ".tmp-install-smoke")],

@@ -981,3 +981,98 @@ single ticket sync:
   fix: removed stale exists variable references in iTopProvider.sync_ticket
   live proof: POST /api/tickets/354/sync returned HTTP 200 and is_new=false
 ```
+
+## Full Bridge And Agentic Regression Rerun - 2026-05-13
+
+Purpose: rerun bridge/unit/smoke coverage plus real local-model agent flows with
+the AI server constrained to the slow local-model lab lane (`MAX_CONCURRENT_AGENTS=1`)
+and no short model wall-clock kills.
+
+Remote evidence files:
+
+```text
+/tmp/platform_full_test_summary_20260512_232845.txt
+/tmp/platform_live_bridge_summary_live_bridges_20260512_233954.txt
+/tmp/soc_dashboard_smoke_summary_serial_20260512_234803.txt
+/tmp/soc_dashboard_model_smoke_summary_model_serial_20260513_001552.txt
+/tmp/soc_dashboard_setup_agent_rerun_20260513_064257.summary
+/tmp/soc_dashboard_itop_close_rerun_20260513_065044.summary
+/tmp/soc_dashboard_full_green_acceptance_v2_20260513_070546.txt
+```
+
+Bridge/unit results:
+
+```text
+soc-dashboard unittest discovery: PASS
+soc-dashboard core py_compile: PASS
+siem-ticket-bridge unit/status: PASS
+soc-bridge E2E/iTop/Mailcow: PASS
+report-phish reporter/report/smtp sink: PASS
+keycloak-manager unit: PASS
+mailcow-api-shim: PASS
+live iam-bridge: PASS
+live keycloak-mailcow-bridge: PASS
+live wazuh-bridge: PASS
+live keycloak-manager: PASS 26/26
+live mailcow-api-shim: PASS 10/10
+live Mailcow SMTP/IMAP: PASS
+```
+
+Dashboard deterministic smoke results:
+
+```text
+smoke_agentic_system: PASS
+smoke_provider_adapters: PASS
+smoke_service_desk_intake: PASS
+smoke_user_response_workflow: PASS
+smoke_phishing_workflow_lifecycle: PASS
+smoke_postmortem_promotion: PASS
+smoke_setup_platform: PASS after setup auto-assignment guard
+smoke_cicd_security_pipeline: PASS
+smoke_agent_auditor: PASS
+smoke_auto_assignment_policy: PASS
+smoke_change_auto_completion: PASS
+```
+
+Model-backed local-agent results:
+
+```text
+smoke_local_model_agent: PASS
+  ticket=405 agent=144 task=141
+  checkpoint=done/100
+  evidence note="local model agent smoke note complete"
+  no lingering active process
+
+smoke_setup_agent: PASS
+  ticket=408 agent=146 task=143
+  checkpoint=done/100
+  note_written=true
+  no lingering active process
+
+smoke_itop_agent_close_e2e: PASS
+  marker=CODEX_ITOP_CLOSE_RERUN_20260513_065044
+  dashboard_ticket=409
+  itop Incident=262 / I-000271
+  agent=147 task=144
+  dashboard_status=resolved
+  provider_sync_status=synced
+  direct_itop_status=resolved
+  direct_itop_solution contains marker
+  audit_findings=[agent_task_completed]
+```
+
+Important fixes discovered during this rerun:
+
+- The full-smoke wrapper no longer queues overlapping model-backed agents behind
+  slow local models. Model smokes wait for `/api/agents/active` to drain, run
+  the auditor while waiting, and default to one-hour waits with
+  `AGENT_SMOKE_STOP_ON_TIMEOUT=false`.
+- `/api/agents/processes` can return process rows as strings; the local-model
+  smoke parser now handles that shape.
+- `smoke_change_auto_completion.py` self-dispatches into the API container so
+  it uses the deployed raw-PostgreSQL runtime rather than requiring host Python
+  packages.
+- Setup tickets now call `ticket_service.create_ticket(..., auto_assign=False)`.
+  `spawn_agent=false` is review-only and cannot leak into RACI auto-assignment.
+- `report_phish/test_smtp_server.py` uses a Python 3.12-compatible socketserver
+  SMTP sink instead of the removed stdlib `smtpd` module.
