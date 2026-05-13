@@ -41,6 +41,11 @@ curl -sS -X POST "$SOC_DASHBOARD_URL/api/tickets/$TICKET_ID/access-request" \
 5. When the approval gate is approved, the dashboard resumes the original
    ticket. Re-read ticket context, verify the approved grant or lab-safe grant
    note, complete the change with evidence, and continue the original task.
+6. When the original task is complete, write final evidence and explicitly call
+   `POST /api/tickets/{ticket_id}/status`. Use `close_provider: true` only when
+   the external provider record should also close; otherwise use
+   `close_provider: false` and leave any provider-side access ticket for the
+   access owner workflow.
 
 ## Seeded RACI Examples
 
@@ -76,4 +81,4 @@ python scripts/agentic_access_request_resume_demo.py http://localhost:25480 qwen
 Expected proof: the first agent stops at `waiting_for_access`, an access request
 ticket and approval gate are created, approval resumes a new ticket agent, the
 resumed agent completes the grant gate with evidence, writes the final note, and
-resolves the original ticket.
+explicitly resolves the original ticket through the ticket status endpoint.

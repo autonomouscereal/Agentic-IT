@@ -287,6 +287,8 @@ Covers:
 - runner preserving the waiting state instead of resolving the ticket
 - approval-driven resume of the original ticket
 - resumed agent completing the access gate and resolving the ticket
+- explicit `POST /api/tickets/{id}/status` from the resumed agent after the
+  grant is verified; runner completion alone must not close the ticket
 
 ## Provider Adapter Smoke
 
