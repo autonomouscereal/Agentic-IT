@@ -924,4 +924,13 @@ agent note attribution:
   source fix: ticket-agent prompts now require explicit author=agent-{agent_instance_id} and source=agent on note writes
   local compile: python -m py_compile api/services/task_prompts.py api/services/itop_sync.py -> PASS
   live deployment: source synced; API rebuild deferred until active agent 123 completes
+provider closure:
+  issue: ticket-resolution agents resolved dashboard tickets locally without guaranteeing iTop close
+  source fix: successful ticket_resolution completion now calls the iTop provider close lifecycle when provider=itop
+  local tests: python -m unittest tests.test_itop_sync_status tests.test_auto_assignment tests.test_itop_outbound tests.test_agent_lifecycle_guards -> PASS
+  live proof: manual provider close for pre-fix ticket 354 returned status=resolved; evidence shows dashboard status=resolved and provider status=resolved
+single ticket sync:
+  issue: /api/tickets/354/sync returned HTTP 500 after status-guard refactor
+  fix: removed stale exists variable references in iTopProvider.sync_ticket
+  live proof: POST /api/tickets/354/sync returned HTTP 200 and is_new=false
 ```

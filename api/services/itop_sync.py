@@ -280,7 +280,7 @@ class iTopProvider(TicketProvider):
                 ticket_data["assignee_team"], json_dumps(obj_data))
 
         auto_assignment = None
-        if auto_assign and not exists:
+        if auto_assign and not existing_ticket:
             try:
                 from services import auto_assignment as auto_assignment_service
                 auto_assignment = await auto_assignment_service.maybe_auto_assign(ticket_id, source="itop_sync")
@@ -290,7 +290,7 @@ class iTopProvider(TicketProvider):
                                 f"ticket_{ticket_id}", {"error": str(exc)})
 
         return {"status": "synced", "itop_ref": str(key_val),
-                "itop_class": ticket_class, "is_new": not exists,
+                "itop_class": ticket_class, "is_new": not bool(existing_ticket),
                 "ticket_id": ticket_id, "auto_assignment": auto_assignment}
 
     async def full_sync(self) -> dict:

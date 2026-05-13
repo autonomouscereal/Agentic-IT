@@ -301,6 +301,42 @@ async def _add_agent_note(ticket_id, agent_id, task_id, title, body, source="age
     return note_id
 
 
+async def _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, notes):
+    """Best-effort provider close after successful ticket-resolution work."""
+    if not ticket_id:
+        return {"status": "skipped", "reason": "missing_ticket_id"}
+    ticket = await fetchrow(
+        "SELECT provider, provider_ref, status FROM tickets WHERE id = $1",
+        ticket_id,
+    )
+    if not ticket:
+        return {"status": "skipped", "reason": "ticket_not_found"}
+    provider = (ticket.get("provider") or "local").strip().lower()
+    if provider != "itop" or not ticket.get("provider_ref"):
+        return {"status": "skipped", "reason": f"provider_{provider or 'local'}"}
+    try:
+        from services.itop_sync import iTopProvider
+        result = await iTopProvider().close_ticket(ticket_id, notes or "Resolved by SOC agent.")
+    except Exception as exc:
+        result = {"error": str(exc)}
+
+    if result.get("error"):
+        await log_event("sync", "warning", f"agent_{agent_id}", "provider_close_failed",
+                        f"ticket_{ticket_id}", {"task_id": task_id, "error": result.get("error")})
+        await _add_agent_note(
+            ticket_id,
+            agent_id,
+            task_id,
+            "Provider close failed",
+            f"The dashboard resolved this ticket locally, but provider close failed: {result.get('error')}",
+            source="agent-control-plane",
+        )
+    else:
+        await log_event("sync", "info", f"agent_{agent_id}", "provider_close_complete",
+                        f"ticket_{ticket_id}", {"task_id": task_id, "provider": provider, "result": result})
+    return result
+
+
 def _auto_complete_allowed(change):
     policy = _loads(change.get("approval_policy"), {})
     if not isinstance(policy, dict):
@@ -962,6 +998,12 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                     "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
                     task_meta.get("ticket_id"),
                 )
+                await _close_provider_ticket_if_needed(
+                    task_meta.get("ticket_id"),
+                    agent_id,
+                    task_id,
+                    summary[:1500] or "Resolved by SOC agent.",
+                )
             change_completion = await complete_approved_changes_for_task(
                 agent_id,
                 task_id,
@@ -1007,6 +1049,12 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 await execute(
                     "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
                     recovered_completion["ticket_id"],
+                )
+                await _close_provider_ticket_if_needed(
+                    recovered_completion["ticket_id"],
+                    agent_id,
+                    task_id,
+                    summary[:1500] or "Resolved by SOC agent after supervisor recovery.",
                 )
                 await log_event("agent", "warning", f"agent_{agent_id}", "agent_completion_recovered",
                                 f"task_{task_id}", {

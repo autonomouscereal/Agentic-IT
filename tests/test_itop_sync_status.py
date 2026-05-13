@@ -1,5 +1,6 @@
 import unittest
 import importlib.util
+import inspect
 import sys
 import types
 from pathlib import Path
@@ -67,6 +68,10 @@ class ITopSyncStatusTests(unittest.TestCase):
             itop_sync._effective_local_status("assigned", "new", has_active_agent=False),
             "assigned",
         )
+
+    def test_sync_ticket_does_not_reference_removed_exists_name(self):
+        source = inspect.getsource(itop_sync.iTopProvider.sync_ticket)
+        self.assertNotIn("not exists", source)
 
 
 if __name__ == "__main__":

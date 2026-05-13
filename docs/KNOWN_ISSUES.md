@@ -1309,6 +1309,71 @@ Verified:
 - Source synced to the remote tree; container rebuild waits for the active EDR
   proof agent to finish.
 
+### Agent completion must close provider tickets
+
+Status: fixed and deployed.
+
+Problem:
+
+- Real EDR/SIEM agent `123` completed task `120` and resolved dashboard ticket
+  `354`, but the runner's success path only updated the canonical dashboard
+  status directly.
+- For iTop-backed tickets, provider closure should also be attempted through the
+  iTop lifecycle so the external ticket does not remain open after local agent
+  completion.
+
+Fix:
+
+- Added best-effort provider close on successful `ticket_resolution` completion.
+- For iTop-backed tickets, the runner now calls `iTopProvider.close_ticket`,
+  which already handles `ev_assign` before `ev_resolve` when iTop rejects direct
+  resolution from `new`.
+- Provider close success/failure is logged. Failures add a ticket note instead
+  of hiding the local resolution.
+
+Verified:
+
+- Local `python -m unittest tests.test_itop_sync_status tests.test_auto_assignment tests.test_itop_outbound tests.test_agent_lifecycle_guards`: PASS.
+- Local `python -m py_compile api/services/agent_runner.py api/services/itop_sync.py api/services/task_prompts.py`: PASS.
+- Live API rebuilt after active agents reached zero.
+- Manual provider close for ticket `354` returned `{'status': 'resolved'}` and
+  post-close evidence showed dashboard status `resolved` and provider status
+  `resolved`.
+
+### Single-ticket sync endpoint returned 500 after provider close
+
+Status: fixed and deployed.
+
+Problem:
+
+- `POST /api/tickets/354/sync` returned `Internal Server Error` immediately
+  after iTop provider close.
+- A subsequent evidence fetch still showed ticket `354` and provider payload
+  status as `resolved`, so the sync operation may be completing but the route is
+  erroring while formatting or returning the response.
+
+Impact:
+
+- Operators cannot trust the manual single-ticket sync button/API even when the
+  underlying provider state is correct.
+
+Fix:
+
+- Inspect the API traceback, fix the route or sync return contract, and rerun
+  `POST /api/tickets/354/sync` until it returns a clean JSON response.
+- The status-guard refactor had two stale references to the removed `exists`
+  variable in `iTopProvider.sync_ticket`. Replaced them with `existing_ticket`
+  / `not bool(existing_ticket)`.
+- Added a regression check to `tests/test_itop_sync_status.py`.
+
+Verified:
+
+- Live API rebuilt with zero active agents.
+- `POST /api/tickets/354/sync` returned HTTP 200 with
+  `{"status":"synced","itop_ref":"226","itop_class":"Incident","is_new":false,"ticket_id":354,"auto_assignment":null}`.
+- Ticket `354` evidence remained dashboard `resolved` with provider payload
+  status `resolved`.
+
 ### iTop outbound creation needs environment-specific defaults
 
 Incident/UserRequest creation requires iTop org/caller defaults. This is intentional. Configure:
