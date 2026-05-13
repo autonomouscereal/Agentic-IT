@@ -73,6 +73,61 @@ class AgentAuditorTests(unittest.TestCase):
 
         self.assertEqual(records, [])
 
+    def test_completed_task_records_terminal_audit_evidence(self):
+        module = load_agent_auditor()
+        records = []
+
+        async def recent_duplicate(task_id, finding, minutes=15):
+            return None
+
+        async def completed_task_evidence(agent, task):
+            return {
+                "ticket_status": "resolved",
+                "task_status": "completed",
+                "progress_pct": 100,
+                "open_changes": 0,
+                "completed_changes": 3,
+                "postmortems": 1,
+            }
+
+        async def record(*args, **kwargs):
+            records.append((args, kwargs))
+
+        async def complete_approved_changes_for_task(*args, **kwargs):
+            return {"completed": 0}
+
+        agent_runner = types.ModuleType("services.agent_runner")
+        agent_runner.complete_approved_changes_for_task = complete_approved_changes_for_task
+        sys.modules["services.agent_runner"] = agent_runner
+        sys.modules["services"].agent_runner = agent_runner
+
+        module._recent_duplicate = recent_duplicate
+        module._completed_task_evidence = completed_task_evidence
+        module._record = record
+
+        row = {
+            "agent_id": 129,
+            "ticket_id": 366,
+            "model": "qwen/qwen3.6-27b",
+            "selected_model": "qwen/qwen3.6-27b",
+            "attempts": 0,
+            "task_id": 126,
+            "task_status": "completed",
+            "prompt": "work ticket",
+            "task_type": "ticket_resolution",
+            "checkpoints": [],
+            "started_at": None,
+            "completed_at": "2026-05-13T03:49:21Z",
+        }
+        asyncio.run(module._audit_task(row))
+
+        self.assertEqual(records[0][0][4], "agent_task_completed")
+        details = records[0][0][8]
+        self.assertEqual(details["ticket_status"], "resolved")
+        self.assertEqual(details["open_changes"], 0)
+        self.assertEqual(details["completed_changes"], 3)
+        self.assertEqual(details["postmortems"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

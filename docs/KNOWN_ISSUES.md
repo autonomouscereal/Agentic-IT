@@ -4,6 +4,44 @@ Last updated: 2026-05-13.
 
 ## Fixed In Current Pass
 
+### Agent audit history lacked terminal completion review
+
+Status: fixed and deployed, found while auditing ticket `366` / agent `129`
+after the successful workflow-reuse run.
+
+Problem:
+
+- `POST /api/agents/audits/run` worked and did not restart or duplicate the
+  completed agent, but the visible audit history for agent `129` only showed an
+  earlier `agent_progress_ok` row from when task `126` was still running.
+- Because `/api/agents/audits` joins current agent status onto historical audit
+  rows, the UI/API could show `agent_status=finished` beside old details like
+  `task_status=running`.
+
+Impact:
+
+- Demo and operator review can be confusing: the agent really finished, but the
+  latest audit artifact does not prove terminal completion or closure evidence.
+
+Fix:
+
+- Add a terminal `agent_task_completed` audit finding for recently completed
+  tasks with ticket status, open/completed change counts, postmortem count, and
+  final progress.
+
+Verification:
+
+- Local validation: `python -m py_compile api\services\agent_auditor.py` and
+  `python -m unittest tests.test_agent_auditor
+  tests.test_agent_lifecycle_guards tests.test_auto_assignment
+  tests.test_itop_sync_status` passed.
+- Rebuilt the live API after confirming `/api/agents/active` returned zero.
+- Reran `/api/agents/audits/run`; it audited six recently completed tasks and
+  created audit review `333` for agent `129` with
+  `finding=agent_task_completed`, `task_status=completed`,
+  `ticket_status=resolved`, `progress_pct=100`, `open_changes=0`,
+  `completed_changes=3`, and `postmortems=1`.
+
 ### Postmortem create endpoint rejected list-shaped text fields
 
 Status: fixed and deployed, found during workflow reuse proof ticket `366` /

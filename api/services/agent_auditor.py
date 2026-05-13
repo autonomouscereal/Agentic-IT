@@ -143,6 +143,40 @@ async def _record(agent_id, task_id, ticket_id, severity, finding, recommended_a
     return review_id
 
 
+async def _completed_task_evidence(agent, task):
+    return await fetchrow("""
+        SELECT
+            t.status AS ticket_status,
+            at.status AS task_status,
+            at.progress_pct,
+            (
+                SELECT COUNT(*)
+                FROM change_requests cr
+                WHERE cr.ticket_id = $1
+                  AND cr.status IN ('pending', 'approved')
+            ) AS open_changes,
+            (
+                SELECT COUNT(*)
+                FROM change_requests cr
+                WHERE cr.ticket_id = $1
+                  AND cr.status = 'completed'
+            ) AS completed_changes,
+            (
+                SELECT COUNT(*)
+                FROM postmortems pm
+                WHERE pm.ticket_id = $1
+                  AND (
+                    pm.task_id = $2
+                    OR pm.agent_id = $3
+                    OR pm.created_at >= COALESCE(at.started_at, at.created_at)
+                  )
+            ) AS postmortems
+        FROM agent_tasks at
+        LEFT JOIN tickets t ON t.id = at.ticket_id
+        WHERE at.id = $2
+    """, agent["ticket_id"], task["id"], agent["id"])
+
+
 async def _spawn_replacement(agent, task, reason):
     if not AUTO_RECOVER:
         return "audit_only"
@@ -191,6 +225,7 @@ async def _audit_task(row):
         "task_type": row.get("task_type"),
         "checkpoints": row.get("checkpoints"),
         "started_at": row.get("started_at"),
+        "completed_at": row.get("completed_at"),
         "agent_heartbeat": row.get("agent_heartbeat"),
         "work_dir": row.get("work_dir"),
         "latest_note_at": row.get("latest_note_at"),
@@ -207,6 +242,18 @@ async def _audit_task(row):
             await _record(agent["id"], task["id"], agent["ticket_id"], "info",
                           "approved_change_auto_completed", "none",
                           "auto_completed_changes", False, completion)
+        if not await _recent_duplicate(task["id"], "agent_task_completed", 1440):
+            evidence = await _completed_task_evidence(agent, task) or {}
+            await _record(agent["id"], task["id"], agent["ticket_id"], "info",
+                          "agent_task_completed", None, None, False, {
+                              "task_status": evidence.get("task_status") or task["status"],
+                              "ticket_status": evidence.get("ticket_status"),
+                              "progress_pct": evidence.get("progress_pct"),
+                              "open_changes": int(evidence.get("open_changes") or 0),
+                              "completed_changes": int(evidence.get("completed_changes") or 0),
+                              "postmortems": int(evidence.get("postmortems") or 0),
+                              "completed_at": str(task.get("completed_at") or ""),
+                          })
         return
 
     other_active = await _ticket_has_other_active_agent(agent["ticket_id"], agent["id"])
@@ -280,7 +327,8 @@ async def audit_once():
     rows = await fetchall("""
         SELECT a.id AS agent_id, a.ticket_id, a.model, a.selected_model, a.attempts,
                t.id AS task_id, t.status AS task_status, t.prompt, t.task_type,
-               t.checkpoints, t.started_at, t.work_dir, a.heartbeat AS agent_heartbeat,
+               t.checkpoints, t.started_at, t.completed_at, t.work_dir,
+               a.heartbeat AS agent_heartbeat,
                (
                  SELECT MAX(n.created_at)
                  FROM ticket_notes n
@@ -306,11 +354,14 @@ async def audit_once():
            OR (t.status = 'failed' AND t.created_at > NOW() - INTERVAL '2 hours')
            OR (
                 t.status = 'completed'
-                AND EXISTS (
-                    SELECT 1 FROM change_requests cr
-                    WHERE cr.agent_id = a.id
-                      AND cr.status = 'approved'
-                      AND (cr.ticket_id = a.ticket_id OR cr.ticket_id IS NULL)
+                AND (
+                    t.completed_at > NOW() - INTERVAL '4 hours'
+                    OR EXISTS (
+                        SELECT 1 FROM change_requests cr
+                        WHERE cr.agent_id = a.id
+                          AND cr.status = 'approved'
+                          AND (cr.ticket_id = a.ticket_id OR cr.ticket_id IS NULL)
+                    )
                 )
            )
         ORDER BY a.started_at DESC
