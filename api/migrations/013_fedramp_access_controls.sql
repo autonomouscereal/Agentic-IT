@@ -69,6 +69,7 @@ INSERT INTO dashboard_role_permissions (role_name, permission_key, description) 
     ('analyst', 'tickets:read', 'Read tickets within assigned scopes.'),
     ('analyst', 'tickets:note', 'Write notes within assigned scopes.'),
     ('analyst', 'tickets:request_info', 'Request user information on assigned work.'),
+    ('analyst', 'access:request', 'Request approval-gated account or system access.'),
     ('analyst', 'changes:request', 'Request approval-gated changes.'),
     ('analyst', 'agents:assigned', 'Work through assigned agents only.'),
     ('auditor', 'tickets:read', 'Read scoped tickets.'),
@@ -79,6 +80,7 @@ INSERT INTO dashboard_role_permissions (role_name, permission_key, description) 
     ('agent-operator', 'agents:spawn', 'Spawn agents within caller scope.'),
     ('agent-operator', 'agents:read', 'Read agent status.'),
     ('agent-operator', 'tickets:read', 'Read ticket context needed to spawn scoped agents.'),
+    ('agent-operator', 'access:request', 'Request approval-gated account or system access.'),
     ('agent-operator', 'changes:request', 'Request approval-gated changes.')
 ON CONFLICT (role_name, permission_key) DO UPDATE SET
     description = EXCLUDED.description;

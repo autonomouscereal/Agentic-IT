@@ -1,13 +1,16 @@
 # FedRAMP Access Control Preparation
 
-Status: prepared locally on 2026-05-13. Not deployed.
+Status: enforcement and per-agent vault lease proof deployed and live-verified
+on 2026-05-14.
 
 ## Goal
 
 The dashboard must enforce least privilege across users, agents, tickets,
-workflows, credentials, tools, and audit evidence. An agent may never receive a
-permission, credential, ticket scope, classification, or tool capability that
-the spawning user could not use directly.
+workflows, credentials, tools, and audit evidence. An agent may spawn when work
+is requested, but it may not use a permission, credential, ticket scope,
+classification, or tool capability outside its own per-agent vault leases. When
+it hits a denied resource, it must document the wall and create an access
+request instead of borrowing broader credentials.
 
 This is an additive preparation layer. Defaults remain demo-safe:
 
@@ -25,21 +28,40 @@ This is an additive preparation layer. Defaults remain demo-safe:
   - Adds per-agent permission snapshots.
   - Adds access decision log structure.
   - Adds ticket ownership and classification fields.
+- `api/migrations/014_agent_vault_leases.sql`
+  - Adds `agent_vault_leases`, a per-agent manifest of scoped vault references.
+  - Stores only vault reference names and lease metadata; never stores or
+    returns secret values.
 - `api/services/access_control.py`
   - Maps HTTP routes to explicit permission keys.
   - Evaluates role capabilities and wildcard grants.
   - Computes classification ceiling.
   - Records agent permission snapshots.
-  - Refuses requested agent permissions that exceed the spawner capability set.
+  - Trims requested agent permissions that exceed the spawner capability set
+    while still allowing the agent to spawn and encounter/use denials normally.
+  - Creates and evaluates per-agent vault leases by system/resource/action.
 - `api/app.py`
   - Adds default-off middleware so the system can run in audit-only or enforce
     mode without route rewrites.
 - `api/routes/access.py`
   - Exposes the active route-permission map, role capabilities, classification
     order, and agent permission boundary in `/api/access/policies`.
+  - Adds user scope CRUD for demo/provisioning workflows.
+- `api/routes/agents.py`
+  - Adds `/api/agents/{id}/vault` and `/api/agents/{id}/vault/lease`.
+  - Lease requests return scoped vault references on allow and HTTP 403 on
+    denial. They do not return secret values.
+- `api/routes/tickets.py`
+  - Applies row-level group/classification checks to ticket list/detail/notes,
+    assignment, postmortem/workflow starts, and status updates.
 - `tests/test_access_control_policy.py`
-  - Proves route permission mapping and the "agent cannot exceed spawner"
-    boundary locally without hitting the live server.
+  - Proves route permission mapping, ticket scope/classification boundaries,
+    agent permission trimming, and vault lease match behavior.
+- `scripts/smoke_permission_vault_e2e.py`
+  - Proves real HTTP 403 behavior in enforcement mode: Dev Team Y cannot see or
+    note Dev Team Z tickets, Team Z can be scoped to both queues, an agent can
+    spawn from Team Y, a Dev Y GitLab lease is allowed, a Dev Z GitLab lease is
+    denied, and no secret values are returned.
 
 ## Policy Model
 
@@ -59,6 +81,27 @@ Scopes constrain where those capabilities apply:
 - future provider scopes: ServiceNow groups, Jira projects, GitLab projects,
   Wazuh index scopes, mailbox scopes, Keycloak groups.
 
+Scope rows can also carry per-system vault lease metadata in `permissions`, for
+example:
+
+```json
+[
+  {
+    "system": "gitlab",
+    "resource_type": "project",
+    "resource_id": "dev-y/*",
+    "actions": ["read"],
+    "credential_ref": "<vault:gitlab_dev_y_read>"
+  }
+]
+```
+
+At spawn time the dashboard writes a per-agent `agent_vault.json` in the
+agent work directory and mirrors the same leases in `agent_vault_leases`. The
+agent must request a specific lease before using external credentials. Denied
+lease requests are logged in `access_decision_log` and returned as HTTP 403 so
+the agent can file an access request.
+
 Classifications are ordered:
 
 `public < internal < confidential < restricted < secret`
@@ -76,7 +119,9 @@ Classifications are ordered:
    - audit visibility by auditor role
    - approval restrictions by manager/CAB role
    - agent spawn with allowed subset
-   - agent spawn denied when requested tools/permissions exceed spawner
+   - agent spawn with denied requested permissions trimmed from the effective
+     envelope, not blocked at spawn
+   - per-agent vault lease allowed/denied behavior for different systems
 7. Switch enforcement to `enforce` only after the audit-only run shows no
    unexpected denies.
 
@@ -92,14 +137,51 @@ Classifications are ordered:
 - Auditor can read tickets, evidence, approvals, and audit trails but cannot
   spawn agents or approve changes.
 - Agent spawned by an analyst can request a least-privilege access ticket when
-  blocked, but cannot use platform-admin credentials or bypass approval gates.
+  a system/resource lease is denied, but cannot use platform-admin credentials
+  or bypass approval gates.
 
 ## Remaining Work
 
-- Apply scope predicates to ticket, agent, change, workflow, and audit queries.
-- Carry the evaluated request identity into every agent spawn call.
-- Add provider-specific credential delegation tables that reference vault keys,
-  never plaintext credentials.
+- Apply scope predicates to agent, change, workflow, and audit queries.
+- Expand provider-specific credential broker adapters so allowed vault
+  references can be resolved by each deployment's vault without exposing secret
+  values through dashboard JSON.
 - Add UI barriers: classification badges, locked rows, denied-state messages,
   and "why you cannot access this" audit links.
 - Add Playwright demos for two-way visibility boundaries and approval denials.
+
+## Enforcement Smoke
+
+Use this sequence in a controlled test window after confirming no unrelated
+agents are active:
+
+```bash
+python scripts/smoke_permission_vault_e2e.py --print-seed-sql
+python scripts/smoke_permission_vault_e2e.py http://127.0.0.1:25480
+```
+
+The first command prints raw PostgreSQL seed SQL for demo users/scopes. The
+second command requires `DASHBOARD_AUTH_MODE=header` and
+`DASHBOARD_AUTH_ENFORCEMENT=enforce`.
+
+Latest live proof:
+
+- Marker: `PERMISSION_VAULT_E2E_1778761664`.
+- Dev Team Y scoped ticket: `480`.
+- Dev Team Z scoped ticket: `481`.
+- Dev Y could list/read/note ticket `480` and could not list/read/note ticket
+  `481`.
+- Dev Z could list both tickets because it was explicitly scoped to Team Z and
+  Team Y.
+- Dev Y spawned agent `170`.
+- Agent `170` received six scoped vault leases: dashboard ticket `480`
+  read/note/request_access, GitLab `dev-y/*` read, and iTop `team-y/*`
+  read/comment.
+- `/api/agents/170/vault/lease` allowed GitLab `dev-y/app` read with
+  credential ref `<vault:gitlab_dev_y_read>` and returned no secret value.
+- `/api/agents/170/vault/lease` denied GitLab `dev-z/app` read with HTTP 403
+  and reason `missing_agent_vault_lease`.
+- `access_decision_log` recorded both the allow and deny decisions.
+- Final verification after restoring normal mode: 73 unit tests passed,
+  platform doctor passed 18/18, auditor smoke returned OK, and
+  `/api/agents/active` returned `0`.

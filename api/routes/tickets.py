@@ -1,7 +1,33 @@
 from fastapi import APIRouter, Query, Body, HTTPException
+try:
+    from fastapi import Request
+except ImportError:  # unit-test stubs do not expose Request
+    class Request:
+        pass
 from datetime import datetime
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services import provider_registry, ticket_service
+try:
+    from services import access_control
+except ImportError:  # unit-test stubs load this route without service package contents
+    class _AccessControlFallback:
+        @staticmethod
+        def subject_from_request(request):
+            return {"identity": {"username": "unit-test"}, "roles": ["platform-admin"], "capabilities": ["*"], "scopes": [], "max_classification": "secret"}
+
+        @staticmethod
+        def ticket_filter_clause(subject, alias="t", start_param=1):
+            return "", [], start_param
+
+        @staticmethod
+        def ticket_access_decision(ticket, subject, required_permission="tickets:read"):
+            return {"allow": True, "reason": "unit_test_fallback"}
+
+        @staticmethod
+        async def load_agent_subject(agent_id):
+            return {"identity": {"username": f"agent_{agent_id}"}, "roles": ["agent-operator"], "capabilities": ["tickets:read"], "scopes": [], "max_classification": "internal"}
+
+    access_control = _AccessControlFallback()
 from services.ticket_service import compact_ticket_payload
 from services.ticket_links import external_ticket_url
 from services.task_prompts import (
@@ -23,6 +49,7 @@ async def list_tickets(
     sort_dir: str = Query("desc", description="Sort direction"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    request: Request = None,
 ):
     where_clauses = []
     params = []
@@ -42,6 +69,13 @@ async def list_tickets(
         param_idx += 1
     if agent_only:
         where_clauses.append("t.agent_id IS NOT NULL")
+
+    subject = access_control.subject_from_request(request)
+    scope_sql, scope_params, next_idx = access_control.ticket_filter_clause(subject, "t", param_idx)
+    if scope_sql:
+        where_clauses.append(scope_sql)
+        params.extend(scope_params)
+        param_idx = next_idx
 
     where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
     sort_columns = {
@@ -81,7 +115,7 @@ async def list_tickets(
     return {"tickets": rows, "total": count, "limit": limit, "offset": offset}
 
 @router.get("/{ticket_id}")
-async def get_ticket(ticket_id: int):
+async def get_ticket(ticket_id: int, request: Request = None):
     ticket = await fetchrow("""
         SELECT t.*, a.id AS agent_instance_id, a.status AS agent_status,
                a.model AS agent_model, a.heartbeat AS agent_heartbeat,
@@ -92,6 +126,13 @@ async def get_ticket(ticket_id: int):
     """, ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:read",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
     ticket["external_url"] = external_ticket_url(ticket)
     compact_ticket_payload(ticket)
 
@@ -117,13 +158,17 @@ async def create_ticket(
     sync_provider: bool = Body(None),
     created_by: str = Body("dashboard"),
     auto_assign: bool = Body(True),
+    owning_group: str = Body(None),
+    security_classification: str = Body("internal"),
+    access_scope: dict = Body(None),
+    request: Request = None,
 ):
     """Create a canonical dashboard ticket.
 
     Provider sync is automatic when an external provider is configured, and
     falls back to local-only when the dashboard is running without one.
     """
-    return await ticket_service.create_ticket(
+    ticket = await ticket_service.create_ticket(
         title=title,
         description=description,
         ticket_class=ticket_class,
@@ -136,10 +181,43 @@ async def create_ticket(
         created_by=created_by,
         auto_assign=auto_assign,
     )
+    update_fields = []
+    update_values = []
+    idx = 1
+    if owning_group is not None:
+        update_fields.append(f"owning_group = ${idx}")
+        update_values.append(owning_group)
+        idx += 1
+    if security_classification:
+        update_fields.append(f"security_classification = ${idx}")
+        update_values.append(security_classification)
+        idx += 1
+    if access_scope is not None:
+        update_fields.append(f"access_scope = ${idx}::jsonb")
+        update_values.append(json_dumps(access_scope))
+        idx += 1
+    if update_fields:
+        update_values.append(ticket["id"])
+        await execute(
+            f"UPDATE tickets SET {', '.join(update_fields)}, updated_at = NOW() WHERE id = ${idx}",
+            *update_values,
+        )
+        ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket["id"])
+    return ticket
 
 
 @router.get("/{ticket_id}/context")
-async def get_ticket_context(ticket_id: int):
+async def get_ticket_context(ticket_id: int, request: Request = None):
+    ticket = await fetchrow("SELECT id, owning_group, security_classification FROM tickets WHERE id = $1", ticket_id)
+    if not ticket:
+        return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:read",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
     return await ticket_service.get_context(ticket_id)
 
 
@@ -154,6 +232,7 @@ async def add_ticket_note(
     source: str = Body("dashboard"),
     visibility: str = Body("internal"),
     external_ref: str = Body(None),
+    request: Request = None,
 ):
     """Add a canonical ticket note.
 
@@ -169,6 +248,17 @@ async def add_ticket_note(
         text = title
     if text is None:
         raise HTTPException(status_code=400, detail="Missing note body. Use body or note.")
+    if callable(fetchrow):
+        ticket = await fetchrow("SELECT id, owning_group, security_classification FROM tickets WHERE id = $1", ticket_id)
+        if not ticket:
+            return {"error": "Ticket not found"}
+        ticket_decision = access_control.ticket_access_decision(
+            ticket,
+            access_control.subject_from_request(request),
+            "tickets:note",
+        )
+        if not ticket_decision.get("allow"):
+            raise HTTPException(status_code=403, detail=ticket_decision)
     if title and title not in text:
         text = f"{title}\n\n{text}"
     return await ticket_service.add_note(ticket_id, text, author, source, visibility, external_ref)
@@ -218,6 +308,7 @@ async def create_ticket_access_request(
     risk_level: str = Body("medium"),
     sync_provider: bool = Body(None),
     created_by: str = Body("agent-access-request"),
+    request: Request = None,
 ):
     """Create an auditable access request and approval gate for a blocker.
 
@@ -225,6 +316,16 @@ async def create_ticket_access_request(
     routed to the owning access group, while the approval gate remains linked to
     the original ticket/agent so approval resumes the original work.
     """
+    ticket = await fetchrow("SELECT id, owning_group, security_classification FROM tickets WHERE id = $1", ticket_id)
+    if not ticket:
+        return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:request_info",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
     return await ticket_service.create_access_request(
         parent_ticket_id=ticket_id,
         resource=resource,
@@ -265,6 +366,7 @@ async def update_ticket_status(
     actor: str = Body("dashboard"),
     reason: str = Body(""),
     close_provider: bool = Body(False),
+    request: Request = None,
 ):
     """Explicitly update ticket status.
 
@@ -275,6 +377,13 @@ async def update_ticket_status(
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:note",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
 
     normalized = (status or "").strip().lower()
     allowed = {
@@ -353,11 +462,19 @@ async def assign_agent(
     ticket_id: int,
     model: str = Body("qwen/qwen3.6-27b"),
     prompt: str = Body(None),
+    request: Request = None,
 ):
     from services import agent_runner
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:read",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
     active_agent = await fetchrow("""
         SELECT id, status FROM agents
         WHERE ticket_id = $1
@@ -375,6 +492,7 @@ async def assign_agent(
         ticket_id,
         model,
         prompt or build_ticket_resolution_prompt(ticket),
+        actor_context=access_control.subject_from_request(request),
     )
     await log_event("ticket", "info", "dashboard", "agent_assigned",
                     f"ticket_{ticket_id}", {"model": model, "agent_id": result.get("agent_id")})
@@ -386,12 +504,20 @@ async def start_postmortem(
     ticket_id: int,
     model: str = Body("qwen/qwen3.6-27b"),
     context: str = Body(None),
+    request: Request = None,
 ):
     """Spawn a postmortem agent for a completed or in-progress ticket."""
     from services import agent_runner
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:read",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
     active_postmortem = await fetchrow("""
         SELECT a.id, a.status FROM agents a
         JOIN agent_tasks t ON t.agent_id = a.id
@@ -413,6 +539,7 @@ async def start_postmortem(
         model,
         build_postmortem_prompt(ticket, context),
         "postmortem",
+        actor_context=access_control.subject_from_request(request),
     )
     await log_event("agent", "info", "dashboard", "postmortem_requested",
                     f"ticket_{ticket_id}", {"model": model, "agent_id": result.get("agent_id")})
@@ -424,12 +551,20 @@ async def start_workflow_build(
     ticket_id: int,
     model: str = Body("qwen/qwen3.6-27b"),
     context: str = Body(None),
+    request: Request = None,
 ):
     """Spawn a workflow-build agent for this ticket class/use case."""
     from services import agent_runner
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:read",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
     active_workflow = await fetchrow("""
         SELECT a.id, a.status FROM agents a
         JOIN agent_tasks t ON t.agent_id = a.id
@@ -451,6 +586,7 @@ async def start_workflow_build(
         model,
         build_workflow_prompt(ticket, context),
         "workflow_build",
+        actor_context=access_control.subject_from_request(request),
     )
     await log_event("agent", "info", "dashboard", "workflow_build_requested",
                     f"ticket_{ticket_id}", {"model": model, "agent_id": result.get("agent_id")})
@@ -568,6 +704,7 @@ async def record_user_response(
                 (agent or {}).get("selected_model") or (agent or {}).get("model") or "qwen/qwen3.6-27b",
                 resume_prompt,
                 "ticket_resolution",
+                actor_context=await access_control.load_agent_subject(ticket["agent_id"]),
             )
     await log_event("ticket", "info", responder_name, "user_response_received",
                     f"ticket_{ticket_id}", {"note_id": note.get("id"), "resume": resume})

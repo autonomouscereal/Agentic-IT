@@ -133,6 +133,58 @@ async def set_user_roles(user_id: int, roles: list = Body(...)):
     return {"id": user_id, "roles": assigned}
 
 
+@router.get("/users/{user_id}/scopes")
+async def list_user_scopes(user_id: int):
+    user = await fetchrow("SELECT id, username FROM dashboard_users WHERE id = $1", user_id)
+    if not user:
+        return {"error": "User not found"}
+    rows = await fetchall(
+        """
+        SELECT id, user_id, scope_type, scope_value, permissions, created_at, updated_at
+        FROM dashboard_user_scopes
+        WHERE user_id = $1
+        ORDER BY scope_type, scope_value
+        """,
+        user_id,
+    )
+    return {"user_id": user_id, "username": user["username"], "scopes": rows}
+
+
+@router.post("/users/{user_id}/scopes")
+async def upsert_user_scope(
+    user_id: int,
+    scope_type: str = Body(...),
+    scope_value: str = Body(...),
+    permissions: list = Body([]),
+):
+    user = await fetchrow("SELECT id, username FROM dashboard_users WHERE id = $1", user_id)
+    if not user:
+        return {"error": "User not found"}
+    scope_id = await fetchval(
+        """
+        INSERT INTO dashboard_user_scopes (user_id, scope_type, scope_value, permissions)
+        VALUES ($1, $2, $3, $4::jsonb)
+        ON CONFLICT (user_id, scope_type, scope_value) DO UPDATE SET
+            permissions = EXCLUDED.permissions,
+            updated_at = NOW()
+        RETURNING id
+        """,
+        user_id,
+        scope_type,
+        scope_value,
+        json_dumps(permissions or []),
+    )
+    await log_event(
+        "access",
+        "info",
+        "dashboard",
+        "access_scope_upserted",
+        f"user_{user_id}",
+        {"username": user["username"], "scope_type": scope_type, "scope_value": scope_value},
+    )
+    return {"id": scope_id, "user_id": user_id, "scope_type": scope_type, "scope_value": scope_value}
+
+
 @router.get("/policies")
 async def policies():
     return {
@@ -151,6 +203,13 @@ async def policies():
         ],
         "agent_permission_boundary": (
             "Agents receive a policy snapshot at spawn time and requested "
-            "permissions must be a subset of the spawning subject capabilities."
+            "permissions outside the spawning subject capabilities are trimmed "
+            "from the effective envelope and audited. Agents still spawn so "
+            "they can hit real permission walls and request access."
+        ),
+        "agent_vault_boundary": (
+            "Each agent gets scoped vault lease references per system/resource/action. "
+            "The dashboard returns vault references only, never secret values, and "
+            "denies missing leases with HTTP 403 plus audit evidence."
         ),
     }

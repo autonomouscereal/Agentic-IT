@@ -3,6 +3,15 @@ from datetime import datetime, timedelta
 import json
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.event_logger import log_event
+try:
+    from services import access_control
+except ImportError:  # unit-test stubs load this route without service package contents
+    class _AccessControlFallback:
+        @staticmethod
+        async def load_agent_subject(agent_id):
+            return {"identity": {"username": f"agent_{agent_id}"}, "roles": ["agent-operator"], "capabilities": ["tickets:read"], "scopes": [], "max_classification": "internal"}
+
+    access_control = _AccessControlFallback()
 
 router = APIRouter(prefix="/api/changes", tags=["changes"])
 
@@ -205,6 +214,7 @@ async def _resume_agent_after_approval(change, approved_by):
         agent.get("selected_model") or agent.get("model") or "qwen/qwen3.6-27b",
         (latest_task.get("prompt") or "") + continuation,
         latest_task.get("task_type") or "ticket_resolution",
+        actor_context=await access_control.load_agent_subject(agent_id),
     )
     await log_event("agent", "info", approved_by, "agent_resumed_after_approval",
                     f"agent_{agent_id}", {

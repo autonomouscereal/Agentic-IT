@@ -128,22 +128,41 @@ aiohttp==3.10.0
 
 ### Access Control - `/api/access`
 
-The 2026-05-14 access-control prep is deployed in audit-only mode. It is a
-FedRAMP-style boundary scaffold, not full enforcement yet.
+The 2026-05-14 access-control layer supports audit-only and enforcement modes.
+It uses role capabilities, ticket group/classification scopes, spawn-time agent
+permission snapshots, and per-agent vault leases.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/access/policies` | Shows auth mode, enforcement mode, route permission requirements, role capability map, classification order, and agent permission boundary text |
+| GET | `/api/access/policies` | Shows auth mode, enforcement mode, route permission requirements, role capability map, classification order, and agent permission/vault boundary text |
+| GET | `/api/access/users/{id}/scopes` | Lists user group/classification/provider scopes |
+| POST | `/api/access/users/{id}/scopes` | Upserts user scopes and optional per-system vault lease metadata |
 
 Current behavior:
 
-- `SOC_ACCESS_CONTROL_MODE=disabled` / `audit-only`: requests are logged and
-  route requirements are visible, but requests are not blocked yet.
-- `agent_permission_context` records a spawn-time permission snapshot. Recent
-  proof: agent `167` on ticket `474` was spawned with `tickets:read`,
-  `tickets:note`, `changes:request`, and max classification `secret`.
-- Agents must never receive permissions broader than the actor/user that
-  spawned them. Keep future enforcement in `api/services/access_control.py`.
+- `DASHBOARD_AUTH_MODE=disabled`: local lab default, equivalent to
+  platform-admin.
+- `DASHBOARD_AUTH_MODE=header` plus `DASHBOARD_AUTH_ENFORCEMENT=enforce`:
+  trusted auth proxy/header identities are checked and denied with HTTP 403.
+- Ticket list/detail/note/assignment paths enforce group and classification
+  scopes in enforce mode.
+- Agents are allowed to spawn, but requested permissions beyond the spawner are
+  trimmed from the effective snapshot and audited. They should hit permission
+  walls at use time and create access requests rather than being blocked from
+  spawning.
+- Each spawned agent gets an `agent_vault.json` workdir manifest and
+  `agent_vault_leases` rows. `/api/agents/{id}/vault/lease` evaluates one
+  system/resource/action at a time, returns a scoped vault reference on allow,
+  returns HTTP 403 on deny, and never returns secret values.
+- Permission proof smoke:
+  `python scripts/smoke_permission_vault_e2e.py --print-seed-sql`, seed the SQL,
+  then run `python scripts/smoke_permission_vault_e2e.py http://127.0.0.1:25480`
+  during an enforcement test window.
+- Latest live proof, 2026-05-14: marker
+  `PERMISSION_VAULT_E2E_1778761664`, tickets `480` and `481`, agent `170`,
+  Dev Y blocked from Dev Z ticket/lease, Dev Z scoped to both queues, GitLab
+  `dev-y/*` lease allowed, GitLab `dev-z/app` lease denied with HTTP 403, no
+  secret values returned, final active agent count `0`.
 
 `/api/dashboard/ops-metrics` includes two separate SLA views:
 

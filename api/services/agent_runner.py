@@ -14,6 +14,7 @@ from services.agent_harness import get_harness, list_harnesses
 
 
 def _env_int(name, default):
+    permission_context_result = {"status": "not_recorded", "denied_permissions": []}
     try:
         return int(os.getenv(name, str(default)))
     except (TypeError, ValueError):
@@ -783,6 +784,17 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Persist postmortems: `POST /api/postmortems`
 - Persist workflows: `POST /api/workflows`
 
+## Per-Agent Credential Vault
+This agent has its own credential lease manifest at `agent_vault.json` in the
+work directory. The manifest contains scoped vault references only, never secret
+values. Before using any external system credential, request the exact lease
+from the dashboard with `POST /api/agents/<agent_id>/vault/lease` using
+`system`, `resource_type`, `resource_id`, and `action`. If that endpoint returns
+`403 access_denied`, do not reuse broader credentials or bypass the wall. Add a
+ticket note explaining the blocked system/resource/action, create
+`POST /api/tickets/{ticket.get('id', '{ticket_id}')}/access-request`, write a
+`waiting_for_access` checkpoint below 100%, and stop until the gate is approved.
+
 Treat iTop, ServiceNow, Jira, and local-only tickets as providers behind the dashboard API. Do not call provider-specific APIs unless the ticket context or a skill explicitly requires it.
 Do not fetch broad schema, docs, or tool inventory endpoints such as `/openapi.json`, `/api/tools`, `/api/tools/status`, `/docs`, or `/redoc`. The runner blocks those calls because they have caused local models to stall on oversized context. Use the bounded ticket/evidence endpoints above.
 When posting a postmortem, use the exact body fields `ticket_id`, `agent_id`, `task_id`, `status`, `summary`, `went_well`, `improvements`, `workflow_proposal`, `skill_proposals`, `test_cases`, `guardrails`, `documentation`, and `created_by`. Text fields must be strings. `skill_proposals`, `test_cases`, and `guardrails` must be JSON arrays, not strings. Put timeline, root cause, residual risk, and evidence details into the text fields instead of inventing extra top-level fields.
@@ -873,7 +885,7 @@ def _build_settings(model, agent_id=None, ticket=None):
     }
 
 
-async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt):
+async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, vault_manifest=None):
     """Create isolated work directory with Claude Code config."""
     work_dir = os.path.join(AGENT_WORK_BASE, str(agent_id))
     claude_dir = os.path.join(work_dir, ".claude")
@@ -888,6 +900,10 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt):
     claude_md_path = os.path.join(claude_dir, "CLAUDE.md")
     with open(claude_md_path, "w") as f:
         f.write(_build_claude_md(ticket, skills, prompt))
+
+    vault_manifest_path = os.path.join(work_dir, "agent_vault.json")
+    with open(vault_manifest_path, "w", encoding="utf-8") as f:
+        json.dump(vault_manifest or {"agent_id": agent_id, "leases": []}, f, indent=2, default=str)
 
     guard_path = _write_curl_guard(work_dir)
     if guard_path:
@@ -1046,7 +1062,7 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
     )
     try:
         from services import access_control
-        await access_control.record_agent_permission_context(
+        permission_context_result = await access_control.record_agent_permission_context(
             agent_id,
             ticket_id,
             actor_context,
@@ -1058,6 +1074,26 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
             "warning",
             f"agent_{agent_id}",
             "agent_permission_snapshot_failed",
+            f"ticket_{ticket_id}",
+            {"error": str(exc), "task_type": task_type},
+        )
+
+    vault_manifest = {"agent_id": agent_id, "ticket_id": ticket_id, "leases": []}
+    try:
+        from services import access_control
+        vault_manifest = await access_control.create_agent_vault_manifest(
+            agent_id,
+            ticket_id,
+            actor_context,
+        )
+        if permission_context_result.get("denied_permissions"):
+            vault_manifest["denied_requested_permissions"] = permission_context_result.get("denied_permissions")
+    except Exception as exc:
+        await log_event(
+            "access",
+            "warning",
+            f"agent_{agent_id}",
+            "agent_vault_manifest_failed",
             f"ticket_{ticket_id}",
             {"error": str(exc), "task_type": task_type},
         )
@@ -1079,7 +1115,7 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
         )
 
     # Provision isolated work directory with Claude Code config
-    work_dir = await _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt)
+    work_dir = await _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, vault_manifest)
     await execute(
         "UPDATE agent_tasks SET work_dir = $1 WHERE id = $2",
         work_dir, task_id,
@@ -1164,6 +1200,37 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
             )
 
         result = await _run_agent(work_dir, prompt, task_id)
+        terminal_meta = await fetchrow("""
+            SELECT at.status AS task_status, a.status AS agent_status, at.ticket_id
+            FROM agent_tasks at
+            JOIN agents a ON a.id = at.agent_id
+            WHERE at.id = $1 AND at.agent_id = $2
+        """, task_id, agent_id)
+        if terminal_meta and (
+            terminal_meta.get("task_status") in ("stopped", "terminated")
+            or terminal_meta.get("agent_status") in ("stopped", "terminated")
+        ):
+            await log_event("agent", "info", f"agent_{agent_id}",
+                            "agent_exit_after_operator_stop", f"task_{task_id}", {
+                                "exit_code": result.get("exit_code"),
+                                "task_status": terminal_meta.get("task_status"),
+                                "agent_status": terminal_meta.get("agent_status"),
+                            })
+            if terminal_meta.get("ticket_id"):
+                await _add_agent_note(
+                    terminal_meta.get("ticket_id"),
+                    agent_id,
+                    task_id,
+                    "Agent stopped",
+                    (
+                        f"Agent `{agent_id}` exited after an operator stop. "
+                        f"The runner preserved `{terminal_meta.get('agent_status')}` / "
+                        f"`{terminal_meta.get('task_status')}` instead of marking the intentional stop as a failure."
+                    ),
+                    "agent-control-plane",
+                )
+            _active_processes.pop(task_id, None)
+            return
         checkpoint = await _mirror_checkpoint_to_task(task_id, agent_id, work_dir)
         checkpoint_done = bool(checkpoint and checkpoint.get("status") in ("done", "completed"))
         checkpoint_blocked = _checkpoint_blocks_completion(checkpoint)

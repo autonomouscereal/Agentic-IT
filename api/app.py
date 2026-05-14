@@ -90,6 +90,7 @@ app.add_middleware(
 @app.middleware("http")
 async def access_control_middleware(request, call_next):
     decision = await access_control.evaluate_request(request)
+    request.state.access_decision = decision
     if not decision.get("allow"):
         await access_control.audit_decision(decision, request.method, request.url.path, 403)
         return JSONResponse(

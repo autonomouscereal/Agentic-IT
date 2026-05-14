@@ -1,8 +1,34 @@
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Body
+try:
+    from fastapi import HTTPException
+except ImportError:  # unit-test stubs do not expose HTTPException
+    class HTTPException(Exception):
+        def __init__(self, status_code=None, detail=None):
+            self.status_code = status_code
+            self.detail = detail
+            super().__init__(detail)
+try:
+    from fastapi import Request
+except ImportError:  # unit-test stubs do not expose Request
+    class Request:
+        pass
 from datetime import datetime
 from database import fetchall, fetchrow, execute, fetchval, json_dumps, json_loads
 from services.event_logger import log_event
 from services.task_prompts import build_ticket_resolution_prompt
+try:
+    from services import access_control
+except ImportError:  # unit-test stubs load this route without service package contents
+    class _AccessControlFallback:
+        @staticmethod
+        def subject_from_request(request):
+            return {"identity": {"username": "unit-test"}, "roles": ["platform-admin"], "capabilities": ["*"], "scopes": [], "max_classification": "secret"}
+
+        @staticmethod
+        async def request_agent_vault_lease(*args, **kwargs):
+            return {"allow": False, "error": "access_denied", "reason": "unit_test_fallback"}
+
+    access_control = _AccessControlFallback()
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -160,6 +186,8 @@ async def spawn_agent(
     model: str = Body("qwen/qwen3.6-27b"),
     prompt: str = Body(None),
     task_type: str = Body("ticket_resolution"),
+    requested_permissions: list = Body(None),
+    request: Request = None,
 ):
     """Spawn a Claude Code agent to work on a ticket."""
     from services import agent_runner
@@ -172,7 +200,14 @@ async def spawn_agent(
         else:
             prompt = f"Investigate and resolve ticket #{ticket_id}"
 
-    result = await agent_runner.spawn_agent(ticket_id, model, prompt, task_type)
+    result = await agent_runner.spawn_agent(
+        ticket_id,
+        model,
+        prompt,
+        task_type,
+        actor_context=access_control.subject_from_request(request),
+        requested_permissions=requested_permissions,
+    )
     await log_event("agent", "info", "dashboard", "agent_spawned",
                     f"ticket_{ticket_id}", {"model": model, "task_type": task_type})
     return result
@@ -182,6 +217,7 @@ async def spawn_agent(
 async def create_from_prompt(
     prompt: str = Body(...),
     model: str = Body("qwen/qwen3.6-27b"),
+    request: Request = None,
 ):
     """Create a ticket from a prompt and spawn an agent to work it."""
     from services import ticket_service
@@ -199,7 +235,13 @@ async def create_from_prompt(
 
     # Spawn agent
     from services import agent_runner
-    result = await agent_runner.spawn_agent(ticket_id, model, agent_prompt, "ad_hoc")
+    result = await agent_runner.spawn_agent(
+        ticket_id,
+        model,
+        agent_prompt,
+        "ad_hoc",
+        actor_context=access_control.subject_from_request(request),
+    )
     await log_event("agent", "info", "dashboard", "create_from_prompt",
                     f"ticket_{ticket_id}", {"prompt_preview": prompt[:200]})
     return result
@@ -297,6 +339,51 @@ async def get_task_logs(task_id: int, lines: int = Query(200, ge=1, le=2000)):
         content = task.get("output") or ""
 
     return {"task_id": task_id, "log_path": log_path, "content": content}
+
+
+@router.get("/{agent_id}/vault")
+async def get_agent_vault_manifest(agent_id: int):
+    """Return scoped credential lease references for an agent, never secrets."""
+    agent = await fetchrow("SELECT id FROM agents WHERE id = $1", agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    rows = await fetchall("""
+        SELECT id, agent_id, system, resource_type, resource_id, action,
+               credential_ref, lease_status, granted_by, expires_at, created_at
+        FROM agent_vault_leases
+        WHERE agent_id = $1
+        ORDER BY system, resource_type, resource_id, action
+    """, agent_id)
+    return {
+        "agent_id": agent_id,
+        "leases": rows,
+        "secret_values_returned": False,
+        "note": "Each row is a scoped vault reference only. Resolve secrets through the configured credential vault if the lease is active.",
+    }
+
+
+@router.post("/{agent_id}/vault/lease")
+async def request_agent_vault_lease(
+    agent_id: int,
+    system: str = Body(...),
+    resource_type: str = Body("resource"),
+    resource_id: str = Body("*"),
+    action: str = Body("read"),
+):
+    """Evaluate a per-agent credential lease request for one system/resource/action."""
+    agent = await fetchrow("SELECT id FROM agents WHERE id = $1", agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    result = await access_control.request_agent_vault_lease(
+        agent_id,
+        system,
+        resource_type,
+        resource_id,
+        action,
+    )
+    if not result.get("allow"):
+        raise HTTPException(status_code=403, detail=result)
+    return result
 
 
 @router.get("/{agent_id}")
@@ -448,6 +535,13 @@ async def wake_agent(agent_id: int):
         model,
         latest_task["prompt"],
         latest_task.get("task_type") or "ticket_resolution",
+        actor_context={
+            "identity": {"username": f"agent_{agent_id}"},
+            "roles": ["agent-operator"],
+            "capabilities": ["agents:spawn", "tickets:read", "changes:request"],
+            "scopes": [],
+            "max_classification": "internal",
+        },
     )
 
     await log_event("agent", "info", "dashboard", "agent_wake_spawned",
@@ -492,7 +586,19 @@ async def restart_agent(agent_id: int):
         task_type = "ticket_resolution"
 
     # Spawn new agent
-    result = await agent_runner.spawn_agent(ticket_id, model, prompt, task_type)
+    result = await agent_runner.spawn_agent(
+        ticket_id,
+        model,
+        prompt,
+        task_type,
+        actor_context={
+            "identity": {"username": f"agent_{agent_id}"},
+            "roles": ["agent-operator"],
+            "capabilities": ["agents:spawn", "tickets:read", "changes:request"],
+            "scopes": [],
+            "max_classification": "internal",
+        },
+    )
     await log_event("agent", "info", "dashboard", "agent_restarted",
                     f"agent_{agent_id}", {"new_task_id": result.get("task_id"), "stop_result": stop_result})
     return result

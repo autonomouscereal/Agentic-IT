@@ -317,6 +317,23 @@ CREATE TABLE IF NOT EXISTS agent_permission_context (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS agent_vault_leases (
+    id SERIAL PRIMARY KEY,
+    agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    system VARCHAR(120) NOT NULL,
+    resource_type VARCHAR(120) NOT NULL DEFAULT 'resource',
+    resource_id VARCHAR(300) NOT NULL DEFAULT '*',
+    action VARCHAR(120) NOT NULL DEFAULT 'read',
+    credential_ref VARCHAR(300) NOT NULL,
+    lease_status VARCHAR(40) NOT NULL DEFAULT 'active',
+    granted_by VARCHAR(240) NOT NULL DEFAULT 'system',
+    expires_at TIMESTAMPTZ,
+    policy_snapshot JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (agent_id, system, resource_type, resource_id, action)
+);
+
 CREATE TABLE IF NOT EXISTS access_decision_log (
     id SERIAL PRIMARY KEY,
     actor VARCHAR(240) NOT NULL,
@@ -488,6 +505,7 @@ INSERT INTO dashboard_role_permissions (role_name, permission_key, description) 
     ('analyst', 'tickets:read', 'Read tickets within assigned scopes.'),
     ('analyst', 'tickets:note', 'Write notes within assigned scopes.'),
     ('analyst', 'tickets:request_info', 'Request user information on assigned work.'),
+    ('analyst', 'access:request', 'Request approval-gated account or system access.'),
     ('analyst', 'changes:request', 'Request approval-gated changes.'),
     ('analyst', 'agents:assigned', 'Work through assigned agents only.'),
     ('auditor', 'tickets:read', 'Read scoped tickets.'),
@@ -498,6 +516,7 @@ INSERT INTO dashboard_role_permissions (role_name, permission_key, description) 
     ('agent-operator', 'agents:spawn', 'Spawn agents within caller scope.'),
     ('agent-operator', 'agents:read', 'Read agent status.'),
     ('agent-operator', 'tickets:read', 'Read ticket context needed to spawn scoped agents.'),
+    ('agent-operator', 'access:request', 'Request approval-gated account or system access.'),
     ('agent-operator', 'changes:request', 'Request approval-gated changes.')
 ON CONFLICT (role_name, permission_key) DO UPDATE SET description = EXCLUDED.description;
 
@@ -692,6 +711,8 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_role_permissions_role ON dashboard_role
 CREATE INDEX IF NOT EXISTS idx_dashboard_user_scopes_user ON dashboard_user_scopes(user_id);
 CREATE INDEX IF NOT EXISTS idx_dashboard_user_scopes_scope ON dashboard_user_scopes(scope_type, scope_value);
 CREATE INDEX IF NOT EXISTS idx_agent_permission_context_ticket ON agent_permission_context(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_agent_vault_leases_agent ON agent_vault_leases(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_vault_leases_lookup ON agent_vault_leases(agent_id, system, resource_type, action, lease_status);
 CREATE INDEX IF NOT EXISTS idx_access_decision_log_created ON access_decision_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_access_decision_log_actor ON access_decision_log(actor);
 CREATE INDEX IF NOT EXISTS idx_tickets_owning_group ON tickets(owning_group);

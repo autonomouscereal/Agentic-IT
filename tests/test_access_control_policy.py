@@ -71,7 +71,7 @@ class AccessControlPolicyTests(unittest.TestCase):
 
         self.assertEqual(denied, ["changes:approve"])
 
-    def test_record_agent_permission_context_refuses_excess_permissions(self):
+    def test_record_agent_permission_context_trims_excess_permissions_without_blocking_spawn(self):
         module, database = load_access_control()
         executes = []
         events = []
@@ -99,10 +99,85 @@ class AccessControlPolicyTests(unittest.TestCase):
             ["tickets:read", "tools:operate"],
         ))
 
-        self.assertEqual(result["status"], "denied")
+        self.assertEqual(result["status"], "recorded_with_denials")
+        self.assertEqual(result["allowed_permissions"], ["tickets:read"])
         self.assertEqual(result["denied_permissions"], ["tools:operate"])
-        self.assertEqual(executes, [])
+        self.assertTrue(executes)
         self.assertEqual(events[0][3], "agent_permission_snapshot_denied")
+
+    def test_ticket_scope_blocks_cross_team_access_when_enforced(self):
+        module, _ = load_access_control()
+        original_auth_mode = module.auth_mode
+        original_enforcement_mode = module.enforcement_mode
+        module.auth_mode = lambda: "header"
+        module.enforcement_mode = lambda: "enforce"
+        try:
+            subject = {
+                "roles": ["analyst"],
+                "capabilities": ["tickets:read", "tickets:note"],
+                "scopes": [{"scope_type": "group", "scope_value": "Dev Team Y"}],
+                "max_classification": "confidential",
+            }
+            allowed = module.ticket_access_decision(
+                {"id": 1, "owning_group": "Dev Team Y", "security_classification": "confidential"},
+                subject,
+                "tickets:read",
+            )
+            denied_group = module.ticket_access_decision(
+                {"id": 2, "owning_group": "Dev Team Z", "security_classification": "confidential"},
+                subject,
+                "tickets:read",
+            )
+            denied_classification = module.ticket_access_decision(
+                {"id": 3, "owning_group": "Dev Team Y", "security_classification": "restricted"},
+                subject,
+                "tickets:read",
+            )
+
+            self.assertTrue(allowed["allow"])
+            self.assertFalse(denied_group["allow"])
+            self.assertEqual(denied_group["reason"], "ticket_outside_subject_scope")
+            self.assertFalse(denied_classification["allow"])
+            self.assertEqual(denied_classification["reason"], "classification_exceeds_subject")
+        finally:
+            module.auth_mode = original_auth_mode
+            module.enforcement_mode = original_enforcement_mode
+
+    def test_ticket_list_filter_uses_group_scope_and_classification_cap(self):
+        module, _ = load_access_control()
+        original_auth_mode = module.auth_mode
+        module.auth_mode = lambda: "header"
+        try:
+            sql, params, next_idx = module.ticket_filter_clause(
+                {
+                    "roles": ["analyst"],
+                    "capabilities": ["tickets:read"],
+                    "scopes": [{"scope_type": "group", "scope_value": "Dev Team Y"}],
+                    "max_classification": "confidential",
+                },
+                "t",
+                3,
+            )
+            self.assertIn("security_classification", sql)
+            self.assertIn("owning_group", sql)
+            self.assertEqual(params, [2, ["Dev Team Y"]])
+            self.assertEqual(next_idx, 5)
+        finally:
+            module.auth_mode = original_auth_mode
+
+    def test_agent_vault_lease_match_is_system_resource_action_specific(self):
+        module, _ = load_access_control()
+
+        lease = {
+            "system": "gitlab",
+            "resource_type": "project",
+            "resource_id": "dev-y/*",
+            "action": "read",
+        }
+
+        self.assertTrue(module._lease_matches(lease, "gitlab", "project", "dev-y/app", "read"))
+        self.assertFalse(module._lease_matches(lease, "gitlab", "project", "dev-z/app", "read"))
+        self.assertFalse(module._lease_matches(lease, "gitlab", "project", "dev-y/app", "write"))
 
 
 if __name__ == "__main__":

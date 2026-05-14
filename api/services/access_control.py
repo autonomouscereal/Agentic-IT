@@ -1,5 +1,6 @@
 import fnmatch
 import os
+import json
 
 from database import fetchall, fetchrow, execute, json_dumps
 from services.event_logger import log_event
@@ -27,6 +28,7 @@ DEFAULT_ROLE_CAPABILITIES = {
         "tickets:read",
         "tickets:note",
         "tickets:request_info",
+        "access:request",
         "changes:request",
         "agents:assigned",
     ],
@@ -41,6 +43,7 @@ DEFAULT_ROLE_CAPABILITIES = {
         "agents:spawn",
         "agents:read",
         "tickets:read",
+        "access:request",
         "changes:request",
     ],
 }
@@ -54,9 +57,11 @@ ROUTE_REQUIREMENTS = [
     ("POST", "/api/tickets/*/postmortem", "agents:spawn"),
     ("POST", "/api/tickets/*/workflow", "agents:spawn"),
     ("POST", "/api/tickets/*/access-request", "access:request"),
+    ("POST", "/api/tickets/*/status", "tickets:note"),
     ("POST", "/api/tickets*", "tickets:create"),
     ("GET", "/api/agents*", "agents:read"),
     ("POST", "/api/agents/spawn", "agents:spawn"),
+    ("POST", "/api/agents/*/vault/lease", "agents:read"),
     ("POST", "/api/agents/*/stop", "agents:stop"),
     ("POST", "/api/agents/*/restart", "agents:restart"),
     ("POST", "/api/agents/*/wake", "agents:wake"),
@@ -99,14 +104,40 @@ def enforcement_mode():
 
 def request_identity(request):
     headers = getattr(request, "headers", {}) or {}
+    mode = auth_mode()
     return {
         "username": headers.get("x-auth-request-user")
         or headers.get("x-forwarded-user")
-        or "local-admin",
+        or ("local-admin" if mode == "disabled" else "anonymous"),
         "email": headers.get("x-auth-request-email")
         or headers.get("x-forwarded-email"),
         "provider": headers.get("x-auth-provider") or "local",
-        "auth_mode": auth_mode(),
+        "auth_mode": mode,
+    }
+
+
+def subject_from_decision(decision):
+    """Return the bounded subject payload routes can pass into agent spawns."""
+    decision = decision or {}
+    return {
+        "identity": decision.get("identity") or {"username": "system"},
+        "roles": decision.get("roles") or [],
+        "capabilities": decision.get("capabilities") or [],
+        "scopes": decision.get("scopes") or [],
+        "max_classification": decision.get("max_classification") or "internal",
+    }
+
+
+def subject_from_request(request):
+    decision = getattr(getattr(request, "state", None), "access_decision", None)
+    if decision:
+        return subject_from_decision(decision)
+    return {
+        "identity": request_identity(request),
+        "roles": ["platform-admin"] if auth_mode() == "disabled" else [],
+        "capabilities": ["*"] if auth_mode() == "disabled" else [],
+        "scopes": [],
+        "max_classification": "secret" if auth_mode() == "disabled" else "internal",
     }
 
 
@@ -151,6 +182,10 @@ def max_classification(roles, scopes):
         reverse=True,
     )
     return ranked[0] if ranked else "internal"
+
+
+def classification_rank(value):
+    return CLASSIFICATION_RANK.get((value or "internal").strip().lower(), CLASSIFICATION_RANK["internal"])
 
 
 def normalize_capabilities(role_rows, permission_rows=None):
@@ -216,6 +251,32 @@ async def load_subject(username):
     }
 
 
+async def load_agent_subject(agent_id):
+    row = await fetchrow(
+        """
+        SELECT spawned_by_username, roles, allowed_permissions, scopes, max_classification
+        FROM agent_permission_context
+        WHERE agent_id = $1
+        """,
+        agent_id,
+    )
+    if not row:
+        return {
+            "identity": {"username": f"agent_{agent_id}"},
+            "roles": ["agent-operator"],
+            "capabilities": ["tickets:read", "changes:request"],
+            "scopes": [],
+            "max_classification": "internal",
+        }
+    return {
+        "identity": {"username": row.get("spawned_by_username") or f"agent_{agent_id}"},
+        "roles": _json_value(row.get("roles"), []),
+        "capabilities": _json_value(row.get("allowed_permissions"), []),
+        "scopes": _json_value(row.get("scopes"), []),
+        "max_classification": row.get("max_classification") or "internal",
+    }
+
+
 async def evaluate_request(request):
     identity = request_identity(request)
     mode = identity["auth_mode"]
@@ -271,6 +332,100 @@ async def evaluate_request(request):
     }
 
 
+def _has_unbounded_ticket_access(subject):
+    roles = set(subject.get("roles") or [])
+    capabilities = subject.get("capabilities") or []
+    return (
+        capability_matches(capabilities, "*")
+        or "platform-admin" in roles
+        or "soc-manager" in roles
+    )
+
+
+def _scope_values(subject, names):
+    values = []
+    names = set(names)
+    for scope in subject.get("scopes") or []:
+        if scope.get("scope_type") in names and scope.get("scope_value"):
+            values.append(str(scope.get("scope_value")))
+    return values
+
+
+def ticket_access_decision(ticket, subject, required_permission="tickets:read"):
+    """Evaluate row-level ticket access for users and inherited agent subjects."""
+    subject = subject or {}
+    if auth_mode() == "disabled":
+        return {"allow": True, "reason": "auth_disabled"}
+    if not capability_matches(subject.get("capabilities") or [], required_permission):
+        return {
+            "allow": enforcement_mode() != "enforce",
+            "reason": "missing_required_permission",
+            "required_permission": required_permission,
+        }
+    ticket_classification = (ticket or {}).get("security_classification") or "internal"
+    if classification_rank(ticket_classification) > classification_rank(subject.get("max_classification")):
+        return {
+            "allow": enforcement_mode() != "enforce",
+            "reason": "classification_exceeds_subject",
+            "ticket_classification": ticket_classification,
+            "subject_max_classification": subject.get("max_classification"),
+        }
+    if _has_unbounded_ticket_access(subject):
+        return {"allow": True, "reason": "unbounded_role_scope"}
+    ticket_id = str((ticket or {}).get("id") or "")
+    ticket_scopes = _scope_values(subject, ("ticket", "ticket_id"))
+    if ticket_id and ticket_id in ticket_scopes:
+        return {"allow": True, "reason": "ticket_scope_match"}
+    owning_group = (ticket or {}).get("owning_group")
+    group_scopes = _scope_values(subject, ("group", "owning_group", "assignment_group", "team"))
+    if owning_group and owning_group in group_scopes:
+        return {"allow": True, "reason": "owning_group_scope_match"}
+    return {
+        "allow": enforcement_mode() != "enforce",
+        "reason": "ticket_outside_subject_scope",
+        "ticket_id": ticket_id,
+        "owning_group": owning_group,
+    }
+
+
+def ticket_filter_clause(subject, alias="t", start_param=1):
+    """Return a SQL WHERE fragment and params for scoped ticket list reads."""
+    subject = subject or {}
+    if auth_mode() == "disabled" or _has_unbounded_ticket_access(subject):
+        return "", [], start_param
+
+    max_rank = classification_rank(subject.get("max_classification"))
+    params = [max_rank]
+    idx = start_param + 1
+    clauses = [
+        f"""CASE COALESCE({alias}.security_classification, 'internal')
+            WHEN 'public' THEN 0
+            WHEN 'internal' THEN 1
+            WHEN 'confidential' THEN 2
+            WHEN 'restricted' THEN 3
+            WHEN 'secret' THEN 4
+            ELSE 1
+        END <= ${start_param}"""
+    ]
+
+    group_scopes = _scope_values(subject, ("group", "owning_group", "assignment_group", "team"))
+    ticket_scopes = _scope_values(subject, ("ticket", "ticket_id"))
+    scope_parts = []
+    if group_scopes:
+        params.append(group_scopes)
+        scope_parts.append(f"{alias}.owning_group = ANY(${idx}::text[])")
+        idx += 1
+    if ticket_scopes:
+        params.append([int(value) for value in ticket_scopes if str(value).isdigit()])
+        scope_parts.append(f"{alias}.id = ANY(${idx}::int[])")
+        idx += 1
+    if not scope_parts:
+        clauses.append("FALSE")
+    else:
+        clauses.append("(" + " OR ".join(scope_parts) + ")")
+    return "(" + " AND ".join(clauses) + ")", params, idx
+
+
 async def audit_decision(decision, method, path, status_code=None):
     if not decision.get("required_permission") and decision.get("reason") == "auth_disabled":
         return
@@ -294,6 +449,41 @@ async def audit_decision(decision, method, path, status_code=None):
     )
 
 
+async def audit_resource_decision(actor, subject_type, subject_id, action, resource_type, resource_id, decision, reason, policy_snapshot=None):
+    await execute(
+        """
+        INSERT INTO access_decision_log (
+            actor, subject_type, subject_id, action, resource_type, resource_id,
+            decision, reason, policy_snapshot
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+        """,
+        actor or "unknown",
+        subject_type,
+        str(subject_id) if subject_id is not None else None,
+        action,
+        resource_type,
+        str(resource_id) if resource_id is not None else None,
+        decision,
+        reason,
+        json_dumps(policy_snapshot or {}),
+    )
+    await log_event(
+        "access",
+        "info" if decision == "allow" else "warning",
+        actor or "unknown",
+        "resource_access_decision",
+        f"{resource_type}_{resource_id}",
+        {
+            "subject_type": subject_type,
+            "subject_id": subject_id,
+            "action": action,
+            "decision": decision,
+            "reason": reason,
+        },
+    )
+
+
 def requested_permissions_within_subject(subject_capabilities, requested_permissions):
     denied = []
     for permission in requested_permissions or []:
@@ -312,6 +502,10 @@ async def record_agent_permission_context(agent_id, ticket_id, subject=None, req
     }
     requested_permissions = requested_permissions or ["tickets:read", "tickets:note", "changes:request"]
     denied = requested_permissions_within_subject(subject.get("capabilities", []), requested_permissions)
+    allowed_permissions = [
+        permission for permission in requested_permissions
+        if permission not in denied
+    ]
     if denied:
         await log_event(
             "access",
@@ -321,7 +515,6 @@ async def record_agent_permission_context(agent_id, ticket_id, subject=None, req
             f"agent_{agent_id}",
             {"ticket_id": ticket_id, "denied_permissions": denied},
         )
-        return {"status": "denied", "denied_permissions": denied}
 
     await execute(
         """
@@ -344,12 +537,14 @@ async def record_agent_permission_context(agent_id, ticket_id, subject=None, req
         ticket_id,
         subject.get("identity", {}).get("username", "system"),
         json_dumps(subject.get("roles", [])),
-        json_dumps(requested_permissions),
+        json_dumps(allowed_permissions),
         json_dumps(subject.get("scopes", [])),
         subject.get("max_classification", "internal"),
         json_dumps({
             "source": "spawn",
             "capabilities_at_spawn": subject.get("capabilities", []),
+            "requested_permissions": requested_permissions,
+            "denied_permissions": denied,
             "enforcement": enforcement_mode(),
         }),
     )
@@ -361,8 +556,208 @@ async def record_agent_permission_context(agent_id, ticket_id, subject=None, req
         f"agent_{agent_id}",
         {
             "ticket_id": ticket_id,
-            "allowed_permissions": requested_permissions,
+            "allowed_permissions": allowed_permissions,
+            "denied_permissions": denied,
             "max_classification": subject.get("max_classification", "internal"),
         },
     )
-    return {"status": "recorded", "agent_id": agent_id, "ticket_id": ticket_id}
+    return {
+        "status": "recorded_with_denials" if denied else "recorded",
+        "agent_id": agent_id,
+        "ticket_id": ticket_id,
+        "allowed_permissions": allowed_permissions,
+        "denied_permissions": denied,
+    }
+
+
+def _json_value(value, default=None):
+    if value is None:
+        return default if default is not None else {}
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default if default is not None else {}
+    return default if default is not None else {}
+
+
+def _scope_lease_specs(subject):
+    specs = []
+    for scope in subject.get("scopes") or []:
+        permissions = _json_value(scope.get("permissions"), [])
+        if isinstance(permissions, dict):
+            permissions = [permissions]
+        if not isinstance(permissions, list):
+            continue
+        for item in permissions:
+            if not isinstance(item, dict):
+                continue
+            system = item.get("system")
+            credential_ref = item.get("credential_ref")
+            if not system or not credential_ref:
+                continue
+            actions = item.get("actions") or item.get("action") or ["read"]
+            if isinstance(actions, str):
+                actions = [actions]
+            for action in actions:
+                specs.append({
+                    "system": system,
+                    "resource_type": item.get("resource_type") or "resource",
+                    "resource_id": item.get("resource_id") or item.get("resource") or "*",
+                    "action": action,
+                    "credential_ref": credential_ref,
+                    "expires_at": item.get("expires_at"),
+                })
+    return specs
+
+
+async def create_agent_vault_manifest(agent_id, ticket_id, subject=None):
+    """Create a per-agent vault manifest with scoped credential references only."""
+    subject = subject or {
+        "identity": {"username": "system"},
+        "roles": ["platform-admin"],
+        "capabilities": ["*"],
+        "scopes": [],
+        "max_classification": "secret",
+    }
+    ticket = await fetchrow(
+        "SELECT id, owning_group, security_classification FROM tickets WHERE id = $1",
+        ticket_id,
+    )
+    leases = []
+    if ticket:
+        for action in ("read", "note", "request_access"):
+            leases.append({
+                "system": "dashboard",
+                "resource_type": "ticket",
+                "resource_id": str(ticket_id),
+                "action": action,
+                "credential_ref": f"<vault:agent_{agent_id}_dashboard_ticket_{ticket_id}>",
+                "expires_at": None,
+            })
+    leases.extend(_scope_lease_specs(subject))
+
+    for lease in leases:
+        await execute(
+            """
+            INSERT INTO agent_vault_leases (
+                agent_id, system, resource_type, resource_id, action,
+                credential_ref, lease_status, granted_by, expires_at, policy_snapshot
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8::timestamptz, $9::jsonb)
+            ON CONFLICT (agent_id, system, resource_type, resource_id, action)
+            DO UPDATE SET
+                credential_ref = EXCLUDED.credential_ref,
+                lease_status = EXCLUDED.lease_status,
+                granted_by = EXCLUDED.granted_by,
+                expires_at = EXCLUDED.expires_at,
+                policy_snapshot = EXCLUDED.policy_snapshot,
+                updated_at = NOW()
+            """,
+            agent_id,
+            lease["system"],
+            lease["resource_type"],
+            str(lease["resource_id"]),
+            lease["action"],
+            lease["credential_ref"],
+            subject.get("identity", {}).get("username", "system"),
+            lease.get("expires_at"),
+            json_dumps({
+                "spawned_by": subject.get("identity", {}).get("username", "system"),
+                "roles": subject.get("roles", []),
+                "max_classification": subject.get("max_classification", "internal"),
+                "note": "Credential values remain in the external vault; this row is only a scoped lease reference.",
+            }),
+        )
+
+    rows = await fetchall(
+        """
+        SELECT id, agent_id, system, resource_type, resource_id, action,
+               credential_ref, lease_status, expires_at, granted_by, created_at
+        FROM agent_vault_leases
+        WHERE agent_id = $1
+        ORDER BY system, resource_type, resource_id, action
+        """,
+        agent_id,
+    )
+    await log_event(
+        "access",
+        "info",
+        subject.get("identity", {}).get("username", "system"),
+        "agent_vault_manifest_created",
+        f"agent_{agent_id}",
+        {"ticket_id": ticket_id, "lease_count": len(rows)},
+    )
+    return {"agent_id": agent_id, "ticket_id": ticket_id, "leases": rows}
+
+
+def _lease_matches(lease, system, resource_type, resource_id, action):
+    return (
+        lease.get("system") == system
+        and lease.get("resource_type") == resource_type
+        and fnmatch.fnmatch(str(resource_id), str(lease.get("resource_id") or "*"))
+        and (lease.get("action") == action or lease.get("action") == "*")
+    )
+
+
+async def request_agent_vault_lease(agent_id, system, resource_type, resource_id, action):
+    rows = await fetchall(
+        """
+        SELECT *
+        FROM agent_vault_leases
+        WHERE agent_id = $1
+          AND lease_status = 'active'
+          AND (expires_at IS NULL OR expires_at > NOW())
+        ORDER BY system, resource_type, resource_id, action
+        """,
+        agent_id,
+    )
+    for row in rows:
+        if _lease_matches(row, system, resource_type, resource_id, action):
+            await audit_resource_decision(
+                f"agent_{agent_id}",
+                "agent",
+                agent_id,
+                action,
+                f"{system}:{resource_type}",
+                resource_id,
+                "allow",
+                "agent_vault_lease_match",
+                {"lease_id": row.get("id"), "credential_ref": row.get("credential_ref")},
+            )
+            return {
+                "allow": True,
+                "lease_id": row.get("id"),
+                "agent_id": agent_id,
+                "system": system,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "action": action,
+                "credential_ref": row.get("credential_ref"),
+                "credential_value": None,
+                "note": "Use the credential vault resolver for this reference; secret values are never returned by the dashboard.",
+            }
+    await audit_resource_decision(
+        f"agent_{agent_id}",
+        "agent",
+        agent_id,
+        action,
+        f"{system}:{resource_type}",
+        resource_id,
+        "deny",
+        "missing_agent_vault_lease",
+        {"active_lease_count": len(rows)},
+    )
+    return {
+        "allow": False,
+        "error": "access_denied",
+        "reason": "missing_agent_vault_lease",
+        "agent_id": agent_id,
+        "system": system,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "action": action,
+        "next_step": "Create a ticket access request for this exact system/resource/action and wait for approval.",
+    }

@@ -13,6 +13,20 @@ Use this skill when work is blocked by missing access. Do not bypass the
 control, reuse broader credentials, or ask the operator for a secret in chat.
 Create a child access request and wait for approval.
 
+Agents now use per-agent vault leases for system credentials. Before accessing
+GitLab, Wazuh/SIEM, mail, iTop, Keycloak, or another provider, request the
+specific lease from:
+
+```bash
+curl -sS -X POST "$SOC_DASHBOARD_URL/api/agents/$AGENT_ID/vault/lease" \
+  -H "Content-Type: application/json" \
+  -d '{"system":"gitlab","resource_type":"project","resource_id":"dev-y/app","action":"read"}'
+```
+
+If the lease request returns HTTP 403, treat that as the permission wall. The
+response is the evidence for the access request. Do not reuse dashboard admin
+credentials, broader provider tokens, or another agent's vault reference.
+
 ## Flow
 
 1. Read the current ticket and determine the exact missing resource and minimum

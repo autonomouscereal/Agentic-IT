@@ -1,6 +1,119 @@
 # Known Issues And Fix Log
 
-Last updated: 2026-05-13.
+Last updated: 2026-05-14.
+
+## Found In Current Permission-Proof Pass
+
+### Codex migration audit reports unrelated reference-skill drift
+
+Status: documented on 2026-05-14.
+
+Problem:
+
+- Final local hygiene ran `python scripts/audit_codex_migration.py`.
+- The audit failed because `sync_reference_skills.py` reports reference-skill
+  drift in several skills, and `reference_skills/agent-memory/scripts/agent_memory.py`
+  still contains an old `.claude\skills\server-manager` path reference.
+
+Impact:
+
+- This does not block the deployed permission/vault proof, and no plaintext
+  secret was introduced by this pass.
+- It does mean the broader reference skill bundle needs a separate sync/cleanup
+  pass before using the audit as an all-green release gate.
+
+Follow-up:
+
+- Reconcile the listed reference-skill drift intentionally rather than
+  bulk-overwriting unrelated skill work in this permission commit.
+- Replace the old `.claude\skills\server-manager` reference in the agent-memory
+  reference skill with the current `.agents/skills/server-manager` path.
+
+### Operator-stopped proof agent can be overwritten as failed
+
+Status: fixed, deployed, and live-verified on 2026-05-14.
+
+Problem:
+
+- During the permission-vault proof, agent `170` was intentionally stopped
+  after proving the allowed and denied vault leases.
+- The stop endpoint terminated the process, but the runner later observed the
+  SIGTERM exit code and overwrote the stopped bookkeeping as `failed`.
+
+Impact:
+
+- A deliberately stopped test-lane agent can look like a model/runtime failure
+  in demo evidence.
+
+Fix:
+
+- Make the runner re-check task/agent status after the subprocess exits. If an
+  operator already set the task or agent to `stopped`/`terminated`, the runner
+  records an `agent_exit_after_operator_stop` audit event and does not rewrite
+  the terminal state as failed.
+
+Verification:
+
+- Local compile passed for `api/services/agent_runner.py`.
+- Local unit discovery passed: 73 tests.
+- Live unit discovery passed: 73 tests.
+- Agent `170` from the permission-vault proof was corrected to `stopped` /
+  task `stopped` with an audit entry explaining the pre-fix SIGTERM overwrite.
+- Final live verification showed `/api/agents/active` count `0`.
+
+### Agent vault leases are not yet enforced at use time
+
+Status: fixed, deployed, and live-verified on 2026-05-14.
+
+Problem:
+
+- Route-level RBAC can deny `/api/agents/spawn` and ticket assign-agent calls
+  when `DASHBOARD_AUTH_MODE` and `DASHBOARD_AUTH_ENFORCEMENT=enforce` are set,
+  but the authenticated subject is not consistently passed into
+  `agent_runner.spawn_agent`.
+- If `record_agent_permission_context` detects requested permissions broader
+  than the spawner, the current snapshot path records a denial event but the
+  agent does not yet have a dedicated per-agent vault/lease manifest that
+  controls which credential references it may use for each system.
+
+Impact:
+
+- The dashboard can demonstrate audit-only agent permission snapshots, but it
+  does not yet strictly prove that spawned agents receive only their own
+  credential leases, work inside allowed system/resource scope, hit a permission
+  wall for forbidden systems/actions, document the denial, and request access
+  instead of silently overreaching.
+
+Fix:
+
+- Pass the evaluated request subject from middleware into agent-spawn routes.
+- Record the bounded permission snapshot for every spawned agent, trimming or
+  rejecting individual requested permissions from the effective agent envelope
+  without preventing the agent from spawning.
+- Create a per-agent vault manifest that contains only scoped credential
+  references and lease metadata. Do not inject a single dashboard auth header
+  into generic curls, because different provider systems require different
+  credentials and scopes.
+- Add a broker/API path that evaluates vault lease requests per agent, system,
+  resource, and action. Allowed requests return the scoped vault reference;
+  denied requests return a real access-denied response and audit entry so the
+  agent can create an account-access request.
+- Add tests proving lower-privilege agents can spawn, can access allowed ticket
+  scope through their vault leases, are blocked from forbidden system/resource
+  leases, and can record/request access after the denial.
+
+Verification:
+
+- Local compile passed for access-control service, ticket/agent/change routes,
+  app middleware, and the permission-vault smoke script.
+- Local unit discovery passed: 73 tests.
+- Live enforcement proof marker `PERMISSION_VAULT_E2E_1778761664` passed:
+  Dev Y ticket `480`, Dev Z ticket `481`, test agent `170`, allowed GitLab
+  lease `dev-y/*`, denied GitLab lease `dev-z/app`.
+- `access_decision_log` recorded both `agent_vault_lease_match` allow and
+  `missing_agent_vault_lease` deny for agent `170`.
+- Live post-deploy checks passed: 73 unit tests, platform doctor 18/18, auditor
+  smoke OK, and active agents count `0`.
 
 ## Current Operational Caveats
 
