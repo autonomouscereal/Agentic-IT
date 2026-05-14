@@ -352,6 +352,25 @@ async def get_task_logs(task_id: int, lines: int = Query(200, ge=1, le=2000)):
     return {"task_id": task_id, "log_path": log_path, "content": content}
 
 
+@router.get("/{agent_id}/steering")
+async def list_agent_steering(agent_id: int):
+    rows = await fetchall("""
+        SELECT *
+        FROM agent_steering_events
+        WHERE agent_id = $1
+        ORDER BY created_at DESC, id DESC
+        LIMIT 50
+    """, agent_id)
+    return {"agent_id": agent_id, "events": rows, "total": len(rows)}
+
+
+@router.post("/{agent_id}/steering/{event_id}/ack")
+async def acknowledge_agent_steering(agent_id: int, event_id: int, body: dict = Body(None)):
+    from services import agent_steering
+    actor = (body or {}).get("actor") or f"agent_{agent_id}"
+    return await agent_steering.acknowledge(agent_id, event_id, actor)
+
+
 @router.get("/{agent_id}/vault")
 async def get_agent_vault_manifest(agent_id: int):
     """Return scoped credential lease references for an agent, never secrets."""

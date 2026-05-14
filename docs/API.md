@@ -97,6 +97,22 @@ Example:
 }
 ```
 
+When the note source is a human or ticketing provider source such as
+`dashboard`, `itop`, `servicenow`, `jira`, `provider`, `requester`, or
+`user-response`, the dashboard creates non-interrupting steering events for any
+currently active ticket agents. The runner mirrors those updates into the
+agent's work directory as `agent_steering_inbox.json` and `AGENT_STEERING.md`.
+Agent-authored and control-plane notes are ignored for steering so agents do
+not steer themselves from their own progress notes.
+
+`GET /api/agents/{agent_id}/steering`
+
+Lists recent steering events delivered or pending for an agent.
+
+`POST /api/agents/{agent_id}/steering/{event_id}/ack`
+
+Marks a steering event acknowledged after the agent incorporates it.
+
 `POST /api/tickets/{ticket_id}/attachments`
 
 Stores attachment metadata only. Binary storage should be external.

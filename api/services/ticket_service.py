@@ -299,7 +299,23 @@ async def add_note(ticket_id, body, author="dashboard", source="dashboard", visi
     await execute("UPDATE tickets SET updated_at = NOW() WHERE id = $1", ticket_id)
     await log_event("ticket", "info", author, "ticket_note_added",
                     f"ticket_{ticket_id}", {"note_id": note_id, "visibility": visibility})
-    return {"id": note_id, "ticket_id": ticket_id, "status": "created"}
+    steering = {"status": "not_checked"}
+    try:
+        from services import agent_steering
+        steering = await agent_steering.record_ticket_note(
+            ticket_id,
+            note_id,
+            body,
+            author=author,
+            source=source,
+            visibility=visibility,
+            external_ref=external_ref,
+        )
+    except Exception as exc:
+        steering = {"status": "error", "error": str(exc)}
+        await log_event("agent", "warning", author, "agent_steering_note_failed",
+                        f"ticket_{ticket_id}", {"note_id": note_id, "error": str(exc)})
+    return {"id": note_id, "ticket_id": ticket_id, "status": "created", "steering": steering}
 
 
 async def add_attachment_metadata(
@@ -357,6 +373,10 @@ async def get_context(ticket_id):
     """, ticket_id)
     tasks = await fetchall(
         "SELECT * FROM agent_tasks WHERE ticket_id = $1 ORDER BY created_at DESC LIMIT 20",
+        ticket_id,
+    )
+    steering_events = await fetchall(
+        "SELECT * FROM agent_steering_events WHERE ticket_id = $1 ORDER BY created_at DESC LIMIT 30",
         ticket_id,
     )
     postmortems = await fetchall(
@@ -438,6 +458,7 @@ async def get_context(ticket_id):
         "change_requests": changes,
         "access_requests": access_requests,
         "tasks": tasks,
+        "steering_events": steering_events,
         "postmortems": postmortems,
         "related_tickets": related,
         "knowledge_articles": articles,

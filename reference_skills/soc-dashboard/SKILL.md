@@ -208,6 +208,42 @@ Current behavior:
   and resume can continue. `/api/agents/processes` reconciles active task IDs
   from stored DB PIDs as well as the in-memory process map.
 
+### Live Note Steering
+
+Active ticket agents receive human/provider note updates without being stopped.
+`POST /api/tickets/{ticket_id}/notes` creates `agent_steering_events` for
+currently running ticket agents when the note source is `dashboard`, `itop`,
+`servicenow`, `jira`, `provider`, `requester`, or `user-response`. The runner
+mirrors those events into the agent work directory as
+`agent_steering_inbox.json` and `AGENT_STEERING.md`.
+
+Agents must read the steering inbox before major actions and checkpoints. They
+should treat updates as additional context, keep the original ticket objective,
+record any changed decision in a note, and continue unless the new note creates
+an access, approval, safety, or requester wait gate. Agent-authored and
+control-plane notes are ignored for steering to prevent self-steering loops.
+
+Provider note sync: iTop `public_log` / `private_log` diffs are mirrored into
+canonical ticket notes with source `itop`, which then steer active agents the
+same way dashboard notes do.
+
+Real active-agent proof:
+
+```bash
+python scripts/agentic_note_steering_demo.py http://127.0.0.1:25480 qwen/qwen3.6-27b
+```
+
+Expected evidence: one active agent observes both `DASHBOARD_STEER` and
+`ITOP_STEER` updates, writes `STEERING_OBSERVED_DASHBOARD`,
+`STEERING_OBSERVED_ITOP`, and `STEERING_COMPLETE` notes, and completes the
+ticket with a 100% checkpoint without being restarted.
+
+Latest verified proof: ticket `530`, iTop `UserRequest::307`, agent `193`,
+task `190`, marker `NOTE_STEERING_1778787230`. Steering event `3` delivered
+dashboard note `1075`; steering event `4` delivered iTop note `1079`; the agent
+completed at 100%, and a forced iTop sync preserved local status `resolved`
+while the provider payload still reported `new`.
+
 `/api/dashboard/ops-metrics` includes two separate SLA views:
 
 - `sla`: ticket create-to-resolution compliance by priority.

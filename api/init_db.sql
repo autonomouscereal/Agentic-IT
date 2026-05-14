@@ -418,6 +418,22 @@ CREATE TABLE IF NOT EXISTS access_requests (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS agent_steering_events (
+    id SERIAL PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    task_id INTEGER REFERENCES agent_tasks(id) ON DELETE SET NULL,
+    note_id INTEGER REFERENCES ticket_notes(id) ON DELETE SET NULL,
+    source VARCHAR(80) NOT NULL DEFAULT 'dashboard',
+    author VARCHAR(120) NOT NULL DEFAULT 'dashboard',
+    body TEXT NOT NULL,
+    status VARCHAR(40) NOT NULL DEFAULT 'pending',
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    delivered_at TIMESTAMPTZ,
+    acknowledged_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS cicd_security_runs (
     id SERIAL PRIMARY KEY,
     provider VARCHAR(100) NOT NULL DEFAULT 'local',
@@ -726,6 +742,11 @@ CREATE INDEX IF NOT EXISTS idx_service_intake_created ON service_intake_sessions
 CREATE INDEX IF NOT EXISTS idx_access_requests_parent ON access_requests(parent_ticket_id);
 CREATE INDEX IF NOT EXISTS idx_access_requests_access_ticket ON access_requests(access_ticket_id);
 CREATE INDEX IF NOT EXISTS idx_access_requests_change ON access_requests(change_id);
+CREATE INDEX IF NOT EXISTS idx_agent_steering_events_agent_status ON agent_steering_events(agent_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_steering_events_ticket_created ON agent_steering_events(ticket_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_steering_events_agent_note_once
+    ON agent_steering_events(agent_id, note_id)
+    WHERE note_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_cicd_security_runs_created ON cicd_security_runs(created_at);
 CREATE INDEX IF NOT EXISTS idx_cicd_security_runs_ticket ON cicd_security_runs(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_agent_audit_reviews_agent ON agent_audit_reviews(agent_id);

@@ -2,6 +2,117 @@
 
 Last updated: 2026-05-14.
 
+## Found In Current Note-Steering Pass
+
+### Ticket notes do not steer already-running agents
+
+Status: fixed, deployed, and live-agent verified on 2026-05-14.
+
+Problem:
+
+Dashboard and provider-synced ticket notes are durable ticket context, but an
+already-running agent only sees them if it independently re-reads ticket context.
+There is no explicit non-interrupting note-update hook that tells the active
+agent "new information arrived; keep the original objective, but incorporate
+this update."
+
+Impact:
+
+Operators can add clarifying notes in the dashboard or iTop while an agent is
+working, but the agent may continue on stale context or a human may be tempted
+to stop/restart it. Stopping the harness risks losing objective continuity, so
+the correct behavior is to deliver a bounded steering update without replacing
+the agent's task.
+
+Fix:
+
+- Record a durable steering event whenever a user/provider note is added to a
+  ticket that has an active agent.
+- Mirror pending steering events into the agent work directory as a compact
+  inbox file the agent can poll while continuing its original task.
+- Update agent prompts/skills so active agents check the inbox between major
+  steps and treat notes as context, not as a replacement objective.
+- Prove the behavior with unit tests and real active local-agent runs, including
+  dashboard note and iTop/provider-note style updates.
+
+Implemented with `agent_steering_events`, per-agent
+`agent_steering_inbox.json` / `AGENT_STEERING.md`, dashboard steering APIs, and
+iTop case-log note mirroring. First live proof ticket `529` / iTop
+`UserRequest::306` / agent `192` delivered dashboard note `1062` and iTop note
+`1066` into the same active agent without interrupting it. Clean rerun ticket
+`530` / iTop `UserRequest::307` / agent `193` delivered dashboard note `1075`
+and iTop note `1079`, produced `STEERING_OBSERVED_DASHBOARD`,
+`STEERING_OBSERVED_ITOP`, and `STEERING_COMPLETE NOTE_STEERING_1778787230`,
+completed task `190` at 100%, and left no active agent processes.
+
+### Note-steering proof driver checked terminal task state too early
+
+Status: fixed, deployed, and clean live-agent rerun verified on 2026-05-14.
+
+Problem:
+
+The live proof wrapper saw the agent's final `STEERING_COMPLETE` ticket note
+before the runner had flushed terminal task state and the 100% checkpoint. The
+wrapper exited with an error while the owned agent was still running, even
+though the agent later completed cleanly.
+
+Impact:
+
+The system behavior was correct, but proof output could falsely look failed
+because the driver did not wait for the final task checkpoint.
+
+Fix:
+
+`scripts/agentic_note_steering_demo.py` now waits for task `completed`,
+`progress_pct >= 100`, and checkpoint
+`note-steering-complete-<marker>` before printing pass. Clean rerun
+`NOTE_STEERING_1778787230` printed `status: passed` only after agent `193` /
+task `190` completed with 100% progress.
+
+### iTop sync can overwrite a locally resolved agent ticket with stale provider state
+
+Status: fixed, deployed, and provider-sync verified on 2026-05-14.
+
+Problem:
+
+After the live note-steering proof, the agent locally resolved ticket `529`
+with `close_provider=false`. A later iTop sync refreshed the provider status
+`new` and overwrote the local dashboard status back to `in_progress`.
+
+Impact:
+
+The agent completed correctly, but dashboard status could look unfinished when
+provider closure is intentionally deferred.
+
+Fix:
+
+iTop sync now preserves local terminal states such as `resolved`, `closed`, and
+`implemented` while the provider is still non-terminal. Provider terminal states
+still flow back into the dashboard. After clean proof ticket `530` resolved
+locally, a forced iTop sync still saw provider status `new` but preserved
+dashboard status `resolved`.
+
+### iTop HTML markup can leak into dashboard ticket descriptions
+
+Status: fixed, deployed, and provider-sync verified on 2026-05-14.
+
+Problem:
+
+iTop returns descriptions with HTML markup such as `<p>...</p>`. The synced
+ticket context for proof ticket `530` still showed the raw paragraph tags.
+
+Impact:
+
+Dashboard ticket descriptions can look broken or expose provider formatting
+instead of readable text.
+
+Fix:
+
+iTop sync now strips simple markup from provider descriptions before writing the
+canonical dashboard ticket description, using the same sanitizer as iTop
+case-log note mirroring. After redeploy, forced sync on ticket `530` rewrote
+the description without raw `<p>` tags.
+
 ## Found In Current Permission-Proof Pass
 
 ### Agent can write a durable access-wait checkpoint but fail to exit

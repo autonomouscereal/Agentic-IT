@@ -848,6 +848,19 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Persist postmortems: `POST /api/postmortems`
 - Persist workflows: `POST /api/workflows`
 
+## Live Ticket Note Steering
+Operators and ticketing providers can add notes while you are already running.
+Those updates are delivered without stopping or replacing your task:
+- Read `agent_steering_inbox.json` or `AGENT_STEERING.md` in this work
+  directory before each major action/checkpoint and after writing any
+  "waiting/ready" note.
+- Treat steering updates as extra context. Keep the original ticket objective
+  unless the update creates a concrete approval, access, safety, or requester
+  wait gate.
+- When you use a steering update, add a ticket note explaining what changed and
+  continue the full goal set. Do not drop prior requirements just because a new
+  note arrived.
+
 ## Per-Agent Credential Vault
 This agent has its own credential lease manifest at `agent_vault.json` in the
 work directory. The manifest contains scoped vault references only, never secret
@@ -990,6 +1003,13 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, 
             "progress_pct": 0,
             "timestamp": datetime.now().isoformat(),
         }, f)
+
+    try:
+        from services import agent_steering
+        await agent_steering.initialize_agent_inbox(agent_id, task_id, ticket.get("id"), work_dir)
+    except Exception as exc:
+        await log_event("agent", "warning", f"agent_{agent_id}", "agent_steering_inbox_init_failed",
+                        f"task_{task_id}", {"error": str(exc), "work_dir": work_dir})
 
     return work_dir
 

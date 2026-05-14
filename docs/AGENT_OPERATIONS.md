@@ -106,6 +106,42 @@ These notes use sources such as `agent-control-plane`, `agent-checkpoint`, and
 Use the ticket modal's **Full Audit Trail** action to jump into the Audit page
 with the ticket filter preloaded.
 
+## Live Note Steering
+
+Human and provider notes can steer a running agent without stopping it. When a
+note is added from `dashboard`, `itop`, `servicenow`, `jira`, `provider`,
+`requester`, or `user-response`, the dashboard records an
+`agent_steering_events` row for each active ticket agent and mirrors the update
+into that agent's workspace:
+
+- `agent_steering_inbox.json`
+- `AGENT_STEERING.md`
+
+Agents are prompted to read the inbox before major actions and checkpoints.
+They must treat steering as additional context, keep the original objective,
+document changed decisions as ticket notes, and continue unless the new note
+creates an approval, access, safety, or requester wait gate. Agent-authored and
+control-plane notes do not create steering events, which prevents self-steering
+loops from normal progress notes.
+
+Operational proof:
+
+```bash
+python scripts/agentic_note_steering_demo.py http://127.0.0.1:25480 qwen/qwen3.6-27b
+```
+
+Expected evidence: the ticket shows `STEERING_READY_DASHBOARD`,
+`STEERING_OBSERVED_DASHBOARD`, `STEERING_READY_ITOP`,
+`STEERING_OBSERVED_ITOP`, and `STEERING_COMPLETE` notes. The agent remains
+active through the dashboard and iTop updates, then finishes the original task
+with a 100% checkpoint.
+
+Latest live proof: ticket `530`, iTop `UserRequest::307`, agent `193`, task
+`190`, marker `NOTE_STEERING_1778787230`. Dashboard note `1075` and iTop
+note `1079` both became delivered steering events, the task completed at 100%,
+and a forced provider sync preserved dashboard status `resolved` even while
+iTop still reported provider status `new`.
+
 ## Creating Agents
 
 From existing ticket:

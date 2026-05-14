@@ -6,6 +6,8 @@ on new tickets + WebSocket broadcast for live dashboard updates.
 import os
 import json
 import asyncio
+import hashlib
+import re
 from datetime import datetime
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.ticket_provider import TicketProvider
@@ -84,12 +86,100 @@ def _effective_local_status(provider_status, local_status=None, has_active_agent
     """Preserve active dashboard work when provider sync lags local agent state."""
     provider_value = (provider_status or "").strip()
     local_value = (local_status or "").strip()
-    terminal = {"resolved", "closed", "rejected", "completed", "cancelled", "canceled"}
-    if has_active_agent and provider_value.lower() not in terminal:
-        if local_value in {"awaiting_user_response", "pending_approval"}:
+    provider_terminal = {"resolved", "closed", "rejected", "completed", "cancelled", "canceled"}
+    local_terminal = {
+        "resolved",
+        "closed",
+        "closed/resolved",
+        "implemented",
+        "rejected",
+        "cancelled",
+        "canceled",
+    }
+    provider_lower = provider_value.lower()
+    local_lower = local_value.lower()
+    if local_lower in local_terminal and provider_lower not in provider_terminal:
+        return local_value
+    if has_active_agent and provider_lower not in provider_terminal:
+        if local_lower in {"awaiting_user_response", "pending_approval"}:
             return local_value
         return "in_progress"
     return provider_value
+
+
+def _strip_markup(value):
+    text = str(value or "")
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
+    return text
+
+
+def _case_log_text(value):
+    if value in (None, "", [], {}):
+        return ""
+    if isinstance(value, str):
+        return _strip_markup(value)
+    if isinstance(value, dict) and isinstance(value.get("entries"), list):
+        parts = []
+        for entry in value.get("entries") or []:
+            if isinstance(entry, dict):
+                message = entry.get("message") or entry.get("text") or entry.get("html") or entry.get("body")
+                if message:
+                    author = entry.get("user_login") or entry.get("user") or entry.get("author") or "iTop"
+                    timestamp = entry.get("date") or entry.get("created_at") or ""
+                    prefix = f"{timestamp} {author}".strip()
+                    parts.append(f"{prefix}: {_strip_markup(message)}" if prefix else _strip_markup(message))
+                else:
+                    parts.append(json.dumps(entry, sort_keys=True, default=str))
+            else:
+                parts.append(_strip_markup(entry))
+        return "\n".join(part for part in parts if part).strip()
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _payload_fields(payload):
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            return {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload.get("fields") if isinstance(payload.get("fields"), dict) else {}
+
+
+async def _sync_case_log_notes(ticket_id, ticket_class, ticket_key, current_fields, previous_payload):
+    """Mirror changed iTop case-log fields into canonical ticket notes."""
+    previous_fields = _payload_fields(previous_payload)
+    created = []
+    for field_name in ("public_log", "private_log", "work_log", "caller_log", "agent_log"):
+        current_text = _case_log_text((current_fields or {}).get(field_name))
+        if not current_text:
+            continue
+        previous_text = _case_log_text(previous_fields.get(field_name))
+        if current_text == previous_text:
+            continue
+        digest = hashlib.sha256(current_text.encode("utf-8")).hexdigest()[:16]
+        external_ref = f"itop:{ticket_class}:{ticket_key}:{field_name}:{digest}"
+        exists = await fetchval("SELECT id FROM ticket_notes WHERE external_ref = $1", external_ref)
+        if exists:
+            continue
+        from services import ticket_service
+        note = await ticket_service.add_note(
+            ticket_id,
+            "\n".join([
+                f"iTop {field_name} update for {ticket_class}::{ticket_key}",
+                "",
+                current_text[:4000],
+            ]).strip(),
+            author="itop_sync",
+            source="itop",
+            visibility="internal",
+            external_ref=external_ref,
+        )
+        created.append(note)
+    return created
 
 
 _async_session = None
@@ -223,7 +313,7 @@ class iTopProvider(TicketProvider):
             "provider_ref": str(key_val),
             "provider_class": ticket_class,
             "title": fields.get("title", ""),
-            "description": fields.get("description", ""),
+            "description": _strip_markup(fields.get("description", "")),
             "status": fields.get("status", ""),
             "priority": fields.get("priority", ""),
             "impact": _to_int(fields.get("impact")),
@@ -234,7 +324,7 @@ class iTopProvider(TicketProvider):
 
         existing_ticket = await fetchrow(
             """
-            SELECT t.id, t.status,
+            SELECT t.id, t.status, t.provider_payload,
                    EXISTS (
                        SELECT 1 FROM agents a
                        WHERE a.ticket_id = t.id
@@ -265,6 +355,17 @@ class iTopProvider(TicketProvider):
                 ticket_data["assignee"], ticket_data["assignee_team"],
                 str(key_val), ticket_class, json_dumps(obj_data))
             ticket_id = existing_ticket["id"]
+            try:
+                await _sync_case_log_notes(
+                    ticket_id,
+                    ticket_class,
+                    key_val,
+                    fields,
+                    existing_ticket.get("provider_payload"),
+                )
+            except Exception as exc:
+                await log_event("sync", "warning", "itop_sync", "case_log_note_sync_failed",
+                                f"ticket_{ticket_id}", {"error": str(exc)})
         else:
             ticket_id = await fetchval("""
                 INSERT INTO tickets (itop_ref, itop_class, title, description, status,
