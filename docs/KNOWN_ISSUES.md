@@ -105,7 +105,7 @@ The live first-alias wrapper did not print `status: passed` until agent `191`
 
 ### Agent process endpoint omits active_processes for container-spawned subject runs
 
-Status: documented on 2026-05-14.
+Status: fixed, deployed, and live-verified on 2026-05-14.
 
 Problem:
 
@@ -120,11 +120,18 @@ Operators can still see the process in the raw process list, but the structured
 container runs. This makes active process monitoring less reliable for
 agentic permission tests and demos.
 
-Expected fix:
+Fix:
 
 Normalize PID/task matching for agents spawned from inside the API container
 through subject-aware runner paths so `active_processes` includes the task id
 when the stored task PID is present in the process list.
+
+Verification:
+
+- Rebuilt API source includes the database-backed PID reconciliation path.
+- Live first-alias proof `AGENTIC_PERMISSION_VAULT_1778778629` showed task
+  `188` in `/api/agents/processes.active_processes` while agent `191` was
+  active, then showed zero active processes after the agent completed.
 
 ### Abandoned model-matrix wrapper started a non-primary alias after scope changed
 
@@ -219,7 +226,7 @@ Verification:
 
 ### Agentic permission proof harness restarted API after spawning agent
 
-Status: partially fixed and under live agentic verification in current pass.
+Status: fixed, deployed, and live-verified on 2026-05-14.
 
 Problem:
 
@@ -250,12 +257,13 @@ Fix plan:
 Verification:
 
 - Script no longer toggles/restarts the API after spawn.
-- Follow-up issue below was found: the one-shot helper can enqueue the task but
-  exit before an in-process queue worker runs it.
+- Live first-alias proof `AGENTIC_PERMISSION_VAULT_1778778629` completed without
+  an API restart: parent ticket `525` resolved, access child ticket `527`
+  resolved, access request `12` granted, and resumed agent `191` finished.
 
 ### One-shot agentic harness created queued task without durable worker
 
-Status: fixed locally and awaiting clean rerun in current pass.
+Status: fixed, deployed, and live-verified on 2026-05-14.
 
 Problem:
 
@@ -286,6 +294,13 @@ Fix:
 - The helper now loads the spawned task and runs
   `agent_runner._spawn_with_semaphore(...)` before returning from the helper
   process, so it cannot strand a queued task without a worker.
+
+Verification:
+
+- Live first-alias proof `AGENTIC_PERMISSION_VAULT_1778778629` ran both the
+  initial denied-access agent and the resumed granted-access agent through the
+  in-container helper. The resumed task `188` reached `completed` with 100%
+  progress and a `vault-access-complete-*` checkpoint.
 
 ### Local model stalled after tool_use stop without executable tool payload
 
@@ -335,7 +350,7 @@ Verification:
 
 ### Agentic proof driver timed out while worker was still running
 
-Status: fixed locally and awaiting clean rerun in current pass.
+Status: fixed, deployed, and live-verified on 2026-05-14.
 
 Problem:
 
@@ -364,9 +379,15 @@ Fix:
   the outer `docker compose exec` helper while passing the shorter no-output
   timeout only into the inner agent runner environment.
 
+Verification:
+
+- Live first-alias proof `AGENTIC_PERMISSION_VAULT_1778778629` stayed attached
+  long enough to approve the access gate, resume the task, and capture terminal
+  completion evidence instead of timing out at the inner watchdog boundary.
+
 ### Agentic proof driver waited for access request after agent failure
 
-Status: fixing in current pass.
+Status: fixed, deployed, and regression-tested on 2026-05-14.
 
 Problem:
 
@@ -379,11 +400,18 @@ Impact:
 - The agent lane is clean, but the proof driver remains as a useless polling
   process until timeout unless manually stopped.
 
-Fix plan:
+Fix:
 
 - Make `wait_access_request` and `wait_completion` check the latest agent task
   state and fail fast when the relevant agent task reaches `failed` or
   `stopped` before the expected ticket/access evidence appears.
+
+Verification:
+
+- `tests.test_permission_vault_demo.PermissionVaultDemoTests.test_wait_access_request_fails_fast_when_agent_ends`
+  covers the pre-access-request failure path.
+- `tests.test_permission_vault_demo.PermissionVaultDemoTests.test_wait_completion_requires_resumed_task_terminal_checkpoint`
+  covers the post-grant completion path and prevents premature success.
 
 ### Access gate completion response hides lease-grant evidence
 
@@ -672,7 +700,7 @@ Verification:
 
 ### Agent supervisor repeats manual-completion skip events for old gates
 
-Status: fixed locally and awaiting safe deployment on 2026-05-14.
+Status: fixed, deployed, and regression-tested on 2026-05-14.
 
 Problem:
 
@@ -690,6 +718,12 @@ Fix:
 - The supervisor now rate-limits duplicate manual-completion skip events per
   change/task for one hour while preserving the first clear audit record
   explaining why manual completion is required.
+
+Verification:
+
+- `tests.test_agent_lifecycle_guards.AgentLifecycleGuardTests.test_manual_completion_skip_dedupe_uses_event_log_window`
+  confirms the event-log dedupe query uses the one-hour window and string-cast
+  parameters expected by asyncpg.
 
 ## Fixed In Current Pass
 
@@ -724,7 +758,7 @@ Verification:
 
 ### FedRAMP-grade dashboard access control was only scaffolded
 
-Status: prepared locally on 2026-05-13, not deployed.
+Status: fixed, deployed, provider-matrix verified, and agentically verified on 2026-05-14.
 
 Problem:
 
@@ -754,10 +788,15 @@ Verification:
 
 - Added local unit tests for route permission mapping and the agent
   "cannot exceed spawner" permission boundary.
+- Live provider matrix `PERMISSION_PROVIDER_MATRIX_1778766486` verified
+  row-scoped ticket denial, permission trimming, and iTop sync behavior.
+- Live first-alias proof `AGENTIC_PERMISSION_VAULT_1778778629` verified an
+  agent spawned under Dev Y could not use Dev Z credentials until an approved
+  access request minted a scoped vault lease.
 
 ### Agent timing labels made gate wait look like wasted runtime
 
-Status: fixed locally on 2026-05-13.
+Status: fixed, deployed, and regression-tested on 2026-05-14.
 
 Problem:
 
@@ -788,10 +827,11 @@ Verification:
   `Runtime` / `Gated` labels.
 - Added route regression coverage proving stalled timing fields are zeroed in
   the `/api/agents` query.
+- Local and remote full unit discovery passed with 82 tests on 2026-05-14.
 
 ### Agent completion implicitly resolved tickets
 
-Status: fixed locally and ready for deployment on 2026-05-13.
+Status: fixed, deployed, and regression-tested on 2026-05-14.
 
 Problem:
 
@@ -828,10 +868,11 @@ Verification:
   provider unless `close_provider=true`.
 - Added prompt regression coverage proving the default workflow contract is
   agent-initiated closure, while human review remains an explicit opt-out.
+- Local and remote full unit discovery passed with 82 tests on 2026-05-14.
 
 ### Agent runtime advertised git but did not install git
 
-Status: fixed locally and ready for deployment on 2026-05-13.
+Status: fixed, deployed, and regression-tested on 2026-05-14.
 
 Problem:
 
@@ -866,6 +907,7 @@ Verification:
   passed, note `770` was written, and checkpoint finished at `done` / `100%`.
 - The remaining git evidence gap is now covered by local regression test
   `tests/test_agentic_self_repair_marker.py`.
+- Local and remote full unit discovery passed with 82 tests on 2026-05-14.
 
 ### Postmortem SLA metrics did not track postmortem completion
 
@@ -945,7 +987,7 @@ Verification:
 
 ### Agents could look complete after stopping at an access or approval wait gate
 
-Status: fixed and verification in progress on 2026-05-13.
+Status: fixed, deployed, and agentically verified on 2026-05-14.
 
 Problem:
 
@@ -968,8 +1010,12 @@ Fix:
 
 Verification:
 
-- Pending in this pass: unit tests, control-plane smoke, and real local-model
-  access-resume proof.
+- Unit tests and control-plane permission smokes passed locally and on the AI
+  server.
+- Live first-alias proof `AGENTIC_PERMISSION_VAULT_1778778629` verified the
+  initial agent stopped at `awaiting_access`, the access approval spawned a
+  resumed agent, and the resumed task completed from the granted lease instead
+  of being marked complete at the original wait gate.
 
 ### Operational metrics, workflow review state, scanner findings, and tool inventory were demo-confusing
 

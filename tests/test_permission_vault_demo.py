@@ -19,6 +19,37 @@ def load_demo():
 
 
 class PermissionVaultDemoTests(unittest.TestCase):
+    def test_wait_access_request_fails_fast_when_agent_ends(self):
+        module = load_demo()
+        marker = "UNIT_PERMISSION_FAIL"
+
+        def request(base, method, path, payload=None, user=None, expect=(200,)):
+            self.assertEqual(method, "GET")
+            self.assertEqual(path, "/api/tickets/522/context")
+            return {
+                "ticket": {"id": 522, "status": "in_progress", "agent_id": 188},
+                "notes": [{"body": "permission probe started"}],
+                "access_requests": [],
+            }
+
+        def latest_task(base, agent_id):
+            self.assertEqual(agent_id, 188)
+            return {
+                "id": 185,
+                "status": "failed",
+                "progress_pct": 10,
+                "error_message": "worker exited before access request",
+            }
+
+        module.request = request
+        module.latest_task = latest_task
+        module.time.sleep = lambda seconds: None
+
+        with self.assertRaises(RuntimeError) as raised:
+            module.wait_access_request("http://example.invalid", 522, marker, timeout=5)
+
+        self.assertIn("ended before access request", str(raised.exception))
+
     def test_wait_completion_requires_resumed_task_terminal_checkpoint(self):
         module = load_demo()
         marker = "UNIT_PERMISSION"
