@@ -179,6 +179,20 @@ class AccessControlPolicyTests(unittest.TestCase):
         self.assertFalse(module._lease_matches(lease, "gitlab", "project", "dev-z/app", "read"))
         self.assertFalse(module._lease_matches(lease, "gitlab", "project", "dev-y/app", "write"))
 
+    def test_default_agent_vault_ref_does_not_embed_secret_material(self):
+        module, _ = load_access_control()
+
+        ref = module.default_agent_vault_ref(42, {
+            "system": "gitlab",
+            "resource_type": "project",
+            "resource_id": "dev-z/private repo",
+            "action": "read",
+        })
+
+        self.assertEqual(ref, "<vault:agent_42_gitlab_project_dev_z_private_repo_read>")
+        self.assertNotIn("password", ref.lower())
+        self.assertNotIn("token", ref.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

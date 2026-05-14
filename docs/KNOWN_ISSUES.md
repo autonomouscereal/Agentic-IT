@@ -4,6 +4,316 @@ Last updated: 2026-05-14.
 
 ## Found In Current Permission-Proof Pass
 
+### Direct agent spawn skipped ticket row-scope checks
+
+Status: fixed locally, deployed, and live-verified on 2026-05-14.
+
+Problem:
+
+- The ticket-level `/api/tickets/{id}/assign-agent` route checks whether the
+  spawning subject can read the target ticket, but direct `/api/agents/spawn`
+  accepted a `ticket_id` and started an agent without the same row-level ticket
+  decision.
+- The ticket-level assign route also did not forward a requested permission
+  envelope, so over-broad requested agent permissions could not be proven as
+  trimmed from that common UI path.
+
+Impact:
+
+- A user with `agents:spawn` but without access to a specific ticket could
+  attempt to start an agent on a ticket outside their group/classification scope
+  through the direct agent route.
+- The per-agent permission boundary remained present, but one spawn entry point
+  was missing the required parent-ticket guard.
+
+Fix plan:
+
+- Apply the same ticket existence and row-scope check in `/api/agents/spawn`
+  before calling the runner.
+- Add `requested_permissions` passthrough to
+  `/api/tickets/{id}/assign-agent`.
+- Verify with the new local+iTop permission provider matrix.
+
+Verification:
+
+- Local unit discovery passed: 77 tests.
+- Live unit discovery passed: 77 tests.
+- Live provider matrix marker `PERMISSION_PROVIDER_MATRIX_1778766486`
+  verified direct `/api/agents/spawn` is denied for Dev Y against hidden Dev Z
+  ticket scope, while scoped spawn on Dev Y still succeeds and trims excess
+  requested permissions into the agent snapshot.
+
+### Agentic permission proof harness restarted API after spawning agent
+
+Status: partially fixed and under live agentic verification in current pass.
+
+Problem:
+
+- The real local-model permission-vault script spawned the scoped Dev Y agent
+  while auth enforcement was enabled, then immediately restarted the dashboard
+  API back to disabled/audit-only so the model could use normal lab API calls
+  without synthetic auth headers.
+- That API restart killed the just-spawned subprocess. Tickets `482`/`496`
+  stayed `in_progress`, agents `171`/`176` failed with
+  `Agent process is no longer running in the API container`, and no access
+  request was created.
+
+Impact:
+
+- The agentic permission loop was not actually tested. The failure came from
+  the test harness restarting the runner process, not from a real model
+  permission decision.
+
+Fix plan:
+
+- Keep the API stable during the live agent run.
+- Spawn the agent through the in-container runner with the Dev Y subject loaded
+  from the access-control tables, so the agent receives Dev Y's bounded vault
+  leases without injecting auth headers into its provider/API curls.
+- Use the provider matrix for enforced header/RBAC proof and this script for
+  true local-model permission-wall/resume proof.
+
+Verification:
+
+- Script no longer toggles/restarts the API after spawn.
+- Follow-up issue below was found: the one-shot helper can enqueue the task but
+  exit before an in-process queue worker runs it.
+
+### One-shot agentic harness created queued task without durable worker
+
+Status: fixed locally and awaiting clean rerun in current pass.
+
+Problem:
+
+- After removing the API restart, `agentic_permission_vault_access_demo.py`
+  used `agent_runner.spawn_agent()` from a short-lived
+  `docker compose exec api python -` helper.
+- `spawn_agent()` enqueues work into the current Python process. Because the
+  helper process exits right after returning the spawn payload, queued task
+  `174` for agent `177` did not start until a manual in-container worker was
+  attached.
+
+Impact:
+
+- The test harness can create realistic agent/vault rows, but not reliably run
+  the live local-model task end to end unless it also keeps a worker process
+  alive for that queued task.
+
+Fix plan:
+
+- Add a harness path that runs the spawned task's `_spawn_with_semaphore`
+  execution in the same helper process after spawn, or call a durable API route
+  that enqueues work inside the running API server.
+- Verify with the active live proof: agent `177`, ticket `498`, marker
+  `AGENTIC_PERMISSION_VAULT_1778767569`.
+
+Fix:
+
+- The helper now loads the spawned task and runs
+  `agent_runner._spawn_with_semaphore(...)` before returning from the helper
+  process, so it cannot strand a queued task without a worker.
+
+### Local model stalled after tool_use stop without executable tool payload
+
+Status: fixed, deployed, and live-verified as fail-fast on 2026-05-14.
+
+Problem:
+
+- Live local-model proof agent `177` on ticket `498` read its vault manifest
+  and correctly exposed only dashboard ticket leases plus Dev Y GitLab read
+  lease. It also showed denied requested permissions
+  `changes:approve` and `access:admin`.
+- The stream then reached a model message with `stop_reason: tool_use`, but the
+  content contained only a thinking block and no concrete tool call payload.
+  The process stayed alive, heartbeat continued, and no access request or curl
+  action occurred.
+
+Impact:
+
+- A real local-model flow can appear active while no tool work is being
+  performed. This is separate from the permission model; the agent did inherit
+  the correct bounded vault manifest, but the harness needs to detect and
+  recover from a malformed/no-op tool-use turn.
+
+Fix plan:
+
+- Add a bounded no-progress/no-tool-output watchdog signal for local-agent
+  runs, using actual stream/output movement rather than UI percentage.
+- For this proof lane, treat agent `177` as test-owned and recover by stopping
+  or replacing only that exact agent if it remains stuck after inspection.
+
+Fix:
+
+- The proof harness now passes a shorter
+  `AGENT_NO_OUTPUT_STALL_SECONDS` value into the in-container agent runner and
+  the prompt explicitly requires simple sequential Bash/curl commands.
+- The runner now detects `stop_reason=tool_use` assistant events that contain
+  no executable `tool_use` payload and stops the process after the bounded
+  watchdog window with an explicit stalled reason.
+
+Verification:
+
+- Live proof marker `AGENTIC_PERMISSION_VAULT_1778768749`, agent `180`, task
+  `177` stopped cleanly after 65 seconds with:
+  `Agent produced no output for 65 seconds; runner marked it stalled and stopped
+  the process to prevent a silent harness/model hang.`
+- `/api/agents/active` and `/api/agents/processes` were both empty afterward.
+
+### Agentic proof driver timed out while worker was still running
+
+Status: fixed locally and awaiting clean rerun in current pass.
+
+Problem:
+
+- The patched proof harness passed `AGENT_NO_OUTPUT_STALL_SECONDS=180`, but
+  also used the same 180 seconds as the outer `subprocess.run(..., timeout=...)`
+  limit for `docker compose exec api python -`.
+- The driver exited with `subprocess.TimeoutExpired` while live agent `178` was
+  still running on ticket `500`, leaving no orchestration process to approve the
+  access request if the agent later created one.
+
+Impact:
+
+- The no-output watchdog should govern the inner Claude/local-model process.
+  The outer proof driver must stay alive for the full proof timeout so it can
+  approve the access gate, observe the resumed agent, and print proof evidence.
+
+Fix plan:
+
+- Make the outer helper timeout use the full proof timeout, not the
+  no-output-stall setting.
+- Treat agent `178` as a test-owned replacement lane if it remains stalled.
+
+Fix:
+
+- `agentic_permission_vault_access_demo.py` now uses the full proof timeout for
+  the outer `docker compose exec` helper while passing the shorter no-output
+  timeout only into the inner agent runner environment.
+
+### Agentic proof driver waited for access request after agent failure
+
+Status: fixing in current pass.
+
+Problem:
+
+- After the runner correctly failed agent `180` for no-output stall, the outer
+  `agentic_permission_vault_access_demo.py` process continued waiting for an
+  access request that could never be created.
+
+Impact:
+
+- The agent lane is clean, but the proof driver remains as a useless polling
+  process until timeout unless manually stopped.
+
+Fix plan:
+
+- Make `wait_access_request` and `wait_completion` check the latest agent task
+  state and fail fast when the relevant agent task reaches `failed` or
+  `stopped` before the expected ticket/access evidence appears.
+
+### Access gate completion response hides lease-grant evidence
+
+Status: fixed locally, deployed, and live-verified on 2026-05-14.
+
+Problem:
+
+- The local+iTop permission provider matrix created a synced iTop parent
+  ticket, spawned a scoped Dev Y agent, proved denied GitLab and iTop leases,
+  created a synced iTop access-request child, approved the gate, and completed
+  change `146`.
+- The completion API returned only `{"status":"completed","change_id":146}`
+  instead of the access-request sync result and granted lease evidence.
+
+Impact:
+
+- The control plane may still grant the scoped lease internally, but the API
+  response does not give the runner or demo UI an immediate, auditable proof
+  artifact for denied lease -> approved access gate -> granted agent vault
+  lease.
+
+Fix plan:
+
+- Confirm whether the lease row was minted for change `146`.
+- Return the `_sync_access_request_status` result from the change completion
+  route under `access_sync`.
+- Rerun the local+iTop matrix and verify the response plus a subsequent vault
+  lease request.
+
+Verification:
+
+- Live matrix marker `PERMISSION_PROVIDER_MATRIX_1778766486` completed access
+  gate response with `access_sync.granted_leases`, then verified the newly
+  granted iTop lease id `37` returned
+  `<vault:itop_team_z_read_after_approval>` with `credential_value: null`.
+
+### Access-request child ticket completion did not close iTop object
+
+Status: fixed locally, deployed, and live-verified on 2026-05-14.
+
+Problem:
+
+- The local+iTop permission provider matrix passed RBAC, row-scope, vault
+  allow/deny, iTop parent creation, iTop access-request child creation, and
+  post-approval lease grant checks with marker
+  `PERMISSION_PROVIDER_MATRIX_1778766347`.
+- The dashboard access ticket `491` synced to iTop provider ref `294`
+  (`R-000303`), but after local access-gate completion the provider-side iTop
+  object still read as `status: new`.
+
+Impact:
+
+- Dashboard evidence says the access gate is granted, but the real ticketing
+  provider does not reflect the completed access request. That weakens the
+  demo and violates the provider-sync expectation for end-to-end workflows.
+
+Fix plan:
+
+- When an access-request gate completes or rejects, update the local child
+  access ticket and also close the provider-side access ticket when it has an
+  external provider reference.
+- Rerun the matrix and verify the iTop access request is no longer `new`.
+
+Verification:
+
+- Live matrix marker `PERMISSION_PROVIDER_MATRIX_1778766486` created dashboard
+  access ticket `495`, synced it to iTop provider ref `296` (`R-000305`), and
+  verified iTop returned `status: resolved` after access-gate completion.
+
+### Access grant completion did not mint the approved agent vault lease
+
+Status: fixed locally, deployed, and control-plane verified on 2026-05-14.
+
+Problem:
+
+- The access-request workflow marks access requests as `granted` when the
+  approval gate is completed, but the completion path does not yet create a new
+  `agent_vault_leases` row for the approved system/resource/action.
+- That means a resumed agent can prove it requested access and got approval, but
+  it cannot prove the approved lease is available afterward without manual DB
+  intervention.
+
+Impact:
+
+- The permission wall loop is auditable up to approval, but not fully closed
+  from denied lease -> access request -> approval -> new scoped lease -> resumed
+  work.
+
+Fix plan:
+
+- Allow access requests to carry a lease request payload with system,
+  resource_type, resource_id, action, and optional vault reference.
+- On access-gate completion, mint an active `agent_vault_leases` row for the
+  original agent and the completing/resumed agent when applicable.
+- Verify with a real local-model agent run.
+
+Verification:
+
+- Control-plane matrix marker `PERMISSION_PROVIDER_MATRIX_1778766486` verified
+  denied iTop lease -> access request -> approval -> completion -> newly
+  granted agent vault lease id `37`.
+- Real local-model verification is still running for marker
+  `AGENTIC_PERMISSION_VAULT_1778767569`.
+
 ### Codex migration audit reports unrelated reference-skill drift
 
 Status: documented on 2026-05-14.

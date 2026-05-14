@@ -1,6 +1,7 @@
 import fnmatch
 import os
 import json
+import re
 
 from database import fetchall, fetchrow, execute, json_dumps
 from services.event_logger import log_event
@@ -760,4 +761,95 @@ async def request_agent_vault_lease(agent_id, system, resource_type, resource_id
         "resource_id": resource_id,
         "action": action,
         "next_step": "Create a ticket access request for this exact system/resource/action and wait for approval.",
+    }
+
+
+def _safe_vault_ref_part(value):
+    text = re.sub(r"[^A-Za-z0-9_]+", "_", str(value or "resource")).strip("_").lower()
+    return text[:80] or "resource"
+
+
+def default_agent_vault_ref(agent_id, lease_request):
+    return "<vault:agent_{agent}_{system}_{rtype}_{rid}_{action}>".format(
+        agent=agent_id,
+        system=_safe_vault_ref_part(lease_request.get("system")),
+        rtype=_safe_vault_ref_part(lease_request.get("resource_type")),
+        rid=_safe_vault_ref_part(lease_request.get("resource_id")),
+        action=_safe_vault_ref_part(lease_request.get("action")),
+    )
+
+
+async def grant_agent_vault_lease(agent_id, lease_request, granted_by="access-gate", evidence=None):
+    """Grant one scoped vault reference to one agent after an approved access gate.
+
+    The credential_ref is still only a vault reference. Secret values remain in
+    the deployment vault and are never stored in dashboard tables.
+    """
+    if not agent_id or not isinstance(lease_request, dict):
+        return {"status": "skipped", "reason": "missing_agent_or_lease_request"}
+    system = lease_request.get("system")
+    resource_type = lease_request.get("resource_type") or "resource"
+    resource_id = lease_request.get("resource_id") or "*"
+    action = lease_request.get("action") or "read"
+    if not system:
+        return {"status": "skipped", "reason": "missing_system"}
+    credential_ref = lease_request.get("credential_ref") or default_agent_vault_ref(agent_id, {
+        "system": system,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "action": action,
+    })
+    await execute(
+        """
+        INSERT INTO agent_vault_leases (
+            agent_id, system, resource_type, resource_id, action, credential_ref,
+            lease_status, granted_by, expires_at, policy_snapshot
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8::timestamptz, $9::jsonb)
+        ON CONFLICT (agent_id, system, resource_type, resource_id, action)
+        DO UPDATE SET
+            credential_ref = EXCLUDED.credential_ref,
+            lease_status = 'active',
+            granted_by = EXCLUDED.granted_by,
+            expires_at = EXCLUDED.expires_at,
+            policy_snapshot = EXCLUDED.policy_snapshot,
+            updated_at = NOW()
+        """,
+        agent_id,
+        system,
+        resource_type,
+        str(resource_id),
+        action,
+        credential_ref,
+        granted_by,
+        lease_request.get("expires_at"),
+        json_dumps({
+            "source": "access_request_completion",
+            "evidence": evidence or "",
+            "secret_values_stored": False,
+        }),
+    )
+    await log_event(
+        "access",
+        "info",
+        granted_by,
+        "agent_vault_lease_granted",
+        f"agent_{agent_id}",
+        {
+            "system": system,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "action": action,
+            "credential_ref": credential_ref,
+        },
+    )
+    return {
+        "status": "granted",
+        "agent_id": agent_id,
+        "system": system,
+        "resource_type": resource_type,
+        "resource_id": str(resource_id),
+        "action": action,
+        "credential_ref": credential_ref,
+        "credential_value": None,
     }

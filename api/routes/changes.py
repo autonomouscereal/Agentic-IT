@@ -133,12 +133,60 @@ async def _sync_access_request_status(change, status, actor, evidence=None):
     await _add_gate_note(access_request.get("parent_ticket_id"), change_id, title, body, actor, "access-request")
     if access_request.get("access_ticket_id"):
         await _add_gate_note(access_request.get("access_ticket_id"), change_id, title, body, actor, "access-request")
+        provider_close = {"status": "skipped", "reason": "not_terminal_or_local"}
         if status in ("completed", "rejected"):
             await execute("""
                 UPDATE tickets
                 SET status = $1, updated_at = NOW()
                 WHERE id = $2
             """, "resolved" if status == "completed" else "closed", access_request.get("access_ticket_id"))
+            if status == "completed":
+                access_ticket = await fetchrow(
+                    """
+                    SELECT id, provider, provider_ref, provider_class, itop_ref, itop_class
+                    FROM tickets
+                    WHERE id = $1
+                    """,
+                    access_request.get("access_ticket_id"),
+                )
+                provider_name = (access_ticket or {}).get("provider") or "local"
+                provider_ref = (access_ticket or {}).get("provider_ref") or (access_ticket or {}).get("itop_ref")
+                if provider_name != "local" and provider_ref:
+                    try:
+                        from services import provider_registry
+                        provider_close = await provider_registry.close_ticket(
+                            provider_name,
+                            access_request.get("access_ticket_id"),
+                            evidence or f"Access request {access_request['id']} completed by {actor}.",
+                        )
+                    except Exception as exc:
+                        provider_close = {"error": str(exc), "provider": provider_name}
+                    if provider_close.get("error"):
+                        await log_event(
+                            "sync",
+                            "warning",
+                            actor,
+                            "access_request_provider_close_failed",
+                            f"ticket_{access_request.get('access_ticket_id')}",
+                            {
+                                "provider": provider_name,
+                                "provider_ref": provider_ref,
+                                "error": provider_close.get("error"),
+                            },
+                        )
+                    else:
+                        await log_event(
+                            "sync",
+                            "info",
+                            actor,
+                            "access_request_provider_close_complete",
+                            f"ticket_{access_request.get('access_ticket_id')}",
+                            {
+                                "provider": provider_name,
+                                "provider_ref": provider_ref,
+                                "result": provider_close,
+                            },
+                        )
     await log_event("access", "info", actor, f"access_request_{status}",
                     f"access_request_{access_request['id']}", {
                         "change_id": change_id,
@@ -146,7 +194,32 @@ async def _sync_access_request_status(change, status, actor, evidence=None):
                         "access_ticket_id": access_request.get("access_ticket_id"),
                         "status": access_request.get("status"),
                     })
-    return {"status": access_request.get("status"), "access_request_id": access_request.get("id")}
+    granted_leases = []
+    if status == "completed":
+        lease_request = policy.get("lease_request")
+        if lease_request:
+            candidate_agent_ids = []
+            if access_request.get("agent_id"):
+                candidate_agent_ids.append(access_request.get("agent_id"))
+            if actor and str(actor).startswith("agent_"):
+                try:
+                    candidate_agent_ids.append(int(str(actor).split("_", 1)[1]))
+                except (TypeError, ValueError):
+                    pass
+            for candidate in dict.fromkeys(candidate_agent_ids):
+                granted = await access_control.grant_agent_vault_lease(
+                    candidate,
+                    lease_request,
+                    granted_by=actor,
+                    evidence=evidence,
+                )
+                granted_leases.append(granted)
+    return {
+        "status": access_request.get("status"),
+        "access_request_id": access_request.get("id"),
+        "granted_leases": granted_leases,
+        "provider_close": provider_close if access_request.get("access_ticket_id") else {"status": "skipped", "reason": "no_access_ticket"},
+    }
 
 
 async def _resume_agent_after_approval(change, approved_by):
@@ -516,6 +589,6 @@ async def complete_change(change_id: int, body: dict = Body({})):
         actor,
         "approval-gate",
     )
-    await _sync_access_request_status({**change, "id": change_id}, "completed", actor, result)
+    access_sync = await _sync_access_request_status({**change, "id": change_id}, "completed", actor, result)
 
-    return {"status": "completed", "change_id": change_id}
+    return {"status": "completed", "change_id": change_id, "access_sync": access_sync}

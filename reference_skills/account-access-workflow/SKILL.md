@@ -27,6 +27,12 @@ If the lease request returns HTTP 403, treat that as the permission wall. The
 response is the evidence for the access request. Do not reuse dashboard admin
 credentials, broader provider tokens, or another agent's vault reference.
 
+When creating an access request for a denied vault lease, include a
+`lease_request` payload with the exact `system`, `resource_type`,
+`resource_id`, `action`, and optional `credential_ref`. Completing the approved
+access gate mints the scoped `agent_vault_leases` row for the original or
+resumed agent without exposing any credential value.
+
 ## Flow
 
 1. Read the current ticket and determine the exact missing resource and minimum
@@ -108,3 +114,12 @@ Latest live proof, 2026-05-14:
 - Agent `169` completed the approved access grant with lab-safe evidence,
   changed access request `4` to `granted`, wrote final
   `ACCESS RESUME COMPLETE` notes, and resolved parent ticket `476`.
+
+Latest permission/vault provider proof, 2026-05-14:
+
+- Marker `PERMISSION_PROVIDER_MATRIX_1778768984`.
+- iTop parent ticket `511` synced to provider ref `299`.
+- Access request child ticket `512` synced to provider ref `300`.
+- Denied iTop Team Z read lease became granted lease id `64` only after the
+  access gate was approved and completed.
+- Direct iTop readback showed the access request child ticket as `resolved`.

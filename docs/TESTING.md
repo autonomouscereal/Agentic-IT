@@ -1258,3 +1258,47 @@ Important fixes discovered during this rerun:
   `error_count: 0`, and `backpressure_count: 0`.
 - `report_phish/test_smtp_server.py` uses a Python 3.12-compatible socketserver
   SMTP sink instead of the removed stdlib `smtpd` module.
+
+## Permission And Provider Regression Rerun - 2026-05-14
+
+Remote result file:
+
+```text
+/tmp/soc_broad_deterministic_results.json
+```
+
+Passing suites:
+
+```text
+python3 -m unittest discover -s tests -p 'test_*.py'  # 78 tests
+python3 scripts/platform_doctor.py --base http://127.0.0.1:25480  # 18/18
+python3 scripts/smoke_provider_adapters.py http://127.0.0.1:25480 --itop-create
+python3 scripts/smoke_permission_provider_matrix.py http://127.0.0.1:25480 --manage-auth --repo /home/cereal/SOC_TESTING/soc-dashboard --model qwen/qwen3.6-27b
+python3 scripts/smoke_access_request_control_plane.py http://127.0.0.1:25480
+python3 scripts/smoke_agent_auditor.py http://127.0.0.1:25480
+python3 scripts/smoke_operational_metrics.py http://127.0.0.1:25480
+python3 scripts/smoke_auto_assignment_policy.py http://127.0.0.1:25480
+python3 scripts/smoke_change_auto_completion.py http://127.0.0.1:25480
+python3 scripts/smoke_service_desk_intake.py http://127.0.0.1:25480
+```
+
+Key evidence:
+
+- Permission matrix marker `PERMISSION_PROVIDER_MATRIX_1778768984`.
+- iTop parent ticket `511` provider ref `299`; access child `512` provider ref
+  `300`; iTop readback for child was `resolved`.
+- Agent `181` inherited scoped leases, denied forbidden GitLab/iTop leases with
+  `missing_agent_vault_lease`, then received granted iTop lease id `64` only
+  after approval/completion.
+- Provider adapter smoke created iTop `UserRequest` provider ref `297` and
+  iTop `Incident` provider ref `298`.
+- Service desk intake synced ticket `516` to the configured ticket provider.
+- Final `/api/agents/active` returned `0`.
+
+Local-model agentic caveat:
+
+- The current Qwen model aliases are not reliably emitting executable tools in
+  the Claude Code harness for the permission-wall curl flow.
+- Agent `180`, task `177`, marker `AGENTIC_PERMISSION_VAULT_1778768749`
+  failed fast with a runner stall message after no output. This is the desired
+  failure mode until a tool-capable local model/proxy is configured.

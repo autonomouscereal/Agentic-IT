@@ -163,6 +163,17 @@ Current behavior:
   Dev Y blocked from Dev Z ticket/lease, Dev Z scoped to both queues, GitLab
   `dev-y/*` lease allowed, GitLab `dev-z/app` lease denied with HTTP 403, no
   secret values returned, final active agent count `0`.
+- Latest local+iTop provider permission matrix, 2026-05-14: marker
+  `PERMISSION_PROVIDER_MATRIX_1778768984`, Dev Y local ticket `509`, Dev Z
+  restricted ticket `510`, iTop parent `511` / provider ref `299`, access child
+  `512` / provider ref `300`, agent `181`, GitLab Dev Y lease allowed, GitLab
+  Dev Z lease denied, iTop Team Y lease allowed, iTop Team Z lease denied then
+  granted as lease id `64`, and the iTop access child resolved in the provider.
+- Local-model caveat, 2026-05-14: Qwen `qwen/qwen3.6-27b` currently fails the
+  fully agentic permission-wall curl flow because it stalls without executable
+  tool calls. The runner now marks this as failed/stalled quickly instead of
+  silently hanging. Use the provider matrix for permission-boundary proof until
+  a tool-capable local model/proxy is configured.
 
 `/api/dashboard/ops-metrics` includes two separate SLA views:
 

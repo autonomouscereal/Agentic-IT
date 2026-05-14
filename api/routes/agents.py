@@ -25,6 +25,10 @@ except ImportError:  # unit-test stubs load this route without service package c
             return {"identity": {"username": "unit-test"}, "roles": ["platform-admin"], "capabilities": ["*"], "scopes": [], "max_classification": "secret"}
 
         @staticmethod
+        def ticket_access_decision(ticket, subject, required_permission="tickets:read"):
+            return {"allow": True, "reason": "unit_test_fallback"}
+
+        @staticmethod
         async def request_agent_vault_lease(*args, **kwargs):
             return {"allow": False, "error": "access_denied", "reason": "unit_test_fallback"}
 
@@ -192,13 +196,20 @@ async def spawn_agent(
     """Spawn a Claude Code agent to work on a ticket."""
     from services import agent_runner
 
+    ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
+    if not ticket:
+        return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:read",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
+
     # Default prompt if not provided
     if not prompt:
-        ticket = await fetchrow("SELECT title, description, itop_class FROM tickets WHERE id = $1", ticket_id)
-        if ticket:
-            prompt = f"Investigate and resolve this ticket: {ticket['title']}. Class: {ticket['itop_class']}. Description: {ticket['description'] or 'N/A'}"
-        else:
-            prompt = f"Investigate and resolve ticket #{ticket_id}"
+        prompt = f"Investigate and resolve this ticket: {ticket['title']}. Class: {ticket['itop_class']}. Description: {ticket['description'] or 'N/A'}"
 
     result = await agent_runner.spawn_agent(
         ticket_id,

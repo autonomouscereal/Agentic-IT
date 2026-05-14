@@ -394,6 +394,101 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertTrue(any("UPDATE tickets" in call[0] and call[1] == 85 and call[2] == 312 for call in executes))
         self.assertTrue(any(event[3] == "ticket_agent_reassigned_after_stop" for event in events))
 
+    def test_direct_spawn_checks_ticket_row_scope_before_runner(self):
+        module = load_agents_route()
+
+        async def fetchrow(query, *args):
+            if "SELECT * FROM tickets" in query:
+                return {
+                    "id": 412,
+                    "title": "hidden restricted ticket",
+                    "description": "not visible",
+                    "itop_class": "Incident",
+                    "owning_group": "Dev Team Z",
+                    "security_classification": "restricted",
+                }
+            return None
+
+        async def fail_spawn(*args, **kwargs):
+            raise AssertionError("runner must not be called when ticket scope denies spawn")
+
+        module.fetchrow = fetchrow
+        sys.modules["services"].agent_runner.spawn_agent = fail_spawn
+        module.access_control = types.SimpleNamespace(
+            subject_from_request=lambda request: {
+                "identity": {"username": "dev-y"},
+                "roles": ["analyst", "agent-operator"],
+                "capabilities": ["agents:spawn", "tickets:read"],
+                "scopes": [{"scope_type": "group", "scope_value": "Dev Team Y"}],
+                "max_classification": "confidential",
+            },
+            ticket_access_decision=lambda ticket, subject, required_permission="tickets:read": {
+                "allow": False,
+                "reason": "ticket_outside_subject_scope",
+            },
+        )
+
+        with self.assertRaises(module.HTTPException) as raised:
+            asyncio.run(module.spawn_agent(412, prompt="should not spawn"))
+
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(raised.exception.detail["reason"], "ticket_outside_subject_scope")
+
+    def test_ticket_assign_agent_forwards_requested_permissions(self):
+        module = load_tickets_route()
+        captured = {}
+
+        async def fetchrow(query, *args):
+            if "SELECT * FROM tickets" in query:
+                return {
+                    "id": 413,
+                    "title": "visible ticket",
+                    "description": "visible",
+                    "itop_class": "Incident",
+                    "owning_group": "Dev Team Y",
+                    "security_classification": "confidential",
+                }
+            if "SELECT id, status FROM agents" in query:
+                return None
+            return None
+
+        async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", actor_context=None, requested_permissions=None):
+            captured["ticket_id"] = ticket_id
+            captured["requested_permissions"] = requested_permissions
+            captured["actor_context"] = actor_context
+            return {"agent_id": 99, "task_id": 100}
+
+        async def log_event(*args, **kwargs):
+            return None
+
+        module.fetchrow = fetchrow
+        module.log_event = log_event
+        sys.modules["services"].agent_runner = types.SimpleNamespace(spawn_agent=spawn_agent)
+        module.access_control = types.SimpleNamespace(
+            subject_from_request=lambda request: {
+                "identity": {"username": "dev-y"},
+                "roles": ["analyst", "agent-operator"],
+                "capabilities": ["agents:spawn", "tickets:read", "tickets:note"],
+                "scopes": [{"scope_type": "group", "scope_value": "Dev Team Y"}],
+                "max_classification": "confidential",
+            },
+            ticket_access_decision=lambda ticket, subject, required_permission="tickets:read": {
+                "allow": True,
+                "reason": "owning_group_scope_match",
+            },
+        )
+
+        result = asyncio.run(module.assign_agent(
+            413,
+            prompt="permission envelope probe",
+            requested_permissions=["tickets:read", "access:admin"],
+        ))
+
+        self.assertEqual(result["agent_id"], 99)
+        self.assertEqual(captured["ticket_id"], 413)
+        self.assertEqual(captured["requested_permissions"], ["tickets:read", "access:admin"])
+        self.assertEqual(captured["actor_context"]["identity"]["username"], "dev-y")
+
     def test_list_agents_qualifies_status_and_ticket_filters(self):
         module = load_agents_route()
         queries = []
@@ -702,6 +797,32 @@ class AgentLifecycleGuardTests(unittest.TestCase):
 
         self.assertTrue(state["stalled"])
         self.assertIn("produced no output", state["reason"])
+        self.assertNotEqual(returncode, 0)
+
+    def test_watchdog_stops_malformed_tool_use_without_tool_payload(self):
+        module = load_agent_runner()
+
+        async def run_watchdog():
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-c",
+                "import time; time.sleep(30)",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            state = {"stalled": False, "reason": None}
+            activity = {
+                "last_output_at": module.time.monotonic(),
+                "malformed_tool_use_at": module.time.monotonic() - 2,
+            }
+            await module._terminate_after_no_output(process, 0.1, activity, state)
+            await process.wait()
+            return state, process.returncode
+
+        state, returncode = asyncio.run(run_watchdog())
+
+        self.assertTrue(state["stalled"])
+        self.assertIn("tool_use", state["reason"])
         self.assertNotEqual(returncode, 0)
 
     def test_ticket_priority_rank_orders_high_priority_before_low(self):

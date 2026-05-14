@@ -309,6 +309,7 @@ async def create_ticket_access_request(
     sync_provider: bool = Body(None),
     created_by: str = Body("agent-access-request"),
     request: Request = None,
+    lease_request: dict = Body(None),
 ):
     """Create an auditable access request and approval gate for a blocker.
 
@@ -338,6 +339,7 @@ async def create_ticket_access_request(
         risk_level=risk_level,
         sync_provider=sync_provider,
         created_by=created_by,
+        lease_request=lease_request,
     )
 
 @router.post("/{ticket_id}/sync")
@@ -462,6 +464,7 @@ async def assign_agent(
     ticket_id: int,
     model: str = Body("qwen/qwen3.6-27b"),
     prompt: str = Body(None),
+    requested_permissions: list = Body(None),
     request: Request = None,
 ):
     from services import agent_runner
@@ -493,6 +496,7 @@ async def assign_agent(
         model,
         prompt or build_ticket_resolution_prompt(ticket),
         actor_context=access_control.subject_from_request(request),
+        requested_permissions=requested_permissions,
     )
     await log_event("ticket", "info", "dashboard", "agent_assigned",
                     f"ticket_{ticket_id}", {"model": model, "agent_id": result.get("agent_id")})

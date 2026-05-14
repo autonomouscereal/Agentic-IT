@@ -89,6 +89,23 @@ async def _stream_reader(stream, label, output_path, task_id, agent_id, chunks, 
             if activity is not None:
                 activity["last_output_at"] = time.monotonic()
             text = line.decode("utf-8", errors="replace")
+            if activity is not None and label == "stdout":
+                try:
+                    event = json.loads(text)
+                except json.JSONDecodeError:
+                    event = {}
+                if event.get("type") == "assistant":
+                    content = ((event.get("message") or {}).get("content") or [])
+                    has_tool_use = any(
+                        isinstance(item, dict) and item.get("type") == "tool_use"
+                        for item in content
+                    )
+                    if (event.get("message") or {}).get("stop_reason") == "tool_use" and not has_tool_use:
+                        activity["malformed_tool_use_at"] = time.monotonic()
+                    elif has_tool_use or event.get("type") == "user":
+                        activity.pop("malformed_tool_use_at", None)
+                elif event.get("type") == "user":
+                    activity.pop("malformed_tool_use_at", None)
             rendered = text if label == "stdout" else f"[stderr] {text}"
             f.write(rendered)
             f.flush()
@@ -138,6 +155,26 @@ async def _terminate_after_no_output(process, stall_seconds, activity, state):
     while process.returncode is None:
         await asyncio.sleep(min(30, max(1, stall_seconds / 10)))
         if process.returncode is not None:
+            return
+        malformed_at = activity.get("malformed_tool_use_at")
+        if malformed_at and time.monotonic() - malformed_at >= min(stall_seconds, 90):
+            idle_seconds = time.monotonic() - malformed_at
+            state["stalled"] = True
+            state["reason"] = (
+                f"Agent emitted stop_reason=tool_use without an executable tool payload "
+                f"and made no tool progress for {int(idle_seconds)} seconds; "
+                "runner stopped the process to prevent a silent model/harness hang."
+            )
+            try:
+                process.terminate()
+                for _ in range(5):
+                    await asyncio.sleep(1)
+                    if process.returncode is not None:
+                        return
+                if process.returncode is None:
+                    process.kill()
+            except ProcessLookupError:
+                return
             return
         idle_seconds = time.monotonic() - activity.get("last_output_at", time.monotonic())
         if idle_seconds < stall_seconds:

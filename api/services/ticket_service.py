@@ -469,6 +469,7 @@ async def create_access_request(
     risk_level="medium",
     sync_provider=None,
     created_by="agent-access-request",
+    lease_request=None,
 ):
     """Create a child access request plus an approval gate for the original work.
 
@@ -525,6 +526,15 @@ async def create_access_request(
         "assignment_group": assignment_group,
         "auto_complete": False,
     }
+    if isinstance(lease_request, dict) and lease_request.get("system"):
+        approval_policy["lease_request"] = {
+            "system": lease_request.get("system"),
+            "resource_type": lease_request.get("resource_type") or "resource",
+            "resource_id": lease_request.get("resource_id") or "*",
+            "action": lease_request.get("action") or "read",
+            "credential_ref": lease_request.get("credential_ref"),
+            "expires_at": lease_request.get("expires_at"),
+        }
     change_id = await fetchval("""
         INSERT INTO change_requests (
             agent_id, ticket_id, action, target, reason, risk_level,
@@ -594,6 +604,7 @@ async def create_access_request(
             "resource": resource,
             "permission": permission,
             "assignment_group": assignment_group,
+            "lease_request": approval_policy.get("lease_request"),
         }))
     await log_event("access", "info", f"agent_{agent_id}" if agent_id else created_by,
                     "access_request_created", f"access_request_{access_request_id}", {

@@ -82,6 +82,52 @@ class ChangeApprovalResumeTests(unittest.TestCase):
 
         self.assertEqual(result, "")
 
+    def test_change_completion_returns_access_sync_evidence(self):
+        module = load_changes_module()
+        sync_calls = []
+
+        async def fetchrow(query, *args):
+            return {
+                "id": 146,
+                "agent_id": 172,
+                "ticket_id": 486,
+                "action": "Grant least-privilege account access",
+                "target": "iTop ticket team-z/incident-999",
+            }
+
+        async def execute(*args):
+            return None
+
+        async def log_event(*args, **kwargs):
+            return None
+
+        async def add_gate_note(*args, **kwargs):
+            return 99
+
+        async def sync_access(change, status, actor, evidence=None):
+            sync_calls.append((change, status, actor, evidence))
+            return {
+                "status": "granted",
+                "access_request_id": 6,
+                "granted_leases": [{"status": "granted", "agent_id": 172}],
+            }
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module.log_event = log_event
+        module._add_gate_note = add_gate_note
+        module._sync_access_request_status = sync_access
+
+        result = asyncio.run(module.complete_change(146, {
+            "completed_by": "agent_172",
+            "result": "lease grant proof",
+        }))
+
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["access_sync"]["status"], "granted")
+        self.assertEqual(result["access_sync"]["granted_leases"][0]["agent_id"], 172)
+        self.assertEqual(sync_calls[0][1:], ("completed", "agent_172", "lease grant proof"))
+
     def test_resume_skips_when_ticket_already_has_active_agent(self):
         module = load_changes_module()
         calls = []

@@ -164,7 +164,40 @@ The first command prints raw PostgreSQL seed SQL for demo users/scopes. The
 second command requires `DASHBOARD_AUTH_MODE=header` and
 `DASHBOARD_AUTH_ENFORCEMENT=enforce`.
 
-Latest live proof:
+Latest live proof, local+iTop provider matrix:
+
+- Marker: `PERMISSION_PROVIDER_MATRIX_1778768984`.
+- Dev Y local ticket `509`; Dev Z restricted negative-control ticket `510`.
+- Dev Y iTop parent ticket `511`, provider ref `299` / `R-000308`.
+- Access request child ticket `512`, provider ref `300` / `R-000309`.
+- Dev Y could not spawn an agent on hidden Dev Z scope through direct
+  `/api/agents/spawn`.
+- Dev Y spawned test agent `181` on its own ticket; over-broad requested
+  permissions were trimmed rather than blocking spawn.
+- GitLab `dev-y/app` lease allowed as lease id `61`.
+- GitLab `dev-z/app` lease denied with reason `missing_agent_vault_lease`.
+- iTop `team-y/incident-123` comment lease allowed as lease id `63`.
+- iTop `team-z/incident-999` read lease denied, then granted after access
+  approval as lease id `64` with credential ref
+  `<vault:itop_team_z_read_after_approval>` and no secret value returned.
+- iTop directly reported the access request provider object `R-000309` as
+  `resolved` after gate completion.
+- Final active agent count: `0`.
+
+Latest local-model agentic proof status:
+
+- Marker `AGENTIC_PERMISSION_VAULT_1778768749`, ticket `504`, agent `180`.
+- The agent received the correct bounded vault manifest and no Dev Z lease, but
+  the currently configured Qwen local model did not emit executable tool calls.
+- The runner now fails this state fast and audibly instead of silently hanging:
+  `Agent produced no output for 65 seconds; runner marked it stalled and stopped
+  the process to prevent a silent harness/model hang.`
+- No active agents or agent processes remained after the failed proof.
+- A complete local-model permission-wall/resume proof still requires a
+  tool-capable local model or proxy configuration. The control-plane/iTop
+  permission boundary itself is verified by the matrix above.
+
+Previous live proof:
 
 - Marker: `PERMISSION_VAULT_E2E_1778761664`.
 - Dev Team Y scoped ticket: `480`.
