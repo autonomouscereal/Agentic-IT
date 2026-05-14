@@ -123,3 +123,23 @@ Latest permission/vault provider proof, 2026-05-14:
 - Denied iTop Team Z read lease became granted lease id `64` only after the
   access gate was approved and completed.
 - Direct iTop readback showed the access request child ticket as `resolved`.
+
+Latest fully agentic first-alias permission/vault proof, 2026-05-14:
+
+- Marker `AGENTIC_PERMISSION_VAULT_1778778629`.
+- Parent ticket `525`, initial agent `190`, resumed agent `191`, access request
+  `12`, iTop child access ticket `527` / provider ref `304`, change gate `154`.
+- Agent `190` proved least privilege by receiving only GitLab `dev-y/*` read
+  lease `93`, then getting HTTP 403 / `missing_agent_vault_lease` for GitLab
+  `dev-z/app` read. It wrote the permission-wall note, created the iTop-synced
+  child access request with a `lease_request`, and stopped at
+  `awaiting_access` instead of borrowing broader credentials.
+- After approval, agent `191` completed change `154`, which moved access
+  request `12` to `granted`, resolved the iTop child ticket, and minted scoped
+  Dev Z leases for agents `190` and `191`.
+- Agent `191` then re-requested its own GitLab `dev-z/app` read lease and got
+  `allow: true`, lease `99`, credential ref
+  `<vault:gitlab_dev_z_read_after_approval>`, and `credential_value: null`.
+  It wrote final evidence, resolved parent ticket `525`, wrote final checkpoint
+  `vault-access-complete-AGENTIC_PERMISSION_VAULT_1778778629`, and exited with
+  task `188` completed at 100%.

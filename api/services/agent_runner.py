@@ -197,6 +197,33 @@ async def _terminate_after_no_output(process, stall_seconds, activity, state):
         return
 
 
+async def _terminate_after_blocking_checkpoint(process, work_dir, activity, state, poll_seconds=5, grace_seconds=5):
+    while process.returncode is None:
+        await asyncio.sleep(poll_seconds)
+        if process.returncode is not None:
+            return
+        checkpoint = _read_checkpoint_sync(work_dir)
+        if not _checkpoint_blocks_completion(checkpoint):
+            continue
+        state["checkpoint"] = checkpoint
+        state["reason"] = (
+            "Agent wrote a durable wait checkpoint; runner stopped the owned "
+            "harness process so approval/resume handling can continue."
+        )
+        activity["last_output_at"] = time.monotonic()
+        try:
+            process.terminate()
+            for _ in range(max(1, int(grace_seconds))):
+                await asyncio.sleep(1)
+                if process.returncode is not None:
+                    return
+            if process.returncode is None:
+                process.kill()
+        except ProcessLookupError:
+            return
+        return
+
+
 def _write_checkpoint(work_dir, task_id, step, status, output, progress_pct):
     checkpoint_path = os.path.join(work_dir, "checkpoint.json")
     with open(checkpoint_path, "w", encoding="utf-8") as f:
@@ -1018,8 +1045,12 @@ async def _run_agent(work_dir, prompt, task_id):
         chunks = []
         activity = {"last_output_at": time.monotonic()}
         idle_state = {"stalled": False, "reason": None}
+        checkpoint_state = {"checkpoint": None, "reason": None}
         idle_task = asyncio.create_task(
             _terminate_after_no_output(process, AGENT_NO_OUTPUT_STALL_SECONDS, activity, idle_state)
+        )
+        checkpoint_task = asyncio.create_task(
+            _terminate_after_blocking_checkpoint(process, work_dir, activity, checkpoint_state)
         )
         stdout_task = asyncio.create_task(
             _stream_reader(process.stdout, "stdout", output_path, task_id, agent_id, chunks, activity)
@@ -1034,20 +1065,25 @@ async def _run_agent(work_dir, prompt, task_id):
             else:
                 await process.wait()
             idle_task.cancel()
+            checkpoint_task.cancel()
+            await asyncio.gather(idle_task, checkpoint_task, return_exceptions=True)
             await asyncio.gather(stdout_task, stderr_task)
             output = "".join(chunks)
             return {
                 "exit_code": process.returncode,
                 "stdout": output,
-                "stderr": idle_state["reason"] or "",
+                "stderr": checkpoint_state["reason"] or idle_state["reason"] or "",
                 "no_output_stalled": idle_state["stalled"],
+                "blocking_checkpoint": checkpoint_state["checkpoint"],
             }
         except asyncio.TimeoutError:
             process.kill()
             await process.wait()
             idle_task.cancel()
+            checkpoint_task.cancel()
             stdout_task.cancel()
             stderr_task.cancel()
+            await asyncio.gather(idle_task, checkpoint_task, stdout_task, stderr_task, return_exceptions=True)
             return {
                 "exit_code": -1,
                 "stdout": _tail_text("".join(chunks)),
@@ -1528,12 +1564,36 @@ async def get_process_snapshot():
             line for line in lines[1:]
             if "claude" in line.lower() or "node" in line.lower() or "bun" in line.lower()
         ]
+        observed_pids = set()
+        for row in rows:
+            parts = row.split(None, 1)
+            if not parts:
+                continue
+            try:
+                observed_pids.add(int(parts[0]))
+            except ValueError:
+                continue
+        active_task_ids = set(_active_processes.keys())
+        try:
+            pid_tasks = await fetchall(
+                """
+                SELECT id, pid
+                FROM agent_tasks
+                WHERE status IN ('queued', 'running')
+                  AND pid IS NOT NULL
+                """
+            )
+            for task in pid_tasks:
+                if task.get("pid") in observed_pids:
+                    active_task_ids.add(task["id"])
+        except Exception:
+            pass
         return {
             "ps_path": ps_path,
             "exit_code": completed.returncode,
             "header": header,
             "processes": rows,
-            "active_processes": list(_active_processes.keys()),
+            "active_processes": sorted(active_task_ids),
         }
     except Exception as exc:
         return {

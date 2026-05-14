@@ -4,6 +4,180 @@ Last updated: 2026-05-14.
 
 ## Found In Current Permission-Proof Pass
 
+### Agent can write a durable access-wait checkpoint but fail to exit
+
+Status: fixed, deployed, and live-verified on 2026-05-14.
+
+Problem:
+
+During first-alias permission-vault proof `AGENTIC_PERMISSION_VAULT_1778778629`,
+agent `190` correctly created access request `12`, iTop child ticket `527`
+/ provider ref `304`, and change gate `154`. It then wrote
+`checkpoint.json` with step
+`waiting-for-vault-access-AGENTIC_PERMISSION_VAULT_1778778629`, status
+`waiting_for_access`, and progress `45`, but the harness process remained open.
+Because the runner only mirrors the blocking checkpoint after process exit, the
+dashboard continued to show task `187` as `running` and agent `190` as
+`working` instead of moving them to `awaiting_access`.
+
+Impact:
+
+The permission boundary itself worked and the iTop-synced access request was
+created, but the approval/resume path was blocked by harness lifecycle behavior
+after the durable wait checkpoint had already been written.
+
+Fix:
+
+The runner should monitor `checkpoint.json` while the process is still running.
+When a durable blocking checkpoint such as `waiting_for_access` appears, it
+should persist the checkpoint, move the task and agent to the mapped wait state,
+and terminate only that owned harness process so the approval/resume workflow
+can continue without waiting for the one-hour no-output timeout.
+
+Implemented as `_terminate_after_blocking_checkpoint` in
+`api/services/agent_runner.py`. The API image was rebuilt after active agent
+count reached `0`, `AGENT_NO_OUTPUT_STALL_SECONDS` remained `3600`, focused
+lifecycle tests passed, and full remote unittest discovery passed 81/81.
+
+### Stale API bytecode hid the active process reconciliation fix
+
+Status: fixed, deployed, and verified on 2026-05-14.
+
+Problem:
+
+During first-alias permission-vault proof `AGENTIC_PERMISSION_VAULT_1778778629`,
+agent `190` / task `187` was actively running with container PID `19`, and the
+database task row also stored PID `19`. The source file on disk included the
+DB-backed process reconciliation fix, but importing `services.agent_runner`
+inside the API container showed `get_process_snapshot.__code__.co_names`
+without `fetchall`, proving the interpreter was still executing stale bytecode.
+As a result, `/api/agents/processes` still returned `active_processes: []`
+while the raw `processes` list showed the active Claude/Qwen process.
+
+Impact:
+
+The active agent was not interrupted and the raw process stream still showed
+what was running, but the structured `active_processes` field was unreliable
+until the stale bytecode is cleared and the API imports the updated module.
+
+Fix:
+
+After the active first-alias permission proof completes, remove the stale
+`__pycache__` entry for `agent_runner.py`, restart only the dashboard API while
+no agents are active, and verify `get_process_snapshot.__code__.co_names`
+includes `fetchall` plus `/api/agents/processes` reports the expected task id
+during the next active run.
+
+Completed after ticket `525` proof finished: active agents were `0`, stale
+`agent_runner` bytecode was removed from host/container paths, the API image was
+rebuilt from updated host source, and in-container import verification returned
+`fetchall_in_get_process_snapshot=True` and `checkpoint_watcher_present=True`.
+
+### Permission-vault demo wrapper reported pass before resumed task terminal state flushed
+
+Status: fixed, deployed, and verified on 2026-05-14.
+
+Problem:
+
+The first-alias permission-vault proof completed successfully, but the wrapper
+summary printed `task_status: running` and `task_progress: 40` even though the
+dashboard later showed resumed agent `189` / task `186` as `completed` at 100%.
+The wrapper declared success as soon as the ticket was resolved, the final note
+was visible, and the access request was granted.
+
+Impact:
+
+The control-plane behavior was correct, but demo/test output could look
+inconsistent because the wrapper did not wait for the resumed task terminal
+state and final checkpoint to flush before printing the pass summary.
+
+Fix:
+
+Require the resumed task to reach `completed` with 100% progress and the final
+`ACCESS LEASE GRANTED` checkpoint before `agentic_permission_vault_access_demo.py`
+prints `status: passed`.
+
+Implemented and covered by
+`tests.test_permission_vault_demo.PermissionVaultDemoTests.test_wait_completion_requires_resumed_task_terminal_checkpoint`.
+The live first-alias wrapper did not print `status: passed` until agent `191`
+/ task `188` completed at 100% with final checkpoint
+`vault-access-complete-AGENTIC_PERMISSION_VAULT_1778778629`.
+
+### Agent process endpoint omits active_processes for container-spawned subject runs
+
+Status: documented on 2026-05-14.
+
+Problem:
+
+During first-alias permission-vault proof `AGENTIC_PERMISSION_VAULT_1778773989`,
+agent `188` / task `185` was running with PID `265`. `/api/agents/processes`
+listed the Claude command in `processes`, but returned `active_processes: []`.
+
+Impact:
+
+Operators can still see the process in the raw process list, but the structured
+`active_processes` field under-reports active work for subject-spawned
+container runs. This makes active process monitoring less reliable for
+agentic permission tests and demos.
+
+Expected fix:
+
+Normalize PID/task matching for agents spawned from inside the API container
+through subject-aware runner paths so `active_processes` includes the task id
+when the stored task PID is present in the process list.
+
+### Abandoned model-matrix wrapper started a non-primary alias after scope changed
+
+Status: documented on 2026-05-14.
+
+Problem:
+
+An earlier local-model matrix wrapper continued running after the test scope was
+narrowed to only `qwen/qwen3.6-27b`. It spawned agents `184`, `185`, and `186`
+for `qwen/qwen3.6-27b2`, `qwen/qwen3.6-27b3`, and `qwen/qwen3.6-27b4` on
+tickets `518`, `519`, and `520` with the older short matrix wait settings.
+
+Impact:
+
+This violated the current first-alias-only test scope and could consume agent
+runner/model capacity while the permission proof is supposed to focus only on
+the primary alias. It was verified by inspecting the remote process tree before
+taking action. The matrix controller PID was `3634350`; stopping only child
+smoke scripts allowed it to advance once per child, so the controller must be
+stopped before the active child.
+
+Expected fix:
+
+Do not start multi-alias matrix wrappers during first-alias permission proof
+runs. If a scope change happens mid-run, identify the wrapper command and stop
+only the verified out-of-scope wrapper/agent lane. Keep
+`AGENT_NO_OUTPUT_STALL_SECONDS=3600`; do not shorten runner no-output timeout
+to accelerate model testing.
+
+### Restoring runner timeout during active smoke killed test agent
+
+Status: documented on 2026-05-14.
+
+Problem:
+
+- A previous interrupted model-alias matrix left `qwen/qwen3.6-27b` smoke agent
+  `183` running on ticket `517`, task `180`.
+- Restoring the live environment from `AGENT_NO_OUTPUT_STALL_SECONDS=120` back
+  to `3600` required `docker compose up -d api`, which recreated the API
+  container and terminated that active test-lane process.
+
+Impact:
+
+- Even when correcting configuration, API restarts kill active dashboard-owned
+  agent subprocesses. This invalidates the active agentic test and should never
+  be used as a casual way to change runner knobs during live proof runs.
+
+Follow-up rule:
+
+- Before any API restart/rebuild/config restore, check `/api/agents/active` and
+  `/api/agents/processes`. If any agent is active, either wait for it, explicitly
+  document and stop only the current test-owned lane, or defer the restart.
+
 ### Direct agent spawn skipped ticket row-scope checks
 
 Status: fixed locally, deployed, and live-verified on 2026-05-14.

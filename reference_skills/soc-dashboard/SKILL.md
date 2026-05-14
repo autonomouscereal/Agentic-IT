@@ -187,11 +187,26 @@ Current behavior:
   `512` / provider ref `300`, agent `181`, GitLab Dev Y lease allowed, GitLab
   Dev Z lease denied, iTop Team Y lease allowed, iTop Team Z lease denied then
   granted as lease id `64`, and the iTop access child resolved in the provider.
-- Local-model caveat, 2026-05-14: Qwen `qwen/qwen3.6-27b` currently fails the
-  fully agentic permission-wall curl flow because it stalls without executable
-  tool calls. The runner now marks this as failed/stalled quickly instead of
-  silently hanging. Use the provider matrix for permission-boundary proof until
-  a tool-capable local model/proxy is configured.
+- Latest fully agentic first-alias permission/vault proof, 2026-05-14: marker
+  `AGENTIC_PERMISSION_VAULT_1778778629`, parent ticket `525`, initial agent
+  `190`, resumed agent `191`, access request `12`, iTop access child `527`
+  / provider ref `304`, and change gate `154`. Agent `190` spawned under
+  Dev Team Y, got GitLab `dev-y/*` read lease `93`, was denied GitLab
+  `dev-z/app` read with `missing_agent_vault_lease`, wrote the permission wall
+  note, created the iTop-synced access request, and stopped at
+  `awaiting_access`. After approval, agent `191` completed change `154`,
+  minted scoped Dev Z leases `98`/`99` for the original and resumed agents,
+  re-requested its own Dev Z lease and received only
+  `<vault:gitlab_dev_z_read_after_approval>` with `credential_value: null`,
+  resolved parent ticket `525`, resolved access child `527` in iTop, wrote
+  final checkpoint `vault-access-complete-AGENTIC_PERMISSION_VAULT_1778778629`,
+  and exited cleanly. Wrapper result: `status: passed`, `task_status:
+  completed`, `task_progress: 100`, final active agent count `0`.
+- Runner hardening from that proof: `_terminate_after_blocking_checkpoint`
+  watches owned harness workdirs for durable wait checkpoints such as
+  `waiting_for_access` and stops only that owned harness process so approval
+  and resume can continue. `/api/agents/processes` reconciles active task IDs
+  from stored DB PIDs as well as the in-memory process map.
 
 `/api/dashboard/ops-metrics` includes two separate SLA views:
 

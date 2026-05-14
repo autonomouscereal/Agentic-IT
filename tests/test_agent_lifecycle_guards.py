@@ -269,6 +269,87 @@ def load_postmortems_route():
 
 
 class AgentLifecycleGuardTests(unittest.TestCase):
+    def test_blocking_checkpoint_watcher_terminates_owned_process(self):
+        module = load_agent_runner()
+
+        class FakeProcess:
+            def __init__(self):
+                self.returncode = None
+                self.terminated = False
+                self.killed = False
+
+            def terminate(self):
+                self.terminated = True
+                self.returncode = -15
+
+            def kill(self):
+                self.killed = True
+                self.returncode = -9
+
+        process = FakeProcess()
+        activity = {"last_output_at": 1}
+        state = {}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_path = Path(tmpdir) / "checkpoint.json"
+            checkpoint_path.write_text(
+                (
+                    '{"step":"waiting-for-vault-access-unit",'
+                    '"status":"waiting_for_access",'
+                    '"output":"waiting for approved lease",'
+                    '"progress_pct":45}'
+                ),
+                encoding="utf-8",
+            )
+
+            asyncio.run(
+                module._terminate_after_blocking_checkpoint(
+                    process,
+                    tmpdir,
+                    activity,
+                    state,
+                    poll_seconds=0.01,
+                    grace_seconds=1,
+                )
+            )
+
+        self.assertTrue(process.terminated)
+        self.assertFalse(process.killed)
+        self.assertEqual(state["checkpoint"]["status"], "waiting_for_access")
+        self.assertIn("durable wait checkpoint", state["reason"])
+
+    def test_process_snapshot_includes_db_pid_matches(self):
+        module = load_agent_runner()
+
+        class Completed:
+            returncode = 0
+            stdout = (
+                "    PID    PPID STAT     ELAPSED COMMAND         COMMAND\n"
+                "    265     258 Sl         01:48 claude          claude --model qwen/qwen3.6-27b\n"
+            )
+
+        async def fetchall(query, *args):
+            self.assertIn("FROM agent_tasks", query)
+            return [
+                {"id": 185, "pid": 265},
+                {"id": 186, "pid": 999999},
+            ]
+
+        original_which = module.shutil.which
+        original_run = module.subprocess.run
+        try:
+            module.shutil.which = lambda name: "/usr/bin/ps"
+            module.subprocess.run = lambda *args, **kwargs: Completed()
+            module.fetchall = fetchall
+            module._active_processes = {184: object()}
+
+            result = asyncio.run(module.get_process_snapshot())
+
+            self.assertEqual(result["active_processes"], [184, 185])
+            self.assertEqual(len(result["processes"]), 1)
+        finally:
+            module.shutil.which = original_which
+            module.subprocess.run = original_run
+
     def test_provider_close_retries_transient_itop_invalid_stimulus(self):
         module = load_agent_runner()
         calls = []

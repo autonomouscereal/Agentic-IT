@@ -186,21 +186,28 @@ def wait_completion(base, ticket_id, marker, timeout=3600):
         notes = "\n".join(row.get("body") or "" for row in context.get("notes") or [])
         access = context.get("access_requests") or []
         granted = any(row.get("status") == "granted" for row in access)
+        agent_id = ticket.get("agent_id")
+        task = latest_task(base, agent_id) if agent_id else {}
+        task_done = (
+            task.get("status") == "completed"
+            and int(task.get("progress_pct") or 0) >= 100
+            and f"ACCESS LEASE GRANTED {marker}" in (task.get("checkpoints") or "")
+        )
         complete = (
             ticket.get("status") == "resolved"
             and granted
             and f"ACCESS LEASE GRANTED {marker}" in notes
+            and task_done
         )
         if complete:
             return context
-        agent_id = ticket.get("agent_id")
-        if agent_id:
-            task = latest_task(base, agent_id)
-            if task.get("status") in ("failed", "stopped", "terminated"):
-                raise RuntimeError(f"agent {agent_id} ended before completion: {task}")
+        if task.get("status") in ("failed", "stopped", "terminated"):
+            raise RuntimeError(f"agent {agent_id} ended before completion: {task}")
         last = {
             "ticket_status": ticket.get("status"),
             "granted": granted,
+            "task_status": task.get("status"),
+            "task_progress": task.get("progress_pct"),
             "note_tail": notes[-500:],
         }
         time.sleep(15)
