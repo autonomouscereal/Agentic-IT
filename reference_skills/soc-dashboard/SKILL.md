@@ -1,11 +1,11 @@
 ---
 name: soc-dashboard
 description: >
-  SOC Dashboard — FastAPI + PostgreSQL + vanilla JS monitoring platform for the AI Server (192.168.50.222).
-  Mirrors iTop tickets via bidirectional sync, orchestrates AI agents for ticket resolution,
-  manages change approvals, monitors tool health, and provides real-time WebSocket updates.
-  Use when checking dashboard status, API endpoints, agent state, ticket sync, change requests,
-  tool health, audit log, or deploying frontend/backend changes.
+  SOC Dashboard / autonomous enterprise operations control plane - FastAPI + PostgreSQL + vanilla JS
+  platform for the AI Server (192.168.50.222). The current SOC dashboard is the seed proof
+  for a broader one-line installed agentic enterprise operations layer that can route IT,
+  SOC, DevOps, service desk, IAM, cloud, network, compliance, maintenance, and self-repair
+  work to governed agents.
 allowed-tools:
   - Read
   - Bash(python *)
@@ -13,13 +13,31 @@ allowed-tools:
   - Bash(find *)
 ---
 
-# SOC Dashboard
+# SOC Dashboard / Enterprise Operations Control Plane
 
-Unified SOC monitoring platform deployed on the AI Server. Mirrors iTop tickets, orchestrates AI agents, manages change approvals, monitors tool health, and provides real-time WebSocket updates.
+Unified SOC/IT proof deployment for the autonomous enterprise operations control
+plane on the AI Server. Mirrors iTop tickets, orchestrates AI agents, manages
+approvals and access requests, monitors tool health, and provides real-time
+updates. The current SOC scope is the seed; the platform goal is a governed
+agentic layer that can eventually operate or replace broad enterprise IT,
+security, DevOps, service desk, IAM, cloud, network, compliance, maintenance,
+and internal tooling work.
 
 ## Project Mental Model
 
-This is the control plane for a provider-agnostic agentic IT/SOC replacement platform, not merely a monitoring dashboard. The dashboard owns canonical operational state: tickets, notes, attachments, agent tasks, prompts, checkpoints, logs, model selection, change approvals, workflows, postmortems, skills, knowledge articles, tool health, setup plans, and audit/event history.
+This is the control plane for a provider-agnostic autonomous enterprise
+operations platform, not merely a monitoring dashboard. The dashboard owns
+canonical operational state: tickets, alerts, requests, notes, attachments,
+agent tasks, prompts, checkpoints, logs, model selection, change approvals,
+access requests, scoped credential leases, workflows, postmortems, skills,
+knowledge articles, tool health, setup plans, and audit/event history.
+
+The north star is a one-line installed, local/private, governed agentic
+operations layer that can replace or radically reduce human labor across
+enterprise IT, SOC/security, DevOps, service desk, IAM, infrastructure, network,
+cloud, compliance, maintenance, and internal tooling. SOC is the first proof
+domain because it exercises tickets, alerts, logs, identity, approvals,
+remediation, evidence, and postmortems.
 
 All concrete products are replaceable providers or reference modules. iTop, Wazuh, Zeek, Suricata, Mailcow, Keycloak, GitLab, SearXNG, and the AI proxy are the current lab/reference stack on `192.168.50.222`; ServiceNow, Jira, Splunk, Sentinel, Defender, CrowdStrike, Exchange, Gmail, Proofpoint, Okta, GitHub, Azure DevOps, Jenkins, and similar tools should be integrated through provider adapters without changing the canonical dashboard contract.
 

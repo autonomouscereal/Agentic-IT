@@ -1,6 +1,16 @@
-# SOC Dashboard
+# Autonomous Enterprise Operations Control Plane
 
-FastAPI + raw PostgreSQL + vanilla JS control plane for a modular, product-agnostic agentic IT/SOC platform. The local open-source stack is a reference deployment; customer environments can integrate existing ITSM, SIEM, EDR, IAM, email, and CI/CD products through provider adapters.
+FastAPI + raw PostgreSQL + vanilla JS control plane for a modular,
+product-agnostic autonomous enterprise operations platform. The current SOC
+dashboard is the first proof domain: it starts with ITSM, SOC, DevSecOps, IAM,
+email, and infrastructure operations, but the long-term goal is a one-line
+installed agentic layer that can operate or replace broad enterprise IT work
+with scoped agents, approval gates, audit evidence, and continuous learning.
+
+The local open-source stack is a reference deployment, not the product boundary.
+Customer environments can integrate existing ITSM, SIEM, EDR, IAM, email,
+cloud, network, SaaS, and CI/CD products through provider adapters, or deploy
+approved reference modules when those capabilities are missing.
 
 ## Current Deployment
 
@@ -12,6 +22,7 @@ FastAPI + raw PostgreSQL + vanilla JS control plane for a modular, product-agnos
 
 ## Documentation Map
 
+- [Autonomous Enterprise Operations Vision](docs/ENTERPRISE_OPERATIONS_VISION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Full Platform Blueprint](docs/FULL_PLATFORM.md)
 - [One-Line Installer](docs/ONE_LINE_INSTALLER.md)
@@ -38,7 +49,14 @@ FastAPI + raw PostgreSQL + vanilla JS control plane for a modular, product-agnos
 
 ## Agent Runner
 
-The dashboard owns canonical tickets, notes, postmortems, workflows, approvals, and audit logs in PostgreSQL. External ticketing systems are providers behind that canonical model; iTop is the current provider, while local-only tickets are used for tests and demos. Future providers such as ServiceNow or Jira should implement the same provider interface instead of changing dashboard routes or frontend code.
+The dashboard owns canonical enterprise work state: tickets, requests, alerts,
+tasks, notes, postmortems, workflows, approvals, credential leases, and audit
+logs in PostgreSQL. External systems are providers behind that canonical model;
+iTop is the current ticketing provider, while local-only tickets are used for
+tests and demos. Future providers such as ServiceNow, Jira, GitHub, Entra,
+Okta, Splunk, Sentinel, Defender, CrowdStrike, AWS, Azure, GCP, Kubernetes,
+M365, and network/security tools should implement provider or skill adapters
+instead of changing dashboard route contracts.
 
 ## Platform Setup
 

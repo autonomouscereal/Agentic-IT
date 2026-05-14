@@ -1,6 +1,14 @@
 # Module Registry
 
-`platform/manifest.json` is the setup source of truth. It lets the dashboard build product-agnostic deployment plans from capabilities rather than hardcoding one stack.
+`platform/manifest.json` is the setup source of truth. It lets the dashboard
+build product-agnostic deployment plans from capabilities rather than hardcoding
+one stack.
+
+The registry is not limited to SOC tools. It is the capability catalog for an
+autonomous enterprise operations platform. Current modules prove the SOC/IT
+seed domain, while future modules should cover service desk, IAM, endpoint,
+network, cloud, DevOps, databases, storage, backup, compliance, collaboration,
+SaaS administration, and internal tool replacement.
 
 ## Status Values
 
@@ -22,6 +30,11 @@
 Every module should describe the capability it provides, not just the product name. For example, Mailcow is the reference email platform, but the real capability is email intake, mailbox context, and phishing-report handling. A customer mail security provider should be able to replace Mailcow by implementing that capability through an adapter.
 
 Provider-contract modules are intentionally separate from reference products. Mark a provider contract as existing when the customer already has a product for that capability, then either exclude the matching reference module or leave it as a test/sandbox deployment.
+
+Late-game modules may replace existing SaaS/tool categories with agent-built or
+agent-operated internal tools. That should still be represented as a capability:
+the platform replaces how the work is done without changing the canonical work,
+approval, audit, and permission contracts.
 
 ## Agent Memory Module
 

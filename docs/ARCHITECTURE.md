@@ -1,12 +1,21 @@
-# SOC Dashboard Architecture
+# Autonomous Enterprise Operations Architecture
 
-Last updated: 2026-05-11.
+Last updated: 2026-05-14.
 
 ## Purpose
 
-SOC Dashboard is the control plane for the agentic SOC system. It is designed to be:
+The current SOC Dashboard is the first deployed control plane for a broader
+autonomous enterprise operations platform. SOC/ITSM is the seed domain because
+it exercises alerts, tickets, logs, identity, approvals, remediation, evidence,
+and postmortems, but the architecture is intended to scale toward replacing or
+radically reducing enterprise IT/security/DevOps/service-desk labor with
+governed agents.
 
-- ticketing-system agnostic
+The control plane is designed to be:
+
+- work-intake agnostic: tickets, alerts, chat, email, schedules, CI/CD, direct
+  operator prompts, and future business-operation triggers
+- ticketing-system and provider agnostic
 - agent-harness agnostic
 - local-model or cloud-model compatible
 - approval-gated for risky work
@@ -28,10 +37,12 @@ The current implementation uses iTop and Claude Code because those are the activ
 | Approval system | Dashboard `change_requests` table/API | Can later sync to external CAB/change platforms |
 | Memory/learning | Skills, KB, workflows, postmortems | Can later ingest external KB/tickets/docs |
 | Email provider | Mailcow reference stack plus optional API shim | Exchange, Gmail, Proofpoint, Mimecast, or another email/security adapter |
+| Enterprise providers | Current SOC/IT reference modules | Cloud, network, endpoint, SaaS, identity, code, storage, backup, and monitoring adapters |
 
 ## Canonical Data Model
 
-The dashboard owns canonical records. External systems mirror into or out of those records.
+The dashboard owns canonical records for enterprise work. External systems
+mirror into or out of those records.
 
 Core tables:
 
@@ -48,6 +59,13 @@ Core tables:
 - `agent_skills`: prompt-level reusable capabilities.
 - `audit_log` and `event_log`: durable action/event history.
 - `tools` and `tool_checks`: tool inventory and health checks.
+
+As the platform broadens, the same model should expand around an enterprise
+ontology: users, groups, roles, org units, assets, apps, services, repos,
+environments, networks, data classifications, system owners, providers,
+policies, runbooks, and approval authorities. Those objects let agents reason
+about enterprise work beyond SOC tickets without hardcoding each customer's
+tooling.
 
 Provider metadata on `tickets`:
 

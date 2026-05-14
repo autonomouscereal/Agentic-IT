@@ -1,10 +1,19 @@
 # Demo Runbook
 
-Last updated: 2026-05-11.
+Last updated: 2026-05-14.
 
 ## Demo Goal
 
-Show that this is not code completion and not a static playbook system. The dashboard is a control plane for agentic work:
+Show that this is not code completion and not a static playbook system. The SOC
+deployment is the first proof of an autonomous enterprise operations platform:
+a one-line installed, local/private control plane that turns enterprise work
+into governed agent work.
+
+The demo should explicitly frame SOC as the seed domain. The same primitives
+apply to service desk, IAM, endpoint, network, cloud, DevOps, compliance,
+maintenance, and eventually internal replacement of SaaS/tool categories.
+
+The dashboard is a control plane for agentic work:
 
 - canonical tickets
 - provider sync
@@ -15,6 +24,17 @@ Show that this is not code completion and not a static playbook system. The dash
 - postmortems
 - reusable workflow creation
 - human-readable ticket notes and full audit drill-downs
+
+The deeper story is:
+
+- One install can connect to existing tools or deploy reference modules for gaps.
+- Agents can work ad hoc tasks, alerts, scheduled maintenance, CI/CD events, and
+  user requests.
+- Agents do not inherit blanket admin power; they receive scoped leases and hit
+  permission walls when outside scope.
+- Risky actions are approval-gated.
+- Completed work becomes reusable knowledge, workflows, tests, and skills.
+- The platform can expand from SOC to the rest of enterprise operations.
 
 ## Activity Trail For Demos
 
@@ -227,3 +247,6 @@ Suggested longer demo:
 - The model can run local or cloud through a proxy/harness abstraction.
 - iTop is a provider, not the architecture.
 - Claude Code is a harness, not the architecture.
+- SOC is the first proof area, not the final product boundary.
+- The long-term product is an agentic enterprise operations layer that can
+  replace broad IT/security/DevOps/service-desk labor through governed agents.

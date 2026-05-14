@@ -1,6 +1,15 @@
 # One-Line Installer
 
-The installer deploys the control plane and writes an initial setup plan. It does not assume the customer wants the reference open-source stack. Product choices are made in the Setup page and tracked as tickets.
+The installer deploys the autonomous enterprise operations control plane and
+writes an initial setup plan. It does not assume the customer wants the
+reference open-source stack. Product choices are made in the Setup page and
+tracked as auditable work items.
+
+The near-term installer proves the SOC/IT seed domain. The long-term installer
+is the bootstrap for a private agentic operations layer that can connect to an
+existing enterprise, deploy approved reference modules for missing capabilities,
+and start routing IT, security, DevOps, cloud, network, service desk,
+compliance, and maintenance work to governed agents.
 
 ## Local Linux Install
 
@@ -57,9 +66,11 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
 
 1. Open the dashboard URL printed by the installer.
 2. Go to Setup.
-3. Mark existing products by capability, for example existing ServiceNow, Splunk, Defender, Proofpoint, Okta, or GitHub.
+3. Mark existing products by capability, for example existing ServiceNow,
+   Splunk, Defender, Proofpoint, Okta, GitHub, Entra ID, AWS, Azure, GCP,
+   Kubernetes, M365, or network/security tooling.
 4. Leave reference modules enabled only for gaps you want the platform to deploy.
-5. Create a setup ticket.
+5. Create a setup ticket/work item.
 6. Assign an agent only after the AI endpoint and approval policy are ready.
 
 The setup ticket becomes the auditable deployment record. Agents must request changes before modifying infrastructure.
