@@ -82,3 +82,15 @@ Expected proof: the first agent stops at `waiting_for_access`, an access request
 ticket and approval gate are created, approval resumes a new ticket agent, the
 resumed agent completes the grant gate with evidence, writes the final note, and
 explicitly resolves the original ticket through the ticket status endpoint.
+
+Latest live proof, 2026-05-14:
+
+- Parent ticket `476` used marker `ACCESS_RESUME_1778725601`.
+- First agent `168` created access request `4`, iTop access ticket `477`
+  / provider ref `289`, and change `144`, then stopped at `awaiting_access`
+  with checkpoint `waiting-for-access-ACCESS_RESUME_1778725601`.
+- `access-demo-approver` approved change `144`, which spawned resumed agent
+  `169`.
+- Agent `169` completed the approved access grant with lab-safe evidence,
+  changed access request `4` to `granted`, wrote final
+  `ACCESS RESUME COMPLETE` notes, and resolved parent ticket `476`.

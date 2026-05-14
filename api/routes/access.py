@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Body, Request
-import os
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.event_logger import log_event
+from services import access_control
 
 router = APIRouter(prefix="/api/access", tags=["access"])
 
@@ -28,22 +28,10 @@ async def ensure_defaults():
         )
 
 
-def _request_identity(request):
-    return {
-        "username": request.headers.get("x-auth-request-user")
-        or request.headers.get("x-forwarded-user")
-        or "local-admin",
-        "email": request.headers.get("x-auth-request-email")
-        or request.headers.get("x-forwarded-email"),
-        "provider": request.headers.get("x-auth-provider") or "local",
-        "auth_mode": os.getenv("DASHBOARD_AUTH_MODE", "disabled"),
-    }
-
-
 @router.get("/me")
 async def me(request: Request):
     await ensure_defaults()
-    identity = _request_identity(request)
+    identity = access_control.request_identity(request)
     roles = []
     if identity["auth_mode"] == "disabled":
         roles = ["platform-admin"]
@@ -148,18 +136,21 @@ async def set_user_roles(user_id: int, roles: list = Body(...)):
 @router.get("/policies")
 async def policies():
     return {
-        "auth_mode": os.getenv("DASHBOARD_AUTH_MODE", "disabled"),
-        "enforcement": os.getenv("DASHBOARD_AUTH_ENFORCEMENT", "audit-only"),
+        "auth_mode": access_control.auth_mode(),
+        "enforcement": access_control.enforcement_mode(),
         "provider_headers": {
             "username": ["x-auth-request-user", "x-forwarded-user"],
             "email": ["x-auth-request-email", "x-forwarded-email"],
             "provider": ["x-auth-provider"],
         },
-        "role_capabilities": {
-            "platform-admin": ["*"],
-            "soc-manager": ["tickets:*", "agents:*", "changes:*", "workflows:*", "audit:read"],
-            "analyst": ["tickets:read", "tickets:note", "agents:assigned", "changes:request"],
-            "auditor": ["tickets:read", "changes:read", "audit:read", "evidence:read"],
-            "agent-operator": ["agents:*", "tickets:read", "changes:request"],
-        },
+        "role_capabilities": access_control.DEFAULT_ROLE_CAPABILITIES,
+        "classification_order": access_control.CLASSIFICATION_RANK,
+        "route_requirements": [
+            {"method": method, "path": path, "permission": permission}
+            for method, path, permission in access_control.ROUTE_REQUIREMENTS
+        ],
+        "agent_permission_boundary": (
+            "Agents receive a policy snapshot at spawn time and requested "
+            "permissions must be a subset of the spawning subject capabilities."
+        ),
     }

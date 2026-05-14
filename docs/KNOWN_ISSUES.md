@@ -2,7 +2,195 @@
 
 Last updated: 2026-05-13.
 
+## Current Operational Caveats
+
+### Agent can complete ticket evidence but leave task running
+
+Status: fixed and live-verified on 2026-05-14.
+
+Problem:
+
+- During the real local-model phishing smoke for ticket `452`, agent `165`
+  completed change `132`, wrote final resolution note `854`, and closed the
+  ticket, but the dashboard still showed the agent task `162` as `running` with
+  stale checkpoints at `40%`.
+- The agent heartbeat continued, so this was not a dead process by percent
+  alone. It is a terminal bookkeeping gap after the substantive work succeeded.
+
+Impact:
+
+- Demo and audit views can look wrong even when the actual ticket, note, and
+  change evidence prove the work completed.
+- The capped local-model lane can remain occupied until an operator stops the
+  completed-but-not-finalized test agent.
+
+Fix:
+
+- Terminal evidence detection now counts final notes posted with `source=agent`,
+  `source LIKE 'agent%'`, or `author=agent-<id>`.
+- The agent auditor now calls a narrow terminal-evidence recovery helper for
+  running ticket-resolution tasks. The helper only finalizes the task when the
+  ticket is closed/resolved, no change gates remain open, and final evidence
+  notes plus completed change/postmortem evidence exist.
+
+Verification:
+
+- Agent `166` worked ticket `472` end to end, wrote triage note `882`,
+  no-containment note `883`, final resolution note `884`, and closed the ticket
+  with note `885`.
+- The explicit auditor run returned OK and finalized agent `166` / task `163`
+  from terminal evidence: agent status `finished`, task status `completed`,
+  progress `100%`, and `/api/agents/active` returned `0`.
+
+### Agent auditor smoke returns HTTP 500 after terminal recovery change
+
+Status: fixed and live-verified on 2026-05-14.
+
+Problem:
+
+- After deploying terminal-evidence recovery, the deterministic
+  `scripts/smoke_agent_auditor.py` check failed on
+  `POST /api/agents/audits/run` with HTTP 500.
+
+Impact:
+
+- The standalone auditor smoke cannot prove supervision health until the route
+  traceback is fixed.
+- The run stopped before the remaining deterministic smokes, so the full
+  acceptance pass must be rerun after the fix.
+
+Fix:
+
+- The traceback was in `_recent_manual_completion_skip`: asyncpg inferred the
+  `$3::text` interval parameter as text, but the helper passed integer `3600`.
+- A second traceback appeared in `_detect_completed_ticket_resolution` for the
+  `$4::text` author match because the helper passed integer `agent_id`.
+- Both helpers now pass explicit strings for text-cast parameters.
+
+Verification:
+
+- Local full unit sweep: `python -m unittest discover -s tests -p "test_*.py"`
+  passed with 70 tests.
+- Live `POST /api/agents/audits/run` returned `{"status":"ok","audited":4}`.
+
+### Agent supervisor repeats manual-completion skip events for old gates
+
+Status: fixed locally and awaiting safe deployment on 2026-05-14.
+
+Problem:
+
+- The live dashboard recent activity stream repeatedly logs
+  `change_auto_complete_skipped` for older manual-completion gates such as
+  changes `97`, `98`, `99`, and `127`.
+
+Impact:
+
+- This does not indicate an active agent is running, but it makes the audit feed
+  noisier and can obscure more important recent actions during demos.
+
+Fix:
+
+- The supervisor now rate-limits duplicate manual-completion skip events per
+  change/task for one hour while preserving the first clear audit record
+  explaining why manual completion is required.
+
 ## Fixed In Current Pass
+
+### Runtime image does not include repo-level unit tests
+
+Status: documented on 2026-05-13.
+
+Problem:
+
+- During the agent timing/status deployment, `docker compose exec -T api python
+  -m unittest tests...` failed with `ModuleNotFoundError: No module named
+  'tests'`.
+- The API container is a production runtime image and does not include the
+  repository-level `tests` package.
+
+Impact:
+
+- Deployment verification can look failed if operators try to run repo tests
+  from inside the API container.
+
+Resolution:
+
+- Run syntax checks inside the container for deployed API files.
+- Run repo-level unit discovery from the remote project host path:
+  `cd /home/cereal/SOC_TESTING/soc-dashboard && python3 -m unittest discover
+  -s tests -p 'test_*.py'`.
+
+Verification:
+
+- Remote host targeted tests passed: 25 tests.
+- Remote host full unit discovery passed: 62 tests.
+
+### FedRAMP-grade dashboard access control was only scaffolded
+
+Status: prepared locally on 2026-05-13, not deployed.
+
+Problem:
+
+- Dashboard users and roles existed, but route enforcement, user scopes,
+  classification boundaries, and per-agent permission snapshots were not ready
+  for a FedRAMP-style least-privilege cutover.
+- Agents did not yet have an explicit stored policy snapshot proving they could
+  not receive permissions beyond the user or workflow that spawned them.
+
+Impact:
+
+- The lab dashboard could demonstrate audit and approvals, but it could not yet
+  prove strict need-to-know separation between teams, organizations,
+  classifications, or provider-specific ticket scopes.
+
+Fix:
+
+- Added local additive migration `013_fedramp_access_controls.sql`.
+- Added `api/services/access_control.py` with route-permission mapping,
+  role-capability evaluation, classification ordering, and agent permission
+  subset checks.
+- Added default-off middleware so deployment can start in audit-only mode and
+  move to enforcement mode after identity/provider testing.
+- Documented the cutover plan in `docs/FEDRAMP_ACCESS_CONTROL_PREP.md`.
+
+Verification:
+
+- Added local unit tests for route permission mapping and the agent
+  "cannot exceed spawner" permission boundary.
+
+### Agent timing labels made gate wait look like wasted runtime
+
+Status: fixed locally on 2026-05-13.
+
+Problem:
+
+- Agent cards still showed separate `Runtime`, `Work`, and `Gated` fields.
+- Stalled agents could report increasing wall-clock/runtime fields even though
+  a stalled agent is not doing useful work.
+- Agents blocked behind approvals, access grants, or requester replies were not
+  grouped clearly, so a wait-gated run could look like an overlapping active or
+  stalled category.
+
+Impact:
+
+- Demo viewers could misread approval/user wait as agents wasting compute.
+- Operators could miss that an agent was legitimately waiting behind a gate
+  instead of actively running or silently stalled.
+
+Fix:
+
+- The Agents tab now shows only `Total work time` on cards.
+- Stalled agents return zero `idle_seconds`, `running_seconds`, and
+  `task_working_seconds` from `/api/agents`.
+- Queued agents and wait-gated agents are rendered in distinct sections before
+  stalled/history agents.
+
+Verification:
+
+- Added frontend regression coverage for queue/wait sections and removal of
+  `Runtime` / `Gated` labels.
+- Added route regression coverage proving stalled timing fields are zeroed in
+  the `/api/agents` query.
 
 ### Agent completion implicitly resolved tickets
 

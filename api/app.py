@@ -24,6 +24,7 @@ from routes import (
     cicd,
 )
 from services import itop_sync, health_check, task_tracker, agent_auditor
+from services import access_control
 from services.event_logger import log_event
 
 APP_TITLE = "SOC Dashboard API"
@@ -85,6 +86,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def access_control_middleware(request, call_next):
+    decision = await access_control.evaluate_request(request)
+    if not decision.get("allow"):
+        await access_control.audit_decision(decision, request.method, request.url.path, 403)
+        return JSONResponse(
+            {
+                "error": "access_denied",
+                "reason": decision.get("reason"),
+                "required_permission": decision.get("required_permission"),
+            },
+            status_code=403,
+        )
+    response = await call_next(request)
+    if access_control.auth_mode() != "disabled":
+        await access_control.audit_decision(decision, request.method, request.url.path, response.status_code)
+    return response
 
 app.include_router(tools.router)
 app.include_router(tickets.router)

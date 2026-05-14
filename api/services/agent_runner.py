@@ -468,6 +468,18 @@ def _format_change_completion_result(change, task, checkpoint):
     return "\n".join(evidence)
 
 
+async def _recent_manual_completion_skip(change_id, task_id, window_seconds=3600):
+    return bool(await fetchval("""
+        SELECT 1
+        FROM event_log
+        WHERE action = 'change_auto_complete_skipped'
+          AND target = $1
+          AND details->>'task_id' = $2
+          AND created_at > NOW() - ($3::text || ' seconds')::interval
+        LIMIT 1
+    """, f"change_{change_id}", str(task_id), str(int(window_seconds))))
+
+
 async def complete_approved_changes_for_task(agent_id, task_id, reason="agent_task_completed", checkpoint=None):
     """Advance approved agent-linked changes when a task has finished cleanly.
 
@@ -498,13 +510,14 @@ async def complete_approved_changes_for_task(agent_id, task_id, reason="agent_ta
     for change in changes or []:
         if not _auto_complete_allowed(change):
             skipped.append({"change_id": change["id"], "reason": "manual_completion_required"})
-            await log_event("change", "info", "agent-supervisor", "change_auto_complete_skipped",
-                            f"change_{change['id']}", {
-                                "agent_id": agent_id,
-                                "task_id": task_id,
-                                "ticket_id": task.get("ticket_id"),
-                                "reason": "manual_completion_required",
-                            })
+            if not await _recent_manual_completion_skip(change["id"], task_id):
+                await log_event("change", "info", "agent-supervisor", "change_auto_complete_skipped",
+                                f"change_{change['id']}", {
+                                    "agent_id": agent_id,
+                                    "task_id": task_id,
+                                    "ticket_id": task.get("ticket_id"),
+                                    "reason": "manual_completion_required",
+                                })
             continue
 
         result = _format_change_completion_result(change, task, checkpoint)
@@ -560,6 +573,7 @@ async def _detect_completed_ticket_resolution(task_id, agent_id):
     started_at = task.get("started_at") or task.get("created_at")
     evidence = await fetchrow("""
         SELECT
+            (SELECT status FROM tickets WHERE id = $1) AS ticket_status,
             (SELECT COUNT(*)
              FROM change_requests
              WHERE ticket_id = $1 AND status = 'completed') AS completed_changes,
@@ -571,7 +585,11 @@ async def _detect_completed_ticket_resolution(task_id, agent_id):
              FROM ticket_notes
              WHERE ticket_id = $1
                AND created_at >= COALESCE($2, created_at)
-               AND source IN ('soc-agent', 'dashboard', 'agent-control-plane')
+               AND (
+                   source IN ('soc-agent', 'dashboard', 'agent-control-plane', 'agent')
+                   OR source LIKE 'agent%'
+                   OR author = ('agent-' || $4::text)
+               )
                AND (
                    body ILIKE '%Resolution%'
                    OR body ILIKE '%Residual Risk%'
@@ -581,10 +599,11 @@ async def _detect_completed_ticket_resolution(task_id, agent_id):
              FROM postmortems
              WHERE ticket_id = $1
                AND (task_id = $3 OR created_at >= COALESCE($2, created_at))) AS postmortems
-    """, ticket_id, started_at, task_id)
+    """, ticket_id, started_at, task_id, str(agent_id))
     if not evidence:
         return None
 
+    ticket_status = str(evidence.get("ticket_status") or "").strip().lower()
     completed_changes = int(evidence.get("completed_changes") or 0)
     open_changes = int(evidence.get("open_changes") or 0)
     final_notes = int(evidence.get("final_notes") or 0)
@@ -592,12 +611,95 @@ async def _detect_completed_ticket_resolution(task_id, agent_id):
     if final_notes > 0 and open_changes == 0 and (completed_changes > 0 or postmortems > 0):
         return {
             "ticket_id": ticket_id,
+            "ticket_status": ticket_status,
             "completed_changes": completed_changes,
             "open_changes": open_changes,
             "final_notes": final_notes,
             "postmortems": postmortems,
         }
     return None
+
+
+async def recover_completed_ticket_resolution(agent_id, task_id, reason="terminal_evidence_recovered"):
+    """Finalize a running ticket task when dashboard evidence proves completion.
+
+    This is deliberately narrow: only ticket-resolution tasks with a final agent
+    note, no open gates, and completed change/postmortem evidence qualify. It
+    lets the auditor free the local-model lane if the harness keeps running
+    after the ticket is already closed.
+    """
+    task = await fetchrow("""
+        SELECT id, agent_id, ticket_id, task_type, status, pid, output
+        FROM agent_tasks
+        WHERE id = $1 AND agent_id = $2
+    """, task_id, agent_id)
+    if not task:
+        return {"status": "skipped", "reason": "missing_task"}
+    if task.get("task_type") != "ticket_resolution":
+        return {"status": "skipped", "reason": "not_ticket_resolution"}
+    if task.get("status") not in ("queued", "running"):
+        return {"status": "skipped", "reason": f"task_status_{task.get('status')}"}
+
+    evidence = await _detect_completed_ticket_resolution(task_id, agent_id)
+    if not evidence:
+        return {"status": "skipped", "reason": "insufficient_terminal_evidence"}
+    if evidence.get("ticket_status") not in ("closed", "resolved"):
+        return {
+            "status": "skipped",
+            "reason": "ticket_not_closed",
+            "evidence": evidence,
+        }
+
+    summary = (
+        "Recovered terminal completion from dashboard evidence: "
+        f"ticket status `{evidence['ticket_status']}`, "
+        f"{evidence['completed_changes']} completed change gates, "
+        f"{evidence['final_notes']} final notes, and "
+        f"{evidence['postmortems']} postmortems."
+    )
+    await execute(
+        "UPDATE agent_tasks SET status = 'completed', output = $1, error_message = NULL, "
+        "completed_at = NOW(), progress_pct = 100 WHERE id = $2",
+        summary,
+        task_id,
+    )
+    await execute(
+        "UPDATE agents SET status = 'finished', heartbeat = NOW(), error_message = NULL, finished_at = NOW() WHERE id = $1",
+        agent_id,
+    )
+    await log_event("agent", "warning", f"agent_{agent_id}", "agent_terminal_completion_recovered",
+                    f"task_{task_id}", {
+                        "reason": reason,
+                        "evidence": evidence,
+                    })
+    await _add_agent_note(
+        evidence["ticket_id"],
+        agent_id,
+        task_id,
+        "Agent completed with terminal evidence recovery",
+        (
+            f"Agent `{agent_id}` had already completed ticket work but left the task running. "
+            f"The supervisor finalized task `{task_id}` from persisted evidence. {summary}"
+        ),
+        "agent-control-plane",
+    )
+
+    pid = task.get("pid")
+    if pid:
+        if task_id in _active_processes:
+            proc = _active_processes[task_id]
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                proc.kill()
+        else:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+    _active_processes.pop(task_id, None)
+    return {"status": "recovered", "task_id": task_id, "agent_id": agent_id, "evidence": evidence}
 
 
 async def _mirror_checkpoint_to_task(task_id, agent_id, work_dir):
@@ -908,7 +1010,7 @@ async def _run_agent(work_dir, prompt, task_id):
         }
 
 
-async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
+async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", actor_context=None, requested_permissions=None):
     """Spawn a Claude Code agent to work on a ticket.
 
     Returns task_id on success.
@@ -942,6 +1044,23 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution"):
         "VALUES ($1, $2, $3, $4, 'queued') RETURNING id",
         agent_id, ticket_id, task_type, prompt,
     )
+    try:
+        from services import access_control
+        await access_control.record_agent_permission_context(
+            agent_id,
+            ticket_id,
+            actor_context,
+            requested_permissions,
+        )
+    except Exception as exc:
+        await log_event(
+            "access",
+            "warning",
+            f"agent_{agent_id}",
+            "agent_permission_snapshot_failed",
+            f"ticket_{ticket_id}",
+            {"error": str(exc), "task_type": task_type},
+        )
 
     # Link agent to task and ticket to agent
     await execute(

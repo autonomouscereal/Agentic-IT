@@ -126,6 +126,25 @@ aiohttp==3.10.0
 | GET | `/api/dashboard/agent-performance` | Last 50 finished agents with duration |
 | GET | `/api/dashboard/tool-uptime` | Tool uptime percentages for last N days (default 7) |
 
+### Access Control - `/api/access`
+
+The 2026-05-14 access-control prep is deployed in audit-only mode. It is a
+FedRAMP-style boundary scaffold, not full enforcement yet.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/access/policies` | Shows auth mode, enforcement mode, route permission requirements, role capability map, classification order, and agent permission boundary text |
+
+Current behavior:
+
+- `SOC_ACCESS_CONTROL_MODE=disabled` / `audit-only`: requests are logged and
+  route requirements are visible, but requests are not blocked yet.
+- `agent_permission_context` records a spawn-time permission snapshot. Recent
+  proof: agent `167` on ticket `474` was spawned with `tickets:read`,
+  `tickets:note`, `changes:request`, and max classification `secret`.
+- Agents must never receive permissions broader than the actor/user that
+  spawned them. Keep future enforcement in `api/services/access_control.py`.
+
 `/api/dashboard/ops-metrics` includes two separate SLA views:
 
 - `sla`: ticket create-to-resolution compliance by priority.
@@ -184,6 +203,11 @@ The reference AI server currently runs slow local models. Do not use short wall-
 - `AGENT_NO_OUTPUT_STALL_SECONDS=3600`: configurable no-output stall guard. This is a last-resort harness-hang guard, not a progress timer; streaming or tool-using agents should continue.
 - The agent auditor is the primary supervision path. Judge status from task logs, checkpoints, notes, audit entries, and process state, not from percent alone.
 - Before rebuilding the API container, check `/api/agents/active` and `/api/agents/processes`. Stop only agents in your current test swim lane, with an explicit audit reason.
+- The auditor can recover terminal bookkeeping when persisted evidence proves a
+  running ticket-resolution task is already complete. Required evidence:
+  ticket closed/resolved, no open change gates, final agent evidence notes, and
+  completed change or postmortem evidence. Latest proof: agent `166` / task
+  `163` on ticket `472` was finalized from terminal evidence.
 - Per-agent curl guards block broad dashboard schema/tool endpoints (`/openapi.json`, `/api/tools`, `/docs`, `/redoc`) and cap oversized curl output so local agents stay on bounded ticket/evidence context.
 - Task/checkpoint completion is intentionally strict: `done` / `completed`
   checkpoints below `100%` are ignored. Agents must use `running` for
@@ -229,6 +253,22 @@ Latest proof, 2026-05-13:
 - The run also exposed missing `git` in the API image. `api/Dockerfile` now
   installs git so source, CI/CD, GitLab, and patch-evidence flows have the tool
   they are already allowed to call.
+
+### 2026-05-14 Agentic Proofs
+
+- Phishing lifecycle ticket `472`: agent `166` wrote triage note `882`,
+  no-containment note `883`, final resolution note `884`, closed the ticket
+  with note `885`, and the auditor finalized task `163` from terminal evidence.
+- Core smoke ticket `474`: agent `167` completed approval-gated URL block
+  change `143`, wrote triage note `894`, approval evidence note `895`,
+  resolution note `896`, resolved the ticket with note `897`, and created
+  postmortem `81`.
+- Permission-wall resume ticket `476`: first agent `168` stopped at
+  `awaiting_access`, created access request `4`, iTop access ticket `477`
+  / provider ref `289`, and change `144`. Approval by
+  `access-demo-approver` spawned resumed agent `169`, which completed the
+  access grant evidence, wrote final `ACCESS RESUME COMPLETE` notes, and
+  resolved the parent ticket.
 
 ### Current Real-Flow Proofs
 

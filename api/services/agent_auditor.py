@@ -305,6 +305,22 @@ async def _audit_task(row):
                           None, True, {"age_minutes": age_minutes})
         return
 
+    if task["status"] == "running":
+        from services import agent_runner
+        recover_terminal = getattr(agent_runner, "recover_completed_ticket_resolution", None)
+        if recover_terminal:
+            terminal_recovery = await recover_terminal(
+                agent["id"],
+                task["id"],
+                reason="agent_auditor_terminal_evidence",
+            )
+            if terminal_recovery.get("status") == "recovered":
+                await _record(agent["id"], task["id"], agent["ticket_id"], "warning",
+                              "agent_terminal_completion_recovered",
+                              "finalized_running_agent_from_terminal_evidence",
+                              "agent_marked_finished", False, terminal_recovery)
+                return
+
     if task["status"] == "running" and age_minutes is not None and age_minutes > NO_PROGRESS_MINUTES:
         if await _recent_duplicate(task["id"], "agent_no_progress", 15):
             return
