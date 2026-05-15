@@ -8,6 +8,12 @@ from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.event_logger import log_event
 from services.postmortem_synthesizer import synthesize_postmortem
 from services.ticket_service import compact_ticket_payload
+from services.workflow_keys import (
+    canonical_workflow_name,
+    load_policy,
+    policy_with_key,
+    workflow_key_for_fields,
+)
 
 router = APIRouter(prefix="/api/postmortems", tags=["postmortems"])
 
@@ -197,6 +203,72 @@ def _ticket_class(ticket):
     return (ticket or {}).get("provider_class") or (ticket or {}).get("itop_class")
 
 
+def _postmortem_workflow_key(postmortem, ticket):
+    summary = postmortem.get("summary") or ""
+    improvements = postmortem.get("improvements") or ""
+    proposal = postmortem.get("workflow_proposal") or ""
+    guardrails = "\n".join(_text_lines(_loads(postmortem.get("guardrails"), [])))
+    tests = "\n".join(_text_lines(_loads(postmortem.get("test_cases"), [])))
+    return workflow_key_for_fields(
+        ticket_class=_ticket_class(ticket),
+        trigger_type="postmortem-promotion",
+        name=(ticket or {}).get("title") or f"postmortem {postmortem.get('id')}",
+        description="\n".join([summary, improvements]),
+        blueprint="\n".join([proposal, guardrails, tests]),
+    )
+
+
+def _review_gated_status(status, fallback="draft"):
+    value = (status or fallback or "draft").strip()
+    if value in ("active", "approved"):
+        return "ready_for_review"
+    return value
+
+
+def _merge_text(existing, addition, heading):
+    existing = existing or ""
+    addition = addition or ""
+    if not addition:
+        return existing
+    if addition in existing:
+        return existing
+    if not existing:
+        return addition
+    return f"{existing.rstrip()}\n\n{heading}\n{addition.strip()}"
+
+
+def _merge_unique(existing, additions):
+    merged = []
+    seen = set()
+    for item in list(existing or []) + list(additions or []):
+        marker = json_dumps(item) if isinstance(item, (dict, list)) else str(item)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        merged.append(item)
+    return merged
+
+
+async def _promoted_workflow_from_audit(postmortem_id):
+    row = await fetchrow("""
+        SELECT details
+        FROM audit_log
+        WHERE action = 'postmortem_promoted' AND target = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+    """, f"postmortem_{postmortem_id}")
+    if not row:
+        return None
+    details = load_policy(row.get("details"))
+    workflow_id = details.get("workflow_id")
+    if not workflow_id:
+        return None
+    return await fetchrow(
+        "SELECT id, name, status, version, workflow_key, updated_at FROM agent_workflows WHERE id = $1",
+        workflow_id,
+    )
+
+
 def _severity_counts(findings):
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "unknown": 0}
     for finding in findings or []:
@@ -266,6 +338,15 @@ async def list_postmortems(
 async def get_postmortem_evidence(
     ticket_id: int,
     task_log_lines: int = Query(0, ge=0, le=100),
+    max_notes: int = Query(12, ge=0, le=40),
+    max_attachments: int = Query(10, ge=0, le=40),
+    max_changes: int = Query(12, ge=0, le=40),
+    max_tasks: int = Query(8, ge=0, le=25),
+    max_cicd_runs: int = Query(8, ge=0, le=20),
+    max_postmortems: int = Query(5, ge=0, le=10),
+    max_workflows: int = Query(3, ge=0, le=10),
+    max_articles: int = Query(2, ge=0, le=10),
+    max_audit: int = Query(8, ge=0, le=15),
 ):
     """Return compact, agent-safe evidence for postmortem work.
 
@@ -276,7 +357,7 @@ async def get_postmortem_evidence(
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
-    compact_ticket_payload(ticket)
+    ticket = compact_ticket_payload(ticket)
     evidence_terms = _evidence_terms(ticket)
 
     notes = await fetchall("""
@@ -284,20 +365,20 @@ async def get_postmortem_evidence(
         FROM ticket_notes
         WHERE ticket_id = $1
         ORDER BY created_at DESC
-        LIMIT 40
-    """, ticket_id)
+        LIMIT $2
+    """, ticket_id, max_notes)
     for note in notes:
-        note["body"] = _truncate(note.get("body"), 700)
+        note["body"] = _truncate(note.get("body"), 360)
     attachments = await fetchall("""
         SELECT id, note_id, filename, content_type, storage_ref, sha256,
                size_bytes, metadata, created_at
         FROM ticket_attachments
         WHERE ticket_id = $1
         ORDER BY created_at DESC
-        LIMIT 40
-    """, ticket_id)
+        LIMIT $2
+    """, ticket_id, max_attachments)
     for attachment in attachments:
-        attachment["metadata"] = _truncate(attachment.get("metadata"), 1000)
+        attachment["metadata"] = _truncate(attachment.get("metadata"), 500)
     changes = await fetchall("""
         SELECT id, agent_id, action, target, reason, status, requested_by,
                approved_by, approved_at, rejected_reason, result, risk_level,
@@ -305,12 +386,12 @@ async def get_postmortem_evidence(
         FROM change_requests
         WHERE ticket_id = $1
         ORDER BY requested_at DESC
-        LIMIT 40
-    """, ticket_id)
+        LIMIT $2
+    """, ticket_id, max_changes)
     for change in changes:
-        change["reason"] = _truncate(change.get("reason"), 500)
-        change["rejected_reason"] = _truncate(change.get("rejected_reason"), 500)
-        change["result"] = _truncate(change.get("result"), 700)
+        change["reason"] = _truncate(change.get("reason"), 260)
+        change["rejected_reason"] = _truncate(change.get("rejected_reason"), 260)
+        change["result"] = _truncate(change.get("result"), 360)
     tasks = await fetchall("""
         SELECT id, agent_id, task_type, status, progress_pct, work_dir,
                pid, error_message, created_at, started_at,
@@ -318,8 +399,8 @@ async def get_postmortem_evidence(
         FROM agent_tasks
         WHERE ticket_id = $1
         ORDER BY created_at DESC
-        LIMIT 25
-    """, ticket_id)
+        LIMIT $2
+    """, ticket_id, max_tasks)
     for task in tasks:
         task["log_tail"] = ""
         if task_log_lines and task.get("work_dir"):
@@ -335,8 +416,8 @@ async def get_postmortem_evidence(
         FROM cicd_security_runs
         WHERE ticket_id = $1
         ORDER BY created_at DESC
-        LIMIT 20
-    """, ticket_id)
+        LIMIT $2
+    """, ticket_id, max_cicd_runs)
     for run in cicd_runs:
         findings = _loads(run.get("findings"), [])
         tool_results = _loads(run.get("tool_results"), {})
@@ -363,12 +444,12 @@ async def get_postmortem_evidence(
         FROM postmortems
         WHERE ticket_id = $1
         ORDER BY created_at DESC
-        LIMIT 10
-    """, ticket_id)
+        LIMIT $2
+    """, ticket_id, max_postmortems)
     for postmortem in postmortems:
-        postmortem["summary"] = _truncate(postmortem.get("summary"), 1800)
-        postmortem["improvements"] = _truncate(postmortem.get("improvements"), 1800)
-        postmortem["workflow_proposal"] = _truncate(postmortem.get("workflow_proposal"), 1800)
+        postmortem["summary"] = _truncate(postmortem.get("summary"), 500)
+        postmortem["improvements"] = _truncate(postmortem.get("improvements"), 500)
+        postmortem["workflow_proposal"] = _truncate(postmortem.get("workflow_proposal"), 500)
     ticket_class = _ticket_class(ticket)
     workflows = await fetchall("""
         SELECT id, name, description, ticket_class, trigger_type, status,
@@ -386,14 +467,14 @@ async def get_postmortem_evidence(
         workflows,
         evidence_terms,
         ("name", "description", "blueprint", "test_plan", "test_results"),
-        limit=5,
-        fallback=3,
+        limit=max_workflows,
+        fallback=min(max_workflows, 2),
     )
     for workflow in workflows:
-        workflow["description"] = _truncate(workflow.get("description"), 320)
-        workflow["blueprint"] = _truncate(workflow.get("blueprint"), 900)
-        workflow["test_plan"] = _truncate(workflow.get("test_plan"), 450)
-        workflow["test_results"] = _truncate(workflow.get("test_results"), 450)
+        workflow["description"] = _truncate(workflow.get("description"), 240)
+        workflow["blueprint"] = _truncate(workflow.get("blueprint"), 500)
+        workflow["test_plan"] = _truncate(workflow.get("test_plan"), 260)
+        workflow["test_results"] = _truncate(workflow.get("test_results"), 260)
     knowledge_articles = await fetchall("""
         SELECT id, title, category, source, tags, external_ref, body, updated_at
         FROM knowledge_articles
@@ -411,11 +492,11 @@ async def get_postmortem_evidence(
         knowledge_articles,
         evidence_terms,
         ("title", "category", "tags", "body"),
-        limit=5,
-        fallback=3,
+        limit=max_articles,
+        fallback=min(max_articles, 1),
     )
     for article in knowledge_articles:
-        article["body"] = _truncate(article.get("body"), 900)
+        article["body"] = _truncate(article.get("body"), 420)
     audit = await fetchall("""
         SELECT id, actor, action, target, details, created_at, 'audit' AS source
         FROM audit_log
@@ -426,10 +507,10 @@ async def get_postmortem_evidence(
         FROM event_log
         WHERE target ILIKE $1 OR details::text ILIKE $2
         ORDER BY created_at DESC
-        LIMIT 15
-    """, f"%ticket_{ticket_id}%", f"%\"ticket_id\": {ticket_id}%")
+        LIMIT $3
+    """, f"%ticket_{ticket_id}%", f"%\"ticket_id\": {ticket_id}%", max_audit)
     for entry in audit:
-        entry["details"] = _truncate(entry.get("details"), 400)
+        entry["details"] = _truncate(entry.get("details"), 260)
 
     return {
         "ticket": ticket,
@@ -472,10 +553,16 @@ async def get_postmortem(postmortem_id: int):
     ticket = None
     if row.get("ticket_id"):
         ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", row["ticket_id"])
-    workflow = await fetchrow(
-        "SELECT id, name, status, version, updated_at FROM agent_workflows WHERE name = $1",
-        _workflow_name(postmortem_id, ticket),
-    )
+    workflow_key = _postmortem_workflow_key(row, ticket)
+    workflow = await _promoted_workflow_from_audit(postmortem_id)
+    if not workflow:
+        workflow = await fetchrow("""
+            SELECT id, name, status, version, workflow_key, updated_at
+            FROM agent_workflows
+            WHERE workflow_key = $1 AND status <> 'superseded'
+            ORDER BY updated_at DESC
+            LIMIT 1
+        """, workflow_key)
     articles = await fetchall("""
         SELECT id, title, category, source, external_ref, updated_at
         FROM knowledge_articles
@@ -491,6 +578,7 @@ async def get_postmortem(postmortem_id: int):
     row["promotion_assets"] = {
         "knowledge_articles": articles,
         "workflow": workflow,
+        "workflow_key": workflow_key,
         "skills": skills,
     }
     return row
@@ -650,51 +738,94 @@ async def promote_postmortem(
     workflow_id = None
     workflow_name = None
     workflow_action = "skipped"
+    workflow_key = None
     ticket_class = _ticket_class(ticket)
     if create_workflow:
-        workflow_name = _workflow_name(postmortem_id, ticket)
-        existing_workflow = await fetchrow("SELECT id FROM agent_workflows WHERE name = $1", workflow_name)
+        workflow_key = _postmortem_workflow_key(postmortem, ticket)
+        workflow_name = canonical_workflow_name(workflow_key)
+        existing_workflow = await fetchrow("""
+            SELECT *
+            FROM agent_workflows
+            WHERE workflow_key = $1 AND status <> 'superseded'
+            ORDER BY
+                CASE WHEN status IN ('active', 'approved') THEN 0
+                     WHEN status = 'tested' THEN 1
+                     WHEN status = 'ready_for_review' THEN 2
+                     ELSE 3 END,
+                updated_at DESC
+            LIMIT 1
+        """, workflow_key)
         workflow_action = "updated" if existing_workflow else "created"
         test_plan = "\n".join(_text_lines(_loads(postmortem.get("test_cases"), [])))
         guardrails = _loads(postmortem.get("guardrails"), [])
+        base_policy = load_policy(existing_workflow.get("approval_policy")) if existing_workflow else {}
+        postmortem_ids = _merge_unique(base_policy.get("postmortem_ids"), [postmortem_id])
         approval_policy = {
+            **base_policy,
             "source": "postmortem_promotion",
             "postmortem_id": postmortem_id,
+            "postmortem_ids": postmortem_ids,
             "ticket_id": postmortem.get("ticket_id"),
             "requires_human_review_before_activation": True,
             "production_changes_require_approval": True,
-            "guardrails": guardrails,
+            "guardrails": _merge_unique(base_policy.get("guardrails"), guardrails),
         }
-        workflow_id = await fetchval("""
-            INSERT INTO agent_workflows (
-                name, description, ticket_class, trigger_type, status, blueprint,
-                test_plan, test_results, approval_policy, skill_ids, created_by
+        approval_policy = policy_with_key(approval_policy, workflow_key)
+        safe_workflow_status = _review_gated_status(workflow_status)
+        proposed_blueprint = postmortem.get("workflow_proposal") or postmortem.get("improvements") or "Review ticket evidence and convert repeated steps into a reusable workflow."
+        proposed_description = postmortem.get("summary") or "Workflow drafted from postmortem learning."
+        proposed_results = "Generated from postmortem promotion. Requires human review and a workflow run before production activation."
+        if existing_workflow:
+            workflow_name = existing_workflow.get("name") or workflow_name
+            workflow_id = await fetchval("""
+                UPDATE agent_workflows
+                SET description = $2,
+                    ticket_class = $3,
+                    trigger_type = 'manual',
+                    status = $4,
+                    version = version + 1,
+                    blueprint = $5,
+                    test_plan = $6,
+                    test_results = $7,
+                    approval_policy = $8,
+                    skill_ids = $9,
+                    workflow_key = $10,
+                    updated_at = NOW()
+                WHERE id = $1
+                RETURNING id
+            """,
+                existing_workflow["id"],
+                _merge_text(existing_workflow.get("description"), proposed_description, f"Postmortem {postmortem_id} description update:"),
+                ticket_class or existing_workflow.get("ticket_class"),
+                safe_workflow_status,
+                _merge_text(existing_workflow.get("blueprint"), proposed_blueprint, f"Postmortem {postmortem_id} workflow lesson:"),
+                _merge_text(existing_workflow.get("test_plan"), test_plan, f"Postmortem {postmortem_id} test cases:"),
+                _merge_text(existing_workflow.get("test_results"), proposed_results, f"Postmortem {postmortem_id} promotion evidence:"),
+                json_dumps(approval_policy),
+                json_dumps(_merge_unique(_loads(existing_workflow.get("skill_ids"), []), skill_ids)),
+                workflow_key,
             )
-            VALUES ($1, $2, $3, 'manual', $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT (name) DO UPDATE SET
-                description = EXCLUDED.description,
-                ticket_class = EXCLUDED.ticket_class,
-                status = EXCLUDED.status,
-                version = agent_workflows.version + 1,
-                blueprint = EXCLUDED.blueprint,
-                test_plan = EXCLUDED.test_plan,
-                test_results = EXCLUDED.test_results,
-                approval_policy = EXCLUDED.approval_policy,
-                skill_ids = EXCLUDED.skill_ids,
-                updated_at = NOW()
-            RETURNING id
-        """,
-            workflow_name,
-            postmortem.get("summary") or "Workflow drafted from postmortem learning.",
-            ticket_class,
-            workflow_status,
-            postmortem.get("workflow_proposal") or postmortem.get("improvements") or "Review ticket evidence and convert repeated steps into a reusable workflow.",
-            test_plan,
-            "Generated from postmortem promotion. Requires human review and a workflow run before production activation.",
-            json_dumps(approval_policy),
-            json_dumps(skill_ids),
-            created_by,
-        )
+        else:
+            workflow_id = await fetchval("""
+                INSERT INTO agent_workflows (
+                    name, description, ticket_class, trigger_type, status, blueprint,
+                    test_plan, test_results, approval_policy, skill_ids, created_by, workflow_key
+                )
+                VALUES ($1, $2, $3, 'manual', $4, $5, $6, $7, $8, $9, $10, $11)
+                RETURNING id
+            """,
+                workflow_name,
+                proposed_description,
+                ticket_class,
+                safe_workflow_status,
+                proposed_blueprint,
+                test_plan,
+                proposed_results,
+                json_dumps(approval_policy),
+                json_dumps(skill_ids),
+                created_by,
+                workflow_key,
+            )
 
     knowledge_article_id = None
     knowledge_action = "skipped"
@@ -752,6 +883,7 @@ async def promote_postmortem(
             f"- Postmortem: {postmortem_id}\n"
             f"- Knowledge article: {knowledge_article_id or 'not created'} ({knowledge_action})\n"
             f"- Workflow: {workflow_id or 'not created'} ({workflow_action})\n"
+            f"- Workflow key: {workflow_key or 'not created'}\n"
             f"- Skills: {', '.join(str(s) for s in skill_ids) if skill_ids else 'none'}\n"
             "Assets remain draft/review-gated until explicitly approved for production use."
         )
@@ -765,6 +897,7 @@ async def promote_postmortem(
         "ticket_id": postmortem.get("ticket_id"),
         "knowledge_article_id": knowledge_article_id,
         "workflow_id": workflow_id,
+        "workflow_key": workflow_key,
         "skill_ids": skill_ids,
         "skill_actions": skill_actions,
         "knowledge_action": knowledge_action,

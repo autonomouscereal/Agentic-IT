@@ -95,8 +95,8 @@ def _repo_url(provider, repo_ref):
         return ref
     if (provider or "").lower() == "gitlab" and "/" in ref:
         import os
-        base = (os.getenv("GITLAB_BASE_URL") or os.getenv("GITLAB_URL") or "http://192.168.50.222").rstrip("/")
-        return f"{base}/{ref}"
+        base = (os.getenv("GITLAB_BASE_URL") or os.getenv("GITLAB_URL") or "").rstrip("/")
+        return f"{base}/{ref}" if base else None
     return None
 
 
@@ -125,6 +125,8 @@ async def list_runs(limit: int = Query(50, ge=1, le=200)):
         ORDER BY r.created_at DESC
         LIMIT $1
     """, limit)
+    for row in rows:
+        row["repo_url"] = _repo_url(row.get("provider"), row.get("repo_ref"))
     return {"runs": rows, "total": len(rows)}
 
 

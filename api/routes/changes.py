@@ -4,6 +4,11 @@ import json
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.event_logger import log_event
 try:
+    from services.lease_inference import infer_lease_request
+except ImportError:  # unit-test stubs may load this route without service package contents
+    def infer_lease_request(*args, **kwargs):
+        return None
+try:
     from services import access_control
 except ImportError:  # unit-test stubs load this route without service package contents
     class _AccessControlFallback:
@@ -269,6 +274,29 @@ async def _sync_access_request_status(change, status, actor, evidence=None):
     granted_leases = []
     if status == "completed":
         lease_request = policy.get("lease_request")
+        inferred_on_completion = False
+        if not lease_request:
+            lease_request = infer_lease_request(
+                access_request.get("resource"),
+                access_request.get("permission"),
+                access_request.get("account_ref"),
+            )
+            inferred_on_completion = bool(lease_request)
+            if inferred_on_completion:
+                await log_event(
+                    "access",
+                    "warning",
+                    actor,
+                    "access_request_lease_inferred_on_completion",
+                    f"access_request_{access_request['id']}",
+                    {
+                        "change_id": change_id,
+                        "resource": access_request.get("resource"),
+                        "permission": access_request.get("permission"),
+                        "lease_request": lease_request,
+                        "reason": "approval_policy_missing_lease_request",
+                    },
+                )
         if lease_request:
             candidate_agent_ids = []
             if access_request.get("agent_id"):
@@ -286,6 +314,20 @@ async def _sync_access_request_status(change, status, actor, evidence=None):
                     evidence=evidence,
                 )
                 granted_leases.append(granted)
+        elif not lease_request:
+            await log_event(
+                "access",
+                "error",
+                actor,
+                "access_request_lease_not_granted",
+                f"access_request_{access_request['id']}",
+                {
+                    "change_id": change_id,
+                    "resource": access_request.get("resource"),
+                    "permission": access_request.get("permission"),
+                    "reason": "no_explicit_or_inferred_lease_request",
+                },
+            )
     return {
         "status": access_request.get("status"),
         "access_request_id": access_request.get("id"),
@@ -307,12 +349,35 @@ async def _resume_agent_after_approval(change, approved_by):
         return {"status": "not_applicable", "reason": "change has no agent_id"}
 
     active_task = await fetchrow("""
-        SELECT id, status FROM agent_tasks
+        SELECT id, status, work_dir FROM agent_tasks
         WHERE agent_id = $1 AND status IN ('queued', 'running')
         ORDER BY created_at DESC LIMIT 1
     """, agent_id)
     if active_task:
-        return {"status": "already_active", "task_id": active_task["id"]}
+        steering = {"status": "not_attempted"}
+        try:
+            from services import agent_steering
+            steering = await agent_steering.record_ticket_note(
+                ticket_id,
+                None,
+                (
+                    f"Approval gate `{change.get('id')}` for `{change.get('action')}` on `{change.get('target')}` "
+                    f"was approved by `{approved_by}` while agent `{agent_id}` task `{active_task['id']}` was already running. "
+                    "Re-read the current change/access status before writing any wait checkpoint. If the gate is approved or completed, continue the original ticket objective instead of waiting."
+                ),
+                author=approved_by,
+                source="dashboard",
+            )
+        except Exception as exc:
+            steering = {"status": "failed", "error": str(exc)}
+        await log_event("agent", "info", approved_by, "approval_update_delivered_to_active_agent",
+                        f"agent_{agent_id}", {
+                            "change_id": change.get("id"),
+                            "ticket_id": ticket_id,
+                            "task_id": active_task["id"],
+                            "steering": steering,
+                        })
+        return {"status": "already_active", "task_id": active_task["id"], "steering": steering}
 
     active_ticket_agent = await fetchrow("""
         SELECT a.id, a.status, a.last_task_id

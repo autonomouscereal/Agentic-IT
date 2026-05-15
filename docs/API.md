@@ -196,6 +196,12 @@ Example:
 Use `close_provider: false` when the dashboard status should change but the
 external ITSM record should remain open for human review.
 
+Compatibility: `POST`, `PUT`, and `PATCH /api/tickets/{ticket_id}` accept the
+same explicit status payload. This exists for local agents that infer a REST
+update on the ticket resource itself. The compatibility path uses the same
+access checks, status validation, audit note, and provider-close opt-in behavior
+as `/status`; new code should still prefer `/status`.
+
 `POST /api/tickets/{ticket_id}/assign-agent`
 
 Body:
@@ -308,6 +314,27 @@ Returns agent detail, latest task, changes, and audit records.
 
 Returns latest task logs for an agent.
 
+`GET /api/agents/{agent_id}/wazuh/manager/status`
+
+Returns Wazuh manager status only after the agent has an active scoped
+`wazuh/api/wazuh.manager/read` vault lease. Response includes `lease_id`,
+`credential_ref`, `secret_values_returned: false`, and Wazuh status data.
+
+`GET /api/agents/{agent_id}/wazuh/rules/{rule_id}`
+
+Returns Wazuh rule metadata after validating the same scoped Wazuh lease.
+
+`GET /api/agents/{agent_id}/wazuh/alerts/search`
+
+Query params:
+
+- `rule_id`
+- `source_ip`
+- `limit`
+
+Searches Wazuh indexer alerts after validating the scoped Wazuh lease. Requires
+runtime `WAZUH_INDEXER_*` configuration. Secret values are never returned.
+
 `POST /api/agents/{agent_id}/wake`
 
 Refreshes active task heartbeat or spawns a replacement from latest task prompt.
@@ -413,19 +440,19 @@ Postmortems:
 
 - `GET /api/postmortems`
 - `GET /api/postmortems/evidence/{ticket_id}` - compact postmortem evidence for agents, including notes, attachment metadata, change requests, task summaries with bounded log tails, CI/CD runs, prior postmortems, and audit/event entries
-- `GET /api/postmortems/{id}`
+- `GET /api/postmortems/{id}` - includes `promotion_assets` with promoted knowledge articles, skills, `workflow_key`, and the promoted workflow resolved by promotion audit details or by key fallback.
 - `POST /api/postmortems/synthesize/{ticket_id}` - supervisor fallback that creates a `ready_for_review` postmortem from bounded evidence when a model postmortem fails or stalls
 - `POST /api/postmortems`
 - `PUT /api/postmortems/{id}`
 - `POST /api/postmortems/{id}/review`
-- `POST /api/postmortems/{id}/promote` - turns an approved/reviewed postmortem into reusable assets: a knowledge article, draft workflow, candidate skills, a ticket note, and audit/event records. The workflow is draft by default and includes an approval policy requiring human review before production activation. Promotion is idempotent by postmortem: repeat calls update the same knowledge article, workflow, and skill records instead of duplicating assets.
+- `POST /api/postmortems/{id}/promote` - turns an approved/reviewed postmortem into reusable assets: a knowledge article, draft workflow, candidate skills, a ticket note, and audit/event records. The workflow is draft by default and includes an approval policy requiring human review before production activation. Promotion derives `workflow_key` from the ticket class and postmortem lesson. Similar postmortems update/version the same non-superseded workflow and return `workflow_action` plus `workflow_key` instead of creating postmortem-id/name duplicates.
 
 Workflows:
 
 - `GET /api/workflows`
 - `GET /api/workflows/{id}`
-- `POST /api/workflows`
-- `PUT /api/workflows/{id}`
+- `POST /api/workflows` - derives or honors `approval_policy.workflow_key`. If a non-superseded workflow with that key already exists, the route updates/versions that workflow; names are display labels, not identity. Create/update paths keep workflow status review-gated and do not silently activate automation.
+- `PUT /api/workflows/{id}` - updates workflow content, recomputes/stores `workflow_key`, writes it into `approval_policy`, and versions the workflow.
 - `POST /api/workflows/{id}/review`
 - `POST /api/workflows/{id}/runs`
 - `POST /api/workflows/runs/{run_id}/complete`

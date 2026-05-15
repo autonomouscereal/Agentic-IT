@@ -128,6 +128,63 @@ class ChangeApprovalResumeTests(unittest.TestCase):
         self.assertEqual(result["access_sync"]["granted_leases"][0]["agent_id"], 172)
         self.assertEqual(sync_calls[0][1:], ("completed", "agent_172", "lease grant proof"))
 
+    def test_completed_access_request_infers_missing_wazuh_lease_request(self):
+        module = load_changes_module()
+        grants = []
+        events = []
+
+        async def fetchrow(query, *args):
+            if "UPDATE access_requests" in query:
+                return {
+                    "id": 14,
+                    "parent_ticket_id": 533,
+                    "access_ticket_id": None,
+                    "agent_id": 197,
+                    "change_id": 157,
+                    "resource": "wazuh.manager API",
+                    "permission": "read",
+                    "account_ref": "wazuh.manager",
+                    "status": "granted",
+                }
+            self.fail(f"unexpected query: {query}")
+
+        async def add_gate_note(*args, **kwargs):
+            return 901
+
+        async def log_event(*args, **kwargs):
+            events.append(args)
+
+        async def grant_agent_vault_lease(agent_id, lease_request, granted_by="access-gate", evidence=None):
+            grants.append({
+                "agent_id": agent_id,
+                "lease_request": lease_request,
+                "granted_by": granted_by,
+                "evidence": evidence,
+            })
+            return {"status": "granted", "agent_id": agent_id, **lease_request}
+
+        module.fetchrow = fetchrow
+        module._add_gate_note = add_gate_note
+        module.log_event = log_event
+        module.infer_lease_request = lambda resource, permission, account_ref: {
+            "system": "wazuh",
+            "resource_type": "api",
+            "resource_id": "wazuh.manager",
+            "action": "read",
+        }
+        module.access_control.grant_agent_vault_lease = grant_agent_vault_lease
+
+        result = asyncio.run(module._sync_access_request_status({
+            "id": 157,
+            "approval_policy": {"access_request": True},
+        }, "completed", "agent_197", "Wazuh read grant approved."))
+
+        self.assertEqual(result["status"], "granted")
+        self.assertEqual(result["granted_leases"][0]["system"], "wazuh")
+        self.assertEqual(grants[0]["agent_id"], 197)
+        self.assertEqual(grants[0]["lease_request"]["resource_id"], "wazuh.manager")
+        self.assertTrue(any(event[3] == "access_request_lease_inferred_on_completion" for event in events))
+
     def test_resume_skips_when_ticket_already_has_active_agent(self):
         module = load_changes_module()
         calls = []
@@ -162,6 +219,51 @@ class ChangeApprovalResumeTests(unittest.TestCase):
         self.assertEqual(result["handoff"]["status"], "recorded")
         self.assertEqual(handoffs[0][1]["last_task_id"], 81)
         self.assertTrue(any("FROM agents a" in query for query, _ in calls))
+
+    def test_resume_delivers_approval_update_to_already_running_agent(self):
+        module = load_changes_module()
+        steering_calls = []
+        events = []
+
+        async def fetchrow(query, *args):
+            if "FROM agent_tasks" in query and "WHERE agent_id" in query:
+                return {"id": 194, "status": "running", "work_dir": "/app/agent_work/197"}
+            self.fail(f"unexpected query after active task guard: {query}")
+
+        async def record_ticket_note(ticket_id, note_id, body, author="dashboard", source="dashboard", visibility="internal", external_ref=None):
+            steering_calls.append({
+                "ticket_id": ticket_id,
+                "note_id": note_id,
+                "body": body,
+                "author": author,
+                "source": source,
+            })
+            return {"status": "created", "events": [{"agent_id": 197, "task_id": 194}]}
+
+        async def log_event(*args, **kwargs):
+            events.append((args, kwargs))
+
+        agent_steering = types.ModuleType("services.agent_steering")
+        agent_steering.record_ticket_note = record_ticket_note
+        sys.modules["services"].agent_steering = agent_steering
+        sys.modules["services.agent_steering"] = agent_steering
+        module.fetchrow = fetchrow
+        module.log_event = log_event
+
+        result = asyncio.run(module._resume_agent_after_approval({
+            "id": 157,
+            "agent_id": 197,
+            "ticket_id": 533,
+            "action": "Grant least-privilege account access",
+            "target": "wazuh.manager API",
+        }, "dashboard"))
+
+        self.assertEqual(result["status"], "already_active")
+        self.assertEqual(result["task_id"], 194)
+        self.assertEqual(result["steering"]["status"], "created")
+        self.assertEqual(steering_calls[0]["source"], "dashboard")
+        self.assertIn("already running", steering_calls[0]["body"])
+        self.assertTrue(any(call[0][3] == "approval_update_delivered_to_active_agent" for call in events))
 
     def test_approve_is_idempotent_and_resumes_after_active_agent_later_blocks(self):
         module = load_changes_module()

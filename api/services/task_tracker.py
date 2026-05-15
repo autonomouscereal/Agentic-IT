@@ -134,6 +134,59 @@ def _latest_activity(task, checkpoints):
     return max(valid) if valid else None
 
 
+def _checkpoint_blocks_completion(checkpoint):
+    if not checkpoint:
+        return False
+    status = str(checkpoint.get("status") or "").strip().lower()
+    step = str(checkpoint.get("step") or "").strip().lower()
+    try:
+        progress = int(checkpoint.get("progress_pct") or 0)
+    except (TypeError, ValueError):
+        progress = 0
+    if progress >= 100 or status in ("done", "completed"):
+        return False
+    waiting_markers = (
+        "waiting_for_",
+        "pending_approval",
+        "pending_access",
+        "blocked",
+        "access_denied",
+        "needs_access",
+    )
+    return status.startswith(waiting_markers) or step.startswith(waiting_markers)
+
+
+def _blocked_task_status(checkpoint):
+    status = str((checkpoint or {}).get("status") or "").strip().lower()
+    if "access" in status:
+        return "awaiting_access"
+    if "approval" in status:
+        return "pending_approval"
+    if "user" in status:
+        return "awaiting_user_response"
+    return "blocked"
+
+
+async def _wait_checkpoint_obsolete(agent_id, ticket_id):
+    if not agent_id or not ticket_id:
+        return False, {"pending": [], "approved": [], "completed": []}
+    rows = await fetchall("""
+        SELECT id, status
+        FROM change_requests
+        WHERE ticket_id = $1
+          AND (agent_id = $2 OR agent_id IS NULL)
+          AND status IN ('pending', 'approved', 'completed')
+        ORDER BY requested_at DESC
+        LIMIT 20
+    """, ticket_id, agent_id)
+    state = {"pending": [], "approved": [], "completed": []}
+    for row in rows or []:
+        status = str(row.get("status") or "").lower()
+        if status in state:
+            state[status].append(row["id"])
+    return (not state["pending"] and bool(state["approved"] or state["completed"])), state
+
+
 async def _mark_orphaned(task, reason):
     await execute(
         "UPDATE agent_tasks SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
@@ -203,6 +256,37 @@ async def _sync_task_status(task):
         task_status = "completed"
     elif status == "error":
         task_status = "failed"
+    elif _checkpoint_blocks_completion(cp):
+        obsolete_wait, gate_state = await _wait_checkpoint_obsolete(task["agent_id"], task["ticket_id"])
+        if obsolete_wait:
+            task_status = "running"
+            if is_new_checkpoint:
+                await log_event("agent", "warning", f"agent_{task['agent_id']}",
+                                "agent_wait_checkpoint_obsolete_active",
+                                f"task_{task['id']}", {
+                                    "ticket_id": task["ticket_id"],
+                                    "step": step,
+                                    "status": status,
+                                    "progress_pct": progress,
+                                    "gate_state": gate_state,
+                                })
+                try:
+                    from services import agent_steering
+                    await agent_steering.record_ticket_note(
+                        task["ticket_id"],
+                        None,
+                        (
+                            f"Approval/access gate for agent `{task['agent_id']}` is already approved or completed. "
+                            "Re-read current change/access status and continue the original ticket objective; "
+                            "do not keep waiting on the stale checkpoint unless a new blocker is proven."
+                        ),
+                        author="approval-state-monitor",
+                        source="dashboard",
+                    )
+                except Exception:
+                    pass
+        else:
+            task_status = _blocked_task_status(cp)
     elif status in ("done", "completed"):
         await log_event("agent", "warning", f"agent_{task['agent_id']}",
                         "checkpoint_done_ignored_before_100", f"task_{task['id']}", {
@@ -223,6 +307,10 @@ async def _sync_task_status(task):
         "completed": "finished",
         "failed": "failed",
         "stopped": "stopped",
+        "awaiting_access": "awaiting_access",
+        "pending_approval": "pending_approval",
+        "awaiting_user_response": "awaiting_user_response",
+        "blocked": "blocked",
     }
     agent_status = agent_status_map.get(task_status, "working")
     await execute(

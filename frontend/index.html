@@ -53,6 +53,10 @@
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v6M6 15v6M18 3v6M18 15v6M6 9h12M6 15h12"/></svg>
                     <span>Workflows</span>
                 </li>
+                <li class="nav-item" data-page="postmortems">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    <span>Postmortems</span>
+                </li>
                 <li class="nav-item" data-page="cicd">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="19" y1="12" x2="5" y2="12"/></svg>
                     <span>CI/CD</span>
@@ -385,6 +389,41 @@
                         </thead>
                         <tbody id="workflows-tbody">
                             <tr><td colspan="7" class="loading">Loading workflows...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Postmortems Page -->
+            <div class="page" id="page-postmortems">
+                <div class="page-header">
+                    <h2>Postmortems</h2>
+                    <div class="header-actions">
+                        <select id="postmortem-filter-status" class="filter-select">
+                            <option value="">All</option>
+                            <option value="draft">Draft</option>
+                            <option value="ready_for_review">Ready for review</option>
+                            <option value="approved">Approved</option>
+                            <option value="promoted">Promoted</option>
+                            <option value="needs_revision">Needs revision</option>
+                        </select>
+                        <button class="btn btn-sm" onclick="loadPostmortemsPage()">Refresh</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Ticket</th>
+                                <th>Status</th>
+                                <th>Summary</th>
+                                <th>Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="postmortems-page-tbody">
+                            <tr><td colspan="6" class="loading">Loading postmortems...</td></tr>
                         </tbody>
                     </table>
                 </div>

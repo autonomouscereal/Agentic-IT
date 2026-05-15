@@ -56,6 +56,43 @@ or `active` state. The rerun creates a `workflow_runs` row and spawns an agent
 with the workflow blueprint, current ticket context, and the workflow run id it
 must complete.
 
+## Workflow Key Reuse And Postmortem Promotion
+
+Workflow identity is `workflow_key`, not `name`. Names are operator-facing
+labels. Agents and postmortem promotion must reuse an existing non-superseded
+workflow when the operational purpose matches, even when ticket titles,
+postmortem ids, or display names differ.
+
+Promotion behavior:
+
+- `POST /api/workflows` derives or honors `approval_policy.workflow_key`.
+- If a non-superseded workflow already exists for that key, the route updates
+  and versions that workflow instead of creating a name-only duplicate.
+- `POST /api/postmortems/{id}/promote` derives the workflow key from ticket
+  class, summary, improvements, workflow proposal, guardrails, and tests.
+- Similar postmortems update the same reusable workflow and record
+  `workflow_action: updated` plus `workflow_key` in notes and audit details.
+- New or changed workflows remain review-gated; create/update paths do not
+  silently activate workflows.
+- `GET /api/postmortems/{id}` resolves promoted workflow assets by promotion
+  audit details first, then by `workflow_key`.
+
+Focused local regression:
+
+```bash
+python -m unittest tests.test_workflow_postmortem_reuse tests.test_postmortem_evidence_compaction
+```
+
+Deployed smoke:
+
+```bash
+python scripts/smoke_workflow_postmortem_reuse.py http://localhost:25480
+```
+
+The smoke creates two similar resolved phishing tickets with a unique ticket
+class, promotes two approved postmortems, and verifies the second promotion
+updates the first workflow id/version instead of creating a duplicate.
+
 ## Agentic System Smoke
 
 ```bash
@@ -89,7 +126,8 @@ This creates a provider-agnostic setup ticket, assigns a short local-model agent
 5. Rebuild and health check.
 6. Operational metrics smoke.
 7. Setup plane smoke.
-8. Phishing lifecycle smoke.
-9. Agentic system smoke.
-10. Local model agent smoke.
-11. Setup agent smoke.
+8. Workflow/postmortem reuse smoke.
+9. Phishing lifecycle smoke.
+10. Agentic system smoke.
+11. Local model agent smoke.
+12. Setup agent smoke.

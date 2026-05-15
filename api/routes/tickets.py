@@ -361,21 +361,14 @@ async def push_ticket_to_provider(ticket_id: int, body: dict = Body(None)):
     return await ticket_service.push_to_provider(ticket_id, provider)
 
 
-@router.post("/{ticket_id}/status")
-async def update_ticket_status(
+async def _update_ticket_status(
     ticket_id: int,
-    status: str = Body(...),
-    actor: str = Body("dashboard"),
-    reason: str = Body(""),
-    close_provider: bool = Body(False),
+    status: str,
+    actor: str = "dashboard",
+    reason: str = "",
+    close_provider: bool = False,
     request: Request = None,
 ):
-    """Explicitly update ticket status.
-
-    Agent task completion does not imply ticket closure. Agents and operators
-    call this endpoint only when the workflow/deployment policy says the ticket
-    should move to a new state.
-    """
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
@@ -448,6 +441,66 @@ async def update_ticket_status(
         "note_id": note.get("id"),
         "provider_result": provider_result,
     }
+
+
+@router.post("/{ticket_id}/status")
+async def update_ticket_status(
+    ticket_id: int,
+    status: str = Body(...),
+    actor: str = Body("dashboard"),
+    reason: str = Body(""),
+    close_provider: bool = Body(False),
+    request: Request = None,
+):
+    """Explicitly update ticket status.
+
+    Agent task completion does not imply ticket closure. Agents and operators
+    call this endpoint only when the workflow/deployment policy says the ticket
+    should move to a new state.
+    """
+    return await _update_ticket_status(
+        ticket_id,
+        status,
+        actor=actor,
+        reason=reason,
+        close_provider=close_provider,
+        request=request,
+    )
+
+
+async def update_ticket_status_compat(
+    ticket_id: int,
+    body: dict = Body(None),
+    request: Request = None,
+):
+    """Compatibility shim for local agents that try to update the ticket itself.
+
+    The documented endpoint is POST /api/tickets/{ticket_id}/status. During live
+    agent runs, local models sometimes infer PATCH/PUT/POST /api/tickets/{id}.
+    Accepting the same explicit status payload here keeps the workflow moving
+    while preserving the same access checks, provider-close opt-in, audit note,
+    and event trail.
+    """
+    payload = body or {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Expected JSON object with status.")
+    status = payload.get("status")
+    if not status:
+        raise HTTPException(status_code=400, detail="Missing status.")
+    return await _update_ticket_status(
+        ticket_id,
+        status,
+        actor=payload.get("actor") or "dashboard",
+        reason=payload.get("reason") or "",
+        close_provider=bool(payload.get("close_provider")),
+        request=request,
+    )
+
+
+router.post("/{ticket_id}")(update_ticket_status_compat)
+router.put("/{ticket_id}")(update_ticket_status_compat)
+router.patch("/{ticket_id}")(update_ticket_status_compat)
+
 
 @router.post("/sync-all")
 async def sync_all(body=Body(None)):

@@ -57,6 +57,33 @@ _active_processes = {}
 _model_config = None
 
 
+async def _record_model_turn_event(action, task_id, agent_id, details=None):
+    """Record model turn timing in both operator-facing logs."""
+    payload = {
+        "task_id": task_id,
+        "agent_id": agent_id,
+        **(details or {}),
+    }
+    try:
+        await log_event(
+            "agent",
+            "info",
+            f"agent_{agent_id}" if agent_id else "agent-runner",
+            action,
+            f"task_{task_id}",
+            payload,
+        )
+        await execute(
+            "INSERT INTO audit_log (actor, action, target, details) VALUES ($1, $2, $3, $4)",
+            f"agent_{agent_id}" if agent_id else "agent-runner",
+            action,
+            f"task_{task_id}",
+            json.dumps(payload, default=str),
+        )
+    except Exception:
+        pass
+
+
 def _tail_text(text, limit=12000):
     if not text:
         return ""
@@ -95,17 +122,52 @@ async def _stream_reader(stream, label, output_path, task_id, agent_id, chunks, 
                 except json.JSONDecodeError:
                     event = {}
                 if event.get("type") == "assistant":
+                    turn_index = activity.get("model_turn_index") or 1
+                    started_at = activity.get("model_turn_started_at")
+                    duration = None
+                    if activity.get("model_turn_started_monotonic"):
+                        duration = round(time.monotonic() - activity["model_turn_started_monotonic"], 3)
                     content = ((event.get("message") or {}).get("content") or [])
                     has_tool_use = any(
                         isinstance(item, dict) and item.get("type") == "tool_use"
                         for item in content
                     )
+                    await _record_model_turn_event(
+                        "agent_model_turn_finished",
+                        task_id,
+                        agent_id,
+                        {
+                            "turn_index": turn_index,
+                            "turn_started_at": started_at,
+                            "duration_seconds": duration,
+                            "stop_reason": (event.get("message") or {}).get("stop_reason"),
+                            "has_tool_use": has_tool_use,
+                            "session_id": event.get("session_id"),
+                            "uuid": event.get("uuid"),
+                        },
+                    )
+                    activity["model_turn_open"] = False
                     if (event.get("message") or {}).get("stop_reason") == "tool_use" and not has_tool_use:
                         activity["malformed_tool_use_at"] = time.monotonic()
                     elif has_tool_use or event.get("type") == "user":
                         activity.pop("malformed_tool_use_at", None)
                 elif event.get("type") == "user":
                     activity.pop("malformed_tool_use_at", None)
+                    activity["model_turn_index"] = int(activity.get("model_turn_index") or 1) + 1
+                    activity["model_turn_started_at"] = datetime.now().isoformat()
+                    activity["model_turn_started_monotonic"] = time.monotonic()
+                    activity["model_turn_open"] = True
+                    await _record_model_turn_event(
+                        "agent_model_turn_started",
+                        task_id,
+                        agent_id,
+                        {
+                            "turn_index": activity["model_turn_index"],
+                            "trigger": "tool_result_or_user_event",
+                            "session_id": event.get("session_id"),
+                            "uuid": event.get("uuid"),
+                        },
+                    )
             rendered = text if label == "stdout" else f"[stderr] {text}"
             f.write(rendered)
             f.flush()
@@ -300,6 +362,114 @@ def _blocked_task_status(checkpoint):
     if "user" in status:
         return "awaiting_user_response"
     return "blocked"
+
+
+async def _gate_state_for_wait(agent_id, ticket_id):
+    if not agent_id or not ticket_id:
+        return {"pending": [], "approved": [], "completed": [], "rejected": []}
+    rows = await fetchall("""
+        SELECT id, status, action, target, approved_at, requested_at
+        FROM change_requests
+        WHERE ticket_id = $1
+          AND (agent_id = $2 OR agent_id IS NULL)
+          AND status IN ('pending', 'approved', 'completed', 'rejected')
+        ORDER BY requested_at DESC
+        LIMIT 20
+    """, ticket_id, agent_id)
+    state = {"pending": [], "approved": [], "completed": [], "rejected": []}
+    for row in rows or []:
+        status = str(row.get("status") or "").lower()
+        if status in state:
+            state[status].append(row)
+    return state
+
+
+def _wait_checkpoint_obsolete(checkpoint, gate_state):
+    if not _checkpoint_blocks_completion(checkpoint):
+        return False
+    if gate_state.get("pending"):
+        return False
+    return bool(gate_state.get("approved") or gate_state.get("completed"))
+
+
+async def _spawn_obsolete_wait_continuation(agent_id, task_id, task_meta, checkpoint, gate_state, prompt):
+    ticket_id = (task_meta or {}).get("ticket_id")
+    if not ticket_id:
+        return {"status": "skipped", "reason": "missing_ticket_id"}
+    active_ticket_agent = await fetchrow("""
+        SELECT a.id, a.last_task_id
+        FROM agents a
+        LEFT JOIN agent_tasks at ON at.id = a.last_task_id
+        WHERE a.ticket_id = $1
+          AND a.id <> $2
+          AND (
+              a.status IN ('spawned', 'running', 'working')
+              OR at.status IN ('queued', 'running')
+          )
+        ORDER BY a.started_at DESC NULLS LAST, a.id DESC
+        LIMIT 1
+    """, ticket_id, agent_id)
+    if active_ticket_agent:
+        return {
+            "status": "already_active_ticket",
+            "agent_id": active_ticket_agent["id"],
+            "task_id": active_ticket_agent.get("last_task_id"),
+        }
+
+    agent = await fetchrow("SELECT model, selected_model FROM agents WHERE id = $1", agent_id)
+    approved_ids = [row["id"] for row in gate_state.get("approved", [])]
+    completed_ids = [row["id"] for row in gate_state.get("completed", [])]
+    continuation = "\n\nApproval/wait-state correction:\n"
+    continuation += (
+        f"- Source agent {agent_id} wrote wait checkpoint `{(checkpoint or {}).get('step', 'unknown')}` "
+        "after the relevant gate had already been approved or completed.\n"
+    )
+    continuation += f"- Approved change IDs: {approved_ids or 'none'}; completed change IDs: {completed_ids or 'none'}.\n"
+    continuation += (
+        "- Re-read the ticket, change request statuses, access request status, and approval notes now. "
+        "Do not request the same access again unless a fresh permission wall is proven. "
+        "Continue the original ticket objective and write an audit note explaining the stale wait recovery.\n"
+    )
+    try:
+        from services import access_control
+        actor_context = await access_control.load_agent_subject(agent_id)
+    except Exception:
+        actor_context = {
+            "identity": {"username": f"agent_{agent_id}"},
+            "roles": ["agent-operator"],
+            "capabilities": ["agents:spawn", "tickets:read", "changes:request"],
+            "scopes": [],
+            "max_classification": "internal",
+        }
+    result = await spawn_agent(
+        ticket_id,
+        (agent or {}).get("selected_model") or (agent or {}).get("model") or "qwen/qwen3.6-27b",
+        (prompt or "") + continuation,
+        (task_meta or {}).get("task_type") or "ticket_resolution",
+        actor_context=actor_context,
+    )
+    await _add_agent_note(
+        ticket_id,
+        agent_id,
+        task_id,
+        "Stale wait checkpoint recovered",
+        (
+            f"Agent `{agent_id}` wrote wait checkpoint `{(checkpoint or {}).get('step', 'unknown')}` "
+            "after the approval/access gate was already open or completed. "
+            f"Continuation agent `{result.get('agent_id')}` / task `{result.get('task_id')}` was queued to continue from current state."
+        ),
+        "agent-control-plane",
+    )
+    await log_event("agent", "warning", f"agent_{agent_id}", "agent_wait_checkpoint_obsolete",
+                    f"task_{task_id}", {
+                        "ticket_id": ticket_id,
+                        "checkpoint": checkpoint,
+                        "approved_change_ids": approved_ids,
+                        "completed_change_ids": completed_ids,
+                        "replacement_agent_id": result.get("agent_id"),
+                        "replacement_task_id": result.get("task_id"),
+                    })
+    return {"status": "continuation_spawned", **result}
 
 
 def _loads(value, default):
@@ -891,7 +1061,7 @@ You are an SOC agent assigned to resolve the following ticket.
 ## Dashboard API
 Use the canonical dashboard API for ticket context, notes, approvals, postmortems, and workflows:
 - Base URL inside this runner: `{DASHBOARD_API_BASE}`
-- Preferred bounded evidence: `GET /api/postmortems/evidence/{ticket.get('id', '{ticket_id}')}?task_log_lines=0`
+- Preferred bounded evidence: `GET /api/postmortems/evidence/{ticket.get('id', '{ticket_id}')}?task_log_lines=0&max_notes=8&max_articles=1&max_audit=6`
   - This includes relevant active/tested/approved reusable workflows and knowledge articles; follow matching active/approved workflows first and note any deviation.
 - Ticket detail: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}`
 - Broader ticket context only when needed: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}/context`
@@ -934,6 +1104,7 @@ ticket note explaining the blocked system/resource/action, create
 
 Treat iTop, ServiceNow, Jira, and local-only tickets as providers behind the dashboard API. Do not call provider-specific APIs unless the ticket context or a skill explicitly requires it.
 Do not fetch broad schema, docs, or tool inventory endpoints such as `/openapi.json`, `/api/tools`, `/api/tools/status`, `/docs`, or `/redoc`. The runner blocks those calls because they have caused local models to stall on oversized context. Use the bounded ticket/evidence endpoints above.
+Do not read saved harness `tool-results` files from current or prior agent workdirs to recover context. Those files can be oversized and stale; re-query the canonical dashboard API with narrower filters instead.
 When posting a postmortem, use the exact body fields `ticket_id`, `agent_id`, `task_id`, `status`, `summary`, `went_well`, `improvements`, `workflow_proposal`, `skill_proposals`, `test_cases`, `guardrails`, `documentation`, and `created_by`. Text fields must be strings. `skill_proposals`, `test_cases`, and `guardrails` must be JSON arrays, not strings. Put timeline, root cause, residual risk, and evidence details into the text fields instead of inventing extra top-level fields.
 
 ## Checkpoint Protocol
@@ -1117,13 +1288,30 @@ async def _run_agent(work_dir, prompt, task_id):
         )
         await log_event("agent", "info", f"task_{task_id}", "agent_spawned",
                         f"pid_{process.pid}", {"work_dir": work_dir, "model": model})
+        await _record_model_turn_event(
+            "agent_model_turn_started",
+            task_id,
+            agent_id,
+            {
+                "turn_index": 1,
+                "trigger": "process_started",
+                "pid": process.pid,
+                "model": model,
+            },
+        )
         await execute(
             "UPDATE agent_tasks SET progress_pct = GREATEST(progress_pct, 5) WHERE id = $1",
             task_id,
         )
 
         chunks = []
-        activity = {"last_output_at": time.monotonic()}
+        activity = {
+            "last_output_at": time.monotonic(),
+            "model_turn_index": 1,
+            "model_turn_started_at": datetime.now().isoformat(),
+            "model_turn_started_monotonic": time.monotonic(),
+            "model_turn_open": True,
+        }
         idle_state = {"stalled": False, "reason": None}
         checkpoint_state = {"checkpoint": None, "reason": None}
         idle_task = asyncio.create_task(
@@ -1396,6 +1584,35 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
         if checkpoint_blocked:
             blocked_status = _blocked_task_status(checkpoint)
             blocked_summary = (checkpoint or {}).get("output") or "Agent stopped at a durable wait gate."
+            gate_state = await _gate_state_for_wait(
+                agent_id,
+                (task_meta or {}).get("ticket_id"),
+            )
+            if _wait_checkpoint_obsolete(checkpoint, gate_state):
+                continuation = await _spawn_obsolete_wait_continuation(
+                    agent_id,
+                    task_id,
+                    task_meta,
+                    checkpoint,
+                    gate_state,
+                    prompt,
+                )
+                await execute(
+                    "UPDATE agent_tasks SET status = 'completed', output = $1, completed_at = NOW(), "
+                    "progress_pct = 100 WHERE id = $2",
+                    _tail_text(result.get("stdout", "")) or blocked_summary,
+                    task_id,
+                )
+                await execute(
+                    "UPDATE agents SET status = 'finished', heartbeat = NOW(), error_message = $1, finished_at = NOW() WHERE id = $2",
+                    (
+                        "Wait checkpoint was stale because the approval/access gate was already approved or completed. "
+                        f"Continuation: {continuation.get('status')}"
+                    )[:500],
+                    agent_id,
+                )
+                _active_processes.pop(task_id, None)
+                return
             await execute(
                 "UPDATE agent_tasks SET status = $1, output = $2, completed_at = NOW(), "
                 "progress_pct = GREATEST(progress_pct, $3) WHERE id = $4",
@@ -1483,6 +1700,16 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
             summary = _parse_stream_result(result["stdout"]) or "Claude Code process completed"
             if checkpoint_done and checkpoint.get("output"):
                 summary = checkpoint.get("output")
+            if not checkpoint_done:
+                _write_checkpoint(
+                    work_dir,
+                    task_id,
+                    "agent_runner_success",
+                    "done",
+                    summary[:1000],
+                    100,
+                )
+                checkpoint = _read_checkpoint_sync(work_dir) or checkpoint
             await execute(
                 "UPDATE agent_tasks SET status = 'completed', output = $1, "
                 "completed_at = NOW(), progress_pct = 100 WHERE id = $2",
@@ -1525,6 +1752,15 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                     f"{recovered_completion['final_notes']} final notes, and "
                     f"{recovered_completion['postmortems']} postmortems."
                 )
+                if not checkpoint_done:
+                    _write_checkpoint(
+                        work_dir,
+                        task_id,
+                        "agent_runner_recovered_completion",
+                        "done",
+                        summary[:1000],
+                        100,
+                    )
                 await execute(
                     "UPDATE agent_tasks SET status = 'completed', output = $1, error_message = NULL, "
                     "completed_at = NOW(), progress_pct = 100 WHERE id = $2",

@@ -74,6 +74,7 @@ function navigateTo(page) {
         case "agents": loadAgents(); break;
         case "changes": loadChanges(); break;
         case "workflows": loadWorkflows(); break;
+        case "postmortems": loadPostmortemsPage(); break;
         case "cicd": loadCicd(); break;
         case "learning": loadLearning(); break;
         case "tools": loadTools(); break;
@@ -157,6 +158,7 @@ function startAutoRefresh() {
                 case "agents": loadAgents(); break;
                 case "changes": loadChanges(); break;
                 case "workflows": loadWorkflows(); break;
+                case "postmortems": loadPostmortemsPage(); break;
                 case "cicd": loadCicd(); break;
             }
         }
@@ -527,14 +529,18 @@ async function loadWorkflows() {
     tbody.innerHTML = workflows.map(w => `
         <tr>
             <td>${w.id}</td>
-            <td>${escHtml(w.name)}</td>
+            <td>
+                ${escHtml(w.name)}
+                ${w.workflow_key ? `<div class="module-meta">key: ${escHtml(w.workflow_key)}</div>` : ""}
+                ${w.description ? `<div class="module-meta">${escHtml(w.description).slice(0, 140)}</div>` : ""}
+            </td>
             <td>${escHtml(w.ticket_class || "-")}</td>
             <td>
                 <span class="status-badge ${statusClass(w.status)}">${escHtml(workflowStatusLabel(w))}</span>
                 <div class="module-meta">${workflowReviewHint(w)}</div>
             </td>
             <td>${w.version || 1}</td>
-            <td>${formatTime(w.updated_at)}<div class="module-meta">${w.run_count || 0} runs / ${w.completed_run_count || 0} complete</div></td>
+            <td>${formatTime(w.updated_at)}<div class="module-meta">${w.run_count || 0} runs / ${w.completed_run_count || 0} complete${w.latest_run_at ? ` / last ${formatTime(w.latest_run_at)}` : ""}</div></td>
             <td>
                 <button class="btn btn-sm" onclick="viewWorkflow(${w.id})">Detail</button>
                 ${w.status !== "active" ? `<button class="btn btn-sm btn-success" onclick="reviewWorkflow(${w.id}, true)">Approve</button>` : ""}
@@ -756,7 +762,7 @@ async function loadCicd() {
             <td>${escHtml(row.provider || "gitlab")}</td>
             <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(row.repo_ref)}">
                 ${escHtml(row.repo_ref)}
-                ${repoExternalUrl(row.provider, row.repo_ref) ? `<a class="inline-link" href="${escAttr(repoExternalUrl(row.provider, row.repo_ref))}" target="_blank" rel="noopener">repo</a>` : ""}
+                ${row.repo_url || repoExternalUrl(row.provider, row.repo_ref) ? `<a class="inline-link" href="${escAttr(row.repo_url || repoExternalUrl(row.provider, row.repo_ref))}" target="_blank" rel="noopener">repo</a>` : ""}
             </td>
             <td><span class="status-badge ${statusClass(row.status)}">${escHtml(row.status)}</span></td>
             <td>${row.ticket_id ? `<button class="btn btn-sm" onclick="viewTicket(${row.ticket_id})">#${row.ticket_id}</button>` : "-"}</td>
@@ -769,7 +775,10 @@ async function loadCicd() {
 function repoExternalUrl(provider, repoRef) {
     const ref = String(repoRef || "");
     if (ref.startsWith("http://") || ref.startsWith("https://")) return ref;
-    if (String(provider || "").toLowerCase() === "gitlab" && ref.includes("/")) return `http://192.168.50.222/${ref}`;
+    const configuredBase = window.SOC_DASHBOARD_CONFIG?.gitlabBaseUrl || window.GITLAB_BASE_URL || "";
+    if (String(provider || "").toLowerCase() === "gitlab" && ref.includes("/") && configuredBase) {
+        return `${String(configuredBase).replace(/\/$/, "")}/${ref}`;
+    }
     return "";
 }
 
@@ -934,7 +943,20 @@ async function loadPostmortems() {
     const data = await apiGet("/api/postmortems?limit=100");
     const tbody = document.getElementById("postmortems-tbody");
     if (!data || !tbody) return;
-    const rows = data.postmortems || [];
+    renderPostmortemRows(tbody, data.postmortems || [], true);
+}
+
+async function loadPostmortemsPage() {
+    const status = document.getElementById("postmortem-filter-status")?.value || "";
+    const params = new URLSearchParams({ limit: "250" });
+    if (status) params.set("status", status);
+    const data = await apiGet(`/api/postmortems?${params}`);
+    const tbody = document.getElementById("postmortems-page-tbody");
+    if (!data || !tbody) return;
+    renderPostmortemRows(tbody, data.postmortems || [], false);
+}
+
+function renderPostmortemRows(tbody, rows, compact) {
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="loading">No postmortems yet</td></tr>';
         return;
@@ -942,12 +964,13 @@ async function loadPostmortems() {
     tbody.innerHTML = rows.map(p => `
         <tr>
             <td>${p.id}</td>
-            <td>${escHtml(p.ticket_title || p.ticket_id || "-")}</td>
+            <td>${p.ticket_id ? `<button class="inline-link" onclick="viewTicket(${p.ticket_id})">#${p.ticket_id}</button>` : "-"} ${escHtml(p.ticket_title || "")}</td>
             <td><span class="status-badge ${statusClass(p.status)}">${learningStatusLabel(p.status)}</span><div class="module-meta">${learningStatusHint(p.status)}</div></td>
-            <td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.summary || "-")}</td>
+            <td style="max-width:${compact ? "360" : "560"}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.summary || "-")}</td>
             <td>${formatTime(p.updated_at || p.created_at)}</td>
             <td>
-                ${p.status === "approved" || p.status === "ready_for_review" ? `<button class="btn btn-sm" onclick="promotePostmortem(${p.id})">Create Assets</button>` : ""}
+                <button class="btn btn-sm" onclick="viewPostmortem(${p.id})">Full</button>
+                ${p.status === "approved" || p.status === "ready_for_review" ? `<button class="btn btn-sm" onclick="promotePostmortem(${p.id})">Promote / Update Assets</button>` : ""}
                 ${p.status !== "approved" && p.status !== "promoted" ? `<button class="inline-link" onclick="reviewPostmortem(${p.id}, true)">approve</button>` : ""}
                 <button class="inline-link" onclick="openAuditTrail('postmortem_${p.id}')">audit</button>
             </td>
@@ -984,7 +1007,7 @@ async function reviewPostmortem(id, approved) {
 }
 
 async function promotePostmortem(postmortemId) {
-    const ok = confirm("Promote this postmortem into a knowledge article, draft workflow, and reusable skills?");
+    const ok = confirm("Promote or update reusable assets from this postmortem? Existing workflows with the same operational key will be updated, not duplicated.");
     if (!ok) return;
     const result = await apiPost(`/api/postmortems/${postmortemId}/promote`, {
         create_knowledge: true,
@@ -995,8 +1018,9 @@ async function promotePostmortem(postmortemId) {
         mark_promoted: true,
     });
     if (result && !result.error) {
-        alert(`Postmortem promoted. KB ${result.knowledge_article_id || "none"}, workflow ${result.workflow_id || "none"}, skills ${(result.skill_ids || []).join(", ") || "none"}.`);
+        alert(`Postmortem promoted. KB ${result.knowledge_article_id || "none"}, workflow ${result.workflow_id || "none"} (${result.workflow_action || "n/a"}), key ${result.workflow_key || "none"}, skills ${(result.skill_ids || []).join(", ") || "none"}.`);
         loadLearning();
+        loadPostmortemsPage();
     } else {
         alert(result?.error || "Postmortem promotion failed");
     }
@@ -1227,21 +1251,76 @@ async function viewTicket(id) {
     loadTicketActivity(id);
 }
 
+function jsonBlock(value) {
+    if (value === undefined || value === null || value === "") return "";
+    if (typeof value === "string") {
+        try {
+            return JSON.stringify(JSON.parse(value), null, 2);
+        } catch (_) {
+            return value;
+        }
+    }
+    return JSON.stringify(value, null, 2);
+}
+
+async function viewPostmortem(id) {
+    const data = await apiGet(`/api/postmortems/${id}`);
+    if (!data) return;
+    const assets = data.promotion_assets || {};
+    const workflow = assets.workflow;
+    document.getElementById("modal-title").textContent = `Postmortem #${data.id}`;
+    document.getElementById("modal-body").innerHTML = `
+        <div class="modal-section">
+            <div class="section-title">Postmortem</div>
+            <div class="detail-row"><span class="detail-label">Ticket:</span><span>${data.ticket_id ? `<button class="inline-link" onclick="viewTicket(${data.ticket_id})">#${data.ticket_id}</button>` : "-"} ${escHtml(data.ticket_title || "")}</span></div>
+            <div class="detail-row"><span class="detail-label">Status:</span><span class="status-badge ${statusClass(data.status)}">${learningStatusLabel(data.status)}</span></div>
+            <div class="detail-row"><span class="detail-label">Reviewed:</span><span>${escHtml(data.reviewed_by || "-")} ${data.reviewed_at ? `at ${formatDate(data.reviewed_at)}` : ""}</span></div>
+            <div class="detail-row"><span class="detail-label">Created:</span><span>${formatDate(data.created_at)}</span></div>
+            <div class="detail-row"><span class="detail-label">Updated:</span><span>${formatDate(data.updated_at)}</span></div>
+            <div class="detail-row" style="flex-direction:column"><span class="detail-label">Summary:</span><pre class="task-output">${escHtml(data.summary || "")}</pre></div>
+            <div class="detail-row" style="flex-direction:column"><span class="detail-label">Went Well:</span><pre class="task-output">${escHtml(data.went_well || "")}</pre></div>
+            <div class="detail-row" style="flex-direction:column"><span class="detail-label">Improvements:</span><pre class="task-output">${escHtml(data.improvements || "")}</pre></div>
+            <div class="detail-row" style="flex-direction:column"><span class="detail-label">Workflow Proposal:</span><pre class="task-output">${escHtml(data.workflow_proposal || "")}</pre></div>
+            <div class="detail-row" style="flex-direction:column"><span class="detail-label">Test Cases:</span><pre class="task-output">${escHtml(jsonBlock(data.test_cases))}</pre></div>
+            <div class="detail-row" style="flex-direction:column"><span class="detail-label">Guardrails:</span><pre class="task-output">${escHtml(jsonBlock(data.guardrails))}</pre></div>
+            ${data.documentation ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Documentation:</span><pre class="task-output">${escHtml(data.documentation)}</pre></div>` : ""}
+        </div>
+        <div class="modal-section">
+            <div class="section-title">Promotion Assets</div>
+            <div class="detail-row"><span class="detail-label">Workflow key:</span><span>${escHtml(assets.workflow_key || "-")}</span></div>
+            <div class="detail-row"><span class="detail-label">Workflow:</span><span>${workflow ? `<button class="inline-link" onclick="viewWorkflow(${workflow.id})">#${workflow.id} ${escHtml(workflow.name || "")}</button> <span class="status-badge ${statusClass(workflow.status)}">${escHtml(workflow.status || "")}</span> v${workflow.version || 1}` : "not promoted"}</span></div>
+            <div class="detail-row" style="flex-direction:column"><span class="detail-label">Knowledge Articles:</span><div>${(assets.knowledge_articles || []).length ? assets.knowledge_articles.map(a => `<div class="modal-activity-item"><span>#${a.id}</span><span>${escHtml(a.title || "")}</span></div>`).join("") : '<div class="learning-meta">No promoted article found.</div>'}</div></div>
+            <div class="detail-row" style="flex-direction:column"><span class="detail-label">Skills:</span><div>${(assets.skills || []).length ? assets.skills.map(s => `<div class="modal-activity-item"><span>#${s.id}</span><span>${escHtml(s.name || "")} <span class="source-badge local">${escHtml(s.category || "")}</span></span></div>`).join("") : '<div class="learning-meta">No promoted skills found.</div>'}</div></div>
+        </div>
+        <div class="modal-actions-bar">
+            ${data.status === "approved" || data.status === "ready_for_review" ? `<button class="btn btn-sm" onclick="promotePostmortem(${data.id})">Promote / Update Assets</button>` : ""}
+            ${data.status !== "approved" && data.status !== "promoted" ? `<button class="btn btn-sm btn-success" onclick="reviewPostmortem(${data.id}, true)">Approve</button>` : ""}
+            <button class="btn btn-sm" onclick="openAuditTrail('postmortem_${data.id}')">Audit Trail</button>
+        </div>
+    `;
+    document.getElementById("ticket-modal").classList.add("active");
+}
+
 async function viewWorkflow(id) {
     const data = await apiGet(`/api/workflows/${id}`);
     if (!data) return;
+    const workflowDescription = data.description || "";
     document.getElementById("modal-title").textContent = `Workflow #${data.id}`;
     document.getElementById("modal-body").innerHTML = `
         <div class="modal-section">
             <div class="section-title">Workflow</div>
             <div class="detail-row"><span class="detail-label">Name:</span><span>${escHtml(data.name)}</span></div>
+            <div class="detail-row"><span class="detail-label">Workflow key:</span><span>${escHtml(data.workflow_key || "-")}</span></div>
             <div class="detail-row"><span class="detail-label">Status:</span><span class="status-badge ${statusClass(data.status)}">${escHtml(workflowStatusLabel(data))}</span></div>
             <div class="detail-row"><span class="detail-label">Review:</span><span>${workflowReviewHint(data)}</span></div>
             <div class="detail-row"><span class="detail-label">Class:</span><span>${escHtml(data.ticket_class || "-")}</span></div>
             <div class="detail-row"><span class="detail-label">Version:</span><span>${data.version || 1}</span></div>
+            <div class="detail-row"><span class="detail-label">Trigger:</span><span>${escHtml(data.trigger_type || "-")}</span></div>
+            ${workflowDescription ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Description:</span><pre class="task-output">${escHtml(workflowDescription)}</pre></div>` : ""}
             <div class="detail-row" style="flex-direction:column"><span class="detail-label">Blueprint:</span><pre class="task-output">${escHtml(data.blueprint || "")}</pre></div>
             ${data.test_plan ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Test Plan:</span><pre class="task-output">${escHtml(data.test_plan)}</pre></div>` : ""}
             ${data.test_results ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Test Results:</span><pre class="task-output">${escHtml(data.test_results)}</pre></div>` : ""}
+            ${data.approval_policy ? `<div class="detail-row" style="flex-direction:column"><span class="detail-label">Approval Policy:</span><pre class="task-output">${escHtml(jsonBlock(data.approval_policy))}</pre></div>` : ""}
         </div>
         <div class="modal-section">
             <div class="section-title">Tickets / Test Runs</div>

@@ -55,6 +55,14 @@ def load_postmortems_route():
     ticket_service.compact_ticket_payload = lambda ticket: ticket
     sys.modules["services.ticket_service"] = ticket_service
 
+    workflow_keys_spec = importlib.util.spec_from_file_location(
+        "services.workflow_keys",
+        ROOT / "api" / "services" / "workflow_keys.py",
+    )
+    workflow_keys = importlib.util.module_from_spec(workflow_keys_spec)
+    workflow_keys_spec.loader.exec_module(workflow_keys)
+    sys.modules["services.workflow_keys"] = workflow_keys
+
     spec = importlib.util.spec_from_file_location(
         "tested_postmortems",
         ROOT / "api" / "routes" / "postmortems.py",

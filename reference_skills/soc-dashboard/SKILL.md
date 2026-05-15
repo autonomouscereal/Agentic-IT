@@ -45,6 +45,62 @@ Claude Code is the first working harness, not the permanent architecture boundar
 
 Default ticket agents should complete assigned work quickly and safely. They should not create reusable workflows unless explicitly asked. Postmortems and workflow-builds are separate learning tasks that convert completed work into reviewed knowledge, skills, tests, guardrails, and draft workflows.
 
+## Workflow / Postmortem Reuse Rules
+
+Workflows are reusable operational procedures. `workflow_key` is the reuse
+identity; `name` is only a display label.
+
+Agents performing postmortems or workflow-building must:
+
+1. Call `GET /api/workflows?limit=100` before creating a workflow.
+2. Read likely matches with `GET /api/workflows/{id}`.
+3. Compare by ticket class, workflow key, description, blueprint, trigger type,
+   approval policy, test plan, and run history.
+4. Update a substantially similar workflow with `PUT /api/workflows/{id}`
+   instead of creating a near-duplicate.
+5. Create a new workflow only when the operational behavior is genuinely
+   different, not because the ticket title, marker, or postmortem id differs.
+6. Keep new or changed workflows in `draft`, `ready_for_review`, or `tested`
+   until a human/operator approval calls `POST /api/workflows/{id}/review`.
+7. Use `superseded` for obsolete duplicates only after explicit operator
+   consolidation approval.
+8. Include workflow key/action evidence in postmortem promotion notes and audit
+   trails so operators can prove whether an asset was created or updated.
+
+## Approval Timing And Wait Recovery
+
+Approval gates may be approved while a local model is already generating. Use
+`agent_model_turn_started` / `agent_model_turn_finished` audit and event rows
+to explain whether stale "waiting" text came from a model turn that began before
+the approval landed.
+
+When approval lands for an already-running task, `/api/changes/{id}/approve`
+delivers a non-interrupting dashboard steering update into the agent workspace.
+If the agent still writes a stale durable wait checkpoint after the gate is
+approved/completed, the runner either keeps the active task running with a
+correction or queues a continuation agent after the owned harness is stopped.
+True waits must use `awaiting_access`, `pending_approval`,
+`awaiting_user_response`, or `blocked` instead of generic `working`.
+
+## Wazuh Lease-Gated Provider Access
+
+Wazuh/SIEM reads must be performed through dashboard-gated endpoints after an
+agent has a scoped lease. Agents request
+`{"system":"wazuh","resource_type":"api","resource_id":"wazuh.manager","action":"read"}`
+through `/api/agents/{agent_id}/vault/lease`; if denied, create an access
+request. Access requests should include `lease_request`, but the dashboard also
+infers leases for known resources such as `wazuh.manager API` and records
+`lease_request_inferred` evidence.
+
+After approval/completion, use:
+
+- `GET /api/agents/{agent_id}/wazuh/manager/status`
+- `GET /api/agents/{agent_id}/wazuh/rules/{rule_id}`
+- `GET /api/agents/{agent_id}/wazuh/alerts/search?rule_id=...&source_ip=...`
+
+These routes validate `agent_vault_leases`, return no secret values, and write
+provider-access audit events.
+
 Additional reconstructed context for future Codex sessions lives at:
 
 - `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/AGENTS.md`

@@ -33,6 +33,24 @@ When creating an access request for a denied vault lease, include a
 access gate mints the scoped `agent_vault_leases` row for the original or
 resumed agent without exposing any credential value.
 
+If a local model omits `lease_request` but names a known provider resource such
+as `wazuh.manager API`, `Wazuh alert index <name>`, or
+`GitLab project <group/project>`, the SOC Dashboard now infers the scoped lease
+request and records `lease_request_inferred` in audit/event evidence. This is a
+fallback only; explicit `lease_request` is still preferred for exact scopes.
+
+For Wazuh/SIEM work after approval, agents must use dashboard-gated provider
+endpoints instead of calling Wazuh directly:
+
+```bash
+curl -sS "$SOC_DASHBOARD_URL/api/agents/$AGENT_ID/wazuh/manager/status"
+curl -sS "$SOC_DASHBOARD_URL/api/agents/$AGENT_ID/wazuh/rules/11"
+curl -sS "$SOC_DASHBOARD_URL/api/agents/$AGENT_ID/wazuh/alerts/search?rule_id=11&source_ip=192.0.2.10"
+```
+
+These endpoints validate the agent's Wazuh lease, return no secret values, and
+write provider-access audit events.
+
 ## Flow
 
 1. Read the current ticket and determine the exact missing resource and minimum
@@ -96,6 +114,12 @@ Real local-model resume proof:
 
 ```bash
 python scripts/agentic_access_request_resume_demo.py http://localhost:25480 qwen/qwen3.6-27b
+```
+
+Real Wazuh lease/provider proof:
+
+```bash
+python scripts/agentic_wazuh_access_request_demo.py http://localhost:25480 qwen/qwen3.6-27b
 ```
 
 Expected proof: the first agent stops at `waiting_for_access`, an access request

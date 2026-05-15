@@ -1,6 +1,168 @@
 # Known Issues And Fix Log
 
-Last updated: 2026-05-14.
+Last updated: 2026-05-15.
+
+## Found In Workflow Reuse Proof
+
+### Active agent can stall after approvals by chasing oversized persisted context output
+
+Status: fixed, deployed, and real-agent tested on 2026-05-15.
+
+Problem:
+
+Workflow reuse proof ticket `537` / agent `200` received approval steering for
+changes `159` and `160`, but its task checkpoint stayed at the initial queued
+checkpoint. The task output showed the agent was trying to parse a large saved
+tool-result file from `/root/.claude/projects/.../tool-results/...` instead of
+returning to the compact evidence endpoint or completing the approved gates.
+
+Impact:
+
+The run was not blocked by approvals anymore, but the model could continue
+spending time on a brittle context-file recovery path. That makes real
+post-approval continuation look unreliable even though the control plane
+delivered the approval steering correctly.
+
+Mitigation:
+
+- Do not stop the owned harness while it is still alive unless swim-lane
+  evidence proves it cannot recover.
+- Add a bounded steering note to the ticket telling the agent that changes
+  `159` and `160` are approved, to ignore the saved tool-result parsing path,
+  re-read compact evidence or current ticket context, complete the gates with
+  lab-safe evidence, write final notes, and resolve the ticket.
+- Harden ticket and auto-assignment prompts plus the global runner instructions:
+  agents must not read saved harness `tool-results` files from current or prior
+  workdirs to recover context, and must re-query bounded dashboard evidence
+  endpoints with narrower filters instead.
+- Tighten the compact postmortem evidence endpoint defaults so agent-facing
+  responses use fewer notes/articles/audit entries, shorter text snippets, and
+  the compact ticket payload. Ticket `537` / continuation agent `201` showed
+  that the previous "compact" response could still be too large for a local
+  continuation turn after an approval gate.
+
+Verification:
+
+- Agent `202` used the bounded evidence path, completed approved changes `159`
+  and `160`, and wrote final ticket note `1188`.
+- The run exposed a second endpoint-drift issue: agent `202` tried
+  `PATCH`/`PUT`/`POST /api/tickets/537` instead of the documented
+  `POST /api/tickets/537/status`.
+- `api/routes/tickets.py` now accepts explicit status payloads on
+  `POST`/`PUT`/`PATCH /api/tickets/{id}` as a compatibility shim that reuses
+  the same access check, status validation, audit note, and `close_provider`
+  opt-in behavior as the canonical `/status` endpoint.
+- Agent `203` performed the final compatibility-path proof by calling
+  `POST /api/tickets/537` with `close_provider=false`; the API returned
+  `status=resolved`, status note `1193`, and provider close skipped as
+  requested.
+- Ticket `537` ended `resolved`; agent `203` / task `200` ended
+  `finished` / `completed` at `100%`; `/api/agents/active` returned zero.
+- Local regression tests passed:
+  `python -m unittest tests.test_agent_lifecycle_guards tests.test_ticket_status_endpoint`.
+- AI server focused tests passed before rebuild:
+  `PYTHONPATH=api python3 -m unittest discover -s tests -p 'test_agent_lifecycle_guards.py'`
+  and `PYTHONPATH=api python3 -m unittest discover -s tests -p 'test_ticket_status_endpoint.py'`.
+
+### Completed task can leave a stale initial checkpoint file
+
+Status: fixed, deployed, and unit-tested on 2026-05-15.
+
+Problem:
+
+In the same ticket `537` proof, continuation agent `203` resolved the ticket
+and task `200` reached `completed` / `100%` in the database, but the workspace
+`/app/agent_work/203/checkpoint.json` still contained the initial
+`init` / `queued` checkpoint. The runner correctly persisted task completion,
+but the file evidence did not match the task table when the model exited
+without writing its own final checkpoint.
+
+Impact:
+
+Operators and auditors who inspect the workspace file directly can see stale
+evidence even though the control plane marked the task complete. That makes
+demo evidence harder to explain and weakens self-repair logic that reads the
+file first.
+
+Fix:
+
+- `api/services/agent_runner.py` now writes a terminal `checkpoint.json` with
+  `status=done`, `progress_pct=100`, and an explicit runner step when a
+  harness exits successfully or completion is recovered from terminal evidence
+  without a final done checkpoint.
+- Added a regression test proving successful agent completion creates a
+  terminal checkpoint file when the model omitted one.
+
+## Found In Wazuh Access Request Pass
+
+### Approved Wazuh access request did not mint a usable agent lease
+
+Status: fixed, deployed, and real-agent tested on 2026-05-15.
+
+Problem:
+
+Ticket `533` / agent `197` requested Wazuh API read access. The approval gate
+was approved and completed, but the completion result showed
+`granted_leases: []`. The agent then retried
+`POST /api/agents/197/vault/lease` for `wazuh.manager` read and still received
+`missing_agent_vault_lease`.
+
+Impact:
+
+The agent could not retrieve full Wazuh alert details after approval, so it
+classified the alert from partial ticket evidence and wrote an investigation
+limitation. That is unacceptable for the real access-request workflow: approval
+must create a scoped lease and the runner must have an auditable provider path
+to use it.
+
+Current diagnosis:
+
+- The access request did not include a structured `lease_request`, so the
+  access gate had no lease to mint on completion.
+- The Wazuh API is reachable on the host at `https://127.0.0.1:26500`, but the
+  dashboard runner container cannot resolve `host.docker.internal` or the Wazuh
+  compose service name.
+- The Wazuh container exposes API credentials through runtime environment, but
+  the dashboard must consume only vault references and scoped leases, never
+  plaintext ticket notes or hardcoded secrets.
+
+Fix:
+
+- Infer provider lease requests for known access resources such as
+  `wazuh.manager API` when agents omit `lease_request`.
+- Add explicit audit/event evidence when access requests include, infer, mint,
+  or fail to mint leases.
+- Provide a dashboard-controlled Wazuh alert lookup path that validates a
+  scoped `agent_vault_leases` row before reaching the Wazuh API.
+- Surface Wazuh semantic responses, such as "rule does not exist", as provider
+  evidence instead of converting them into dashboard transport failures.
+- Add unit and real agentic access-request tests proving denial before
+  approval, lease minting after approval/completion, and Wazuh provider reads
+  through the approved path.
+
+Verification:
+
+- Local compile and full unit suite: `python -m unittest discover -s tests -p
+  "test_*.py"` passed, 107 tests.
+- Remote focused suite passed after rebuild:
+  `PYTHONPATH=api python3 -m unittest tests.test_access_lease_inference
+  tests.test_change_approval_resume`.
+- Real local-model proof `WAZUH_ACCESS_1778811177`: ticket `535`, initial
+  agent `198`, continuation agent `199`, access request `15`, access ticket
+  `536`, change `158`. Agent `198` was denied Wazuh read access and stopped at
+  `awaiting_access`; approval inferred/minted Wazuh lease `127`; agent `199`
+  re-requested the lease with `credential_value: null`, read Wazuh manager
+  status through the gated endpoint, performed rule and indexer lookups, and
+  resolved the ticket.
+
+Residual note:
+
+The proof corrected its ticket history with note `1164`: Wazuh manager status
+was retrieved successfully, but Wazuh returned no rule metadata for id `11` and
+the indexer search for rule `11` / source `192.168.50.115` returned zero
+matching alerts. The access-control and provider-read path is fixed; the
+original alert content still depends on the upstream SIEM ticket payload and
+available Wazuh/indexer data.
 
 ## Found In Current Note-Steering Pass
 

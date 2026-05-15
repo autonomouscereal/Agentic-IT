@@ -57,6 +57,12 @@ def load_agents_route():
         def post(self, *args, **kwargs):
             return lambda fn: fn
 
+        def put(self, *args, **kwargs):
+            return lambda fn: fn
+
+        def patch(self, *args, **kwargs):
+            return lambda fn: fn
+
         def websocket(self, *args, **kwargs):
             return lambda fn: fn
 
@@ -120,6 +126,12 @@ def load_tickets_route():
             return lambda fn: fn
 
         def post(self, *args, **kwargs):
+            return lambda fn: fn
+
+        def put(self, *args, **kwargs):
+            return lambda fn: fn
+
+        def patch(self, *args, **kwargs):
             return lambda fn: fn
 
     class HTTPException(Exception):
@@ -258,6 +270,14 @@ def load_postmortems_route():
     ticket_service = types.ModuleType("services.ticket_service")
     ticket_service.compact_ticket_payload = lambda value: value
     sys.modules["services.ticket_service"] = ticket_service
+
+    workflow_keys_spec = importlib.util.spec_from_file_location(
+        "services.workflow_keys",
+        ROOT / "api" / "services" / "workflow_keys.py",
+    )
+    workflow_keys = importlib.util.module_from_spec(workflow_keys_spec)
+    workflow_keys_spec.loader.exec_module(workflow_keys)
+    sys.modules["services.workflow_keys"] = workflow_keys
 
     spec = importlib.util.spec_from_file_location(
         "tested_postmortems_route",
@@ -715,6 +735,58 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertFalse(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in executes))
         self.assertTrue(any(event[3] == "agent_completed" for event in events))
 
+    def test_successful_agent_completion_writes_terminal_checkpoint_when_missing(self):
+        module = load_agent_runner()
+
+        async def fetchrow(query, *args):
+            if "JOIN agents" in query:
+                return {
+                    "ticket_id": 537,
+                    "task_type": "ticket_resolution",
+                    "task_status": "queued",
+                    "agent_status": "spawned",
+                }
+            return {
+                "ticket_id": 537,
+                "task_type": "ticket_resolution",
+                "started_at": "2026-05-15T05:00:00Z",
+            }
+
+        async def execute(*args):
+            return None
+
+        async def log_event(*args):
+            return None
+
+        async def run_agent(*args):
+            return {"exit_code": 0, "stdout": '{"type":"result","result":"closed ticket"}', "stderr": ""}
+
+        async def mirror_checkpoint(*args):
+            return None
+
+        async def complete_changes(*args, **kwargs):
+            return {"completed": [], "skipped": []}
+
+        async def add_note(*args, **kwargs):
+            return 1
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module.log_event = log_event
+        module._run_agent = run_agent
+        module._mirror_checkpoint_to_task = mirror_checkpoint
+        module.complete_approved_changes_for_task = complete_changes
+        module._add_agent_note = add_note
+        module._semaphore = asyncio.Semaphore(1)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            asyncio.run(module._spawn_with_semaphore(tmp, "prompt", 203, 200))
+            checkpoint = Path(tmp, "checkpoint.json").read_text(encoding="utf-8")
+
+        self.assertIn('"status": "done"', checkpoint)
+        self.assertIn('"progress_pct": 100', checkpoint)
+        self.assertIn('"step": "agent_runner_success"', checkpoint)
+
     def test_curl_guard_blocks_broad_dashboard_endpoints(self):
         module = load_agent_runner()
         with tempfile.TemporaryDirectory() as tmp:
@@ -927,6 +999,40 @@ class AgentLifecycleGuardTests(unittest.TestCase):
 
         self.assertTrue(module._checkpoint_blocks_completion(checkpoint))
         self.assertEqual(module._blocked_task_status(checkpoint), "awaiting_access")
+
+    def test_wait_checkpoint_is_obsolete_after_gate_approval(self):
+        module = load_agent_runner()
+
+        checkpoint = {
+            "step": "waiting-for-wazuh-access",
+            "status": "waiting_for_access",
+            "output": "waiting on Wazuh read access",
+            "progress_pct": 45,
+        }
+        gate_state = {
+            "pending": [],
+            "approved": [{"id": 157, "status": "approved"}],
+            "completed": [],
+        }
+
+        self.assertTrue(module._wait_checkpoint_obsolete(checkpoint, gate_state))
+
+    def test_wait_checkpoint_is_not_obsolete_when_gate_still_pending(self):
+        module = load_agent_runner()
+
+        checkpoint = {
+            "step": "waiting-for-wazuh-access",
+            "status": "waiting_for_access",
+            "output": "waiting on Wazuh read access",
+            "progress_pct": 45,
+        }
+        gate_state = {
+            "pending": [{"id": 157, "status": "pending"}],
+            "approved": [],
+            "completed": [],
+        }
+
+        self.assertFalse(module._wait_checkpoint_obsolete(checkpoint, gate_state))
 
     def test_done_checkpoint_does_not_block_completion(self):
         module = load_agent_runner()

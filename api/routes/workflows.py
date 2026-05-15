@@ -1,8 +1,38 @@
 from fastapi import APIRouter, Body, Query
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.event_logger import log_event
+from services.workflow_keys import workflow_key_for_fields, policy_with_key, load_policy
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+
+
+REVIEW_GATED_STATUSES = {"draft", "ready_for_review", "tested", "needs_revision", "superseded"}
+
+
+def _review_gated_status(status, fallback="draft"):
+    """Keep create/update paths from silently activating reusable automation."""
+    value = (status or fallback or "draft").strip()
+    if value in ("active", "approved"):
+        return "ready_for_review"
+    return value if value in REVIEW_GATED_STATUSES else fallback
+
+
+def _policy(value):
+    return load_policy(value)
+
+
+def _workflow_key(name, description, ticket_class, trigger_type, blueprint, approval_policy):
+    policy = _policy(approval_policy)
+    explicit_key = policy.get("workflow_key")
+    return workflow_key_for_fields(
+        ticket_class=ticket_class,
+        trigger_type=trigger_type,
+        name=name,
+        description=description,
+        blueprint=blueprint,
+        approval_policy=policy,
+        explicit_key=explicit_key,
+    )
 
 
 @router.get("")
@@ -94,31 +124,73 @@ async def create_workflow(
     skill_ids: list = Body([]),
     created_by: str = Body("dashboard"),
 ):
-    workflow_id = await fetchval("""
-        INSERT INTO agent_workflows (
-            name, description, ticket_class, trigger_type, status, blueprint,
-            test_plan, test_results, approval_policy, skill_ids, created_by
+    workflow_key = _workflow_key(name, description, ticket_class, trigger_type, blueprint, approval_policy)
+    approval_policy = policy_with_key(_policy(approval_policy), workflow_key)
+    status = _review_gated_status(status)
+    existing = await fetchrow("""
+        SELECT id, name
+        FROM agent_workflows
+        WHERE workflow_key = $1 AND status <> 'superseded'
+        ORDER BY
+            CASE WHEN status IN ('active', 'approved') THEN 0
+                 WHEN status = 'tested' THEN 1
+                 WHEN status = 'ready_for_review' THEN 2
+                 ELSE 3 END,
+            updated_at DESC
+        LIMIT 1
+    """, workflow_key)
+    action = "updated" if existing else "created"
+    if existing:
+        rename_on_reuse = bool(approval_policy.get("rename_on_reuse") or approval_policy.get("update_name"))
+        workflow_id = await fetchval("""
+            UPDATE agent_workflows
+            SET name = CASE WHEN $2 THEN $3 ELSE name END,
+                description = $4,
+                ticket_class = $5,
+                trigger_type = $6,
+                status = $7,
+                version = version + 1,
+                blueprint = $8,
+                test_plan = $9,
+                test_results = $10,
+                approval_policy = $11,
+                skill_ids = $12,
+                workflow_key = $13,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id
+        """,
+            existing["id"], rename_on_reuse, name, description, ticket_class,
+            trigger_type, status, blueprint, test_plan, test_results,
+            json_dumps(approval_policy), json_dumps(skill_ids or []), workflow_key,
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        ON CONFLICT (name) DO UPDATE SET
-            description = EXCLUDED.description,
-            ticket_class = EXCLUDED.ticket_class,
-            trigger_type = EXCLUDED.trigger_type,
-            status = EXCLUDED.status,
-            version = agent_workflows.version + 1,
-            blueprint = EXCLUDED.blueprint,
-            test_plan = EXCLUDED.test_plan,
-            test_results = EXCLUDED.test_results,
-            approval_policy = EXCLUDED.approval_policy,
-            skill_ids = EXCLUDED.skill_ids,
-            updated_at = NOW()
-        RETURNING id
-    """, name, description, ticket_class, trigger_type, status, blueprint,
-        test_plan, test_results, json_dumps(approval_policy or {}),
-        json_dumps(skill_ids or []), created_by)
+    else:
+        workflow_id = await fetchval("""
+            INSERT INTO agent_workflows (
+                name, description, ticket_class, trigger_type, status, blueprint,
+                test_plan, test_results, approval_policy, skill_ids, created_by, workflow_key
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (name) DO UPDATE SET
+                description = EXCLUDED.description,
+                ticket_class = EXCLUDED.ticket_class,
+                trigger_type = EXCLUDED.trigger_type,
+                status = EXCLUDED.status,
+                version = agent_workflows.version + 1,
+                blueprint = EXCLUDED.blueprint,
+                test_plan = EXCLUDED.test_plan,
+                test_results = EXCLUDED.test_results,
+                approval_policy = EXCLUDED.approval_policy,
+                skill_ids = EXCLUDED.skill_ids,
+                workflow_key = EXCLUDED.workflow_key,
+                updated_at = NOW()
+            RETURNING id
+        """, name, description, ticket_class, trigger_type, status, blueprint,
+            test_plan, test_results, json_dumps(approval_policy),
+            json_dumps(skill_ids or []), created_by, workflow_key)
     await log_event("workflow", "info", created_by, "workflow_saved",
-                    f"workflow_{workflow_id}", {"name": name, "status": status})
-    return {"id": workflow_id, "status": "saved"}
+                    f"workflow_{workflow_id}", {"name": name, "status": status, "workflow_key": workflow_key, "action": action})
+    return {"id": workflow_id, "status": "saved", "action": action, "workflow_key": workflow_key}
 
 
 @router.put("/{workflow_id}")
@@ -135,17 +207,39 @@ async def update_workflow(
     approval_policy: dict = Body(None),
     skill_ids: list = Body(None),
 ):
+    existing = await fetchrow("SELECT * FROM agent_workflows WHERE id = $1", workflow_id)
+    if not existing:
+        return {"error": "Workflow not found"}
+    merged_policy = _policy(approval_policy) if approval_policy is not None else _policy(existing.get("approval_policy"))
+    effective = {
+        "name": name if name is not None else existing.get("name"),
+        "description": description if description is not None else existing.get("description"),
+        "ticket_class": ticket_class if ticket_class is not None else existing.get("ticket_class"),
+        "trigger_type": trigger_type if trigger_type is not None else existing.get("trigger_type"),
+        "blueprint": blueprint if blueprint is not None else existing.get("blueprint"),
+    }
+    workflow_key = _workflow_key(
+        effective["name"],
+        effective["description"],
+        effective["ticket_class"],
+        effective["trigger_type"],
+        effective["blueprint"],
+        merged_policy,
+    )
+    merged_policy = policy_with_key(merged_policy, workflow_key)
+    safe_status = _review_gated_status(status, existing.get("status")) if status is not None else None
     values = {
         "name": name,
         "description": description,
         "ticket_class": ticket_class,
         "trigger_type": trigger_type,
-        "status": status,
+        "status": safe_status,
         "blueprint": blueprint,
         "test_plan": test_plan,
         "test_results": test_results,
-        "approval_policy": json_dumps(approval_policy) if approval_policy is not None else None,
+        "approval_policy": json_dumps(merged_policy),
         "skill_ids": json_dumps(skill_ids) if skill_ids is not None else None,
+        "workflow_key": workflow_key,
     }
     fields = []
     params = []
@@ -157,6 +251,7 @@ async def update_workflow(
             idx += 1
     if not fields:
         return {"error": "No fields to update"}
+    fields.append("version = version + 1")
     fields.append("updated_at = NOW()")
     params.append(workflow_id)
     await execute(f"UPDATE agent_workflows SET {', '.join(fields)} WHERE id = ${idx}", *params)

@@ -7,6 +7,11 @@ prefer this service over calling provider-specific modules directly.
 from datetime import datetime
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services.event_logger import log_event
+try:
+    from services.lease_inference import infer_lease_request
+except ImportError:  # unit-test stubs may load this service without service package contents
+    def infer_lease_request(*args, **kwargs):
+        return None
 from services.ticket_links import external_ticket_url
 from services.workflow_keys import workflow_key_for_ticket
 
@@ -547,6 +552,7 @@ async def create_access_request(
         "assignment_group": assignment_group,
         "auto_complete": False,
     }
+    inferred_lease_request = None
     if isinstance(lease_request, dict) and lease_request.get("system"):
         approval_policy["lease_request"] = {
             "system": lease_request.get("system"),
@@ -556,6 +562,11 @@ async def create_access_request(
             "credential_ref": lease_request.get("credential_ref"),
             "expires_at": lease_request.get("expires_at"),
         }
+    else:
+        inferred_lease_request = infer_lease_request(resource, permission, account_ref)
+        if inferred_lease_request:
+            approval_policy["lease_request"] = inferred_lease_request
+            approval_policy["lease_request_inferred"] = True
     change_id = await fetchval("""
         INSERT INTO change_requests (
             agent_id, ticket_id, action, target, reason, risk_level,
@@ -626,6 +637,7 @@ async def create_access_request(
             "permission": permission,
             "assignment_group": assignment_group,
             "lease_request": approval_policy.get("lease_request"),
+            "lease_request_inferred": bool(inferred_lease_request),
         }))
     await log_event("access", "info", f"agent_{agent_id}" if agent_id else created_by,
                     "access_request_created", f"access_request_{access_request_id}", {
@@ -634,6 +646,8 @@ async def create_access_request(
                         "agent_id": agent_id,
                         "change_id": change_id,
                         "assignment_group": assignment_group,
+                        "lease_request": approval_policy.get("lease_request"),
+                        "lease_request_inferred": bool(inferred_lease_request),
                     })
 
     return {

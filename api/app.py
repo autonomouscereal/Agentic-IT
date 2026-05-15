@@ -22,6 +22,7 @@ from routes import (
     access,
     intake,
     cicd,
+    wazuh,
 )
 from services import itop_sync, health_check, task_tracker, agent_auditor
 from services import access_control
@@ -120,6 +121,7 @@ app.include_router(setup.router)
 app.include_router(access.router)
 app.include_router(intake.router)
 app.include_router(cicd.router)
+app.include_router(wazuh.router)
 
 frontend_dir = "/frontend"
 

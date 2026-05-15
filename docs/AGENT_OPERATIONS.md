@@ -25,6 +25,7 @@ from active evidence:
 - `checkpoint.json` content and `agent_tasks.checkpoints`
 - ticket notes written by the agent/control plane
 - `audit_log` and `agent_audit_reviews`
+- AI proxy / LM Studio activity for the selected model route
 - PostgreSQL memory hook events for the agent workspace, when memory is enabled
 
 The dashboard should let operators answer:
@@ -37,6 +38,44 @@ The dashboard should let operators answer:
 - Did it request approval before risky work?
 - Did the process clean up after completion?
 - Can a demo viewer follow the story from ticket notes without reading raw logs?
+
+## Proxy And Model Activity
+
+Use proxy and model-server evidence as another liveness signal before deciding
+an agent is stuck. A stale checkpoint can coexist with active local inference,
+especially on long Qwen/LM Studio runs. Do not stop or restart an agent only
+because `progress_pct` or `checkpoint.json` has not advanced if proxy/model
+logs show recent `/v1/messages` activity for that agent's selected model.
+
+Reference lab checks on the AI server:
+
+```bash
+curl -s http://localhost:4001/health
+curl -s http://localhost:4001/v1/models
+docker logs --since 20m --tail 200 ai-proxy
+curl -s http://localhost:25480/api/agents/active
+curl -s http://localhost:25480/api/agents/processes
+```
+
+Interpretation:
+
+- Recent `POST /v1/messages` lines from `claude-cli` through `ai-proxy` to
+  `localhost:1234` mean the harness is actively using LM Studio/local model.
+- Repeated `GET /v1/models` alone proves the runner health probe is alive, not
+  that the agent is making reasoning progress.
+- Combine proxy timestamps with agent heartbeat, process PID, output log
+  growth, ticket notes, audit events, and checkpoint state.
+- If proxy/model activity is recent but no ticket notes/checkpoints are moving,
+  prefer light steering through ticket notes over stopping the harness.
+- For live capability evaluations, avoid giving the agent suspected root cause,
+  hostname, device type, user identity, or asset owner through steering notes
+  until after the run. Operator hints can contaminate the proof by turning
+  discovery into confirmation. If context must be added mid-run, label it as
+  unverified operator context and record that the run is no longer a clean
+  autonomous-identification proof.
+- If there is no proxy/model activity, no output growth, no checkpoint movement,
+  and no relevant wait gate, treat it as a no-progress reliability issue and
+  document it before intervening.
 
 ## Real-Time Metrics
 
@@ -141,6 +180,72 @@ Latest live proof: ticket `530`, iTop `UserRequest::307`, agent `193`, task
 note `1079` both became delivered steering events, the task completed at 100%,
 and a forced provider sync preserved dashboard status `resolved` even while
 iTop still reported provider status `new`.
+
+## Approval Timing And Wait Recovery
+
+Approval gates can be approved while a local model is already inside a model
+turn. In that case the next text emitted by the agent may reflect the pre-approval
+worldview even though the gate is already open. The runner records explicit
+`agent_model_turn_started` and `agent_model_turn_finished` events in both
+`event_log` and `audit_log` so operators can compare model-turn timing against
+`change_approved` and `change_completed` events.
+
+When `POST /api/changes/{id}/approve` sees that the original agent task is
+still active, it does not spawn a duplicate continuation. Instead it delivers a
+dashboard-sourced steering update into `agent_steering_inbox.json` telling the
+agent to re-read current change/access state before writing any wait checkpoint.
+
+If the agent still writes a durable wait checkpoint such as `waiting_for_access`
+after the associated gate is already approved or completed, the control plane
+treats that checkpoint as stale. The task tracker keeps the active task in
+`running` while delivering a correction; if the blocking-checkpoint watcher has
+already stopped the harness, the runner marks the source agent as historical
+evidence and queues a continuation agent with the stale-wait correction. If a
+gate is truly still pending, the agent/task state becomes `awaiting_access`,
+`pending_approval`, `awaiting_user_response`, or `blocked` instead of remaining
+generic `working`.
+
+## Wazuh Access Requests
+
+Wazuh/SIEM provider access is lease-gated. Agents must not call Wazuh hosts
+directly or ask operators for API credentials. The control plane owns provider
+credentials through runtime configuration and exposes audited, agent-scoped
+read endpoints only after a matching `agent_vault_leases` row exists.
+
+Expected flow:
+
+1. Agent requests a lease with
+   `POST /api/agents/{agent_id}/vault/lease` for
+   `{"system":"wazuh","resource_type":"api","resource_id":"wazuh.manager","action":"read"}`.
+2. If denied, the agent creates a ticket access request and stops at
+   `waiting_for_access`.
+3. The access request should include `lease_request`. If a local model omits
+   it but names a known resource such as `wazuh.manager API`, the dashboard now
+   infers the scoped Wazuh lease and records that inference in audit/event logs.
+4. When the approved gate is completed, the dashboard mints the scoped lease;
+   secret values are not stored in dashboard tables or returned to the agent.
+5. The resumed agent re-requests the lease and then uses
+   `GET /api/agents/{agent_id}/wazuh/manager/status`,
+   `GET /api/agents/{agent_id}/wazuh/rules/{rule_id}`, and, when indexer
+   credentials are configured,
+   `GET /api/agents/{agent_id}/wazuh/alerts/search?rule_id=...&source_ip=...`.
+
+Audit events to look for:
+
+- `access_request_created` with `lease_request` and
+  `lease_request_inferred`.
+- `access_request_lease_inferred_on_completion` when older/incomplete gates are
+  repaired at completion time.
+- `agent_vault_lease_granted`.
+- `wazuh_provider_access_allowed`.
+- `wazuh_manager_status_read`, `wazuh_rule_lookup`, or
+  `wazuh_alert_search`.
+
+Real proof script:
+
+```bash
+python scripts/agentic_wazuh_access_request_demo.py http://localhost:25480 qwen/qwen3.6-27b
+```
 
 ## Creating Agents
 
@@ -312,6 +417,18 @@ true` only when the external ticketing record should also be closed.
 Deployments that require human review, requester response, access grants, or
 manual provider handoff can leave tickets open after the agent task finishes,
 but the agent must write a note explaining that handoff.
+
+The API also accepts the same explicit status payload on `POST`, `PUT`, and
+`PATCH /api/tickets/{ticket_id}` as a compatibility path for local models that
+infer a ticket-resource update. The compatibility path still requires a status
+field and preserves the same audit note, status validation, access check, and
+`close_provider` behavior. Prompts should continue to teach the canonical
+`/status` endpoint because it is more explicit.
+
+If a model exits cleanly without writing a terminal `checkpoint.json`, the
+runner writes a final checkpoint with `status=done`, `progress_pct=100`, and a
+runner-owned step before marking the task complete. This keeps workspace-file
+evidence aligned with the task table for audits and self-repair.
 
 Terminal-evidence recovery is the narrow exception for local-model finalization
 hangs. If a running ticket-resolution task has no open gates, completed approval

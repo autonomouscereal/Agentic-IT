@@ -22,6 +22,12 @@ def load_tickets_route():
         def post(self, *args, **kwargs):
             return lambda fn: fn
 
+        def put(self, *args, **kwargs):
+            return lambda fn: fn
+
+        def patch(self, *args, **kwargs):
+            return lambda fn: fn
+
     class HTTPException(Exception):
         def __init__(self, status_code=None, detail=None):
             self.status_code = status_code
@@ -163,6 +169,45 @@ class TicketStatusEndpointTests(unittest.TestCase):
         self.assertEqual(result["provider_result"]["status"], "resolved")
         self.assertEqual(provider_calls[0][0][0], "itop")
         self.assertEqual(provider_calls[0][0][1], 442)
+
+    def test_compat_status_update_accepts_agent_ticket_patch_shape(self):
+        module, provider_registry, ticket_service = load_tickets_route()
+        executes = []
+        notes = []
+
+        async def fetchrow(query, *args):
+            return {"id": 537, "provider": "local", "provider_ref": "LOCAL-537", "status": "in_progress"}
+
+        async def execute(query, *args):
+            executes.append((query, args))
+
+        async def add_note(*args, **kwargs):
+            notes.append((args, kwargs))
+            return {"id": 1189, "ticket_id": args[0], "status": "created"}
+
+        async def close_ticket(*args, **kwargs):
+            raise AssertionError("provider close should remain opt-in")
+
+        async def log_event(*args, **kwargs):
+            return None
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module.log_event = log_event
+        ticket_service.add_note = add_note
+        provider_registry.close_ticket = close_ticket
+
+        result = asyncio.run(module.update_ticket_status_compat(
+            537,
+            body={
+                "status": "closed",
+                "close_provider": False,
+            },
+        ))
+
+        self.assertEqual(result["status"], "closed")
+        self.assertTrue(any(call[1][0] == "closed" for call in executes))
+        self.assertEqual(notes[0][1]["source"], "ticket-status")
 
 
 if __name__ == "__main__":
