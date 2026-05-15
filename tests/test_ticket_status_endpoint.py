@@ -88,6 +88,78 @@ def load_tickets_route():
 
 
 class TicketStatusEndpointTests(unittest.TestCase):
+    def test_local_runner_note_without_attribution_is_inferred_as_agent_note(self):
+        module, _provider_registry, ticket_service = load_tickets_route()
+        notes = []
+
+        class Client:
+            host = "127.0.0.1"
+
+        class Request:
+            client = Client()
+            headers = {}
+
+        async def fetchrow(query, *args):
+            return {"id": args[0], "owning_group": "SOC", "security_classification": "internal"}
+
+        async def fetchall(query, *args):
+            if "FROM agents a" in query:
+                return [{"id": 214}]
+            return []
+
+        async def add_note(*args, **kwargs):
+            notes.append((args, kwargs))
+            return {"id": 1306, "ticket_id": args[0], "status": "created"}
+
+        module.fetchrow = fetchrow
+        module.fetchall = fetchall
+        ticket_service.add_note = add_note
+
+        result = asyncio.run(module.add_ticket_note(
+            559,
+            body="Agent verified the cleanup and wrote evidence.",
+            request=Request(),
+        ))
+
+        self.assertEqual(result["status"], "created")
+        self.assertEqual(notes[0][0][2], "agent-214")
+        self.assertEqual(notes[0][0][3], "agent")
+
+    def test_nonlocal_note_without_attribution_still_defaults_to_dashboard(self):
+        module, _provider_registry, ticket_service = load_tickets_route()
+        notes = []
+
+        class Client:
+            host = "192.168.50.10"
+
+        class Request:
+            client = Client()
+            headers = {}
+
+        async def fetchrow(query, *args):
+            return {"id": args[0], "owning_group": "SOC", "security_classification": "internal"}
+
+        async def fetchall(*args, **kwargs):
+            raise AssertionError("non-local dashboard notes should not infer active agents")
+
+        async def add_note(*args, **kwargs):
+            notes.append((args, kwargs))
+            return {"id": 1307, "ticket_id": args[0], "status": "created"}
+
+        module.fetchrow = fetchrow
+        module.fetchall = fetchall
+        ticket_service.add_note = add_note
+
+        result = asyncio.run(module.add_ticket_note(
+            559,
+            body="Operator added a dashboard note.",
+            request=Request(),
+        ))
+
+        self.assertEqual(result["status"], "created")
+        self.assertEqual(notes[0][0][2], "dashboard")
+        self.assertEqual(notes[0][0][3], "dashboard")
+
     def test_status_update_does_not_close_provider_unless_requested(self):
         module, provider_registry, ticket_service = load_tickets_route()
         executes = []

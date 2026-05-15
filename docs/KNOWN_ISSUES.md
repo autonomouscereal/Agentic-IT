@@ -2,6 +2,83 @@
 
 Last updated: 2026-05-15.
 
+## Found In Learning Catalog Cleanup Proof
+
+### Done checkpoint did not close ticket when agent skipped explicit status call
+
+Status: found and mitigated live on 2026-05-15; root hardening remains open.
+
+Problem:
+
+Agent `214` completed task `211` with checkpoint
+`learning_cleanup_complete`, `progress_pct=100`, and
+`LEARNING_CLEANUP_COMPLETE LEARNING_CLEANUP_AGENTIC_1778857750` evidence, but
+ticket `559` stayed `new` because the agent did not call
+`POST /api/tickets/559/status` before exiting.
+
+Impact:
+
+The agent work was complete, but the ticket/provider lifecycle needed
+supervisor cleanup. This weakens the end-to-end proof because a finished agent
+can leave an operator-facing ticket open even when the task prompt explicitly
+required resolution.
+
+Mitigation:
+
+The supervisor closed ticket `559` through the deployed status API with
+`close_provider=true`. The API returned `provider_result.status=resolved`, and
+a forced single-ticket sync showed both local ticket status and iTop provider
+payload status as `resolved`.
+
+Follow-up:
+
+Harden terminal task recovery so completed ticket-resolution tasks with durable
+done checkpoints, final evidence notes, no open gates, and an explicit prompt
+closure requirement are surfaced as a reliability warning or safely resolved
+through the same provider-aware `/status` path. Keep the rule narrow so generic
+task completion does not silently close tickets that require human review.
+
+### Agent-authored notes without attribution self-steer as dashboard notes
+
+Status: fixed, deployed, and unit-tested on 2026-05-15.
+
+Problem:
+
+Agent `214` posted a completion/evidence note to ticket `559` without explicit
+`author` or `source` fields. The ticket note endpoint defaulted the note to
+`author=dashboard` and `source=dashboard`, so the non-interrupting steering
+system treated the agent's own note as a human dashboard update and delivered a
+steering event back to the same active agent.
+
+Impact:
+
+The audit trail misattributes agent evidence as dashboard/operator text, and an
+active agent can receive a noisy self-steering inbox update. This can delay
+closure or create confusing run evidence even though the note body itself is
+valid.
+
+Fix:
+
+- Keep explicit `author`/`source` attribution as the preferred agent contract.
+- Add a narrow API fallback for local runner note posts that omit attribution:
+  when the request comes from the local API/runner path and exactly one active
+  agent is assigned to that ticket, infer `author=agent-<id>` and
+  `source=agent`.
+- Preserve dashboard/provider note steering for explicit or non-local notes.
+- Add route-level regression tests so omitted local agent attribution no longer
+  creates dashboard self-steering risk.
+
+Verification:
+
+- Local `python -m unittest tests.test_ticket_status_endpoint
+  tests.test_agent_note_steering`: PASS, 11 tests.
+- Remote `PYTHONPATH=api python3 -m unittest tests.test_ticket_status_endpoint
+  tests.test_agent_note_steering tests.test_itop_outbound
+  tests.test_ticket_service_provider_sync`: PASS, 23 tests.
+- Remote API rebuild completed; `/health` returned
+  `{"status":"ok","version":"1.3.0"}` and `/api/agents/active` returned zero
+  active agents after restart.
+
 ## Found In Access Broker Review
 
 ### Credential broker decisions were too opaque and approved workflows could not pre-mint normal leases

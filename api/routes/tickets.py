@@ -39,6 +39,62 @@ from services.event_logger import log_event
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
 
+
+def _request_client_host(request):
+    client = getattr(request, "client", None)
+    return str(getattr(client, "host", "") or "").strip().lower()
+
+
+def _is_local_runner_request(request):
+    """Return true for same-container/local runner API calls."""
+    host = _request_client_host(request)
+    forwarded_for = ""
+    headers = getattr(request, "headers", None)
+    if headers:
+        forwarded_for = str(headers.get("x-forwarded-for", "") or "").split(",", 1)[0].strip().lower()
+    return host in {"127.0.0.1", "::1", "localhost"} and not forwarded_for
+
+
+async def _infer_note_attribution(ticket_id, author, source, agent_id=None, request=None):
+    explicit_author = author not in (None, "")
+    explicit_source = source not in (None, "")
+    if explicit_author and explicit_source:
+        return author, source
+
+    inferred_agent_id = None
+    if agent_id:
+        active = await fetchrow("""
+            SELECT a.id
+            FROM agents a
+            JOIN agent_tasks t ON t.agent_id = a.id
+            WHERE a.id = $1
+              AND a.ticket_id = $2
+              AND a.status IN ('spawned', 'running', 'working')
+              AND t.status IN ('queued', 'running')
+            ORDER BY t.created_at DESC
+            LIMIT 1
+        """, agent_id, ticket_id)
+        if active:
+            inferred_agent_id = active.get("id")
+    elif not explicit_author and not explicit_source and _is_local_runner_request(request):
+        active = await fetchall("""
+            SELECT a.id
+            FROM agents a
+            JOIN agent_tasks t ON t.agent_id = a.id
+            WHERE a.ticket_id = $1
+              AND a.status IN ('spawned', 'running', 'working')
+              AND t.status IN ('queued', 'running')
+            ORDER BY t.created_at DESC
+            LIMIT 2
+        """, ticket_id)
+        if active and len(active) == 1:
+            inferred_agent_id = active[0].get("id")
+
+    if inferred_agent_id:
+        return author or f"agent-{inferred_agent_id}", source or "agent"
+    return author or "dashboard", source or "dashboard"
+
+
 @router.get("")
 async def list_tickets(
     status: str = Query(None, description="Filter by status"),
@@ -228,8 +284,9 @@ async def add_ticket_note(
     note: str = Body(None),
     content: str = Body(None),
     title: str = Body(None),
-    author: str = Body("dashboard"),
-    source: str = Body("dashboard"),
+    author: str = Body(None),
+    source: str = Body(None),
+    agent_id: int = Body(None),
     visibility: str = Body("internal"),
     external_ref: str = Body(None),
     request: Request = None,
@@ -261,6 +318,7 @@ async def add_ticket_note(
             raise HTTPException(status_code=403, detail=ticket_decision)
     if title and title not in text:
         text = f"{title}\n\n{text}"
+    author, source = await _infer_note_attribution(ticket_id, author, source, agent_id, request)
     return await ticket_service.add_note(ticket_id, text, author, source, visibility, external_ref)
 
 
