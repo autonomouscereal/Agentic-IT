@@ -193,6 +193,140 @@ class AccessControlPolicyTests(unittest.TestCase):
         self.assertNotIn("password", ref.lower())
         self.assertNotIn("token", ref.lower())
 
+    def test_request_agent_vault_lease_returns_human_broker_trace_without_secret(self):
+        module, database = load_access_control()
+        executed = []
+        events = []
+
+        async def fetchall(query, *args):
+            return [{
+                "id": 77,
+                "agent_id": 42,
+                "system": "wazuh",
+                "resource_type": "api",
+                "resource_id": "wazuh.manager",
+                "action": "read",
+                "credential_ref": "<vault:wazuh_manager_read>",
+            }]
+
+        async def execute(*args):
+            executed.append(args)
+
+        async def log_event(*args):
+            events.append(args)
+
+        database.fetchall = fetchall
+        database.execute = execute
+        module.fetchall = fetchall
+        module.execute = execute
+        module.log_event = log_event
+
+        result = asyncio.run(module.request_agent_vault_lease(
+            42,
+            "wazuh",
+            "api",
+            "wazuh.manager",
+            "read",
+        ))
+
+        self.assertTrue(result["allow"])
+        self.assertIsNone(result["credential_value"])
+        self.assertEqual(result["credential_ref"], "<vault:wazuh_manager_read>")
+        self.assertEqual(result["broker_trace"]["vault_provider"], "server-manager")
+        self.assertIn("no secret value", result["broker_trace"]["human_summary"].lower())
+        self.assertTrue(executed)
+        self.assertTrue(events)
+        self.assertIn("human_summary", events[0][5])
+
+    def test_workflow_preapproved_leases_are_added_to_agent_manifest(self):
+        module, database = load_access_control()
+        inserts = []
+
+        async def fetchrow(query, *args):
+            if "FROM tickets" in query:
+                return {
+                    "id": 501,
+                    "title": "Phishing investigation",
+                    "description": "Investigate phishing report",
+                    "itop_class": "Incident",
+                    "provider_class": "Incident",
+                    "owning_group": "Security Operations",
+                    "security_classification": "internal",
+                }
+            return None
+
+        async def fetchall(query, *args):
+            if "FROM agent_workflows" in query:
+                return [{
+                    "id": 4,
+                    "name": "Canonical phishing",
+                    "status": "active",
+                    "reviewed_at": "2026-05-15T00:00:00Z",
+                    "workflow_key": "incident:phishing",
+                    "approval_policy": {
+                        "preapproved_leases": [
+                            {
+                                "system": "mailcow",
+                                "resource_type": "mailbox",
+                                "resource_id": "security-team@example.invalid",
+                                "action": "read",
+                                "credential_ref": "<vault:mailcow_security_read>",
+                            },
+                            {
+                                "system": "wazuh",
+                                "resource_type": "api",
+                                "resource_id": "wazuh.manager",
+                                "actions": ["read"],
+                                "credential_ref": "<vault:wazuh_manager_read>",
+                            },
+                        ],
+                    },
+                }]
+            if "FROM agent_vault_leases" in query:
+                return [
+                    {
+                        "id": index + 1,
+                        "agent_id": 88,
+                        "system": row[2],
+                        "resource_type": row[3],
+                        "resource_id": row[4],
+                        "action": row[5],
+                        "credential_ref": row[6],
+                        "lease_status": "active",
+                    }
+                    for index, row in enumerate(inserts)
+                ]
+            return []
+
+        async def execute(query, *args):
+            if "INSERT INTO agent_vault_leases" in query:
+                inserts.append(args)
+
+        database.fetchrow = fetchrow
+        database.fetchall = fetchall
+        database.execute = execute
+        module.fetchrow = fetchrow
+        module.fetchall = fetchall
+        module.execute = execute
+
+        manifest = asyncio.run(module.create_agent_vault_manifest(
+            88,
+            501,
+            {
+                "identity": {"username": "soc-operator"},
+                "roles": ["soc-manager"],
+                "capabilities": ["*"],
+                "scopes": [],
+                "max_classification": "restricted",
+            },
+        ))
+
+        self.assertEqual(manifest["workflow_preapproved_lease_count"], 2)
+        systems = {(row[1], row[2], row[3], row[4], row[5]) for row in inserts}
+        self.assertIn(("mailcow", "mailbox", "security-team@example.invalid", "read", "<vault:mailcow_security_read>"), systems)
+        self.assertIn(("wazuh", "api", "wazuh.manager", "read", "<vault:wazuh_manager_read>"), systems)
+        self.assertEqual(manifest["broker_metadata"]["secret_values_returned"], False)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,47 @@
 
 Last updated: 2026-05-15.
 
+## Found In Access Broker Review
+
+### Credential broker decisions were too opaque and approved workflows could not pre-mint normal leases
+
+Status: fixed, deployed, and unit-tested on 2026-05-15.
+
+Problem:
+
+Per-agent vault leases existed, and Wazuh provider access was lease-gated, but
+the operator-facing audit payloads were too terse to explain whether the
+dashboard was brokering a provider call or only returning a vault reference.
+Approved workflows also could not declare normal read/investigation leases to
+mint at agent spawn, so proven workflows could still force repeated access
+requests for the same least-privilege read access.
+
+Impact:
+
+The demo/audit story was hard to explain without reading source code, and
+approved repeatable workflows had no configurable way to carry their normal
+read access envelope.
+
+Fix:
+
+- Added modular vault provider metadata through `api/services/vault_providers.py`
+  with `CREDENTIAL_VAULT_PROVIDER` and `CREDENTIAL_VAULT_RESOLVER_MODE`.
+- Lease allow/deny responses now include `broker_trace.human_summary`,
+  provider metadata, `secret_values_returned=false`, and `credential_value=null`.
+- Wazuh broker endpoints identify themselves as `prebuilt_provider_endpoint`
+  and explain that the dashboard returned provider evidence, not a secret.
+- Reviewed active/approved workflows can define
+  `approval_policy.preapproved_leases`; matching agent spawns mint only those
+  scoped lease references and log `workflow_preapproved_lease` evidence.
+
+Verification:
+
+- Local `python -m unittest discover -s tests -p "test_*.py"`: PASS, 114 tests.
+- Remote `PYTHONPATH=api python3 -m unittest tests.test_access_control_policy`:
+  PASS, 10 tests.
+- Remote `/api/access/policies` shows `credential_broker` metadata and
+  `workflow_preapproved_leases`; `/api/agents/active` stayed empty after deploy.
+
 ## Found In Workflow Reuse Proof
 
 ### Workflow review activation hit HTTP 500 when demoting active siblings

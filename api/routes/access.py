@@ -212,4 +212,20 @@ async def policies():
             "The dashboard returns vault references only, never secret values, and "
             "denies missing leases with HTTP 403 plus audit evidence."
         ),
+        "credential_broker": {
+            "vault_provider": access_control.vault_providers.provider_name(),
+            "resolver_mode": access_control.vault_providers.resolver_mode(),
+            "secret_values_returned": False,
+            "modes": {
+                "lease_reference": "Agent asks for a scoped lease and receives only a vault reference.",
+                "prebuilt_provider_endpoint": "Dashboard validates the lease, calls a provider adapter, and returns redacted provider evidence.",
+                "customer_adapter": "Deployments can replace the resolver behind the same lease contract.",
+            },
+        },
+        "workflow_preapproved_leases": (
+            "Approved workflows may define approval_policy.preapproved_leases "
+            "for normal read/investigation access. The runner mints only those "
+            "exact scoped references at spawn and still requires change approvals "
+            "for mutation/remediation actions."
+        ),
     }

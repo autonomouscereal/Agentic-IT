@@ -44,6 +44,12 @@ async def _require_wazuh_read(agent_id: int, resource_type="api", resource_id="w
             "lease_id": result.get("lease_id"),
             "credential_ref": result.get("credential_ref"),
             "secret_values_returned": False,
+            "broker_mode": "prebuilt_provider_endpoint",
+            "human_summary": (
+                f"Dashboard brokered Wazuh read access for agent {agent_id} "
+                f"to {resource_type}/{resource_id} through lease {result.get('lease_id')}; "
+                "the agent received provider data, not a Wazuh secret."
+            ),
         },
     )
     return result
@@ -65,6 +71,7 @@ async def get_manager_status(agent_id: int):
         "lease_id": lease.get("lease_id"),
         "credential_ref": lease.get("credential_ref"),
         "secret_values_returned": False,
+        "broker_trace": {**(lease.get("broker_trace") or {}), "broker_mode": "prebuilt_provider_endpoint"},
         "data": data,
     }
 
@@ -90,6 +97,7 @@ async def get_rule(agent_id: int, rule_id: str):
         "lease_id": lease.get("lease_id"),
         "credential_ref": lease.get("credential_ref"),
         "secret_values_returned": False,
+        "broker_trace": {**(lease.get("broker_trace") or {}), "broker_mode": "prebuilt_provider_endpoint"},
         "data": data,
     }
 
@@ -120,6 +128,7 @@ async def search_alerts(
         "lease_id": lease.get("lease_id"),
         "credential_ref": lease.get("credential_ref"),
         "secret_values_returned": False,
+        "broker_trace": {**(lease.get("broker_trace") or {}), "broker_mode": "prebuilt_provider_endpoint"},
         "query": {"rule_id": rule_id, "source_ip": source_ip, "limit": limit},
         "data": data,
     }

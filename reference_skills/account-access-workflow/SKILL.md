@@ -27,6 +27,29 @@ If the lease request returns HTTP 403, treat that as the permission wall. The
 response is the evidence for the access request. Do not reuse dashboard admin
 credentials, broader provider tokens, or another agent's vault reference.
 
+Lease responses include a human-readable `broker_trace.human_summary`. Use that
+text in ticket notes when explaining the wall or approved access. It is safe to
+quote because the dashboard returns only lease ids, vault references, decisions,
+and provider metadata; `credential_value` is always `null`.
+
+The dashboard supports two broker shapes:
+
+- `lease-reference`: the agent receives a scoped vault reference only.
+- `prebuilt_provider_endpoint`: the dashboard validates the lease and returns
+  redacted provider evidence through a product adapter, such as the Wazuh
+  manager/rule/alert endpoints.
+
+Deployments can swap the underlying vault provider by configuration while
+preserving the same lease API. The reference lab labels the provider
+`server-manager`.
+
+Approved workflows can define normal investigation leases in
+`approval_policy.preapproved_leases`. When the workflow is active/approved and
+reviewed, new agents spawned for matching tickets receive only those exact
+scoped leases at startup, so proven read-only workflows do not need to request
+the same access every run. Remediation or environment-changing actions still
+require change approval.
+
 When creating an access request for a denied vault lease, include a
 `lease_request` payload with the exact `system`, `resource_type`,
 `resource_id`, `action`, and optional `credential_ref`. Completing the approved

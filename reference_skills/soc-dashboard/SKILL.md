@@ -104,6 +104,31 @@ After approval/completion, use:
 These routes validate `agent_vault_leases`, return no secret values, and write
 provider-access audit events.
 
+## Credential Broker Transparency
+
+The dashboard is a credential broker, not a secret printer. Agents call
+`POST /api/agents/{agent_id}/vault/lease` for one system/resource/action at a
+time. The response includes `credential_ref`, `lease_id`, and
+`broker_trace.human_summary`; `credential_value` is always `null`.
+
+Provider-specific routes such as Wazuh are prebuilt provider endpoints: the
+dashboard validates the lease, calls the adapter, audits the call, and returns
+redacted provider evidence. Generic new integrations should either implement a
+provider adapter with the same lease check or use the `lease-reference` mode
+with an approved customer-side resolver.
+
+The vault backing is modular. `CREDENTIAL_VAULT_PROVIDER` and
+`CREDENTIAL_VAULT_RESOLVER_MODE` describe the resolver behind the lease
+contract. The reference lab uses server-manager, but customer deployments can
+wire HashiCorp Vault, cloud secret managers, or a customer resolver behind the
+same API.
+
+Approved workflows can carry `approval_policy.preapproved_leases` for routine
+read/investigation access. Only reviewed `active`/`approved` workflows mint
+those leases at agent spawn, and the lease rows are logged as
+`workflow_preapproved_lease`. Destructive or environment-changing actions still
+go through change approvals.
+
 Additional reconstructed context for future Codex sessions lives at:
 
 - `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/AGENTS.md`

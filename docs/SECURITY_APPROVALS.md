@@ -135,6 +135,64 @@ in the Waiting On Gate dashboard bucket after another agent owns the work.
 Completion of the gate marks the access request as `granted` and writes grant
 evidence to both parent and child ticket timelines.
 
+## Credential Broker Transparency
+
+The dashboard does not log in and hand credentials to the agent. The agent asks
+the dashboard for a scoped lease:
+
+```bash
+curl -sS -X POST http://localhost:25480/api/agents/<agent_id>/vault/lease \
+  -H "Content-Type: application/json" \
+  -d '{"system":"wazuh","resource_type":"api","resource_id":"wazuh.manager","action":"read"}'
+```
+
+If the lease exists, the response contains a `credential_ref`, `lease_id`, and
+`broker_trace.human_summary`; `credential_value` is always `null`. If the lease
+is missing, the API returns HTTP 403 with a human-readable broker summary and
+the agent must create an access request.
+
+There are two broker modes:
+
+- `lease-reference`: the agent receives only a scoped vault reference and must
+  use an approved resolver or adapter for the target system.
+- `prebuilt_provider_endpoint`: the dashboard validates the lease, calls a
+  provider adapter such as the Wazuh read endpoints, and returns redacted
+  provider evidence. The agent receives facts, not provider secrets.
+
+Vault backends are modular through `CREDENTIAL_VAULT_PROVIDER` and
+`CREDENTIAL_VAULT_RESOLVER_MODE`. The default provider label is
+`server-manager`, but customer deployments can plug in HashiCorp Vault, cloud
+secret managers, or a customer resolver behind the same lease contract without
+changing the agent-facing API.
+
+Approved workflows can avoid repeated access requests for normal investigation
+access by defining exact read leases in `approval_policy.preapproved_leases`:
+
+```json
+{
+  "workflow_key": "incident:phishing",
+  "preapproved_leases": [
+    {
+      "system": "mailcow",
+      "resource_type": "mailbox",
+      "resource_id": "security-team@example.invalid",
+      "action": "read",
+      "credential_ref": "<vault:mailcow_security_read>"
+    },
+    {
+      "system": "wazuh",
+      "resource_type": "api",
+      "resource_id": "wazuh.manager",
+      "actions": ["read"],
+      "credential_ref": "<vault:wazuh_manager_read>"
+    }
+  ]
+}
+```
+
+Only `active` or `approved` workflows with `reviewed_at` set can mint those
+leases at spawn. Mutation/remediation still requires normal approval gates.
+
 ## Demo Transparency
 
 Every change request is presented as an approval gate in the ticket timeline.

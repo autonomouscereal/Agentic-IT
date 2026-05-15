@@ -5,6 +5,36 @@ import re
 
 from database import fetchall, fetchrow, execute, json_dumps
 from services.event_logger import log_event
+try:
+    from services import vault_providers
+except ImportError:  # unit-test stubs may not preload the service package
+    class _VaultProviderFallback:
+        @staticmethod
+        def provider_name():
+            return "server-manager"
+
+        @staticmethod
+        def resolver_mode():
+            return "reference-only"
+
+        @staticmethod
+        def broker_metadata(system=None, broker_mode="lease-reference"):
+            return {
+                "vault_provider": "server-manager",
+                "resolver_mode": "reference-only",
+                "system": system,
+                "broker_mode": broker_mode,
+                "secret_values_returned": False,
+                "credential_value_returned": False,
+            }
+
+    vault_providers = _VaultProviderFallback()
+try:
+    from services.workflow_keys import workflow_key_for_ticket
+except ImportError:  # unit-test stubs may not preload workflow helpers
+    def workflow_key_for_ticket(ticket, *extra_values):
+        ticket_class = (ticket or {}).get("itop_class") or (ticket or {}).get("provider_class") or "ticket"
+        return f"{str(ticket_class).strip().lower()}:general"
 
 
 CLASSIFICATION_RANK = {
@@ -451,6 +481,17 @@ async def audit_decision(decision, method, path, status_code=None):
 
 
 async def audit_resource_decision(actor, subject_type, subject_id, action, resource_type, resource_id, decision, reason, policy_snapshot=None):
+    policy_snapshot = policy_snapshot or {}
+    human_summary = policy_snapshot.get("human_summary") or (
+        f"{actor or 'unknown'} {decision} for {action} on {resource_type}/{resource_id}: {reason}. "
+        "No credential value was returned."
+    )
+    policy_snapshot = {
+        **policy_snapshot,
+        "human_summary": human_summary,
+        "secret_values_returned": False,
+        "vault_provider": policy_snapshot.get("vault_provider") or vault_providers.provider_name(),
+    }
     await execute(
         """
         INSERT INTO access_decision_log (
@@ -467,7 +508,7 @@ async def audit_resource_decision(actor, subject_type, subject_id, action, resou
         str(resource_id) if resource_id is not None else None,
         decision,
         reason,
-        json_dumps(policy_snapshot or {}),
+        json_dumps(policy_snapshot),
     )
     await log_event(
         "access",
@@ -481,6 +522,9 @@ async def audit_resource_decision(actor, subject_type, subject_id, action, resou
             "action": action,
             "decision": decision,
             "reason": reason,
+            "human_summary": human_summary,
+            "secret_values_returned": False,
+            "vault_provider": policy_snapshot.get("vault_provider"),
         },
     )
 
@@ -614,6 +658,74 @@ def _scope_lease_specs(subject):
     return specs
 
 
+def _workflow_policy_lease_specs(workflow):
+    policy = _json_value((workflow or {}).get("approval_policy"), {})
+    raw_specs = (
+        policy.get("preapproved_leases")
+        or policy.get("agent_vault_leases")
+        or policy.get("vault_leases")
+        or []
+    )
+    if isinstance(raw_specs, dict):
+        raw_specs = [raw_specs]
+    specs = []
+    for item in raw_specs:
+        if not isinstance(item, dict) or item.get("enabled") is False:
+            continue
+        system = item.get("system")
+        credential_ref = item.get("credential_ref")
+        if not system or not credential_ref:
+            continue
+        actions = item.get("actions") or item.get("action") or ["read"]
+        if isinstance(actions, str):
+            actions = [actions]
+        for action in actions:
+            specs.append({
+                "system": system,
+                "resource_type": item.get("resource_type") or "resource",
+                "resource_id": item.get("resource_id") or item.get("resource") or "*",
+                "action": action,
+                "credential_ref": credential_ref,
+                "expires_at": item.get("expires_at"),
+                "granted_by": f"workflow:{workflow.get('id')}",
+                "policy_snapshot": {
+                    "source": "workflow_preapproved_lease",
+                    "workflow_id": workflow.get("id"),
+                    "workflow_key": workflow.get("workflow_key"),
+                    "workflow_status": workflow.get("status"),
+                    "workflow_name": workflow.get("name"),
+                    "requires_change_approval_for_mutation": item.get("requires_change_approval_for_mutation", True),
+                    "secret_values_stored": False,
+                },
+            })
+    return specs
+
+
+async def _workflow_lease_specs(ticket):
+    workflow_key = workflow_key_for_ticket(ticket or {})
+    if not workflow_key:
+        return []
+    rows = await fetchall(
+        """
+        SELECT id, name, status, reviewed_at, workflow_key, approval_policy
+        FROM agent_workflows
+        WHERE workflow_key = $1
+          AND status IN ('active', 'approved')
+          AND reviewed_at IS NOT NULL
+        ORDER BY
+          CASE WHEN status = 'active' THEN 0 ELSE 1 END,
+          reviewed_at DESC NULLS LAST,
+          updated_at DESC
+        LIMIT 1
+        """,
+        workflow_key,
+    )
+    specs = []
+    for row in rows or []:
+        specs.extend(_workflow_policy_lease_specs(row))
+    return specs
+
+
 async def create_agent_vault_manifest(agent_id, ticket_id, subject=None):
     """Create a per-agent vault manifest with scoped credential references only."""
     subject = subject or {
@@ -624,7 +736,12 @@ async def create_agent_vault_manifest(agent_id, ticket_id, subject=None):
         "max_classification": "secret",
     }
     ticket = await fetchrow(
-        "SELECT id, owning_group, security_classification FROM tickets WHERE id = $1",
+        """
+        SELECT id, title, description, itop_class, provider_class,
+               owning_group, security_classification
+        FROM tickets
+        WHERE id = $1
+        """,
         ticket_id,
     )
     leases = []
@@ -639,8 +756,20 @@ async def create_agent_vault_manifest(agent_id, ticket_id, subject=None):
                 "expires_at": None,
             })
     leases.extend(_scope_lease_specs(subject))
+    workflow_leases = await _workflow_lease_specs(ticket) if ticket else []
+    leases.extend(workflow_leases)
 
     for lease in leases:
+        policy_snapshot = {
+            "spawned_by": subject.get("identity", {}).get("username", "system"),
+            "roles": subject.get("roles", []),
+            "max_classification": subject.get("max_classification", "internal"),
+            "note": "Credential values remain in the external vault; this row is only a scoped lease reference.",
+            "vault_provider": vault_providers.provider_name(),
+            "resolver_mode": vault_providers.resolver_mode(),
+            "secret_values_stored": False,
+        }
+        policy_snapshot.update(lease.get("policy_snapshot") or {})
         await execute(
             """
             INSERT INTO agent_vault_leases (
@@ -663,14 +792,9 @@ async def create_agent_vault_manifest(agent_id, ticket_id, subject=None):
             str(lease["resource_id"]),
             lease["action"],
             lease["credential_ref"],
-            subject.get("identity", {}).get("username", "system"),
+            lease.get("granted_by") or subject.get("identity", {}).get("username", "system"),
             lease.get("expires_at"),
-            json_dumps({
-                "spawned_by": subject.get("identity", {}).get("username", "system"),
-                "roles": subject.get("roles", []),
-                "max_classification": subject.get("max_classification", "internal"),
-                "note": "Credential values remain in the external vault; this row is only a scoped lease reference.",
-            }),
+            json_dumps(policy_snapshot),
         )
 
     rows = await fetchall(
@@ -689,9 +813,26 @@ async def create_agent_vault_manifest(agent_id, ticket_id, subject=None):
         subject.get("identity", {}).get("username", "system"),
         "agent_vault_manifest_created",
         f"agent_{agent_id}",
-        {"ticket_id": ticket_id, "lease_count": len(rows)},
+        {
+            "ticket_id": ticket_id,
+            "lease_count": len(rows),
+            "workflow_preapproved_lease_count": len(workflow_leases),
+            "vault_provider": vault_providers.provider_name(),
+            "secret_values_returned": False,
+            "human_summary": (
+                f"Agent {agent_id} received {len(rows)} scoped vault lease references "
+                f"at spawn; {len(workflow_leases)} came from an approved workflow policy. "
+                "No credential values were written or returned."
+            ),
+        },
     )
-    return {"agent_id": agent_id, "ticket_id": ticket_id, "leases": rows}
+    return {
+        "agent_id": agent_id,
+        "ticket_id": ticket_id,
+        "leases": rows,
+        "workflow_preapproved_lease_count": len(workflow_leases),
+        "broker_metadata": vault_providers.broker_metadata(),
+    }
 
 
 def _lease_matches(lease, system, resource_type, resource_id, action):
@@ -717,6 +858,18 @@ async def request_agent_vault_lease(agent_id, system, resource_type, resource_id
     )
     for row in rows:
         if _lease_matches(row, system, resource_type, resource_id, action):
+            human_summary = (
+                f"Agent {agent_id} was allowed {action} access to "
+                f"{system}:{resource_type}/{resource_id} through scoped lease {row.get('id')}. "
+                f"The dashboard returned vault reference {row.get('credential_ref')} and no secret value."
+            )
+            broker_trace = {
+                **vault_providers.broker_metadata(system),
+                "audited": True,
+                "decision": "allow",
+                "reason": "agent_vault_lease_match",
+                "human_summary": human_summary,
+            }
             await audit_resource_decision(
                 f"agent_{agent_id}",
                 "agent",
@@ -726,7 +879,11 @@ async def request_agent_vault_lease(agent_id, system, resource_type, resource_id
                 resource_id,
                 "allow",
                 "agent_vault_lease_match",
-                {"lease_id": row.get("id"), "credential_ref": row.get("credential_ref")},
+                {
+                    "lease_id": row.get("id"),
+                    "credential_ref": row.get("credential_ref"),
+                    **broker_trace,
+                },
             )
             return {
                 "allow": True,
@@ -738,8 +895,21 @@ async def request_agent_vault_lease(agent_id, system, resource_type, resource_id
                 "action": action,
                 "credential_ref": row.get("credential_ref"),
                 "credential_value": None,
+                "broker_trace": broker_trace,
                 "note": "Use the credential vault resolver for this reference; secret values are never returned by the dashboard.",
             }
+    human_summary = (
+        f"Agent {agent_id} was denied {action} access to "
+        f"{system}:{resource_type}/{resource_id} because no active scoped lease matched. "
+        "No credential value was returned; the agent must create an access request."
+    )
+    broker_trace = {
+        **vault_providers.broker_metadata(system),
+        "audited": True,
+        "decision": "deny",
+        "reason": "missing_agent_vault_lease",
+        "human_summary": human_summary,
+    }
     await audit_resource_decision(
         f"agent_{agent_id}",
         "agent",
@@ -749,7 +919,7 @@ async def request_agent_vault_lease(agent_id, system, resource_type, resource_id
         resource_id,
         "deny",
         "missing_agent_vault_lease",
-        {"active_lease_count": len(rows)},
+        {"active_lease_count": len(rows), **broker_trace},
     )
     return {
         "allow": False,
@@ -760,6 +930,7 @@ async def request_agent_vault_lease(agent_id, system, resource_type, resource_id
         "resource_type": resource_type,
         "resource_id": resource_id,
         "action": action,
+        "broker_trace": broker_trace,
         "next_step": "Create a ticket access request for this exact system/resource/action and wait for approval.",
     }
 
@@ -841,6 +1012,13 @@ async def grant_agent_vault_lease(agent_id, lease_request, granted_by="access-ga
             "resource_id": resource_id,
             "action": action,
             "credential_ref": credential_ref,
+            "vault_provider": vault_providers.provider_name(),
+            "secret_values_returned": False,
+            "human_summary": (
+                f"Approved access gate granted agent {agent_id} {action} access to "
+                f"{system}:{resource_type}/{resource_id} as scoped vault reference {credential_ref}. "
+                "No credential value was returned."
+            ),
         },
     )
     return {
