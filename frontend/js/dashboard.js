@@ -1,5 +1,40 @@
 // SOC Dashboard - Main JavaScript
 const API = "";
+let agentOpenCountState = null;
+
+function computeAgentLifecycleCounts(agents) {
+    const rows = agents || [];
+    const activeStatuses = new Set(["spawned", "running", "working"]);
+    const waitingStatuses = new Set(["pending_approval", "awaiting_access", "awaiting_user_response", "blocked"]);
+    const queued = rows.filter(a => a?.task_status === "queued" && (a.status === "spawned" || a.status === "running"));
+    const active = rows.filter(a => activeStatuses.has(a.status) && !queued.includes(a));
+    const waiting = rows.filter(a => waitingStatuses.has(a.status));
+    return {
+        queued: queued.length,
+        active: active.length,
+        waiting: waiting.length,
+        open: queued.length + active.length + waiting.length,
+    };
+}
+
+function agentOpenCountFromStats(agents) {
+    if (!agents) return 0;
+    if (agents.open !== undefined && agents.open !== null) return Number(agents.open) || 0;
+    const openStatuses = new Set([
+        "spawned", "running", "working",
+        "pending_approval", "awaiting_access", "awaiting_user_response", "blocked",
+    ]);
+    return (agents.distribution || []).reduce((total, row) => {
+        return total + (openStatuses.has(row.status) ? Number(row.count || 0) : 0);
+    }, 0);
+}
+
+function setAgentOpenCount(count) {
+    agentOpenCountState = Number(count || 0);
+    setText("agent-count", agentOpenCountState);
+    setText("stat-agent-active", agentOpenCountState);
+    return agentOpenCountState;
+}
 
 // Navigation
 document.addEventListener("DOMContentLoaded", () => {
@@ -29,6 +64,7 @@ function navigateTo(page) {
 
     const pageEl = document.getElementById(`page-${page}`);
     if (pageEl) pageEl.classList.add("active");
+    if (agentOpenCountState !== null) setAgentOpenCount(agentOpenCountState);
 
     // Load data for the page
     switch (page) {
@@ -245,18 +281,21 @@ function renderGateSummary(change) {
     `;
 }
 
-// Load dashboard stats
 async function loadDashboardStats() {
-    const [data, metrics] = await Promise.all([
+    const [data, metrics, agentData] = await Promise.all([
         apiGet("/api/dashboard/stats"),
         apiGet("/api/dashboard/ops-metrics"),
+        apiGet("/api/agents"),
     ]);
     if (!data) return;
 
     // Update stat cards
     setText("stat-ticket-total", data.tickets?.total || 0);
     setText("stat-ticket-new", (data.tickets?.new || 0) + (data.tickets?.assigned || 0));
-    setText("stat-agent-active", data.agents?.active || 0);
+    const openAgents = agentData?.agents
+        ? computeAgentLifecycleCounts(agentData.agents).open
+        : agentOpenCountFromStats(data.agents);
+    setAgentOpenCount(openAgents);
     setText("stat-change-pending", data.changes?.pending || 0);
 
     // Update charts
@@ -280,7 +319,7 @@ async function loadDashboardStats() {
     }
 
     // Update badge counts
-    setText("agent-count", data.agents?.active || 0);
+    setAgentOpenCount(openAgents);
     setText("change-count", data.changes?.pending || 0);
 
     // Load pending changes section

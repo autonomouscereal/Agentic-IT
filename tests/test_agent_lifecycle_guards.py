@@ -1008,6 +1008,7 @@ class AgentLifecycleGuardTests(unittest.TestCase):
                 "open_changes": 0,
                 "final_notes": 1,
                 "postmortems": 1,
+                "promoted_postmortems": 1,
             }
 
         module.fetchrow = fetchrow
@@ -1055,6 +1056,7 @@ class AgentLifecycleGuardTests(unittest.TestCase):
                 "open_changes": 0,
                 "final_notes": 1,
                 "postmortems": 1,
+                "promoted_postmortems": 1,
             }
 
         async def execute(query, *args):
@@ -1085,6 +1087,70 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertTrue(any(call[3] == "agent_terminal_completion_recovered" for call in event_calls))
         self.assertEqual(note_calls[0][0], 452)
         self.assertIn("terminal evidence recovery", note_calls[0][3].lower())
+
+    def test_recover_completed_ticket_resolution_resolves_promoted_open_ticket(self):
+        module = load_agent_runner()
+        execute_calls = []
+        note_calls = []
+        event_calls = []
+
+        async def fetchrow(query, *args):
+            if "SELECT id, agent_id, ticket_id, task_type, status, pid, output" in query:
+                return {
+                    "id": 193,
+                    "agent_id": 196,
+                    "ticket_id": 531,
+                    "task_type": "ticket_resolution",
+                    "status": "running",
+                    "pid": None,
+                    "output": "",
+                }
+            if "FROM agent_tasks" in query:
+                return {
+                    "id": 193,
+                    "agent_id": 196,
+                    "ticket_id": 531,
+                    "task_type": "ticket_resolution",
+                    "started_at": "2026-05-14T23:00:45",
+                    "created_at": "2026-05-14T23:00:45",
+                }
+            return {
+                "ticket_status": "in_progress",
+                "completed_changes": 2,
+                "open_changes": 0,
+                "final_notes": 1,
+                "postmortems": 1,
+                "promoted_postmortems": 1,
+            }
+
+        async def execute(query, *args):
+            execute_calls.append((query, args))
+
+        async def log_event(*args):
+            event_calls.append(args)
+
+        async def add_note(*args):
+            note_calls.append(args)
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module.log_event = log_event
+        module._add_agent_note = add_note
+
+        result = asyncio.run(
+            module.recover_completed_ticket_resolution(
+                196,
+                193,
+                reason="unit_test_promoted_ticket_finalization",
+            )
+        )
+
+        self.assertEqual(result["status"], "recovered")
+        self.assertTrue(result["evidence"]["auto_resolved"])
+        self.assertTrue(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in execute_calls))
+        self.assertTrue(any(call[3] == "ticket_status_recovered_from_terminal_evidence" for call in event_calls))
+        self.assertEqual(note_calls[0][0], 531)
+        self.assertIn("terminal evidence recovery", note_calls[-1][3].lower())
 
 
 if __name__ == "__main__":

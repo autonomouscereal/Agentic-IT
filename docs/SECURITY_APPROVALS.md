@@ -125,9 +125,15 @@ This creates:
 - an `access_requests` row tying parent ticket, child ticket, agent, and change
   gate together for audit.
 
-Approval of the gate resumes the original ticket agent. Completion of the gate
-marks the access request as `granted` and writes grant evidence to both parent
-and child ticket timelines.
+Approval of the gate resumes the original ticket flow. In the local-model lab,
+the source agent usually stops at a durable wait checkpoint and the control
+plane spawns a continuation agent after approval instead of trying to revive
+the exact same process. That handoff is recorded in the parent ticket timeline
+as an `agent-lifecycle` note and in the source agent detail. The source
+agent/task is then marked terminal `finished` / `completed` so it does not stay
+in the Waiting On Gate dashboard bucket after another agent owns the work.
+Completion of the gate marks the access request as `granted` and writes grant
+evidence to both parent and child ticket timelines.
 
 ## Demo Transparency
 

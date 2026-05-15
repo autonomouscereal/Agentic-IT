@@ -96,8 +96,46 @@ async def dashboard_stats():
     ticket_resolved = await fetchval("SELECT COUNT(*) FROM tickets WHERE lower(status) = 'resolved'") or 0
     ticket_closed = await fetchval("SELECT COUNT(*) FROM tickets WHERE lower(status) LIKE '%closed%'") or 0
 
-    # Agent stats
-    agent_active = await fetchval("SELECT COUNT(*) FROM agents WHERE status IN ('spawned', 'running', 'working')") or 0
+    # Agent stats match the Agents tab lifecycle buckets.
+    agent_lifecycle = await fetchrow("""
+        WITH latest_task AS (
+            SELECT DISTINCT ON (agent_id)
+                   agent_id, status AS task_status
+            FROM agent_tasks
+            ORDER BY agent_id, created_at DESC
+        ),
+        classified AS (
+            SELECT a.id,
+                   a.status,
+                   COALESCE(lt.task_status, '') AS task_status,
+                   (
+                       COALESCE(lt.task_status, '') = 'queued'
+                       AND a.status IN ('spawned', 'running')
+                   ) AS is_queued
+            FROM agents a
+            LEFT JOIN latest_task lt ON lt.agent_id = a.id
+        )
+        SELECT
+            COUNT(*) FILTER (
+                WHERE status IN ('spawned', 'running', 'working')
+                  AND NOT is_queued
+            ) AS active,
+            COUNT(*) FILTER (WHERE is_queued) AS queued,
+            COUNT(*) FILTER (
+                WHERE status IN ('pending_approval', 'awaiting_access', 'awaiting_user_response', 'blocked')
+            ) AS waiting,
+            COUNT(*) FILTER (WHERE status = 'stalled') AS stalled,
+            COUNT(*) FILTER (
+                WHERE status IN ('finished', 'failed', 'stopped', 'terminated', 'resolved')
+            ) AS history,
+            COUNT(*) FILTER (
+                WHERE is_queued
+                   OR status IN ('spawned', 'running', 'working',
+                                 'pending_approval', 'awaiting_access',
+                                 'awaiting_user_response', 'blocked')
+            ) AS open
+        FROM classified
+    """) or {}
     agent_total = await fetchval("SELECT COUNT(*) FROM agents") or 0
 
     # Change request stats
@@ -169,7 +207,12 @@ async def dashboard_stats():
             "trend": ticket_trend,
         },
         "agents": {
-            "active": agent_active,
+            "active": agent_lifecycle.get("active") or 0,
+            "queued": agent_lifecycle.get("queued") or 0,
+            "waiting": agent_lifecycle.get("waiting") or 0,
+            "stalled": agent_lifecycle.get("stalled") or 0,
+            "history": agent_lifecycle.get("history") or 0,
+            "open": agent_lifecycle.get("open") or 0,
             "total": agent_total,
             "distribution": agent_dist,
         },

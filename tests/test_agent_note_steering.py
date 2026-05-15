@@ -242,6 +242,14 @@ class AgentNoteSteeringTests(unittest.TestCase):
             "awaiting_user_response",
         )
         self.assertEqual(
+            module._effective_local_status("new", "pending_approval", has_active_agent=False),
+            "pending_approval",
+        )
+        self.assertEqual(
+            module._effective_local_status("new", "awaiting_access", has_active_agent=False),
+            "awaiting_access",
+        )
+        self.assertEqual(
             module._effective_local_status("resolved", "in_progress", has_active_agent=True),
             "resolved",
         )

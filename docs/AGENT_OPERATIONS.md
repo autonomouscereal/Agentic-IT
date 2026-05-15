@@ -238,6 +238,28 @@ Dashboard category mapping:
 These categories are intended to be non-overlapping in the UI. An agent behind
 approval belongs in `Waiting On Gate`; it should not be counted as stalled.
 
+### Approval-Gate Continuations
+
+Local model harnesses do not reliably support suspending one long-running
+process at a gate and later resuming that exact process after a human approval
+or access grant. The control plane treats a wait checkpoint as a durable stop:
+the source agent becomes historical evidence for the permission/access/user
+wait, and the ticket objective resumes through a continuation agent after the
+gate opens.
+
+That continuation is still one logical ticket flow. When `_resume_agent_after_approval`
+spawns a replacement, the ticket timeline gets an `agent-lifecycle` note such
+as `Agent handoff after approval: 195 -> 196`. The source agent's detail also
+records the continuation agent/task in `error_message`, and the source
+agent/task moves to terminal `finished` / `completed` so it no longer appears in
+the Waiting On Gate section. Operators should read the source agent as "stopped
+correctly at a gate and handed off," not as an indefinitely running worker.
+
+Current complex proof example: ticket `531` used agent `194` for initial
+phishing/EDR triage until Wazuh access was denied, continuation agent `195`
+after access change `155`, and continuation agent `196` after containment
+change `156`.
+
 ## Checkpoint Protocol
 
 Each work directory contains:
@@ -291,11 +313,25 @@ Deployments that require human review, requester response, access grants, or
 manual provider handoff can leave tickets open after the agent task finishes,
 but the agent must write a note explaining that handoff.
 
+Terminal-evidence recovery is the narrow exception for local-model finalization
+hangs. If a running ticket-resolution task has no open gates, completed approval
+work, final completion notes, and a promoted postmortem/workflow asset, the
+supervisor may mark the ticket `resolved` and finish the task with an
+`agent-supervisor` note. This is for the case where the model already completed
+the real workflow and learning steps but stalled before the explicit final
+status/checkpoint calls. Generic task completion still does not close tickets,
+and any open approval, access, or user-response gate fails closed.
+
 Below-100 wait checkpoints are intentionally not completion. If an agent writes
 `waiting_for_access`, `pending_approval`, `pending_access`, `blocked`,
 `access_denied`, or `needs_access`, the runner records a waiting/blocked task
 state, keeps the ticket unresolved, and writes an operator note. This is the
 durable handoff point for access grants, approval gates, and user follow-up.
+After approval, the control plane may spawn a continuation agent rather than
+resuming the exact same process; this is expected and must be recorded as an
+agent-lifecycle handoff note. Once that handoff is recorded, the source
+agent/task should be terminal `finished` / `completed` because its subtask was
+to stop at the gate and hand off safely.
 
 Postmortem tasks are learning work, not ticket-resolution ownership. Spawning a
 postmortem agent does not reopen the ticket or replace the ticket's primary

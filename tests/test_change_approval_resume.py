@@ -131,6 +131,7 @@ class ChangeApprovalResumeTests(unittest.TestCase):
     def test_resume_skips_when_ticket_already_has_active_agent(self):
         module = load_changes_module()
         calls = []
+        handoffs = []
 
         async def fetchrow(query, *args):
             calls.append((query, args))
@@ -138,9 +139,16 @@ class ChangeApprovalResumeTests(unittest.TestCase):
                 return None
             if "FROM agents a" in query:
                 return {"id": 85, "status": "working", "last_task_id": 83}
+            if "SELECT error_message, last_task_id FROM agents" in query:
+                return {"error_message": "waiting at gate", "last_task_id": 81}
             self.fail(f"unexpected query after active ticket agent guard: {query}")
 
+        async def record_handoff(change, source_agent, result, approved_by):
+            handoffs.append((change, source_agent, result, approved_by))
+            return {"status": "recorded", "replacement_agent_id": result["agent_id"]}
+
         module.fetchrow = fetchrow
+        module._record_resume_handoff = record_handoff
 
         result = asyncio.run(module._resume_agent_after_approval({
             "id": 84,
@@ -151,7 +159,128 @@ class ChangeApprovalResumeTests(unittest.TestCase):
         self.assertEqual(result["status"], "already_active_ticket")
         self.assertEqual(result["agent_id"], 85)
         self.assertEqual(result["task_id"], 83)
+        self.assertEqual(result["handoff"]["status"], "recorded")
+        self.assertEqual(handoffs[0][1]["last_task_id"], 81)
         self.assertTrue(any("FROM agents a" in query for query, _ in calls))
+
+    def test_approve_is_idempotent_and_resumes_after_active_agent_later_blocks(self):
+        module = load_changes_module()
+
+        async def fetchrow(query, *args):
+            return {
+                "id": 156,
+                "agent_id": 195,
+                "ticket_id": 531,
+                "action": "lab-safe phishing and EDR containment",
+                "target": "finance host",
+                "status": "approved",
+            }
+
+        async def resume(change, approved_by):
+            return {
+                "status": "resumed",
+                "agent_id": 196,
+                "task_id": 193,
+                "approved_by": approved_by,
+                "change_id": change["id"],
+            }
+
+        module.fetchrow = fetchrow
+        module._resume_agent_after_approval = resume
+
+        result = asyncio.run(module.approve_change(156, {
+            "approved_by": "unit-approver",
+        }))
+
+        self.assertEqual(result["status"], "approved")
+        self.assertTrue(result["already_approved"])
+        self.assertEqual(result["resume"]["status"], "resumed")
+        self.assertEqual(result["resume"]["task_id"], 193)
+
+    def test_resume_records_ticket_handoff_and_marks_source_agent(self):
+        module = load_changes_module()
+        queries = []
+        updates = []
+        notes = []
+        spawns = []
+
+        async def fetchrow(query, *args):
+            queries.append((query, args))
+            if "FROM agent_tasks" in query and "status IN ('queued', 'running')" in query:
+                return None
+            if "FROM agents a" in query:
+                return None
+            if "SELECT model, selected_model, error_message, last_task_id FROM agents" in query:
+                return {
+                    "model": "qwen/qwen3.6-27b",
+                    "selected_model": "qwen/qwen3.6-27b",
+                    "error_message": "COMPLEX_CONTAINMENT_GATE marker",
+                    "last_task_id": 192,
+                }
+            if "SELECT prompt, task_type FROM agent_tasks" in query:
+                return {
+                    "prompt": "Original ticket objective.",
+                    "task_type": "ticket_resolution",
+                }
+            self.fail(f"unexpected query: {query}")
+
+        async def execute(query, *args):
+            updates.append((query, args))
+            return None
+
+        async def add_gate_note(ticket_id, change_id, title, body, actor="approval-gate", source="approval-gate"):
+            notes.append({
+                "ticket_id": ticket_id,
+                "change_id": change_id,
+                "title": title,
+                "body": body,
+                "actor": actor,
+                "source": source,
+            })
+            return 812
+
+        async def log_event(*args, **kwargs):
+            return None
+
+        async def load_agent_subject(agent_id):
+            return {"identity": {"username": "dev-y"}, "capabilities": ["tickets:read"]}
+
+        async def spawn_agent(ticket_id, model, prompt, task_type, actor_context=None):
+            spawns.append({
+                "ticket_id": ticket_id,
+                "model": model,
+                "prompt": prompt,
+                "task_type": task_type,
+                "actor_context": actor_context,
+            })
+            return {"agent_id": 196, "task_id": 193}
+
+        agent_runner = types.ModuleType("services.agent_runner")
+        agent_runner.spawn_agent = spawn_agent
+        sys.modules["services.agent_runner"] = agent_runner
+        setattr(sys.modules["services"], "agent_runner", agent_runner)
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module._add_gate_note = add_gate_note
+        module.log_event = log_event
+        module.access_control.load_agent_subject = load_agent_subject
+
+        result = asyncio.run(module._resume_agent_after_approval({
+            "id": 156,
+            "agent_id": 195,
+            "ticket_id": 531,
+        }, "unit-approver"))
+
+        self.assertEqual(result["status"], "resumed")
+        self.assertEqual(result["agent_id"], 196)
+        self.assertEqual(result["handoff"]["status"], "recorded")
+        self.assertEqual(notes[0]["source"], "agent-lifecycle")
+        self.assertIn("195 -> 196", notes[0]["title"])
+        self.assertIn("should not be expected to keep running indefinitely", notes[0]["body"])
+        self.assertTrue(any("UPDATE agents" in query and "status = 'finished'" in query and "continuation agent 196" in args[0] for query, args in updates))
+        self.assertTrue(any("UPDATE agent_tasks" in query and "status = 'completed'" in query and args[1] == 192 for query, args in updates))
+        self.assertIn("Approval update", spawns[0]["prompt"])
 
 
 if __name__ == "__main__":

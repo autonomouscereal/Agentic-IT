@@ -4,6 +4,190 @@ Last updated: 2026-05-14.
 
 ## Found In Current Note-Steering Pass
 
+### Overview agent count did not match Agents tab lifecycle count
+
+Status: fixed, deployed, and remote-tested on 2026-05-14.
+
+Problem:
+
+The Overview stat card used `/api/dashboard/stats.agents.active`, which counted
+only agents in `spawned`, `running`, or `working`. The Agents tab badge counted
+the visible operational queue: queued, active, and waiting-on-gate agents. In
+the live complex proof, Overview showed `1` while the Agents tab showed `5`
+because four agents were intentionally waiting behind access gates.
+
+Impact:
+
+The dashboard looked internally inconsistent even though the underlying state
+was correct. Demo viewers could misread waiting-on-gate agents as missing from
+the control plane.
+
+Fix:
+
+The Overview label is now `Open Agents`. The frontend has a shared
+`setAgentOpenCount(...)` state helper and both Overview and Agents write through
+it, so tab navigation carries the same value instead of letting each page own
+the badge independently. Overview now fetches `/api/agents` and uses the same
+lifecycle categorization as the Agents tab; it only falls back to stats
+distribution when the agent-list endpoint is unavailable. The stats API now
+also returns explicit `active`, `queued`, `waiting`, `stalled`, `history`, and
+`open` lifecycle counts for future deployments.
+
+### Local model paused after postmortem promotion before final ticket status
+
+Status: fixed, deployed, and remote-tested on 2026-05-14.
+
+Problem:
+
+In complex proof `COMPLEX_PHISH_EDR_1778789996`, continuation agent `196`
+completed containment change `156`, added final containment evidence, created
+postmortem `82`, reviewed it, and promoted it into knowledge article `66`,
+workflow `76`, and skills `90`/`91`. After the promotion response, the model
+remained in the harness before executing the last two prompt steps: explicit
+ticket `resolved` status update and final `checkpoint.json`.
+
+Impact:
+
+The real agentic work was done, including access gates, containment approval,
+postmortem review, and workflow/skill promotion, but the dashboard could still
+show the ticket `in_progress` and the agent `working`. That makes demos hard to
+explain and can keep the one-agent local-model lane occupied even though the
+remaining work is deterministic final bookkeeping.
+
+Fix:
+
+`agent_runner.recover_completed_ticket_resolution(...)` now has a narrow
+terminal-evidence recovery path for this exact state. If there are no open
+change gates, at least one completed change, final completion notes, and a
+promoted postmortem/workflow asset, the supervisor may mark the ticket
+`resolved`, write an `agent-supervisor` note explaining the recovery, and then
+finish the task/agent. Generic task completion still does not close tickets,
+and open approval/access gates still fail closed.
+
+Verification:
+
+- `python -m py_compile api\services\agent_runner.py`: PASS.
+- `python -m unittest tests.test_agent_lifecycle_guards`: PASS, including
+  `test_recover_completed_ticket_resolution_resolves_promoted_open_ticket`.
+- Remote rebuilt API source suite: `PYTHONPATH=api python3 -m unittest discover
+  -s tests -p 'test_*.py'`: PASS, 96 tests.
+- Live ticket `531` ultimately completed its own final status path: ticket
+  `resolved`, agent `196` `finished`, task `193` `completed` at 100%, and
+  `/api/agents/processes` returned zero active processes.
+
+### Approved gate can miss resume if the agent blocks after the approval call
+
+Status: fixed, deployed, and full complex proof verified on 2026-05-14.
+
+Problem:
+
+During complex proof `COMPLEX_PHISH_EDR_1778789996`, containment change `156`
+was approved while agent `195` was still running. The approval path correctly
+returned `resume.status=already_active`. A few minutes later the same agent
+finished writing its durable `pending_approval` checkpoint and stopped. Because
+the change was already `approved`, there was no second pending approval event to
+resume the final leg.
+
+Impact:
+
+The ticket had correct evidence and an approved gate, but no active agent was
+left to consume that approval and complete containment/postmortem work. This is
+the exact race that can happen when a human approves a gate while the model is
+still flushing its wait checkpoint.
+
+Fix:
+
+`POST /api/changes/{id}/approve` is now idempotent for already-approved gates:
+calling it again attempts `_resume_agent_after_approval` instead of returning a
+dead-end "not pending" error. The complex proof driver also waits for durable
+`pending_approval` / `awaiting_access` checkpoints before approving gates.
+Re-approving already-approved containment change `156` spawned continuation
+agent `196` / task `193` for ticket `531` instead of leaving agent `195`
+permanently behind the already-open gate.
+
+### Approval-gate continuation handoff was not obvious in ticket history
+
+Status: fixed locally and remediated for ticket `531` on 2026-05-14; deploy
+pending active agent `196` completion.
+
+Problem:
+
+Ticket `531` showed agents `194`, `195`, and `196` plus changes `155` and
+`156`. Agents `194` and `195` were intentionally stopped at durable gates:
+`194` at `awaiting_access` for Wazuh access and `195` at `pending_approval` for
+containment approval. The control plane resumed the original ticket by spawning
+continuation agent `196`, but the ticket timeline only showed generic
+"assigned/started/waiting" notes.
+
+Impact:
+
+Operators could reasonably read the three-agent chain as duplicate assignment or
+as older agents stuck indefinitely, instead of a deliberate gate-stop plus
+continuation pattern. This weakens demo readability and audit traceability even
+when the lifecycle behavior is correct.
+
+Fix:
+
+`_resume_agent_after_approval` now records an `agent-lifecycle` ticket note
+whenever it spawns a continuation agent. The note states the source agent, the
+replacement agent/task, the change id, the approver, and that the source agent
+is historical evidence for the wait state. The source agent's `error_message`
+is also annotated with the continuation agent/task so agent-detail views do not
+look abandoned.
+
+Follow-up correction:
+
+The first fix left source agents in `awaiting_access` / `pending_approval`,
+which kept them in the dashboard Waiting On Gate section after the continuation
+agent took ownership. Handoff now moves the source agent to `finished` and the
+source task to `completed` with the handoff evidence, so the continuation agent
+is the only active/waiting owner for that ticket.
+
+### Manual process check under-reported active continuation agent
+
+Status: investigated on 2026-05-14; no product fix required.
+
+Problem:
+
+During complex proof ticket `531`, continuation agent `196` / task `193`
+advanced to the final containment path and wrote
+`payload_change_156_complete.json`. A manual `ps` command with a narrow grep
+pattern did not show the process even though the database still showed task
+`193` as `running`, agent `196` as `working`, and change `156` as `approved`.
+
+Impact:
+
+This briefly looked like an orphaned running task and would have blocked safe
+API redeploys if trusted without checking the structured process endpoint.
+
+Resolution:
+
+`GET /api/agents/processes` correctly reported PID `14` and
+`active_processes: [193]` for agent `196`, so the continuation agent was still
+alive. Use the dashboard process endpoint plus task DB state as the authoritative
+status check; do not rely on ad hoc grep filters alone.
+
+### iTop sync can downgrade local wait states after an agent blocks
+
+Status: fixed, deployed, and remote regression verified on 2026-05-14.
+
+Problem:
+
+After agent `195` stopped at `pending_approval`, iTop still reported provider
+status `new` for Incident `308`. A provider sync changed dashboard ticket `531`
+from `pending_approval` back to `new`.
+
+Impact:
+
+The approval gate and task checkpoint were still visible, but the primary
+ticket status no longer reflected the local wait state.
+
+Fix:
+
+iTop sync now preserves local wait states (`awaiting_user_response`,
+`awaiting_access`, `pending_approval`, and `blocked`) while the provider is
+non-terminal, the same way it already preserves local terminal states.
+
 ### Ticket notes do not steer already-running agents
 
 Status: fixed, deployed, and live-agent verified on 2026-05-14.

@@ -664,6 +664,12 @@ async def _detect_completed_ticket_resolution(task_id, agent_id):
              FROM postmortems
              WHERE ticket_id = $1
                AND (task_id = $3 OR created_at >= COALESCE($2, created_at))) AS postmortems
+            ,
+            (SELECT COUNT(*)
+             FROM postmortems
+             WHERE ticket_id = $1
+               AND status = 'promoted'
+               AND (task_id = $3 OR created_at >= COALESCE($2, created_at))) AS promoted_postmortems
     """, ticket_id, started_at, task_id, str(agent_id))
     if not evidence:
         return None
@@ -673,6 +679,7 @@ async def _detect_completed_ticket_resolution(task_id, agent_id):
     open_changes = int(evidence.get("open_changes") or 0)
     final_notes = int(evidence.get("final_notes") or 0)
     postmortems = int(evidence.get("postmortems") or 0)
+    promoted_postmortems = int(evidence.get("promoted_postmortems") or 0)
     if final_notes > 0 and open_changes == 0 and (completed_changes > 0 or postmortems > 0):
         return {
             "ticket_id": ticket_id,
@@ -681,8 +688,32 @@ async def _detect_completed_ticket_resolution(task_id, agent_id):
             "open_changes": open_changes,
             "final_notes": final_notes,
             "postmortems": postmortems,
+            "promoted_postmortems": promoted_postmortems,
         }
     return None
+
+
+def _can_autoresolve_from_terminal_evidence(evidence):
+    """Allow a narrow final status recovery after the agent did all gated work.
+
+    This does not turn generic task completion into ticket closure. It only
+    applies when the dashboard already has no open gates, final agent evidence,
+    completed approval work, and a promoted postmortem/workflow asset. That is
+    the exact failure mode where a local model completed the workflow learning
+    step but hung before the explicit final `/status resolved` call.
+    """
+    if not evidence:
+        return False
+    ticket_status = str(evidence.get("ticket_status") or "").strip().lower()
+    if ticket_status in ("closed", "resolved", "closed/resolved", "implemented"):
+        return True
+    return (
+        ticket_status in ("new", "assigned", "in_progress", "awaiting_user_response", "pending_approval", "awaiting_access", "blocked")
+        and int(evidence.get("open_changes") or 0) == 0
+        and int(evidence.get("completed_changes") or 0) > 0
+        and int(evidence.get("final_notes") or 0) > 0
+        and int(evidence.get("promoted_postmortems") or 0) > 0
+    )
 
 
 async def recover_completed_ticket_resolution(agent_id, task_id, reason="terminal_evidence_recovered"):
@@ -709,11 +740,40 @@ async def recover_completed_ticket_resolution(agent_id, task_id, reason="termina
     if not evidence:
         return {"status": "skipped", "reason": "insufficient_terminal_evidence"}
     if evidence.get("ticket_status") not in ("closed", "resolved"):
-        return {
-            "status": "skipped",
-            "reason": "ticket_not_closed",
-            "evidence": evidence,
-        }
+        if not _can_autoresolve_from_terminal_evidence(evidence):
+            return {
+                "status": "skipped",
+                "reason": "ticket_not_closed",
+                "evidence": evidence,
+            }
+        await execute(
+            "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
+            evidence["ticket_id"],
+        )
+        await _add_agent_note(
+            evidence["ticket_id"],
+            agent_id,
+            task_id,
+            "Ticket resolved by terminal evidence recovery",
+            (
+                f"Agent `{agent_id}` completed all approval gates, wrote final completion evidence, "
+                "and promoted the postmortem/workflow assets, but the harness did not reach the "
+                "explicit final ticket status call. The supervisor marked the ticket resolved from "
+                "that persisted evidence without exposing secrets or expanding permissions."
+            ),
+            "agent-supervisor",
+        )
+        await log_event("ticket", "warning", f"agent_{agent_id}",
+                        "ticket_status_recovered_from_terminal_evidence",
+                        f"ticket_{evidence['ticket_id']}", {
+                            "task_id": task_id,
+                            "previous_status": evidence.get("ticket_status"),
+                            "new_status": "resolved",
+                            "reason": reason,
+                            "evidence": evidence,
+                        })
+        evidence["ticket_status"] = "resolved"
+        evidence["auto_resolved"] = True
 
     summary = (
         "Recovered terminal completion from dashboard evidence: "

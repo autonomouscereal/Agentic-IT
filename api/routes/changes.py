@@ -79,6 +79,78 @@ async def _add_gate_note(ticket_id, change_id, title, body, actor="approval-gate
     return note_id
 
 
+async def _record_resume_handoff(change, source_agent, result, approved_by):
+    ticket_id = change.get("ticket_id")
+    source_agent_id = change.get("agent_id")
+    replacement_agent_id = result.get("agent_id")
+    replacement_task_id = result.get("task_id")
+    if not ticket_id or not source_agent_id or not replacement_agent_id:
+        return {"status": "skipped", "reason": "missing handoff identifiers"}
+
+    previous_reason = ""
+    if source_agent:
+        previous_reason = (source_agent.get("error_message") or "").strip()
+    title = f"Agent handoff after approval: {source_agent_id} -> {replacement_agent_id}"
+    body = "\n".join([
+        f"Source agent `{source_agent_id}` had stopped at an approval/access gate and is now historical evidence for that wait state.",
+        f"Continuation agent `{replacement_agent_id}` / task `{replacement_task_id}` was spawned after change `{change.get('id')}` was approved by `{approved_by}`.",
+        "The original ticket objective continues under the continuation agent; the source agent should not be expected to keep running indefinitely.",
+        f"Prior wait reason: {previous_reason or 'not recorded'}.",
+    ])
+    note_id = await _add_gate_note(
+        ticket_id,
+        change.get("id"),
+        title,
+        body,
+        approved_by,
+        "agent-lifecycle",
+    )
+    handoff_message = (
+        f"{previous_reason}; " if previous_reason else ""
+    ) + (
+        f"Handed off to continuation agent {replacement_agent_id} / task "
+        f"{replacement_task_id} after change {change.get('id')} approval."
+    )
+    await execute("""
+        UPDATE agents
+        SET status = 'finished',
+            error_message = $1,
+            heartbeat = NOW(),
+            finished_at = COALESCE(finished_at, NOW())
+        WHERE id = $2
+          AND status IN ('awaiting_access', 'pending_approval', 'blocked', 'awaiting_user_response')
+    """, handoff_message[:1000], source_agent_id)
+    source_task_id = source_agent.get("last_task_id") if source_agent else None
+    if source_task_id:
+        await execute("""
+            UPDATE agent_tasks
+            SET status = 'completed',
+                output = $1,
+                error_message = NULL,
+                completed_at = COALESCE(completed_at, NOW()),
+                progress_pct = 100
+            WHERE id = $2
+              AND status IN ('awaiting_access', 'pending_approval', 'blocked', 'awaiting_user_response')
+        """, handoff_message[:5000], source_task_id)
+    await log_event("agent", "info", approved_by, "agent_handoff_after_approval",
+                    f"agent_{source_agent_id}", {
+                        "change_id": change.get("id"),
+                        "ticket_id": ticket_id,
+                        "source_agent_id": source_agent_id,
+                        "source_task_id": source_task_id,
+                        "replacement_agent_id": replacement_agent_id,
+                        "replacement_task_id": replacement_task_id,
+                        "note_id": note_id,
+                    })
+    return {
+        "status": "recorded",
+        "note_id": note_id,
+        "source_agent_id": source_agent_id,
+        "replacement_agent_id": replacement_agent_id,
+        "replacement_task_id": replacement_task_id,
+    }
+
+
 async def _sync_access_request_status(change, status, actor, evidence=None):
     policy = _access_policy(change)
     if not policy:
@@ -255,20 +327,35 @@ async def _resume_agent_after_approval(change, approved_by):
         LIMIT 1
     """, ticket_id)
     if active_ticket_agent:
+        source_agent = await fetchrow(
+            "SELECT error_message, last_task_id FROM agents WHERE id = $1",
+            agent_id,
+        )
+        handoff = await _record_resume_handoff(
+            change,
+            source_agent,
+            {
+                "agent_id": active_ticket_agent["id"],
+                "task_id": active_ticket_agent.get("last_task_id"),
+            },
+            approved_by,
+        )
         await log_event("agent", "info", approved_by, "approval_resume_skipped_active_ticket_agent",
                         f"ticket_{ticket_id}", {
                             "change_id": change["id"],
                             "source_agent_id": agent_id,
                             "active_agent_id": active_ticket_agent["id"],
                             "active_task_id": active_ticket_agent.get("last_task_id"),
+                            "handoff": handoff,
                         })
         return {
             "status": "already_active_ticket",
             "agent_id": active_ticket_agent["id"],
             "task_id": active_ticket_agent.get("last_task_id"),
+            "handoff": handoff,
         }
 
-    agent = await fetchrow("SELECT model, selected_model FROM agents WHERE id = $1", agent_id)
+    agent = await fetchrow("SELECT model, selected_model, error_message, last_task_id FROM agents WHERE id = $1", agent_id)
     latest_task = await fetchrow("""
         SELECT prompt, task_type FROM agent_tasks
         WHERE agent_id = $1
@@ -297,7 +384,8 @@ async def _resume_agent_after_approval(change, approved_by):
                         "replacement_agent_id": result.get("agent_id"),
                         "replacement_task_id": result.get("task_id"),
                     })
-    return {"status": "resumed", **result}
+    handoff = await _record_resume_handoff(change, agent, result, approved_by)
+    return {"status": "resumed", "handoff": handoff, **result}
 
 @router.get("")
 async def list_changes(
@@ -449,6 +537,14 @@ async def approve_change(change_id: int, body: dict = Body({})):
     change = await fetchrow("SELECT * FROM change_requests WHERE id = $1", change_id)
     if not change:
         return {"error": "Change request not found"}
+    if change["status"] == "approved":
+        resume = await _resume_agent_after_approval({**change, "id": change_id}, approved_by)
+        return {
+            "status": "approved",
+            "change_id": change_id,
+            "already_approved": True,
+            "resume": resume,
+        }
     if change["status"] != "pending":
         return {"error": f"Change request is {change['status']}, not pending"}
 

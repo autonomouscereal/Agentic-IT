@@ -48,6 +48,22 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn("function renderMetricStatusList(rows)", self.dashboard_js)
         self.assertIn("metric-status-chip", self.dashboard_js)
 
+    def test_overview_agent_count_uses_open_lifecycle_total(self):
+        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("Open Agents", index_html)
+        self.assertIn("/static/js/dashboard.js?v=20260514-open-agents", index_html)
+        self.assertIn("/static/js/agents.js?v=20260514-open-agents", index_html)
+        self.assertIn("function computeAgentLifecycleCounts(agents)", self.dashboard_js)
+        self.assertIn("function setAgentOpenCount(count)", self.dashboard_js)
+        self.assertIn("function agentOpenCountFromStats(agents)", self.dashboard_js)
+        self.assertIn('"pending_approval", "awaiting_access", "awaiting_user_response", "blocked"', self.dashboard_js)
+        self.assertIn('apiGet("/api/agents")', self.dashboard_js)
+        self.assertIn("computeAgentLifecycleCounts(agentData.agents).open", self.dashboard_js)
+        self.assertIn("if (agentOpenCountState !== null) setAgentOpenCount(agentOpenCountState);", self.dashboard_js)
+        self.assertIn("setAgentOpenCount(computeAgentLifecycleCounts(agents).open);", self.agents_js)
+        self.assertIn('setText("stat-agent-active", agentOpenCountState);', self.dashboard_js)
+        self.assertIn('setText("agent-count", agentOpenCountState);', self.dashboard_js)
+
 
 if __name__ == "__main__":
     unittest.main()

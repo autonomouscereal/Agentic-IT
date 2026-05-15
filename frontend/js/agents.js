@@ -62,8 +62,12 @@ async function loadAgents() {
 
     grid.innerHTML = html;
 
-    // Update badge
-    setText("agent-count", active.length + queued.length + waiting.length);
+    // Update shared badge/card state using the same lifecycle contract as Overview.
+    if (typeof setAgentOpenCount === "function" && typeof computeAgentLifecycleCounts === "function") {
+        setAgentOpenCount(computeAgentLifecycleCounts(agents).open);
+    } else {
+        setText("agent-count", active.length + queued.length + waiting.length);
+    }
 }
 
 async function loadAgentAuditor() {

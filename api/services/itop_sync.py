@@ -96,13 +96,19 @@ def _effective_local_status(provider_status, local_status=None, has_active_agent
         "cancelled",
         "canceled",
     }
+    local_waiting = {
+        "awaiting_user_response",
+        "awaiting_access",
+        "pending_approval",
+        "blocked",
+    }
     provider_lower = provider_value.lower()
     local_lower = local_value.lower()
     if local_lower in local_terminal and provider_lower not in provider_terminal:
         return local_value
+    if local_lower in local_waiting and provider_lower not in provider_terminal:
+        return local_value
     if has_active_agent and provider_lower not in provider_terminal:
-        if local_lower in {"awaiting_user_response", "pending_approval"}:
-            return local_value
         return "in_progress"
     return provider_value
 
