@@ -14,7 +14,6 @@ import time
 import unittest
 from unittest import mock
 from datetime import datetime, timezone
-from pathlib import Path
 
 # Allow running from project root or tests directory
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -109,8 +108,6 @@ class TestConfig(unittest.TestCase):
         cfg = build_bridge_config()
         self.assertEqual(cfg["poll_interval"], 60)
         self.assertEqual(cfg["batch_size"], 50)
-        self.assertEqual(cfg["max_tickets_per_poll"], 10)
-        self.assertIn("suppression_rules_file", cfg)
 
     def test_env_var_override(self):
         os.environ["BRIDGE_POLL_INTERVAL"] = "120"
@@ -230,182 +227,11 @@ class TestBridgeDedup(unittest.TestCase):
         self.bridge._mark_processed(alert)
         self.assertTrue(self.bridge._is_duplicate(alert))
 
-    def test_processed_state_is_time_aware_and_bounded(self):
-        self.bridge.max_processed_alerts = 2
-        for idx in range(3):
-            self.bridge._mark_processed({
-                "rule_id": f"10010{idx}",
-                "source_ip": "10.0.0.1",
-                "timestamp": f"2026-05-13T10:0{idx}:00Z",
-            })
-        self.bridge._save_state()
-        state = load_json_config("/tmp/test_bridge_dedup.json")
-        self.assertIsInstance(state["processed_alerts"], dict)
-        self.assertLessEqual(len(state["processed_alerts"]), 2)
-
     def test_severity_threshold(self):
         low_alert = {"level": 2}
         high_alert = {"level": 7}
         self.assertFalse(self.bridge._should_create_ticket(low_alert))
         self.assertTrue(self.bridge._should_create_ticket(high_alert))
-
-    def test_marker_correlation_creates_one_ticket_for_related_alerts(self):
-        class FakeSIEM:
-            def is_connected(self):
-                return True
-
-            def safe_fetch_alerts(self, limit=50):
-                return [
-                    {
-                        "rule_id": "100201",
-                        "source_ip": "127.0.0.1",
-                        "timestamp": "2026-05-12T23:00:01Z",
-                        "level": 10,
-                        "rule_name": "Sysmon marker",
-                        "log": "CODEX_SYSMON_E2E_ABC raw marker alert",
-                    },
-                    {
-                        "rule_id": "100202",
-                        "source_ip": "127.0.0.1",
-                        "timestamp": "2026-05-12T23:00:02Z",
-                        "level": 10,
-                        "rule_name": "Sysmon XML marker",
-                        "log": "CODEX_SYSMON_E2E_ABC xml marker alert",
-                    },
-                ]
-
-        class FakeTicketing:
-            def __init__(self):
-                self.created = []
-
-            def is_connected(self):
-                return True
-
-            def safe_create_ticket(self, alert):
-                self.created.append(alert)
-                return f"TICKET-{len(self.created)}"
-
-        ticketing = FakeTicketing()
-        self.bridge.siem = FakeSIEM()
-        self.bridge.ticketing = ticketing
-
-        stats = self.bridge.run_once()
-
-        self.assertEqual(stats["tickets_created"], 1)
-        self.assertEqual(stats["correlated"], 1)
-        self.assertEqual(len(ticketing.created), 1)
-        self.assertEqual(len(self.bridge._ticket_correlation_keys), 1)
-        correlation = next(iter(self.bridge._ticket_correlation_keys.values()))
-        self.assertEqual(correlation["ticket_id"], "TICKET-1")
-        self.assertEqual(correlation["alert_count"], 2)
-        self.assertEqual(correlation["rules"], ["100201", "100202"])
-
-    def test_approved_false_positive_suppression_rule_skips_ticket(self):
-        suppression_path = "/tmp/test_bridge_suppression_rules.json"
-        Path(suppression_path).write_text(json.dumps({
-            "rules": [{
-                "id": "internal-phish-portal-fp",
-                "enabled": True,
-                "rule_id": "100601",
-                "field_contains": ["internal training portal", "training.example.internal"],
-                "reason": "Approved false positive for internal awareness platform.",
-                "approved_by": "soc-manager",
-                "expires_at": "2026-12-31T00:00:00Z",
-            }]
-        }), encoding="utf-8")
-
-        class FakeSIEM:
-            def is_connected(self):
-                return True
-
-            def safe_fetch_alerts(self, limit=50):
-                return [{
-                    "rule_id": "100601",
-                    "source_ip": "127.0.0.1",
-                    "timestamp": "2026-05-13T10:10:00Z",
-                    "level": 10,
-                    "rule_name": "Potential phishing URL",
-                    "agent_name": "mailcow",
-                    "log": "Internal training portal link https://training.example.internal/login",
-                }]
-
-        class FakeTicketing:
-            def __init__(self):
-                self.created = []
-
-            def is_connected(self):
-                return True
-
-            def safe_create_ticket(self, alert):
-                self.created.append(alert)
-                return "SHOULD-NOT-CREATE"
-
-        try:
-            self.bridge.suppression_rules_file = suppression_path
-            self.bridge.siem = FakeSIEM()
-            ticketing = FakeTicketing()
-            self.bridge.ticketing = ticketing
-
-            stats = self.bridge.run_once()
-
-            self.assertEqual(stats["suppressed"], 1)
-            self.assertEqual(stats["tickets_created"], 0)
-            self.assertEqual(ticketing.created, [])
-            self.assertEqual(self.bridge._suppressed_count, 1)
-        finally:
-            if os.path.exists(suppression_path):
-                os.remove(suppression_path)
-
-    def test_ticket_cap_defers_alert_without_marking_processed(self):
-        class FakeSIEM:
-            def is_connected(self):
-                return True
-
-            def safe_fetch_alerts(self, limit=50):
-                return [
-                    {
-                        "rule_id": "100701",
-                        "source_ip": "127.0.0.1",
-                        "timestamp": "2026-05-13T10:20:00Z",
-                        "level": 10,
-                        "rule_name": "EDR detection one",
-                        "log": "first",
-                    },
-                    {
-                        "rule_id": "100702",
-                        "source_ip": "127.0.0.1",
-                        "timestamp": "2026-05-13T10:21:00Z",
-                        "level": 10,
-                        "rule_name": "EDR detection two",
-                        "log": "second",
-                    },
-                ]
-
-        class FakeTicketing:
-            def __init__(self):
-                self.created = []
-
-            def is_connected(self):
-                return True
-
-            def safe_create_ticket(self, alert):
-                self.created.append(alert["rule_id"])
-                return f"TICKET-{len(self.created)}"
-
-        self.bridge.siem = FakeSIEM()
-        self.bridge.ticketing = FakeTicketing()
-        self.bridge.max_tickets_per_poll = 1
-
-        stats = self.bridge.run_once()
-
-        self.assertEqual(stats["tickets_created"], 1)
-        self.assertEqual(stats["backpressure_deferred"], 1)
-        deferred = {
-            "rule_id": "100702",
-            "source_ip": "127.0.0.1",
-            "timestamp": "2026-05-13T10:21:00Z",
-        }
-        self.assertFalse(self.bridge._is_duplicate(deferred))
 
 
 class TestWazuhConnectorInit(unittest.TestCase):

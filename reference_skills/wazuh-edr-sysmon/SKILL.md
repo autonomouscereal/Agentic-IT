@@ -58,7 +58,9 @@ This skill packages endpoint telemetry and response assets for the modular SOC p
 - Keep the Sysmon hot log small. A very large historical file can fill the Wazuh
   logcollector/analysis queue and delay fresh alert indexing. The Linux
   deployment script installs a logrotate policy at `/etc/logrotate.d/sysmon-edr`
-  with `size 32M`, `rotate 14`, `copytruncate`, and `su syslog adm`. Move
+  with `size 32M`, `rotate 14`, `copytruncate`, and `su syslog adm`. Keep the
+  `su syslog adm` directive because `/var/log/sysmon` is group-writable in the
+  reference deployment and logrotate will refuse to rotate without it. Move
   `sysmon.log.archive.*` files into `/var/log/sysmon/archive` so historical
   archives cannot be confused with hot collector input.
 - Keep the reference Sysmon config high signal. Broad shell/file suffix rules

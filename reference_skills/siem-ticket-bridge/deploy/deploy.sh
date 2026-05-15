@@ -12,10 +12,6 @@ LOG_DIR="/var/log/siem-ticket-bridge"
 STATE_DIR="/var/lib/siem-ticket-bridge"
 ENV_FILE="${DEPLOY_DIR}/.env"
 SERVICE_FILE="${DEPLOY_DIR}/deploy/systemd/siem-ticket-bridge.service"
-LOGROTATE_FILE="${DEPLOY_DIR}/deploy/logrotate/siem-ticket-bridge"
-SUPPRESSION_EXAMPLE="${DEPLOY_DIR}/deploy/suppression_rules.example.json"
-SUPPRESSION_DIR="/etc/siem-ticket-bridge"
-SUPPRESSION_FILE="${SUPPRESSION_DIR}/suppression_rules.json"
 
 TEST_MODE=false
 if [[ "${1:-}" == "--test" ]]; then
@@ -28,13 +24,7 @@ echo "Test mode: ${TEST_MODE}"
 
 # Create directories
 echo "[1/6] Creating directories..."
-mkdir -p "${LOG_DIR}" "${STATE_DIR}" "${SUPPRESSION_DIR}"
-chown cereal:adm "${LOG_DIR}" 2>/dev/null || true
-chmod 0750 "${LOG_DIR}" 2>/dev/null || true
-if [ ! -f "${SUPPRESSION_FILE}" ] && [ -f "${SUPPRESSION_EXAMPLE}" ]; then
-    cp "${SUPPRESSION_EXAMPLE}" "${SUPPRESSION_FILE}"
-    chmod 0640 "${SUPPRESSION_FILE}"
-fi
+mkdir -p "${LOG_DIR}" "${STATE_DIR}"
 
 # Install Python dependencies (stdlib only, no pip needed)
 echo "[2/6] Checking Python..."
@@ -101,11 +91,6 @@ if [ "${TEST_MODE}" == "true" ]; then
     echo "  Bridge deployed to ${DEPLOY_DIR}"
     echo "  Run manually: cd ${DEPLOY_DIR} && source .env && python3 -m siem_ticket_bridge.bridge"
 else
-    if [ -f "${LOGROTATE_FILE}" ]; then
-        cp "${LOGROTATE_FILE}" /etc/logrotate.d/siem-ticket-bridge
-        chmod 0644 /etc/logrotate.d/siem-ticket-bridge
-    fi
-
     # Update service file with correct paths
     sed "s|{{DEPLOY_DIR}}|${DEPLOY_DIR}|g; s|{{LOG_DIR}}|${LOG_DIR}|g; s|{{USER}}|cereal|g" \
         "${SERVICE_FILE}" > /etc/systemd/system/siem-ticket-bridge.service

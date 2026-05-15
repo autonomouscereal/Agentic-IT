@@ -32,6 +32,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai
 | Run all tests | `...ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc_bridge && python3 tests/test_end_to_end.py && python3 tests/test_itop_connector.py && python3 tests/test_mailcow_connector.py"` |
 | Start daemon | `...ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc_bridge && python3 daemon.py --config production_config.json"` |
 | Single poll | `...ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc_bridge && python3 daemon.py --config production_config.json --poll-once"` |
+| Baseline state | `...ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc_bridge && python3 daemon.py --config production_config.json --baseline-state"` |
 | Health check | `...ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc_bridge && python3 daemon.py --config production_config.json --check"` |
 | Check config | `...ssh_client.py" --server ai --execute "cat /home/cereal/SOC_TESTING/soc_bridge/production_config.json"` |
 
@@ -76,3 +77,4 @@ Edit `production_config.json` on the server. Key sections:
 | "Invalid stimulus: ev_resolve" | Ticket not assigned — connector auto-fixes, verify `assign_ticket` uses `ev_assign` |
 | Permission denied `/var/lib/soc_bridge` | Old hardcoded path — all paths now use `${BASE_DIR}/data/` |
 | Stale `.pyc` cache | Run `find /home/cereal/SOC_TESTING/soc_bridge -type d -name __pycache__ -exec rm -rf {} +` |
+| Old tickets notify after repair | Run `python3 daemon.py --config production_config.json --baseline-state` before enabling polling |

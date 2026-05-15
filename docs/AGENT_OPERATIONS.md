@@ -431,13 +431,31 @@ runner-owned step before marking the task complete. This keeps workspace-file
 evidence aligned with the task table for audits and self-repair.
 
 Terminal-evidence recovery is the narrow exception for local-model finalization
-hangs. If a running ticket-resolution task has no open gates, completed approval
+gaps. If a running ticket-resolution task has no open gates, completed approval
 work, final completion notes, and a promoted postmortem/workflow asset, the
 supervisor may mark the ticket `resolved` and finish the task with an
 `agent-supervisor` note. This is for the case where the model already completed
 the real workflow and learning steps but stalled before the explicit final
-status/checkpoint calls. Generic task completion still does not close tickets,
-and any open approval, access, or user-response gate fails closed.
+status/checkpoint calls.
+
+The successful-exit path has an even narrower done-checkpoint close recovery.
+After the runner has marked the task completed and written its own agent
+completion note, it may resolve the ticket only when the final checkpoint is
+`done` or `completed` at `100%`, the prompt explicitly required ticket closure,
+there are no open change/access gates, the ticket is not in an approval,
+access, user-response, or blocked wait state, and final agent evidence notes
+exist in the task window. The recovery writes an `agent-supervisor` note, calls
+the provider close path for provider-backed tickets, and logs
+`ticket_status_recovered_from_done_checkpoint`.
+
+Generic task completion still does not close tickets, and any open approval,
+access, or user-response gate fails closed.
+
+Latest deployed smoke, 2026-05-15: marker
+`DONE_CHECKPOINT_RECOVERY_SMOKE_1778872231` created synthetic local-only ticket
+`563`, agent `217`, and task `214`; the recovery resolved the ticket, skipped
+provider close as `provider_local`, recorded
+`ticket_status_recovered_from_done_checkpoint`, and left zero active agents.
 
 Below-100 wait checkpoints are intentionally not completion. If an agent writes
 `waiting_for_access`, `pending_approval`, `pending_access`, `blocked`,

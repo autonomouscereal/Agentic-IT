@@ -735,6 +735,101 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertFalse(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in executes))
         self.assertTrue(any(event[3] == "agent_completed" for event in events))
 
+    def test_done_checkpoint_recovery_closes_ticket_when_prompt_required_closure(self):
+        module = load_agent_runner()
+        execute_calls = []
+        note_calls = []
+        event_calls = []
+        provider_calls = []
+
+        async def fetchrow(query, *args):
+            if "JOIN tickets tk" in query:
+                return {
+                    "id": 211,
+                    "agent_id": 214,
+                    "ticket_id": 559,
+                    "task_type": "ticket_resolution",
+                    "prompt": "Clean the catalog, write evidence, and resolve the ticket.",
+                    "started_at": "2026-05-15T15:09:10Z",
+                    "created_at": "2026-05-15T15:09:10Z",
+                    "ticket_status": "new",
+                    "provider": "itop",
+                    "provider_ref": "314",
+                }
+            if "FROM change_requests" in query and "open_access_requests" in query:
+                return {"open_changes": 0, "open_access_requests": 0, "final_notes": 1}
+            return None
+
+        async def execute(query, *args):
+            execute_calls.append((query, args))
+
+        async def add_note(*args):
+            note_calls.append(args)
+
+        async def close_provider(*args):
+            provider_calls.append(args)
+            return {"status": "resolved"}
+
+        async def log_event(*args):
+            event_calls.append(args)
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module._add_agent_note = add_note
+        module._close_provider_ticket_if_needed = close_provider
+        module.log_event = log_event
+
+        result = asyncio.run(module.recover_done_checkpoint_ticket_status(
+            214,
+            211,
+            {"step": "learning_cleanup_complete", "status": "done", "progress_pct": 100},
+            reason="unit_test_done_checkpoint",
+        ))
+
+        self.assertEqual(result["status"], "recovered")
+        self.assertEqual(result["provider_result"]["status"], "resolved")
+        self.assertTrue(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in execute_calls))
+        self.assertEqual(note_calls[0][0], 559)
+        self.assertIn("done checkpoint recovery", note_calls[0][3].lower())
+        self.assertEqual(provider_calls[0][0], 559)
+        self.assertTrue(any(call[3] == "ticket_status_recovered_from_done_checkpoint" for call in event_calls))
+
+    def test_done_checkpoint_recovery_skips_without_prompt_closure_requirement(self):
+        module = load_agent_runner()
+        execute_calls = []
+
+        async def fetchrow(query, *args):
+            if "JOIN tickets tk" in query:
+                return {
+                    "id": 212,
+                    "agent_id": 215,
+                    "ticket_id": 560,
+                    "task_type": "ticket_resolution",
+                    "prompt": "Collect evidence and leave the ticket for human review.",
+                    "started_at": "2026-05-15T15:09:10Z",
+                    "created_at": "2026-05-15T15:09:10Z",
+                    "ticket_status": "in_progress",
+                    "provider": "itop",
+                    "provider_ref": "358",
+                }
+            raise AssertionError("evidence query should not run without closure intent")
+
+        async def execute(query, *args):
+            execute_calls.append((query, args))
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+
+        result = asyncio.run(module.recover_done_checkpoint_ticket_status(
+            215,
+            212,
+            {"status": "done", "progress_pct": 100},
+        ))
+
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "closure_not_required_by_prompt")
+        self.assertEqual(execute_calls, [])
+
     def test_successful_agent_completion_writes_terminal_checkpoint_when_missing(self):
         module = load_agent_runner()
 

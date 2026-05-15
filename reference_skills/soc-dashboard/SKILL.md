@@ -62,12 +62,9 @@ Agents performing postmortems or workflow-building must:
    different, not because the ticket title, marker, or postmortem id differs.
 6. Keep new or changed workflows in `draft`, `ready_for_review`, or `tested`
    until a human/operator approval calls `POST /api/workflows/{id}/review`.
-7. Treat review approval as the activation boundary. Approval demotes any
-   active/approved sibling with the same `workflow_key` to `superseded` before
-   setting the reviewed workflow active.
-8. Use `superseded` for obsolete duplicates only after explicit operator
+7. Use `superseded` for obsolete duplicates only after explicit operator
    consolidation approval.
-9. Include workflow key/action evidence in postmortem promotion notes and audit
+8. Include workflow key/action evidence in postmortem promotion notes and audit
    trails so operators can prove whether an asset was created or updated.
 
 ## Approval Timing And Wait Recovery
@@ -103,31 +100,6 @@ After approval/completion, use:
 
 These routes validate `agent_vault_leases`, return no secret values, and write
 provider-access audit events.
-
-## Credential Broker Transparency
-
-The dashboard is a credential broker, not a secret printer. Agents call
-`POST /api/agents/{agent_id}/vault/lease` for one system/resource/action at a
-time. The response includes `credential_ref`, `lease_id`, and
-`broker_trace.human_summary`; `credential_value` is always `null`.
-
-Provider-specific routes such as Wazuh are prebuilt provider endpoints: the
-dashboard validates the lease, calls the adapter, audits the call, and returns
-redacted provider evidence. Generic new integrations should either implement a
-provider adapter with the same lease check or use the `lease-reference` mode
-with an approved customer-side resolver.
-
-The vault backing is modular. `CREDENTIAL_VAULT_PROVIDER` and
-`CREDENTIAL_VAULT_RESOLVER_MODE` describe the resolver behind the lease
-contract. The reference lab uses server-manager, but customer deployments can
-wire HashiCorp Vault, cloud secret managers, or a customer resolver behind the
-same API.
-
-Approved workflows can carry `approval_policy.preapproved_leases` for routine
-read/investigation access. Only reviewed `active`/`approved` workflows mint
-those leases at agent spawn, and the lease rows are logged as
-`workflow_preapproved_lease`. Destructive or environment-changing actions still
-go through change approvals.
 
 Additional reconstructed context for future Codex sessions lives at:
 
@@ -328,6 +300,47 @@ dashboard note `1075`; steering event `4` delivered iTop note `1079`; the agent
 completed at 100%, and a forced iTop sync preserved local status `resolved`
 while the provider payload still reported `new`.
 
+### Approval-Gate Continuations
+
+When an agent reaches a durable wait checkpoint such as `awaiting_access` or
+`pending_approval`, the lab runner stops that harness process and keeps the
+source agent as audit evidence for the gate. After the access/change gate is
+approved, `_resume_agent_after_approval` resumes the logical ticket flow by
+spawning a continuation agent with the original prompt plus the approval update.
+This avoids relying on a local-model process to stay alive while waiting for a
+human or IAM action.
+
+This is expected behavior, but it must be visible. Continuation spawns write an
+`agent-lifecycle` ticket note named like `Agent handoff after approval: 195 ->
+196`, the source agent detail is annotated with the replacement agent/task, and
+the source agent/task is moved to terminal `finished` / `completed`. Operators
+should not expect the old gated agent to run indefinitely after the handoff, and
+it should not remain in the Waiting On Gate section once a continuation owns the
+work.
+
+Complex proof chain in progress on 2026-05-14: ticket `531` / iTop
+`Incident::308`, agent `194` stopped at Wazuh `awaiting_access`, change `155`
+approved and continued with agent `195`, then containment change `156` approved
+and continued with agent `196`.
+
+### Agent Lifecycle Counts
+
+The Overview stat card is `Open Agents`, not just currently executing agents.
+It should match the Agents tab badge by counting queued, active, and
+waiting-on-gate agents:
+
+- queued: latest task is `queued` and agent is `spawned` or `running`
+- active: `spawned`, `running`, or `working`, excluding queued
+- waiting: `pending_approval`, `awaiting_access`, `awaiting_user_response`, or
+  `blocked`
+
+`/api/dashboard/stats.agents` returns `active`, `queued`, `waiting`, `stalled`,
+`history`, `open`, and `total`. Frontend deployments should display
+`agents.open` for the overview card and nav badge, with a distribution-based
+fallback for older APIs. The current frontend also uses a shared
+`setAgentOpenCount(...)` helper so the Overview page and Agents page cannot
+leave different badge values behind when navigating between tabs.
+
 `/api/dashboard/ops-metrics` includes two separate SLA views:
 
 - `sla`: ticket create-to-resolution compliance by priority.
@@ -385,24 +398,52 @@ The reference AI server currently runs slow local models. Do not use short wall-
   work when the local model lane is capped.
 - `AGENT_NO_OUTPUT_STALL_SECONDS=3600`: configurable no-output stall guard. This is a last-resort harness-hang guard, not a progress timer; streaming or tool-using agents should continue.
 - The agent auditor is the primary supervision path. Judge status from task logs, checkpoints, notes, audit entries, and process state, not from percent alone.
+- Include AI proxy and LM Studio activity when judging agent status. On the
+  reference AI server, check `curl -s http://localhost:4001/health`,
+  `curl -s http://localhost:4001/v1/models`, and
+  `docker logs --since 20m --tail 200 ai-proxy`. Recent
+  `POST /v1/messages` entries from `claude-cli` to the selected model mean the
+  local model is still doing work even if `checkpoint.json` is stale. Repeated
+  `GET /v1/models` health probes alone are not proof of reasoning progress.
+  Combine proxy logs with heartbeat, PID/process state, output log growth,
+  checkpoint state, ticket notes, and audit events before steering or stopping
+  an agent.
+- During live capability demos, do not steer with suspected root cause,
+  hostname, user, owner, or device type before the agent has had a chance to
+  discover it. If a hint must be added for safety, record that the run is no
+  longer a clean autonomous-identification proof.
 - Before rebuilding the API container, check `/api/agents/active` and `/api/agents/processes`. Stop only agents in your current test swim lane, with an explicit audit reason.
 - The auditor can recover terminal bookkeeping when persisted evidence proves a
   running ticket-resolution task is already complete. Required evidence:
-  ticket closed/resolved, no open change gates, final agent evidence notes, and
-  completed change or postmortem evidence. Latest proof: agent `166` / task
-  `163` on ticket `472` was finalized from terminal evidence.
+  no open change gates, final agent evidence notes, and completed change or
+  postmortem evidence. If the ticket is still open, the recovery may resolve it
+  only when a promoted postmortem/workflow asset proves the model already
+  completed the learning/finalization path but stalled before the explicit
+  status call. Latest proof: agent `166` / task `163` on ticket `472` was
+  finalized from terminal evidence; complex proof ticket `531` exercises the
+  promoted-postmortem recovery case.
 - Per-agent curl guards block broad dashboard schema/tool endpoints (`/openapi.json`, `/api/tools`, `/docs`, `/redoc`) and cap oversized curl output so local agents stay on bounded ticket/evidence context.
 - Task/checkpoint completion is intentionally strict: `done` / `completed`
   checkpoints below `100%` are ignored. Agents must use `running` for
   intermediate checkpoints, then final `done` at `100%` only after approval
   gates, ticket notes, and required evidence are complete.
-- Agent/task completion does not automatically resolve the parent ticket.
-  Closure is an explicit workflow/deployment decision. Default ticket workflows
-  have the agent call `POST /api/tickets/{ticket_id}/status` after final
-  evidence and verification. Human-review, requester-wait, access-gated, or
+- Agent/task completion does not generally resolve the parent ticket. Closure
+  is an explicit workflow/deployment decision. Default ticket workflows have
+  the agent call `POST /api/tickets/{ticket_id}/status` after final evidence
+  and verification. Human-review, requester-wait, access-gated, or
   manual-provider-handoff deployments can leave the ticket open with an
   explanatory note; use `close_provider: true` only when the external ITSM
   record should also close.
+- Done-checkpoint close recovery is a narrow exception for successful agent
+  exits that skipped the explicit status call. It only applies to
+  ticket-resolution tasks with a final `done`/`completed` checkpoint at `100%`,
+  explicit prompt closure intent, no open change/access gates, no wait-state
+  ticket status, and final agent evidence notes. When it fires, the supervisor
+  writes an `agent-supervisor` note, marks the ticket `resolved`, attempts the
+  provider close path, and logs `ticket_status_recovered_from_done_checkpoint`.
+  Latest deployed smoke: marker `DONE_CHECKPOINT_RECOVERY_SMOKE_1778872231`
+  resolved synthetic local-only ticket `563` for agent `217` / task `214` and
+  left `/api/agents/active` empty.
 - Source-code and CI/CD agents require git in the runtime. If a prompt asks for
   `git diff`, `git status`, patch artifacts, merge request evidence, or GitLab
   remediation, verify `git --version` inside the agent/API container before the

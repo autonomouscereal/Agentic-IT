@@ -6,7 +6,7 @@ Last updated: 2026-05-15.
 
 ### Done checkpoint did not close ticket when agent skipped explicit status call
 
-Status: found and mitigated live on 2026-05-15; root hardening remains open.
+Status: fixed, deployed, unit-tested, and live-smoke verified on 2026-05-15.
 
 Problem:
 
@@ -23,20 +23,40 @@ supervisor cleanup. This weakens the end-to-end proof because a finished agent
 can leave an operator-facing ticket open even when the task prompt explicitly
 required resolution.
 
-Mitigation:
+Fix:
 
 The supervisor closed ticket `559` through the deployed status API with
 `close_provider=true`. The API returned `provider_result.status=resolved`, and
 a forced single-ticket sync showed both local ticket status and iTop provider
 payload status as `resolved`.
 
-Follow-up:
+The runner now also has a narrow success-path recovery:
 
-Harden terminal task recovery so completed ticket-resolution tasks with durable
-done checkpoints, final evidence notes, no open gates, and an explicit prompt
-closure requirement are surfaced as a reliability warning or safely resolved
-through the same provider-aware `/status` path. Keep the rule narrow so generic
-task completion does not silently close tickets that require human review.
+- only ticket-resolution tasks qualify;
+- the checkpoint must be `done` or `completed` at `100%`;
+- the ticket must not already be terminal and must not be in an approval,
+  access, user-response, or blocked wait state;
+- the task prompt must explicitly require ticket closure;
+- there must be no open change gates or access requests;
+- there must be final agent evidence notes from the task window.
+
+When all checks pass, the supervisor marks the ticket resolved, writes an
+`agent-supervisor` evidence note, attempts provider close through the existing
+provider close path, and logs `ticket_status_recovered_from_done_checkpoint`.
+Generic task completion still does not silently close tickets.
+
+Verification:
+
+- Local `python -m unittest tests.test_agent_lifecycle_guards`: PASS, 34 tests.
+- Remote `PYTHONPATH=api python3 -m unittest tests.test_agent_lifecycle_guards
+  tests.test_task_tracker_provider_close tests.test_itop_outbound`: PASS,
+  45 tests.
+- Live deployed smoke marker `DONE_CHECKPOINT_RECOVERY_SMOKE_1778872231`:
+  synthetic local-only ticket `563`, agent `217`, task `214`; recovery returned
+  `status=recovered`, ticket status became `resolved`, provider result was
+  skipped as `provider_local`, event
+  `ticket_status_recovered_from_done_checkpoint` was recorded, and
+  `/api/agents/active` remained empty.
 
 ### Agent-authored notes without attribution self-steer as dashboard notes
 
@@ -1280,16 +1300,17 @@ Verification:
 - Real local-model verification is still running for marker
   `AGENTIC_PERMISSION_VAULT_1778767569`.
 
-### Codex migration audit reports unrelated reference-skill drift
+### Codex migration audit reported reference-skill drift and a legacy server-manager fallback
 
-Status: documented on 2026-05-14.
+Status: legacy fallback fixed on 2026-05-15; broader reference-skill drift remains documented.
 
 Problem:
 
 - Final local hygiene ran `python scripts/audit_codex_migration.py`.
 - The audit failed because `sync_reference_skills.py` reports reference-skill
-  drift in several skills, and `reference_skills/agent-memory/scripts/agent_memory.py`
-  still contains an old `.claude\skills\server-manager` path reference.
+  drift in several skills.
+- The reference `agent-memory` script also had a legacy Claude-only
+  server-manager fallback path.
 
 Impact:
 
@@ -1298,12 +1319,17 @@ Impact:
 - It does mean the broader reference skill bundle needs a separate sync/cleanup
   pass before using the audit as an all-green release gate.
 
+Fix:
+
+- Removed the legacy Claude-only server-manager fallback from both the
+  reference `agent-memory` script and the installed `agent-memory` skill.
+
 Follow-up:
 
 - Reconcile the listed reference-skill drift intentionally rather than
   bulk-overwriting unrelated skill work in this permission commit.
-- Replace the old `.claude\skills\server-manager` reference in the agent-memory
-  reference skill with the current `.agents/skills/server-manager` path.
+- Continue reconciling any remaining reference-skill drift from the allowlisted
+  skill bundle.
 
 ### Operator-stopped proof agent can be overwritten as failed
 
@@ -4012,7 +4038,7 @@ Next fix:
 
 ### iTop close path used resolution fields for change classes
 
-Status: fixed in source on 2026-05-15; live deployment pending API restart.
+Status: fixed, deployed, and unit-tested on 2026-05-15.
 
 Problem:
 
@@ -4026,3 +4052,11 @@ Fix:
 - `iTopProvider.close_ticket()` now sends `resolution_code`/`solution` only for
   `Incident` and `UserRequest` classes, and retries without fields if iTop
   reports an unknown close-field attribute.
+
+Verification:
+
+- Local `python -m unittest tests.test_itop_outbound
+  tests.test_task_tracker_provider_close`: PASS.
+- Remote focused test pass and API rebuild completed on 2026-05-15; live
+  ticket `559` closed as iTop `UserRequest` `314` with provider status
+  `resolved`.

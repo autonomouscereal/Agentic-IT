@@ -52,7 +52,6 @@ def read_vault_secret(key: str) -> str:
     candidate_dirs = [
         SERVER_MANAGER_DIR,
         Path(r"C:\Users\cereal\.agents\skills\server-manager"),
-        Path(r"C:\Users\cereal\.claude\skills\server-manager"),
     ]
     try:
         import subprocess

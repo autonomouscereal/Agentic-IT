@@ -30,6 +30,19 @@ Phishing email reporting system that delivers reports via internal Mailcow SMTP 
 - **Optional Case Management**: Creates tickets in external case management systems if configured
 - **Email Client Integration**: Works with Outlook, Gmail, and other email clients
 
+## Current Validation Notes
+
+Latest platform bridge rerun, verified 2026-05-13 UTC:
+
+- Summary file on AI server:
+  `/tmp/platform_full_test_summary_20260512_232845.txt`.
+- Report-phish reporter/report tests: PASS.
+- Report-phish SMTP sink test: PASS.
+- The test SMTP sink uses `socketserver` instead of the removed stdlib
+  `smtpd` module, so it works on Python 3.12+ lab hosts.
+- Keep report-phish credentials in the vault or environment references; do not
+  add plaintext SMTP/API secrets to skills, docs, `.env`, examples, or tests.
+
 $ARGUMENTS
 
 ---

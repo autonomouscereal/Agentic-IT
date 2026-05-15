@@ -886,6 +886,165 @@ def _can_autoresolve_from_terminal_evidence(evidence):
     )
 
 
+TERMINAL_TICKET_STATUSES = {"closed", "resolved", "closed/resolved", "implemented"}
+WAIT_TICKET_STATUSES = {"awaiting_user_response", "pending_approval", "awaiting_access", "blocked"}
+
+
+def _done_checkpoint_ready_for_close(checkpoint):
+    if not checkpoint:
+        return False
+    status = str(checkpoint.get("status") or "").strip().lower()
+    if status not in ("done", "completed"):
+        return False
+    try:
+        progress = int(checkpoint.get("progress_pct") or 0)
+    except (TypeError, ValueError):
+        progress = 0
+    return progress >= 100
+
+
+def _prompt_requires_agent_closure(prompt):
+    text = str(prompt or "").lower()
+    if not text:
+        return False
+    markers = (
+        "resolve the ticket",
+        "close the ticket",
+        "resolved/closed",
+        "/status",
+        "agent-initiated closure",
+        "close_provider",
+    )
+    return any(marker in text for marker in markers)
+
+
+async def recover_done_checkpoint_ticket_status(agent_id, task_id, checkpoint, reason="done_checkpoint_recovery"):
+    """Close a ticket from a successful done checkpoint when closure was required.
+
+    This is intentionally narrower than generic task completion. It only runs
+    after the runner has persisted task success and an agent completion note, and
+    it still requires explicit prompt closure intent, no open gates, and final
+    agent evidence before touching ticket/provider state.
+    """
+    if not _done_checkpoint_ready_for_close(checkpoint):
+        return {"status": "skipped", "reason": "checkpoint_not_terminal"}
+
+    task = await fetchrow("""
+        SELECT t.id, t.agent_id, t.ticket_id, t.task_type, t.prompt,
+               t.started_at, t.created_at, tk.status AS ticket_status,
+               tk.provider, tk.provider_ref
+        FROM agent_tasks t
+        JOIN tickets tk ON tk.id = t.ticket_id
+        WHERE t.id = $1 AND t.agent_id = $2
+    """, task_id, agent_id)
+    if not task:
+        return {"status": "skipped", "reason": "missing_task"}
+    if task.get("task_type") != "ticket_resolution":
+        return {"status": "skipped", "reason": "not_ticket_resolution"}
+    ticket_id = task.get("ticket_id")
+    ticket_status = str(task.get("ticket_status") or "").strip().lower()
+    if ticket_status in TERMINAL_TICKET_STATUSES:
+        return {"status": "skipped", "reason": "ticket_already_terminal", "ticket_status": ticket_status}
+    if ticket_status in WAIT_TICKET_STATUSES:
+        return {"status": "skipped", "reason": f"ticket_waiting_{ticket_status}", "ticket_status": ticket_status}
+    if not _prompt_requires_agent_closure(task.get("prompt")):
+        return {"status": "skipped", "reason": "closure_not_required_by_prompt"}
+
+    started_at = task.get("started_at") or task.get("created_at")
+    evidence = await fetchrow("""
+        SELECT
+            (SELECT COUNT(*)
+             FROM change_requests
+             WHERE ticket_id = $1
+               AND status NOT IN ('completed', 'rejected', 'cancelled')) AS open_changes,
+            (SELECT COUNT(*)
+             FROM access_requests
+             WHERE parent_ticket_id = $1
+               AND status NOT IN ('granted', 'rejected', 'cancelled')) AS open_access_requests,
+            (SELECT COUNT(*)
+             FROM ticket_notes
+             WHERE ticket_id = $1
+               AND created_at >= COALESCE($2, created_at)
+               AND (
+                   source IN ('soc-agent', 'agent-control-plane', 'agent-supervisor', 'agent')
+                   OR source LIKE 'agent%'
+                   OR author = ('agent-' || $3::text)
+               )
+               AND (
+                   body ILIKE '%Resolution%'
+                   OR body ILIKE '%Residual Risk%'
+                   OR body ILIKE '%complete%'
+                   OR body ILIKE '%resolved%'
+                   OR body ILIKE '%done%'
+               )) AS final_notes
+    """, ticket_id, started_at, str(agent_id))
+    if not evidence:
+        return {"status": "skipped", "reason": "missing_evidence"}
+    open_changes = int(evidence.get("open_changes") or 0)
+    open_access_requests = int(evidence.get("open_access_requests") or 0)
+    final_notes = int(evidence.get("final_notes") or 0)
+    if open_changes or open_access_requests:
+        return {
+            "status": "skipped",
+            "reason": "open_gates",
+            "open_changes": open_changes,
+            "open_access_requests": open_access_requests,
+        }
+    if final_notes <= 0:
+        return {"status": "skipped", "reason": "missing_final_agent_note"}
+
+    summary = (
+        f"Agent `{agent_id}` wrote a terminal `done` checkpoint at 100% and final evidence, "
+        "and the ticket prompt required closure. The supervisor resolved the ticket because "
+        "the agent exited before making the explicit status call."
+    )
+    await execute(
+        "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
+        ticket_id,
+    )
+    await _add_agent_note(
+        ticket_id,
+        agent_id,
+        task_id,
+        "Ticket resolved by done checkpoint recovery",
+        summary,
+        "agent-supervisor",
+    )
+    provider_result = await _close_provider_ticket_if_needed(
+        ticket_id,
+        agent_id,
+        task_id,
+        summary,
+    )
+    await log_event("ticket", "warning", f"agent_{agent_id}",
+                    "ticket_status_recovered_from_done_checkpoint",
+                    f"ticket_{ticket_id}", {
+                        "task_id": task_id,
+                        "previous_status": ticket_status,
+                        "new_status": "resolved",
+                        "reason": reason,
+                        "provider": task.get("provider"),
+                        "provider_result": provider_result,
+                        "evidence": {
+                            "open_changes": open_changes,
+                            "open_access_requests": open_access_requests,
+                            "final_notes": final_notes,
+                        },
+                    })
+    return {
+        "status": "recovered",
+        "ticket_id": ticket_id,
+        "previous_status": ticket_status,
+        "new_status": "resolved",
+        "provider_result": provider_result,
+        "evidence": {
+            "open_changes": open_changes,
+            "open_access_requests": open_access_requests,
+            "final_notes": final_notes,
+        },
+    }
+
+
 async def recover_completed_ticket_resolution(agent_id, task_id, reason="terminal_evidence_recovered"):
     """Finalize a running ticket task when dashboard evidence proves completion.
 
@@ -1725,13 +1884,7 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 reason="agent_runner_success",
                 checkpoint=checkpoint,
             )
-            await log_event("agent", "info", f"agent_{agent_id}", "agent_completed",
-                            f"task_{task_id}", {
-                                "summary": summary[:500],
-                                "checkpoint_done": checkpoint_done,
-                                "auto_completed_changes": change_completion.get("completed", []),
-                                "auto_complete_skipped": change_completion.get("skipped", []),
-                            })
+            status_recovery = {"status": "skipped", "reason": "not_attempted"}
             if task_meta:
                 await _add_agent_note(
                     task_meta.get("ticket_id"),
@@ -1743,6 +1896,20 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                         f"Summary: {summary[:700] or 'Claude Code process completed.'}"
                     ),
                 )
+                status_recovery = await recover_done_checkpoint_ticket_status(
+                    agent_id,
+                    task_id,
+                    checkpoint,
+                    reason="agent_runner_success",
+                )
+            await log_event("agent", "info", f"agent_{agent_id}", "agent_completed",
+                            f"task_{task_id}", {
+                                "summary": summary[:500],
+                                "checkpoint_done": checkpoint_done,
+                                "auto_completed_changes": change_completion.get("completed", []),
+                                "auto_complete_skipped": change_completion.get("skipped", []),
+                                "ticket_status_recovery": status_recovery,
+                            })
         else:
             recovered_completion = await _detect_completed_ticket_resolution(task_id, agent_id)
             if recovered_completion:

@@ -135,12 +135,20 @@ linked dashboard change request is approved.
 The dashboard stays the system of record for agent-visible evidence, approvals,
 and audit logs.
 
+Dashboard run detail groups findings by scanner under `scanner_summary` with
+canonical keys `semgrep`, `trivy`, `owasp_zap`, and `nuclei`. Operators should
+use those grouped cards for demos and troubleshooting instead of reading the raw
+combined findings list first. ZAP baseline exit code `2` must remain
+`completed_with_findings`; only real scanner execution failures should be shown
+as errors.
+
 ## Test
 
 Local safe smoke:
 
 ```bash
 python scripts/smoke_cicd_security_pipeline.py http://localhost:25480
+python scripts/smoke_operational_metrics.py http://localhost:25480
 ```
 
 Full local-model proof:

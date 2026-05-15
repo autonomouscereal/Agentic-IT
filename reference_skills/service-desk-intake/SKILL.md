@@ -22,7 +22,10 @@ the next agent or human a complete, routed work item.
 4. Submit with `POST /api/intake/submit`.
 5. If the response has `change_id`, wait for approval before any environment
    changing work.
-6. Assign an agent or leave it for a human queue depending on policy.
+6. Assignment is policy-driven. If the matching RACI rule has
+   `auto_assign_agent=true`, the dashboard auto-spawns exactly one agent using
+   the configured model/prompt. Otherwise leave it for a human queue or assign
+   manually.
 
 ## API
 
@@ -54,6 +57,17 @@ List RACI:
 ```bash
 curl -sS "$SOC_DASHBOARD_URL/api/intake/raci"
 ```
+
+RACI rules are CRUD-managed through `/api/intake/raci/rules`. The important
+auto-assignment fields are:
+
+- `auto_assign_agent`: enables automatic agent pickup for matching tickets.
+- `auto_agent_model`: local/provider model alias to use.
+- `auto_agent_prompt`: extra scoped policy prompt appended to the standard
+  ticket-resolution prompt.
+
+The dashboard RACI UI exposes these fields so demo/customer routing can choose
+which queues are human-owned and which queues are automatically handled.
 
 When an agent hits a permission wall while working a different ticket, use the
 access-request path instead of a generic note:
