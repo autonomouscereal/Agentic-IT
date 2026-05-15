@@ -1,10 +1,11 @@
 {
   "models": [
+    "deepseek/deepseek-v4-flash",
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-27b2",
     "qwen/qwen3.6-27b3",
     "qwen/qwen3.6-27b4",
     "qwen/qwen3.6-27b5"
   ],
-  "default": "qwen/qwen3.6-27b"
+  "default": "deepseek/deepseek-v4-flash"
 }

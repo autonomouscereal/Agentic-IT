@@ -88,7 +88,7 @@ python scripts/sync_reference_skills.py check
 
 This is the bridge toward Git-managed skills and prevents `.agents`, `.claude`, and the dashboard bundle from silently drifting.
 
-The dashboard currently spawns Claude Code as the first agent harness from the API container. Claude Code is not treated as the permanent architecture center; it is selected through `AGENT_HARNESS=claude-code`, with the command/env contract isolated in `api/services/agent_harness.py`.
+The dashboard supports both Hermes Agent and Claude Code from the API container. Hermes is the preferred default for long-running queue work in the current lab (`AGENT_HARNESS=hermes`, default model `deepseek/deepseek-v4-flash`), while Claude Code remains available through `AGENT_HARNESS=claude-code`. The command/env contract is isolated in `api/services/agent_harness.py`.
 
 Each task gets:
 
@@ -99,16 +99,23 @@ Each task gets:
 - `.claude/settings.json` with only non-secret runtime settings.
 - `checkpoint.json` that the agent updates as it works.
 - `output.log` with stdout/stderr captured for audit.
-- proxy-aware endpoint settings from `AGENT_LLM_BASE_URL`; the current AI server deployment uses `http://192.168.50.222:4001`.
+- proxy-aware endpoint settings from `AGENT_LLM_BASE_URL`; set this to the
+  routable proxy URL for the target environment.
 - a dashboard API base, default `http://localhost:8000`, so agents can fetch ticket context, write notes, request approvals, and persist postmortems/workflows through the canonical API.
 
-Claude is invoked with:
+Claude Code is invoked with:
 
 ```bash
 claude --allowedTools "Read,Write,Bash(curl *)" -p --settings <work_dir>/.claude/settings.json --model <selected_model> --permission-mode acceptEdits --no-session-persistence --output-format stream-json --verbose "<prompt>"
 ```
 
-The runner uses the configured proxy endpoint for Claude Code requests. For local models, `AGENT_LLM_AUTH_TOKEN` defaults to the non-secret `lmstudio` marker expected by the local proxy; external provider credentials stay in Claude Code OAuth files or the proxy environment, not in source. `AGENT_LLM_BASE_URL` is required so each environment chooses a normal routable endpoint instead of relying on Docker host aliases.
+Hermes is invoked with:
+
+```bash
+hermes --provider <nous|dashboard-proxy> --model <selected_model> --toolsets hermes-cli --accept-hooks -z "<prompt>"
+```
+
+The runner uses the configured proxy endpoint for harness traffic. For local models, `AGENT_LLM_AUTH_TOKEN` can use the non-secret `lmstudio` marker expected by the local proxy; external provider credentials stay in Claude Code OAuth files, Hermes Nous Portal auth state, or proxy runtime environment, not in source. `AGENT_LLM_BASE_URL` is required so each environment chooses a normal routable endpoint instead of relying on Docker host aliases. See `docs/HERMES_HARNESS.md`.
 
 Managed agents run with `acceptEdits` plus the narrow allowlist `Read,Write,Bash(curl *)`. This permits dashboard API calls without allowing arbitrary shell operations. Claude Code refuses full bypass mode when running as root, and full bypass is not needed because destructive work is guarded by dashboard change requests.
 

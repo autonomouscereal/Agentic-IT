@@ -34,6 +34,20 @@ class AgentRuntimeImageTest(unittest.TestCase):
         dockerfile = (ROOT / "api" / "Dockerfile").read_text(encoding="utf-8")
         self.assertRegex(dockerfile, r"apt-get install[\s\S]*\bgit\b")
 
+    def test_compose_mounts_hermes_home_for_harness(self):
+        compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertIn("HERMES_BIN", compose)
+        self.assertIn("HERMES_HOME_DIR", compose)
+        self.assertIn("HERMES_UV_PYTHON_DIR", compose)
+        self.assertIn("HERMES_RUN_AS_UID", compose)
+        self.assertIn("/home/cereal/.hermes", compose)
+
+    def test_reference_proxy_supports_hermes_chat_completions(self):
+        proxy = (ROOT / "deploy" / "ai-proxy" / "ai_proxy.py").read_text(encoding="utf-8")
+        self.assertIn('path == "v1/chat/completions"', proxy)
+        self.assertIn("deepseek/deepseek-v4-flash", proxy)
+        self.assertIn("proxy_nous_chat", proxy)
+
 
 if __name__ == "__main__":
     unittest.main()

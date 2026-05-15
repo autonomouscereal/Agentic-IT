@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument("--db-port", default="5433")
     parser.add_argument("--project-name", default=os.getenv("COMPOSE_PROJECT_NAME", ""))
     parser.add_argument("--ai-base-url", default=os.getenv("AGENT_LLM_BASE_URL", ""))
-    parser.add_argument("--model", default=os.getenv("AGENT_MODEL", "qwen/qwen3.6-27b"))
+    parser.add_argument("--model", default=os.getenv("AGENT_MODEL", "deepseek/deepseek-v4-flash"))
     parser.add_argument("--itop-sync-enabled", default=os.getenv("ITOP_SYNC_ENABLED", "false"))
     parser.add_argument("--non-interactive", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -135,11 +135,20 @@ def write_env(target, args, dry_run=False):
         "AGENT_NO_OUTPUT_STALL_SECONDS": "3600",
         "AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE": "1",
         "AGENT_AUDITOR_AUTO_RECOVER": "false",
-        "AGENT_HARNESS": "claude-code",
+        "AGENT_HARNESS": os.getenv("AGENT_HARNESS", "hermes"),
         "AGENT_PERMISSION_MODE": "acceptEdits",
         "AGENT_ALLOWED_TOOLS": "Read,Write,Bash(curl *)",
         "AGENT_LLM_BASE_URL": args.ai_base_url,
         "AGENT_LLM_AUTH_TOKEN": os.getenv("AGENT_LLM_AUTH_TOKEN", "lmstudio"),
+        "HERMES_BIN": os.getenv("HERMES_BIN", "/home/cereal/.hermes/hermes-agent/venv/bin/hermes"),
+        "HERMES_HOME": os.getenv("HERMES_HOME", "/home/cereal/.hermes"),
+        "HERMES_HOME_DIR": os.getenv("HERMES_HOME_DIR", "./runtime/hermes"),
+        "HERMES_UV_PYTHON_DIR": os.getenv("HERMES_UV_PYTHON_DIR", "./runtime/hermes-uv-python"),
+        "HERMES_DEFAULT_PROVIDER": os.getenv("HERMES_DEFAULT_PROVIDER", "nous"),
+        "HERMES_LOCAL_PROVIDER": os.getenv("HERMES_LOCAL_PROVIDER", "dashboard-proxy"),
+        "HERMES_TOOLSETS": os.getenv("HERMES_TOOLSETS", "hermes-cli"),
+        "HERMES_RUN_AS_UID": os.getenv("HERMES_RUN_AS_UID", "1000"),
+        "HERMES_RUN_AS_GID": os.getenv("HERMES_RUN_AS_GID", "1000"),
         "DASHBOARD_API_BASE": "http://localhost:8000",
         "TRACK_INTERVAL": "10",
         "STUCK_TIMEOUT_MINUTES": "60",

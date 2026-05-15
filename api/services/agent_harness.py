@@ -1,9 +1,10 @@
 """Agent harness abstraction.
 
-Claude Code is the first concrete harness, but the runner calls this module so
-future harnesses can implement the same command/env contract.
+Claude Code was the first concrete harness. The runner calls this module so
+Hermes and future harnesses can share the same command/env contract.
 """
 import os
+import shutil
 
 
 class ClaudeCodeHarness:
@@ -41,8 +42,72 @@ class ClaudeCodeHarness:
         return cmd
 
 
+class HermesHarness:
+    name = "hermes"
+
+    def build_env(self, base_env, llm_base_url=None, llm_auth_token=None, dashboard_api_base=None):
+        env = dict(base_env)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["HERMES_ACCEPT_HOOKS"] = "1"
+        env.setdefault("HERMES_AGENT_SOURCE", "soc-dashboard")
+        env.setdefault("HERMES_TOOLSETS", "hermes-cli")
+        env.setdefault("HERMES_DEFAULT_PROVIDER", "nous")
+        env.setdefault("HERMES_LOCAL_PROVIDER", "dashboard-proxy")
+        run_home = env.get("HERMES_RUN_HOME", "/home/cereal")
+        run_user = env.get("HERMES_RUN_USER", "cereal")
+        env["HOME"] = run_home
+        env["USER"] = run_user
+        env["LOGNAME"] = run_user
+        env.setdefault("XDG_CACHE_HOME", f"{run_home}/.cache")
+        # Least privilege default: the dashboard approval/vault layer is the
+        # privilege boundary. Do not pass a stored sudo password into Hermes
+        # unless the deployment explicitly overrides this value.
+        env.setdefault("SUDO_PASSWORD", "")
+        if dashboard_api_base:
+            env["DASHBOARD_API_BASE"] = dashboard_api_base
+        if llm_base_url:
+            env["HERMES_PROXY_BASE_URL"] = llm_base_url.rstrip("/")
+            env.setdefault("OPENAI_BASE_URL", f"{llm_base_url.rstrip('/')}/v1")
+        if llm_auth_token:
+            env.setdefault("OPENAI_API_KEY", llm_auth_token)
+        return env
+
+    def _provider_for_model(self, model):
+        override = os.getenv("HERMES_PROVIDER", "").strip()
+        if override:
+            return override
+        model_name = (model or "").lower()
+        if model_name.startswith(("qwen/", "lmstudio/", "local/")):
+            return os.getenv("HERMES_LOCAL_PROVIDER", "dashboard-proxy")
+        return os.getenv("HERMES_DEFAULT_PROVIDER", "nous")
+
+    def build_command(self, prompt, settings_path, model, permission_mode, allowed_tools=None):
+        hermes_bin = os.getenv("HERMES_BIN") or shutil.which("hermes") or "hermes"
+        toolsets = os.getenv("HERMES_TOOLSETS", "hermes-cli")
+        provider = self._provider_for_model(model)
+        cmd = []
+        run_uid = os.getenv("HERMES_RUN_AS_UID", "1000").strip()
+        run_gid = os.getenv("HERMES_RUN_AS_GID", run_uid).strip()
+        if run_uid:
+            cmd.extend(["setpriv", "--reuid", run_uid, "--regid", run_gid, "--clear-groups"])
+        cmd.extend([
+            hermes_bin,
+            "--provider",
+            provider,
+            "--model",
+            model,
+            "--toolsets",
+            toolsets,
+            "--accept-hooks",
+            "-z",
+            prompt,
+        ])
+        return cmd
+
+
 _HARNESS_FACTORIES = {
     "claude-code": ClaudeCodeHarness,
+    "hermes": HermesHarness,
 }
 
 

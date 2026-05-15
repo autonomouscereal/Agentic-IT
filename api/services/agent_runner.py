@@ -594,6 +594,31 @@ def _write_curl_guard(work_dir, real_curl=None, blocked_paths=None, max_output_b
     return guard_path
 
 
+def _chown_agent_tree(path, uid=None, gid=None):
+    """Make a provisioned workspace writable by the least-privilege harness user."""
+    if uid is None or gid is None:
+        return
+    try:
+        os.chown(path, uid, gid)
+        for root, dirs, files in os.walk(path):
+            for name in dirs:
+                os.chown(os.path.join(root, name), uid, gid)
+            for name in files:
+                os.chown(os.path.join(root, name), uid, gid)
+    except (AttributeError, OSError):
+        return
+
+
+def _ensure_harness_workspace_ownership(work_dir):
+    if AGENT_HARNESS != "hermes":
+        return
+    run_uid = _env_int("HERMES_RUN_AS_UID", 1000)
+    run_gid = _env_int("HERMES_RUN_AS_GID", run_uid)
+    if run_uid <= 0:
+        return
+    _chown_agent_tree(work_dir, run_uid, run_gid)
+
+
 def _apply_agent_path_guards(env, work_dir):
     guard_bin = os.path.join(work_dir, "bin")
     if os.path.exists(os.path.join(guard_bin, "curl")):
@@ -1176,7 +1201,7 @@ def _load_model_config():
     """Load model config from JSON file.
 
     Secrets and auth tokens are never stored here. Claude Code should use the
-    credentials already available to the harness/container.
+    credentials already available to the selected harness/container.
     """
     global _model_config
     if _model_config is None:
@@ -1191,8 +1216,8 @@ def _load_model_config():
     return _model_config
 
 
-def _build_claude_md(ticket, skills, prompt):
-    """Build CLAUDE.md for the spawned agent workspace."""
+def _build_agent_context_md(ticket, skills, prompt):
+    """Build workspace instructions for the spawned agent."""
     skills_section = ""
     if skills:
         skills_lines = []
@@ -1353,7 +1378,7 @@ def _build_settings(model, agent_id=None, ticket=None):
 
 
 async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, vault_manifest=None):
-    """Create isolated work directory with Claude Code config."""
+    """Create isolated work directory with harness config."""
     work_dir = os.path.join(AGENT_WORK_BASE, str(agent_id))
     claude_dir = os.path.join(work_dir, ".claude")
     os.makedirs(claude_dir, exist_ok=True)
@@ -1363,10 +1388,15 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, 
     with open(settings_path, "w") as f:
         json.dump(_build_settings(model, agent_id, ticket), f)
 
-    # Write CLAUDE.md
+    # Write context files for both currently supported harnesses. Claude Code
+    # reads CLAUDE.md, while Hermes loads AGENTS.md project context.
     claude_md_path = os.path.join(claude_dir, "CLAUDE.md")
+    agent_context = _build_agent_context_md(ticket, skills, prompt)
     with open(claude_md_path, "w") as f:
-        f.write(_build_claude_md(ticket, skills, prompt))
+        f.write(agent_context)
+    agents_md_path = os.path.join(work_dir, "AGENTS.md")
+    with open(agents_md_path, "w", encoding="utf-8") as f:
+        f.write(agent_context)
 
     vault_manifest_path = os.path.join(work_dir, "agent_vault.json")
     with open(vault_manifest_path, "w", encoding="utf-8") as f:
@@ -1401,11 +1431,13 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, 
         await log_event("agent", "warning", f"agent_{agent_id}", "agent_steering_inbox_init_failed",
                         f"task_{task_id}", {"error": str(exc), "work_dir": work_dir})
 
+    _ensure_harness_workspace_ownership(work_dir)
+
     return work_dir
 
 
 async def _run_agent(work_dir, prompt, task_id):
-    """Spawn Claude Code subprocess and wait for completion."""
+    """Spawn selected agent harness subprocess and wait for completion."""
     harness = get_harness(AGENT_HARNESS)
     env = harness.build_env(
         os.environ.copy(),
@@ -1428,7 +1460,7 @@ async def _run_agent(work_dir, prompt, task_id):
     cmd = harness.build_command(prompt, settings_path, model, AGENT_PERMISSION_MODE, AGENT_ALLOWED_TOOLS)
     output_path = os.path.join(work_dir, "output.log")
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write(f"[runner] starting task {task_id} with model {model}\n")
+        f.write(f"[runner] starting task {task_id} with harness {harness.name} and model {model}\n")
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -1446,7 +1478,11 @@ async def _run_agent(work_dir, prompt, task_id):
             process.pid, work_dir, task_id,
         )
         await log_event("agent", "info", f"task_{task_id}", "agent_spawned",
-                        f"pid_{process.pid}", {"work_dir": work_dir, "model": model})
+                        f"pid_{process.pid}", {
+                            "work_dir": work_dir,
+                            "model": model,
+                            "harness": harness.name,
+                        })
         await _record_model_turn_event(
             "agent_model_turn_started",
             task_id,
@@ -1614,7 +1650,7 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
             agent_id, ticket_id,
         )
 
-    # Provision isolated work directory with Claude Code config
+    # Provision isolated work directory with selected harness config
     work_dir = await _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, vault_manifest)
     await execute(
         "UPDATE agent_tasks SET work_dir = $1 WHERE id = $2",
@@ -1856,7 +1892,7 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                     )
                     _active_processes.pop(task_id, None)
                     return
-            summary = _parse_stream_result(result["stdout"]) or "Claude Code process completed"
+            summary = _parse_stream_result(result["stdout"]) or f"{harness.name} process completed"
             if checkpoint_done and checkpoint.get("output"):
                 summary = checkpoint.get("output")
             if not checkpoint_done:
@@ -1893,7 +1929,7 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                     "Agent completed",
                     (
                         f"Agent `{agent_id}` finished task `{task_id}`. "
-                        f"Summary: {summary[:700] or 'Claude Code process completed.'}"
+                        f"Summary: {summary[:700] or f'{harness.name} process completed.'}"
                     ),
                 )
                 status_recovery = await recover_done_checkpoint_ticket_status(
@@ -2024,9 +2060,12 @@ async def stop_agent_task(agent_id, reason="stopped via dashboard"):
 
 
 async def get_process_snapshot():
-    """Return Claude/process diagnostics from inside the runner container."""
+    """Return agent harness process diagnostics from inside the runner container."""
     ps_path = shutil.which("ps")
     if not ps_path:
+        for task_id, proc in list(_active_processes.items()):
+            if getattr(proc, "returncode", None) is not None:
+                _active_processes.pop(task_id, None)
         return {
             "ps_path": None,
             "error": "ps not installed in runner container",
@@ -2045,7 +2084,12 @@ async def get_process_snapshot():
         header = lines[0] if lines else ""
         rows = [
             line for line in lines[1:]
-            if "claude" in line.lower() or "node" in line.lower() or "bun" in line.lower()
+            if (
+                "claude" in line.lower()
+                or "hermes" in line.lower()
+                or "node" in line.lower()
+                or "bun" in line.lower()
+            )
         ]
         observed_pids = set()
         for row in rows:
@@ -2056,7 +2100,12 @@ async def get_process_snapshot():
                 observed_pids.add(int(parts[0]))
             except ValueError:
                 continue
-        active_task_ids = set(_active_processes.keys())
+        active_task_ids = set()
+        for task_id, proc in list(_active_processes.items()):
+            if getattr(proc, "returncode", None) is not None:
+                _active_processes.pop(task_id, None)
+                continue
+            active_task_ids.add(task_id)
         try:
             pid_tasks = await fetchall(
                 """
@@ -2097,6 +2146,9 @@ async def get_runner_health():
     config = _load_model_config()
     settings_path = os.path.expanduser("~/.claude/settings.json")
     creds_path = os.path.expanduser("~/.claude/.credentials.json")
+    hermes_home = os.getenv("HERMES_HOME", os.path.expanduser("~/.hermes"))
+    hermes_config_path = os.path.join(hermes_home, "config.yaml")
+    hermes_auth_path = os.path.join(hermes_home, "shared", "nous_auth.json")
     settings = {}
     if os.path.exists(settings_path):
         try:
@@ -2125,10 +2177,14 @@ async def get_runner_health():
 
     return {
         "claude_path": shutil.which("claude"),
+        "hermes_path": shutil.which("hermes") or os.getenv("HERMES_BIN"),
         "settings_path": settings_path,
         "settings_exists": os.path.exists(settings_path),
         "credentials_path": creds_path,
         "credentials_exists": os.path.exists(creds_path),
+        "hermes_home": hermes_home,
+        "hermes_config_exists": os.path.exists(hermes_config_path),
+        "hermes_nous_auth_exists": os.path.exists(hermes_auth_path),
         "settings_anthropic_base_url": settings_base_url,
         "effective_anthropic_base_url": effective_base_url,
         "model_api": model_api,

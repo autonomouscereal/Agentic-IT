@@ -2,6 +2,115 @@
 
 Last updated: 2026-05-15.
 
+## Found In Hermes Harness Bring-Up
+
+### Text hygiene still detects mojibake in two reference skills
+
+Status: fixed on 2026-05-15 during Hermes verification.
+
+Problem:
+
+`python scripts/text_hygiene.py` fails on
+`reference_skills/login-troubleshooting/SKILL.md` and
+`reference_skills/platform-credentials/SKILL.md` due mojibake arrow and dash
+markers.
+
+Impact:
+
+This blocks the full hygiene verification command even though the Hermes
+harness files compile and focused tests pass.
+
+Fix:
+
+Normalized the affected reference skill text without changing its operational
+meaning.
+
+### Hermes was host-installed but not visible inside the dashboard API container
+
+Status: fixed in source and deployed on 2026-05-15; live queue validation in
+progress.
+
+Problem:
+
+Hermes Agent was installed on the AI server at `/home/cereal/.hermes`, and host
+oneshot tests worked with both Nous Portal `deepseek/deepseek-v4-flash` and the
+local LM Studio custom provider. The dashboard API container could not see the
+`hermes` binary or Hermes home, so `AGENT_HARNESS=hermes` could not spawn from
+the queue.
+
+Impact:
+
+The system could only invoke Claude Code from the dashboard queue even though
+Hermes was correctly installed and authenticated on the host.
+
+Fix:
+
+- Added a `hermes` harness in `api/services/agent_harness.py`.
+- Mounted `HERMES_HOME_DIR` into the API container at `/home/cereal/.hermes`.
+- Mounted `HERMES_UV_PYTHON_DIR` into the API container because the host Hermes
+  venv points at uv-managed Python under `/home/cereal/.local/share/uv`.
+- Added `HERMES_BIN`, provider, toolset, and max-turn environment variables.
+- Added `HERMES_RUN_AS_UID/GID=1000` so Hermes subprocesses run as the Hermes
+  owner instead of API-container root.
+- The runner now writes both `AGENTS.md` and `.claude/CLAUDE.md` into workdirs.
+- Runner health now reports Hermes binary/config/Nous auth status.
+
+### AI proxy only handled Anthropic Messages traffic
+
+Status: fixed in source on 2026-05-15; live proxy update and route validation
+required.
+
+Problem:
+
+Claude Code uses `/v1/messages`, but Hermes uses OpenAI-compatible
+`/v1/chat/completions` for custom providers such as the dashboard proxy. The
+live `ai-proxy` only exposed `/v1/messages`, so Hermes could not use the proxy
+for both local and Nous Portal routes.
+
+Fix:
+
+Added `deploy/ai-proxy/ai_proxy.py` with both `/v1/messages` and
+`/v1/chat/completions` support. `deepseek/deepseek-v4-flash` routes to Nous
+Portal with caller/provider auth, while `qwen/*` and `lmstudio/*` route to LM
+Studio.
+
+### Hermes provider probing created noisy proxy 404s
+
+Status: fixed in source on 2026-05-15; live proxy update in progress.
+
+Problem:
+
+Hermes custom-provider discovery probes model detail and Ollama-compatible
+paths such as `/api/v1/models`, `/api/tags`, `/v1/props`, `/props`,
+`/version`, `/api/show`, and `/v1/models/<model>`. The initial proxy worked
+after falling back to `/v1/models`, but logged each unsupported probe as a 404.
+
+Impact:
+
+The local route worked, but the proxy logs looked noisy and harder to explain
+in a demo or audit.
+
+Fix:
+
+Add compatibility responses for those harmless discovery paths.
+
+### Hermes interactive setup enabled sudo support
+
+Status: fixed by dashboard harness default on 2026-05-15.
+
+Problem:
+
+The host Hermes setup has sudo support enabled for interactive use. Queue
+workers should not inherit broad sudo access by default because dashboard
+approval gates and credential leases are the intended privilege boundary.
+
+Fix:
+
+The Hermes harness environment sets `SUDO_PASSWORD` to an empty value by
+default and launches Hermes through `setpriv` as uid/gid `1000`. Elevated
+operations must be implemented through scoped provider adapters or explicit
+vault-backed deployment overrides.
+
 ## Found In Learning Catalog Cleanup Proof
 
 ### Done checkpoint did not close ticket when agent skipped explicit status call
@@ -4060,3 +4169,127 @@ Verification:
 - Remote focused test pass and API rebuild completed on 2026-05-15; live
   ticket `559` closed as iTop `UserRequest` `314` with provider status
   `resolved`.
+
+### Hermes queue invocation passed unsupported `--source` flag
+
+Status: fixed, deployed, and verified on 2026-05-15.
+
+Problem:
+
+- Hermes Agent v0.13.0 does not expose a `--source` CLI option.
+- The dashboard harness passed `--source soc-dashboard`, causing Hermes to
+  interpret `soc-dashboard` as a command/subcommand during real queue execution.
+- Direct one-shot Hermes tests still passed because they did not include the
+  dashboard runner's full command line.
+
+Fix:
+
+- `api/services/agent_harness.py` now keeps source identity in
+  `HERMES_AGENT_SOURCE` environment metadata and removes `--source` from the
+  command list.
+- `tests/test_agent_harness.py` asserts Hermes commands do not include
+  `--source` or `soc-dashboard`.
+
+Verification:
+
+- Remote focused harness tests passed after API rebuild.
+- Real dashboard Hermes smoke completed on ticket `568`, agent `222`, task
+  `219`, using model `deepseek/deepseek-v4-flash`.
+
+### Hermes queue invocation passed unsupported `--max-turns` flag
+
+Status: fixed, deployed, and verified on 2026-05-15.
+
+Problem:
+
+- Hermes Agent v0.13.0 does not expose a `--max-turns` CLI option.
+- The dashboard harness passed `--max-turns 90`, causing Hermes to interpret
+  `90` as a command/subcommand during real queue execution.
+
+Fix:
+
+- `api/services/agent_harness.py` no longer emits `--max-turns`.
+- Dashboard-level timeout, no-output stall detection, approval gates, and task
+  supervision remain the queue control surface.
+- `tests/test_agent_harness.py` asserts Hermes commands do not include
+  `--max-turns`.
+
+Verification:
+
+- Remote focused harness tests passed after API rebuild.
+- Real dashboard Hermes smoke completed on ticket `568`, agent `222`, task
+  `219`, using model `deepseek/deepseek-v4-flash`.
+
+### Hermes least-privilege queue process inherited `/root` home
+
+Status: fixed, deployed, and verified on 2026-05-15.
+
+Problem:
+
+- Direct `setpriv` Hermes tests passed when `HOME=/home/cereal` was supplied.
+- Real dashboard queue runs inherited `HOME=/root` from the API container
+  because the harness used `setdefault()` and did not override the existing
+  container value.
+- After privilege drop to uid/gid `1000`, Hermes dependency checks attempted
+  to stat `/root/.modal.toml` and failed with `PermissionError`.
+
+Fix:
+
+- `HermesHarness.build_env()` now explicitly sets `HOME`, `USER`, and
+  `LOGNAME` from `HERMES_RUN_HOME`/`HERMES_RUN_USER`, defaulting to the mounted
+  Hermes user home `/home/cereal`.
+
+Verification:
+
+- Direct least-privilege container Hermes call returned
+  `HERMES_SETPRIV_OK`.
+- Real dashboard Hermes smoke completed on ticket `568`, agent `222`, task
+  `219`, using model `deepseek/deepseek-v4-flash`.
+
+### Hermes least-privilege worker could not write root-owned checkpoints
+
+Status: fixed, deployed, and verified on 2026-05-15.
+
+Problem:
+
+- The dashboard runner provisions agent workspaces as the API container user.
+- Hermes then runs through `setpriv` as uid/gid `1000`.
+- Real queue smoke ticket `567` wrote the expected proof ticket note but failed
+  to update `/app/agent_work/221/checkpoint.json` because the workspace was
+  still owned by root, leaving the supervisor without a final done checkpoint.
+
+Fix:
+
+- `api/services/agent_runner.py` now recursively chowns Hermes workspaces to
+  `HERMES_RUN_AS_UID`/`HERMES_RUN_AS_GID` after all context, guard, vault, and
+  steering files are provisioned.
+
+Verification:
+
+- Real dashboard Hermes smoke completed on ticket `568`, agent `222`, task
+  `219`.
+- The workspace `/app/agent_work/222` and final `checkpoint.json` were owned by
+  uid/gid `1000`.
+- Final checkpoint: `local-model-agent-smoke` / `done` at `100%`.
+
+### Completed Hermes task left stale `active_processes` diagnostic entry
+
+Status: fixed, deployed, and verified on 2026-05-15.
+
+Problem:
+
+- Hermes smoke ticket `568` completed successfully, wrote the proof note, and
+  persisted a done checkpoint, but `/api/agents/processes` still listed task
+  `219` in the in-memory `active_processes` diagnostic set.
+- No OS process existed and `/api/agents/active` was empty, so this was a stale
+  runner diagnostic rather than live work.
+
+Fix:
+
+- `get_process_snapshot()` now prunes in-memory process handles whose
+  `returncode` is set before returning diagnostic task ids.
+
+Verification:
+
+- After API rebuild, `/api/agents/active` returned `count: 0` and
+  `/api/agents/processes` returned `active_processes: []`.

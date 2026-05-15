@@ -230,7 +230,10 @@ async function loadRunnerHealth() {
     ]);
     if (!data) return;
     const modelApi = data.model_api || {};
-    const ok = data.claude_path && data.credentials_exists && modelApi.status === "ok";
+    const harness = data.harness || "claude-code";
+    const harnessPath = harness === "hermes" ? data.hermes_path : data.claude_path;
+    const authPresent = harness === "hermes" ? data.hermes_nous_auth_exists : data.credentials_exists;
+    const ok = harnessPath && authPresent && modelApi.status === "ok";
     const base = data.effective_anthropic_base_url || data.settings_anthropic_base_url || "default Anthropic endpoint";
     const apiStatus = modelApi.status === "ok" ? "reachable" : `unreachable (${modelApi.error || "unknown"})`;
     const psStatus = processes?.ps_path
@@ -238,7 +241,7 @@ async function loadRunnerHealth() {
         : `ps: ${processes?.error || data.ps_path || "missing"}`;
     el.innerHTML = `
         <span class="status-dot ${ok ? "connected" : ""}"></span>
-        <span>Claude: ${escHtml(data.claude_path || "missing")} | Auth: ${data.credentials_exists ? "present" : "missing"} | API: ${escHtml(base)} | Model API: ${escHtml(apiStatus)} | ${escHtml(psStatus)}</span>
+        <span>Harness: ${escHtml(harness)} | Binary: ${escHtml(harnessPath || "missing")} | Auth: ${authPresent ? "present" : "missing"} | API: ${escHtml(base)} | Model API: ${escHtml(apiStatus)} | ${escHtml(psStatus)}</span>
     `;
 }
 

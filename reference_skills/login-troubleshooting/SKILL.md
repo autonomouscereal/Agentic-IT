@@ -7,7 +7,7 @@ description: >
   debugging authentication, or fixing credential problems.
 ---
 
-# Login Troubleshooting â€” Known Issues & Root Causes
+# Login Troubleshooting - Known Issues & Root Causes
 
 **Date:** 2026-05-06
 **Affected Account:** `demo_account_1`
@@ -41,18 +41,18 @@ Fixes applied:
 
 | Platform | Symptom | Root Cause | Status |
 |----------|---------|------------|--------|
-| GitLab web login | 422 error on login form | GitLab uses Keycloak OIDC SSO; `keycloak.internal:8443` unreachable | BLOCKED â€” DNS/network |
-| Wazuh dashboard | "Invalid credentials" | User NOT in OpenSearch Security internal_users.yml; only in RBAC DB | FIXABLE â€” add to indexer |
-| Wazuh API | 401 Invalid credentials | scrypt hash length mismatch (178 vs 162 chars) | FIXABLE â€” regenerate hash |
+| GitLab web login | 422 error on login form | GitLab uses Keycloak OIDC SSO; `keycloak.internal:8443` unreachable | BLOCKED - DNS/network |
+| Wazuh dashboard | "Invalid credentials" | User NOT in OpenSearch Security internal_users.yml; only in RBAC DB | FIXABLE - add to indexer |
+| Wazuh API | 401 Invalid credentials | scrypt hash length mismatch (178 vs 162 chars) | FIXABLE - regenerate hash |
 | iTop | "Incorrect login/password" | Hash correct in DB but login fails; possible cache/bridge issue | INVESTIGATING |
 | Keycloak | N/A (IDP, not login target) | Passwords set in all realms | OPERATIONAL |
 
 ---
 
-## GitLab â€” 422 Error / Keycloak OIDC Failure
+## GitLab - 422 Error / Keycloak OIDC Failure
 
 ### Symptom
-User gets "422 â€” make sure you have access or contact an admin" when trying to log in.
+User gets "422 - make sure you have access or contact an admin" when trying to log in.
 Clicking "Sign in with Keycloak" gives: `Could not authenticate you from OpenIDConnect because "Failed to open tcp connection to keycloak.internal:8443 (connection refused)"`
 
 ### Root Cause
@@ -95,24 +95,24 @@ gitlab_rails["omniauth_block_auto_created_users"] = true
 
 ---
 
-## Wazuh Dashboard â€” OpenSearch Security Missing User
+## Wazuh Dashboard - OpenSearch Security Missing User
 
 ### Symptom
 "Invalid credentials" when trying to log into the Wazuh dashboard UI at https://192.168.50.222:26443
 
 ### Root Cause
 Wazuh has **TWO separate authentication systems**:
-1. **OpenSearch Security** â€” Dashboard UI login (stored in `internal_users.yml` on the indexer)
-2. **RBAC Database** â€” API access (stored in SQLite `rbac.db` on the manager)
+1. **OpenSearch Security** - Dashboard UI login (stored in `internal_users.yml` on the indexer)
+2. **RBAC Database** - API access (stored in SQLite `rbac.db` on the manager)
 
 `demo_account_1` was created in the RBAC DB but **NOT in OpenSearch Security**.
 
 ### Architecture
 ```
-User login â†’ Dashboard UI â†’ OpenSearch Security (indexer container)
-                                    â†“
+User login -> Dashboard UI -> OpenSearch Security (indexer container)
+                                    |
                               (SEPARATE from)
-API calls â†’ Wazuh API â†’ RBAC SQLite DB (manager container)
+API calls -> Wazuh API -> RBAC SQLite DB (manager container)
 ```
 
 ### Diagnostic Findings
@@ -146,7 +146,7 @@ API calls â†’ Wazuh API â†’ RBAC SQLite DB (manager container)
 
 ---
 
-## Wazuh API â€” scrypt Hash Length Mismatch
+## Wazuh API - scrypt Hash Length Mismatch
 
 ### Symptom
 Wazuh API returns 401 "Invalid credentials" for `demo_account_1` even though the user exists in the RBAC DB.
@@ -173,9 +173,9 @@ The Wazuh manager container runs Python 3.9 with OpenSSL 3.x, which blocks `hash
 ### Wazuh API Connection Behavior
 - **HTTP connections**: Immediately closed with 0 bytes response
 - **HTTPS connections**: Properly responds (401 for bad creds, 200 for good)
-- **API logs**: Only show dashboard requests from 172.26.0.2 â€” our test requests don't appear in logs
+- **API logs**: Only show dashboard requests from 172.26.0.2 - our test requests don't appear in logs
 - **TLS certs exist**: `/var/ossec/api/configuration/ssl/server.crt` and `server.key`
-- **TLS config commented out** in `api.yaml` but certs are present â€” API appears to use TLS anyway
+- **TLS config commented out** in `api.yaml` but certs are present - API appears to use TLS anyway
 
 ### Fix Required
 1. Generate correct scrypt hash on the HOST (Python 3.12 with `maxmem` parameter):
@@ -186,12 +186,12 @@ The Wazuh manager container runs Python 3.9 with OpenSSL 3.x, which blocks `hash
    hash_str = f"scrypt:32768:8:1${salt.hex()}${dk.hex()}"
    # Result should be exactly 162 characters
    ```
-2. Deliver hash to the RBAC DB using `docker cp` (NOT `docker exec` with inline SQL â€” shell `$` expansion corrupts the hash)
-3. Alternatively, use the Wazuh API to set the password (requires admin credentials â€” currently unknown)
+2. Deliver hash to the RBAC DB using `docker cp` (NOT `docker exec` with inline SQL - shell `$` expansion corrupts the hash)
+3. Alternatively, use the Wazuh API to set the password (requires admin credentials - currently unknown)
 
 ---
 
-## iTop â€” Hash Correct But Login Fails
+## iTop - Hash Correct But Login Fails
 
 ### Symptom
 "Incorrect login/password" when trying to log in at http://192.168.50.222:25432
@@ -227,7 +227,7 @@ docker exec -i itop-deployment-db-1 mariadb -uitop -p"<from container MYSQL_PASS
 
 ---
 
-## Keycloak â€” Internal Connectivity Issues
+## Keycloak - Internal Connectivity Issues
 
 ### Symptom
 Services that need to connect to Keycloak (GitLab OIDC) get "connection refused" for `keycloak.internal:8443`
@@ -236,7 +236,7 @@ Services that need to connect to Keycloak (GitLab OIDC) get "connection refused"
 - Keycloak containers have NO external port mappings
 - Keycloak nginx reverse proxy has default config (no custom proxy to Keycloak)
 - Internal hostname `keycloak.internal` may not resolve from all Docker networks
-- Keycloak runs on internal port 8080 (HTTP) â€” port 8443 (HTTPS) may not be configured
+- Keycloak runs on internal port 8080 (HTTP) - port 8443 (HTTPS) may not be configured
 
 ### Keycloak Realms
 All 5 realms configured: `master`, `itop`, `wazuh`, `mailcow`, `gitlab`
@@ -254,17 +254,17 @@ All 5 realms configured: `master`, `itop`, `wazuh`, `mailcow`, `gitlab`
 
 ### Problem
 When passing password hashes through `docker exec` commands, the `$` characters in hashes are interpreted as shell variable expansion:
-- bcrypt: `$2b$12$...` â†’ shell tries to expand `2b`, `12`, etc.
-- scrypt: `scrypt:32768:8:1$...` â†’ shell expands after the `$`
+- bcrypt: `$2b$12$...` -> shell tries to expand `2b`, `12`, etc.
+- scrypt: `scrypt:32768:8:1$...` -> shell expands after the `$`
 
 ### Solution Pattern
 **NEVER pass hashes with `$` through `docker exec` inline.** Use `docker cp` instead:
 
 ```bash
-# WRONG â€” hash gets corrupted
+# WRONG - hash gets corrupted
 docker exec container mysql -e "UPDATE users SET password='<bcrypt_hash_with_dollar_chars>' WHERE id=1"
 
-# CORRECT â€” write to file, copy, execute
+# CORRECT - write to file, copy, execute
 printf '%s\n' "UPDATE users SET password='<bcrypt_hash_from_vault_or_generator>' WHERE id=1;" > /tmp/fix.sql
 docker cp /tmp/fix.sql container:/tmp/fix.sql
 docker exec container bash -c "mysql < /tmp/fix.sql"
@@ -280,21 +280,21 @@ docker exec container bash -c "mysql < /tmp/fix.sql"
 ## Temp Scripts on AI Server (Cleanup Needed)
 
 The following temporary scripts are scattered in `/home/cereal/` and should be cleaned up:
-- `fix_wazuh.py`, `fix_wazuh2.py` â€” Wazuh fix attempts
-- `fix_itop.py`, `fix_itop_final.py` â€” iTop fix attempts
-- `fix_all.py` â€” Combined fix script
-- `login_check.py`, `deep_check.py`, `test_logins.py`, `final_tests.py` â€” Diagnostic scripts
-- `wazuh_verify.py`, `wazuh_api_test.py` â€” Wazuh verification
-- `gitlab_check.rb`, `gitlab_create.rb`, `gitlab_admin.rb` â€” GitLab scripts
-- `temp_*.py` â€” Various temp scripts
+- `fix_wazuh.py`, `fix_wazuh2.py` - Wazuh fix attempts
+- `fix_itop.py`, `fix_itop_final.py` - iTop fix attempts
+- `fix_all.py` - Combined fix script
+- `login_check.py`, `deep_check.py`, `test_logins.py`, `final_tests.py` - Diagnostic scripts
+- `wazuh_verify.py`, `wazuh_api_test.py` - Wazuh verification
+- `gitlab_check.rb`, `gitlab_create.rb`, `gitlab_admin.rb` - GitLab scripts
+- `temp_*.py` - Various temp scripts
 
 ---
 
 ## Priority Fix Order (Recommended)
 
-1. **Keycloak external accessibility** â€” Blocks GitLab SSO and any SSO-dependent service
-2. **Wazuh OpenSearch Security user creation** â€” Dashboard login fix
-3. **Wazuh RBAC hash regeneration** â€” API login fix (8-byte salt)
-4. **iTop cache/bridge investigation** â€” Login fix
-5. **Temp script cleanup** â€” Housekeeping
+1. **Keycloak external accessibility** - Blocks GitLab SSO and any SSO-dependent service
+2. **Wazuh OpenSearch Security user creation** - Dashboard login fix
+3. **Wazuh RBAC hash regeneration** - API login fix (8-byte salt)
+4. **iTop cache/bridge investigation** - Login fix
+5. **Temp script cleanup** - Housekeeping
 
