@@ -40,6 +40,17 @@ class TaskPromptTicketClosureTests(unittest.TestCase):
         self.assertIn("Ticket id: 448", prompt)
         self.assertIn("Ticket to work: Auto close proof", prompt)
 
+    def test_agent_prompts_warn_to_quote_query_urls(self):
+        module = load_task_prompts()
+
+        ticket_prompt = module.build_ticket_resolution_prompt({"id": 449, "title": "Quote curl proof"})
+        auto_prompt = module.build_auto_assignment_prompt({"id": 450, "title": "Auto quote proof"})
+        postmortem_prompt = module.build_postmortem_prompt({"id": 451, "title": "Postmortem quote proof"})
+
+        for prompt in (ticket_prompt, auto_prompt, postmortem_prompt):
+            self.assertIn("quote the full URL", prompt)
+            self.assertIn("&", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ from services.event_logger import log_event
 from services.postmortem_synthesizer import synthesize_postmortem
 from services.ticket_service import compact_ticket_payload
 from services.workflow_keys import (
+    canonical_knowledge_ref,
     canonical_workflow_name,
     load_policy,
     policy_with_key,
@@ -566,9 +567,9 @@ async def get_postmortem(postmortem_id: int):
     articles = await fetchall("""
         SELECT id, title, category, source, external_ref, updated_at
         FROM knowledge_articles
-        WHERE external_ref = $1
+        WHERE external_ref = ANY($1::text[])
         ORDER BY updated_at DESC
-    """, f"postmortem:{postmortem_id}")
+    """, [f"postmortem:{postmortem_id}", canonical_knowledge_ref(workflow_key)])
     skills = await fetchall("""
         SELECT id, name, category, enabled, updated_at
         FROM agent_skills
@@ -772,6 +773,10 @@ async def promote_postmortem(
         }
         approval_policy = policy_with_key(approval_policy, workflow_key)
         safe_workflow_status = _review_gated_status(workflow_status)
+        if existing_workflow and existing_workflow.get("status") in ("active", "approved"):
+            safe_workflow_status = existing_workflow.get("status")
+        elif existing_workflow and existing_workflow.get("reviewed_at") and safe_workflow_status in ("draft", "ready_for_review", "tested"):
+            safe_workflow_status = "active"
         proposed_blueprint = postmortem.get("workflow_proposal") or postmortem.get("improvements") or "Review ticket evidence and convert repeated steps into a reusable workflow."
         proposed_description = postmortem.get("summary") or "Workflow drafted from postmortem learning."
         proposed_results = "Generated from postmortem promotion. Requires human review and a workflow run before production activation."
@@ -830,14 +835,20 @@ async def promote_postmortem(
     knowledge_article_id = None
     knowledge_action = "skipped"
     if create_knowledge:
-        title = f"Postmortem knowledge: {(ticket or {}).get('title') or postmortem_id}"[:500]
+        title = (
+            f"Workflow knowledge: {workflow_name}"
+            if workflow_key and create_workflow
+            else f"Postmortem knowledge: {(ticket or {}).get('title') or postmortem_id}"
+        )[:500]
         body = _postmortem_article_body(postmortem, ticket, skill_ids, workflow_name)
         tags = ["postmortem", f"postmortem:{postmortem_id}"]
+        if workflow_key:
+            tags.extend(["workflow", f"workflow:{workflow_key}"])
         if postmortem.get("ticket_id"):
             tags.append(f"ticket:{postmortem['ticket_id']}")
-        external_ref = f"postmortem:{postmortem_id}"
+        external_ref = canonical_knowledge_ref(workflow_key) if workflow_key and create_workflow else f"postmortem:{postmortem_id}"
         existing_article = await fetchrow(
-            "SELECT id FROM knowledge_articles WHERE external_ref = $1 ORDER BY updated_at DESC LIMIT 1",
+            "SELECT id, body, tags FROM knowledge_articles WHERE external_ref = $1 ORDER BY updated_at DESC LIMIT 1",
             external_ref,
         )
         if existing_article:
@@ -850,10 +861,10 @@ async def promote_postmortem(
                 WHERE id = $6
             """,
                 title,
-                body,
+                _merge_text(existing_article.get("body"), body, f"Postmortem {postmortem_id} knowledge update:"),
                 ticket_class or "postmortem",
                 "postmortem-promotion",
-                json_dumps(tags),
+                json_dumps(_merge_unique(_loads(existing_article.get("tags"), []), tags)),
                 knowledge_article_id,
             )
         else:

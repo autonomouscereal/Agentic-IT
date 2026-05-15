@@ -74,6 +74,12 @@ Promotion behavior:
   `workflow_action: updated` plus `workflow_key` in notes and audit details.
 - New or changed workflows remain review-gated; create/update paths do not
   silently activate workflows.
+- `POST /api/workflows/{id}/review` is the activation boundary. Approval
+  demotes any active/approved sibling with the same `workflow_key` to
+  `superseded` before setting the reviewed workflow active, and records
+  `workflow_siblings_superseded` audit evidence.
+- If an already-active workflow is edited onto a different `workflow_key`
+  without an explicit status change, it is re-gated to `ready_for_review`.
 - `GET /api/postmortems/{id}` resolves promoted workflow assets by promotion
   audit details first, then by `workflow_key`.
 
@@ -87,11 +93,25 @@ Deployed smoke:
 
 ```bash
 python scripts/smoke_workflow_postmortem_reuse.py http://localhost:25480
+python scripts/smoke_workflow_canonicalization.py http://localhost:25480
 ```
 
 The smoke creates two similar resolved phishing tickets with a unique ticket
 class, promotes two approved postmortems, and verifies the second promotion
 updates the first workflow id/version instead of creating a duplicate.
+The canonicalization smoke additionally verifies review-gated activation,
+one-active-per-key demotion, context selection for the active phishing workflow,
+audit search evidence, and that synthetic evidence tickets are created with
+`auto_assign=false`.
+
+Latest live verification on 2026-05-15:
+
+- `smoke_postmortem_promotion.py`: ticket `552`, postmortem `97`, knowledge
+  article `73`, draft workflow `90`, skills `96` and `97`.
+- `smoke_workflow_canonicalization.py`: workflow `91` reactivated and
+  superseded `92`; tickets `553` and `554`; postmortems `98` and `99`;
+  canonical phishing workflow `4`; knowledge article `55`.
+- `/api/agents/active` returned `{"agents":[],"count":0}` after the smokes.
 
 ## Agentic System Smoke
 

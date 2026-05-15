@@ -16,6 +16,7 @@ approved reference modules when those capabilities are missing.
 
 - UI/API: `http://192.168.50.222:25480`
 - API health: `http://192.168.50.222:25480/health`
+- Current Windows working copy: `D:\IT AGENT PROJECT`
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
 - Containers: `soc-dashboard-api`, `soc-dashboard-db`
 - Database: PostgreSQL 16 only, accessed through `asyncpg` with parameterized raw SQL

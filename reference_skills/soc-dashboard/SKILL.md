@@ -62,9 +62,12 @@ Agents performing postmortems or workflow-building must:
    different, not because the ticket title, marker, or postmortem id differs.
 6. Keep new or changed workflows in `draft`, `ready_for_review`, or `tested`
    until a human/operator approval calls `POST /api/workflows/{id}/review`.
-7. Use `superseded` for obsolete duplicates only after explicit operator
+7. Treat review approval as the activation boundary. Approval demotes any
+   active/approved sibling with the same `workflow_key` to `superseded` before
+   setting the reviewed workflow active.
+8. Use `superseded` for obsolete duplicates only after explicit operator
    consolidation approval.
-8. Include workflow key/action evidence in postmortem promotion notes and audit
+9. Include workflow key/action evidence in postmortem promotion notes and audit
    trails so operators can prove whether an asset was created or updated.
 
 ## Approval Timing And Wait Recovery

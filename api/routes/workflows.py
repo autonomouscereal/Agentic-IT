@@ -228,6 +228,12 @@ async def update_workflow(
     )
     merged_policy = policy_with_key(merged_policy, workflow_key)
     safe_status = _review_gated_status(status, existing.get("status")) if status is not None else None
+    if (
+        status is None
+        and workflow_key != existing.get("workflow_key")
+        and existing.get("status") in ("active", "approved")
+    ):
+        safe_status = "ready_for_review"
     values = {
         "name": name,
         "description": description,
@@ -260,6 +266,40 @@ async def update_workflow(
     return {"status": "updated", "id": workflow_id}
 
 
+async def _supersede_active_siblings(workflow_id, workflow_key, reviewed_by):
+    if not workflow_key:
+        return []
+    rows = await fetchall("""
+        SELECT id
+        FROM agent_workflows
+        WHERE workflow_key = $1
+          AND id <> $2
+          AND status IN ('active', 'approved')
+        ORDER BY updated_at DESC
+    """, workflow_key, workflow_id)
+    sibling_ids = [row["id"] for row in rows]
+    if not sibling_ids:
+        return []
+    await execute("""
+        UPDATE agent_workflows
+        SET status = 'superseded',
+            test_results = COALESCE(test_results, '') ||
+                CASE WHEN COALESCE(test_results, '') = '' THEN '' ELSE E'\n' END ||
+                'Superseded when workflow ' || $2::text || ' was reviewed active for the same workflow_key.',
+            updated_at = NOW()
+        WHERE id = ANY($1::int[])
+    """, sibling_ids, str(workflow_id))
+    await log_event(
+        "workflow",
+        "info",
+        reviewed_by,
+        "workflow_siblings_superseded",
+        f"workflow_{workflow_id}",
+        {"workflow_key": workflow_key, "superseded_workflow_ids": sibling_ids},
+    )
+    return sibling_ids
+
+
 @router.post("/{workflow_id}/review")
 async def review_workflow(
     workflow_id: int,
@@ -268,6 +308,16 @@ async def review_workflow(
     review_notes: str = Body(""),
 ):
     status = "active" if approved else "needs_revision"
+    workflow = await fetchrow("SELECT id, workflow_key FROM agent_workflows WHERE id = $1", workflow_id)
+    if not workflow:
+        return {"error": "Workflow not found"}
+    superseded_ids = []
+    if approved:
+        superseded_ids = await _supersede_active_siblings(
+            workflow_id,
+            workflow.get("workflow_key"),
+            reviewed_by,
+        )
     await execute("""
         UPDATE agent_workflows
         SET status = $1, reviewed_by = $2, reviewed_at = NOW(),
@@ -276,8 +326,8 @@ async def review_workflow(
         WHERE id = $4
     """, status, reviewed_by, review_notes, workflow_id)
     await log_event("workflow", "info", reviewed_by, "workflow_reviewed",
-                    f"workflow_{workflow_id}", {"status": status})
-    return {"status": status, "id": workflow_id}
+                    f"workflow_{workflow_id}", {"status": status, "superseded_workflow_ids": superseded_ids})
+    return {"status": status, "id": workflow_id, "superseded_workflow_ids": superseded_ids}
 
 
 @router.post("/{workflow_id}/rerun")

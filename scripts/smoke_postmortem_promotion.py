@@ -60,6 +60,7 @@ def main():
         "priority": "3",
         "provider": "local",
         "sync_provider": False,
+        "auto_assign": False,
         "created_by": "postmortem-promotion-smoke",
     })
     ticket_id = ticket["id"]
@@ -168,8 +169,10 @@ def main():
     context = request("GET", f"/api/tickets/{ticket_id}/context")
     require(any(str(postmortem_id) in n.get("body", "") for n in context.get("notes", [])),
             "promotion note missing from ticket context")
-    require(any(w.get("id") == promotion["workflow_id"] for w in context.get("workflows", [])),
-            "promoted workflow missing from ticket context")
+    require(not any(
+        w.get("id") == promotion["workflow_id"] and w.get("status") == "draft"
+        for w in context.get("workflows", [])
+    ), "draft workflow should not be presented as operational ticket guidance")
 
     audit_q = urllib.parse.quote(f"postmortem_{postmortem_id}")
     audit = request("GET", f"/api/dashboard/audit?q={audit_q}")

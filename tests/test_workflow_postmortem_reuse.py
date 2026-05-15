@@ -154,6 +154,81 @@ class WorkflowReuseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["workflow_key"], "request:access-custom")
         self.assertIn("request:access-custom", captured["params"])
 
+    async def test_review_supersedes_active_siblings_before_activation(self):
+        module = load_workflows_route()
+        calls = []
+
+        async def fetchrow(query, *params):
+            if "SELECT id, workflow_key FROM agent_workflows" in query:
+                return {"id": 22, "workflow_key": "incident:phishing"}
+            return None
+
+        async def fetchall(query, *params):
+            calls.append(("fetchall", query, params))
+            if "WHERE workflow_key = $1" in query:
+                return [{"id": 11}, {"id": 12}]
+            return []
+
+        async def execute(query, *params):
+            calls.append(("execute", query, params))
+            return None
+
+        module.fetchrow = fetchrow
+        module.fetchall = fetchall
+        module.execute = execute
+
+        result = await module.review_workflow(
+            22,
+            reviewed_by="unit-test",
+            approved=True,
+            review_notes="approve canonical phishing workflow",
+        )
+
+        self.assertEqual(result["status"], "active")
+        self.assertEqual(result["superseded_workflow_ids"], [11, 12])
+        supersede_call = [call for call in calls if "status = 'superseded'" in call[1]][0]
+        self.assertEqual(supersede_call[2][0], [11, 12])
+        self.assertEqual(supersede_call[2][1], "22")
+        review_call = [call for call in calls if "UPDATE agent_workflows" in call[1] and "reviewed_at" in call[1]][0]
+        self.assertEqual(review_call[2][0], "active")
+
+    async def test_active_workflow_key_change_is_regated_for_review(self):
+        module = load_workflows_route()
+        update_params = {}
+
+        async def fetchrow(query, *params):
+            if "SELECT * FROM agent_workflows" in query:
+                return {
+                    "id": 31,
+                    "name": "Current canonical workflow",
+                    "description": "Current",
+                    "ticket_class": "Incident",
+                    "trigger_type": "manual",
+                    "status": "active",
+                    "blueprint": "Current blueprint",
+                    "approval_policy": {"workflow_key": "incident:old"},
+                    "workflow_key": "incident:old",
+                }
+            return None
+
+        async def execute(query, *params):
+            update_params["query"] = query
+            update_params["params"] = params
+            return None
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+
+        result = await module.update_workflow(
+            31,
+            approval_policy={"workflow_key": "incident:new"},
+        )
+
+        self.assertEqual(result["status"], "updated")
+        self.assertIn("status =", update_params["query"])
+        self.assertIn("ready_for_review", update_params["params"])
+        self.assertIn("incident:new", update_params["params"])
+
 
 class PostmortemPromotionReuseTests(unittest.IsolatedAsyncioTestCase):
     async def test_promote_updates_existing_workflow_by_key(self):
@@ -181,7 +256,8 @@ class PostmortemPromotionReuseTests(unittest.IsolatedAsyncioTestCase):
             "name": "Canonical phishing response",
             "description": "Existing phishing workflow",
             "ticket_class": "Incident",
-            "status": "tested",
+            "status": "draft",
+            "reviewed_at": "2026-05-13T15:15:29Z",
             "blueprint": "Original phishing triage.",
             "test_plan": "Original tests.",
             "test_results": "Original evidence.",
@@ -226,7 +302,10 @@ class PostmortemPromotionReuseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["workflow_action"], "updated")
         self.assertEqual(result["workflow_key"], "incident:phishing")
         workflow_update = [call for call in fetchval_queries if "UPDATE agent_workflows" in call[0]][0]
+        self.assertIn("active", workflow_update[1])
         self.assertTrue(any("Postmortem 501 workflow lesson" in str(param) for param in workflow_update[1]))
+        article_insert = [call for call in fetchval_queries if "INSERT INTO knowledge_articles" in call[0]][0]
+        self.assertIn("workflow:incident:phishing:knowledge", article_insert[1])
         audit_insert = [call for call in executed if "INSERT INTO audit_log" in call[0]][0]
         self.assertIn("incident:phishing", audit_insert[1][3])
 

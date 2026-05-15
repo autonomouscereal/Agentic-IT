@@ -47,7 +47,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 ## demo_account_1 Unified Credentials
 
 **Username:** `demo_account_1`
-**Password:** Stored in credential vault â€” retrieve via `credman.py`
+**Password:** Stored in credential vault - retrieve via `credman.py`
 
 ### Current Status Per Platform
 
@@ -68,18 +68,18 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 
 ### Capabilities
 Unified CLI for managing users across all 5 platforms:
-- `create` â€” Create user on all platforms
-- `delete` â€” Remove user from all platforms
-- `update` â€” Modify user attributes
-- `list` â€” List users across platforms
-- `set-password` â€” Set password across platforms
+- `create` - Create user on all platforms
+- `delete` - Remove user from all platforms
+- `update` - Modify user attributes
+- `list` - List users across platforms
+- `set-password` - Set password across platforms
 
 ### Platform Backends
-- **KeycloakBackend** â€” Admin REST API via `keycloak_admin.py`
-- **iTopBackend** â€” Direct MariaDB SQL (bcrypt password hashing)
-- **WazuhBackend** â€” Direct RBAC SQLite (scrypt password hashing)
-- **GitLabBackend** â€” Rails runner (Ruby code templates)
-- **MailcowBackend** â€” API or direct MySQL
+- **KeycloakBackend** - Admin REST API via `keycloak_admin.py`
+- **iTopBackend** - Direct MariaDB SQL (bcrypt password hashing)
+- **WazuhBackend** - Direct RBAC SQLite (scrypt password hashing)
+- **GitLabBackend** - Rails runner (Ruby code templates)
+- **MailcowBackend** - API or direct MySQL
 
 ### Fixed Bugs in User Manager
 1. **Hardcoded DB passwords removed**: iTop and Mailcow DB credentials are resolved from container environment or explicit environment variables.
@@ -97,7 +97,7 @@ Unified CLI for managing users across all 5 platforms:
 | Keycloak | PostgreSQL DB | Encrypted | `keycloak-db-1` |
 | iTop | MariaDB `priv_user_local.password_hash` | bcrypt `$2y$12$` | `itop-deployment-db-1` |
 | Wazuh API | Wazuh REST API preferred; SQLite fallback | native API / scrypt:N:R:P$salt$hash | `wazuh_deploy-wazuh.manager-1` |
-| Wazuh Dashboard | OpenSearch Security | bcrypt `$2y$12$` | `wazuh_deploy-wazuh.indexer-1` â†’ `/usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml` |
+| Wazuh Dashboard | OpenSearch Security | bcrypt `$2y$12$` | `wazuh_deploy-wazuh.indexer-1` -> `/usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml` |
 | GitLab | PostgreSQL | Rails encrypted | `gitlab` |
 | Mailcow | MySQL | Mailcow hash | `mysql-mailcow` |
 

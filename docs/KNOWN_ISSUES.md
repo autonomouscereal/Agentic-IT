@@ -4,6 +4,190 @@ Last updated: 2026-05-15.
 
 ## Found In Workflow Reuse Proof
 
+### Workflow review activation hit HTTP 500 when demoting active siblings
+
+Status: fixed, deployed, and remote unit-tested on 2026-05-15.
+
+Problem:
+
+`scripts/smoke_workflow_canonicalization.py` created a reviewed active
+workflow, moved a second reviewed workflow onto the same `workflow_key`, then
+called `POST /api/workflows/{id}/review`. The live API returned HTTP 500 while
+demoting the active sibling.
+
+Impact:
+
+The intended one-active-per-key workflow policy exists in the local route and
+unit tests, but the deployed asyncpg/runtime path exposed a server error before
+the smoke could prove live review activation and audit evidence.
+
+Fix:
+
+The route used `$2::text` in the sibling-demotion note but passed the integer
+workflow id directly, which asyncpg rejected as `expected str, got int`. The
+route now passes `str(workflow_id)` for that text-cast parameter, and the unit
+test asserts the text parameter shape.
+
+Verification:
+
+- Remote focused unit test passed after rebuild:
+  `PYTHONPATH=api python3 -m unittest tests.test_workflow_postmortem_reuse`.
+- The canonicalization smoke proceeded past the review activation path on the
+  rerun and exposed the next knowledge-article reuse issue below.
+
+### Postmortem promotion reused workflow but duplicated knowledge articles
+
+Status: fixed, deployed, and remote unit-tested on 2026-05-15.
+
+Problem:
+
+`scripts/smoke_workflow_canonicalization.py` proved the second phishing
+postmortem reused the same canonical `incident:phishing` workflow, but
+promotion still returned a different `knowledge_article_id` for each
+postmortem.
+
+Impact:
+
+Operators get one reusable workflow but multiple near-duplicate knowledge
+articles for the same operational lesson, so the learning tab remains noisy and
+agents can receive fragmented guidance.
+
+Fix:
+
+Promoted knowledge now reuses a canonical article keyed by
+`workflow:{workflow_key}:knowledge` when a workflow is being promoted. Repeated
+lessons merge into that article, and postmortem detail looks up both legacy
+per-postmortem articles and the canonical workflow article.
+
+Verification:
+
+- Remote focused unit test passed after rebuild:
+  `PYTHONPATH=api python3 -m unittest tests.test_workflow_postmortem_reuse`.
+- The canonicalization smoke proceeded past knowledge-article reuse and exposed
+  the ticket-context workflow selection issue below.
+
+### Ticket context did not prefer the active canonical workflow
+
+Status: fixed, deployed, and live-smoke verified on 2026-05-15.
+
+Problem:
+
+The canonicalization smoke verified there was only one `incident:phishing`
+workflow in ticket context, but that selected row was not `active`.
+
+Impact:
+
+Agents can still be shown a tested/review-gated workflow instead of the active
+reviewed workflow for the same use case. This is the exact demo risk where
+`phishing-smoke-lifecycle` or another tested workflow appears to be the one in
+use even though activation state says otherwise.
+
+Fix:
+
+Postmortem promotion now preserves or restores `active` status when updating an
+already-reviewed canonical workflow that had previously been demoted by the
+older promotion path. This keeps ticket context pointed at the active reviewed
+workflow while still recording promotion evidence and canonical knowledge.
+
+Verification:
+
+- Live `scripts/smoke_workflow_canonicalization.py` passed against
+  `http://127.0.0.1:25480`: workflow `86` reactivated and superseded `87`;
+  phishing postmortems `92`/`93` reused workflow `4` and knowledge article
+  `55`; ticket context returned workflow `4`.
+
+### Workflow canonicalization smoke created auto-assigned agent work
+
+Status: fixed, deployed, and live-smoke verified on 2026-05-15.
+
+Problem:
+
+The canonicalization smoke creates local phishing tickets for workflow reuse
+evidence. Those synthetic tickets did not explicitly disable RACI
+auto-assignment, so the dashboard spawned agent `209` on ticket `547`.
+
+Impact:
+
+Deterministic smoke tests can unexpectedly consume the local model lane and
+look like unrelated work. This is especially risky in the shared lab because
+test probes must not overlap real agentic runs unless intentionally testing the
+model path.
+
+Fix:
+
+`scripts/smoke_workflow_canonicalization.py` now creates synthetic phishing
+evidence tickets with `auto_assign=false`.
+
+Verification:
+
+- Agent `209` on ticket `547` was confirmed to be the synthetic smoke-spawned
+  worker. After the API rebuild ended the process, cleanup note `1250` and
+  status note `1251` closed ticket `547` as non-customer smoke work.
+- Live `scripts/smoke_workflow_canonicalization.py` passed against
+  `http://127.0.0.1:25480`: workflow `91` reactivated and superseded `92`;
+  phishing postmortems `98`/`99` reused workflow `4` and knowledge article
+  `55`; `/api/agents/active` remained empty afterward.
+
+### Agent curl calls with unquoted query parameters can return empty evidence
+
+Status: fixed, deployed, and remote unit-tested on 2026-05-15.
+
+Problem:
+
+The accidental smoke-spawned agent `209` followed the bounded-evidence prompt
+but ran a Bash curl command against
+`/api/postmortems/evidence/547?task_log_lines=0&max_notes=8&max_articles=1&max_audit=6`
+without quoting the URL. Bash treated `&` as background separators, so the
+first evidence request completed with no useful output and the agent started
+debugging the endpoint instead of the ticket.
+
+Impact:
+
+Real agentic runs can lose their compact evidence at the first step and drift
+into retry/debug behavior even though the dashboard endpoint is healthy.
+
+Fix:
+
+Reusable ticket, auto-assignment, and postmortem prompts now explicitly tell
+agents to quote full curl URLs that contain `?` or `&`.
+
+Verification:
+
+- Local `python -m unittest tests.test_task_prompts_ticket_closure
+  tests.test_workflow_postmortem_reuse`: PASS.
+- Remote `PYTHONPATH=api python3 -m unittest tests.test_task_prompts_ticket_closure
+  tests.test_workflow_postmortem_reuse`: PASS.
+
+### Draft workflow promotion smoke expects draft workflow in ticket context
+
+Status: fixed, deployed, and live-smoke verified on 2026-05-15.
+
+Problem:
+
+`scripts/smoke_postmortem_promotion.py` creates a draft workflow from a generic
+postmortem and then asserts that the promoted workflow appears in ticket
+context. The context endpoint now prioritizes active/tested operational
+workflows and can omit draft one-off promotion artifacts.
+
+Impact:
+
+The smoke assertion no longer matches the safer context behavior. Agents should
+not be pushed draft/unreviewed workflows as operational guidance unless they are
+explicitly doing review or postmortem work.
+
+Fix:
+
+`scripts/smoke_postmortem_promotion.py` now verifies the draft workflow through
+the postmortem promotion asset detail and workflow detail endpoints, keeps the
+ticket context note check, and asserts draft workflows are not presented as
+operational guidance.
+
+Verification:
+
+- Live `scripts/smoke_postmortem_promotion.py` passed against
+  `http://127.0.0.1:25480`: ticket `552`, postmortem `97`, knowledge article
+  `73`, draft workflow `90`, and skills `96`/`97`.
+
 ### Active agent can stall after approvals by chasing oversized persisted context output
 
 Status: fixed, deployed, and real-agent tested on 2026-05-15.
@@ -641,6 +825,11 @@ Follow-up rule:
 - Before any API restart/rebuild/config restore, check `/api/agents/active` and
   `/api/agents/processes`. If any agent is active, either wait for it, explicitly
   document and stop only the current test-owned lane, or defer the restart.
+- 2026-05-15 recurrence: API rebuild for prompt/smoke fixes ended synthetic
+  smoke agent `209` on ticket `547`. The agent was verified as the
+  canonicalization-smoke-owned lane first, cleanup note `1250` and status note
+  `1251` closed the synthetic ticket, and the smoke was fixed to use
+  `auto_assign=false` so future runs do not spawn the model lane.
 
 ### Direct agent spawn skipped ticket row-scope checks
 
@@ -3466,7 +3655,7 @@ Migrations are additive/idempotent. There is no first-class rollback tool yet.
 
 ### Duplicate active workflows per use case
 
-Status: being fixed and verified on 2026-05-13.
+Status: fixed locally and ready for live smoke on 2026-05-15.
 
 Problem:
 
@@ -3488,7 +3677,7 @@ Impact:
   approved workflows remain active.
 - Postmortem learning becomes fragmented across duplicate articles/workflows.
 
-Fix plan:
+Fix:
 
 - Add a canonical `workflow_key` and enforce only one active/approved workflow
   per key.
@@ -3497,6 +3686,25 @@ Fix plan:
 - Demote duplicate active workflows during review/promotion and reconcile the
   live phishing workflow set so `phishing-smoke-lifecycle` is the canonical
   active workflow.
+- Workflow create/update requests for `active` or `approved` are now held at
+  `ready_for_review`; `POST /api/workflows/{id}/review` is the only activation
+  path.
+- Review activation now demotes any active/approved sibling with the same
+  `workflow_key` before setting the reviewed workflow active and records
+  `workflow_siblings_superseded` audit evidence.
+- Changing the `workflow_key` on an already-active workflow without an explicit
+  review status re-gates that workflow to `ready_for_review`.
+- Restored `scripts/smoke_workflow_canonicalization.py` as a deployable smoke
+  that proves review gating, one-active enforcement, postmortem workflow reuse,
+  ticket-context workflow selection, and audit search evidence.
+
+Verification:
+
+- Local full unit discovery passed on 2026-05-15: 111 tests.
+- Focused workflow/postmortem reuse suite passed on 2026-05-15: 6 tests.
+- `scripts/text_hygiene.py` was restored and tightened so default checks catch
+  true mojibake without forcing historical box-drawing/Unicode docs to be
+  rewritten; default hygiene check passes after fixing two recovered skill docs.
 
 ### Wazuh/Sysmon bridge queue and log retention gaps
 
