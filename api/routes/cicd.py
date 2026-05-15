@@ -204,11 +204,9 @@ async def record_run(body: dict = Body({})):
         ticket = await ticket_service.create_ticket(
             title=f"CI/CD security gate: {repo_ref}",
             description=description,
-            ticket_class="Change" if deployment_target == "production" else "UserRequest",
+            ticket_class="NormalChange" if deployment_target == "production" else "UserRequest",
             status="new",
             priority="P1" if counts["critical"] else ("P2" if counts["high"] else "P3"),
-            provider="local",
-            sync_provider=False,
             created_by="cicd-security-pipeline",
         )
         ticket_id = ticket["id"]

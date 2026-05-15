@@ -73,6 +73,32 @@ def _local_ref():
     return f"LOCAL-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 
 
+PROVIDER_TICKET_CLASSES = {"Incident", "UserRequest", "RoutineChange", "NormalChange", "EmergencyChange"}
+
+
+def normalize_ticket_class(ticket_class, fallback="UserRequest"):
+    """Normalize dashboard work into provider-compatible ticket classes."""
+    value = str(ticket_class or fallback or "UserRequest").strip()
+    aliases = {
+        "Change": "RoutineChange",
+        "ServiceRequest": "UserRequest",
+        "Service Request": "UserRequest",
+        "Request": "UserRequest",
+        "Task": "UserRequest",
+        "Bug": "Incident",
+        "Story": "UserRequest",
+    }
+    value = aliases.get(value, value)
+    if value in PROVIDER_TICKET_CLASSES:
+        return value
+    lowered = value.lower()
+    if "phish" in lowered or "incident" in lowered or "alert" in lowered or "edr" in lowered:
+        return "Incident"
+    if "change" in lowered or "deploy" in lowered or "cicd" in lowered or "setup" in lowered:
+        return "RoutineChange"
+    return fallback if fallback in PROVIDER_TICKET_CLASSES else "UserRequest"
+
+
 def _as_list(value):
     if value is None:
         return []
@@ -107,6 +133,8 @@ async def create_ticket(
     """
     from services import provider_registry
 
+    ticket_class = normalize_ticket_class(ticket_class)
+    provider_class = normalize_ticket_class(provider_class, ticket_class) if provider_class else ticket_class
     requested_provider = provider
     provider = provider_registry.default_ticket_provider(provider)
     if provider != "local" and not _can_outbound_create(provider, ticket_class):

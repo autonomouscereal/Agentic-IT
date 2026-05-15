@@ -3881,3 +3881,71 @@ Verification:
   ticket `409` synced to iTop Incident `262` / `I-000271`, agent `147`
   completed task `144`, dashboard and iTop both ended `resolved`, and the iTop
   solution contained the marker.
+
+### Dashboard-created proof tickets bypassed provider sync
+
+Status: fixed in source on 2026-05-15; live cleanup in progress.
+
+Problem:
+
+- Some ad hoc/demo routes and smoke scripts forced `provider: local` or
+  `sync_provider: false`.
+- CI/CD and workflow proof scripts created local ticket classes that are not
+  valid provider classes, including generic `Change`, `BrokerLeaseProof`, and
+  `WorkflowReuseSmoke...`.
+- This made recent proof tickets look complete in the dashboard while not being
+  true provider-synced end-to-end evidence.
+
+Fix:
+
+- `ticket_service.create_ticket()` now normalizes classes before insert and
+  provider create.
+- Ad hoc agent tickets, setup tickets, CI/CD security tickets, and workflow
+  canonicalization smoke tickets no longer opt out of provider sync by default.
+- Explicit local-only creation remains available only when the caller selects
+  `provider: local` for provider-adapter/RBAC negative controls.
+
+Verification:
+
+- See `docs/PROVIDER_SYNC_CLEANUP_2026-05-15.md`.
+
+### iTop backfill can overwrite local proof titles with generic provider titles
+
+Status: investigated on 2026-05-15; sampled database/API rows retained their
+canonical titles after push.
+
+Problem:
+
+- During provider-sync backfill of previously local-only proof tickets, several
+  pushed rows were read back from the dashboard API with title `Ticket 1`.
+- This suggests the provider sync path can trust a generic provider-side title
+  over a more specific dashboard title during or immediately after outbound
+  creation.
+
+Impact:
+
+- Demo/proof tickets lose human-readable context even though provider refs are
+  created successfully.
+- Audit and ticket lists become harder to explain.
+
+Next fix:
+
+- Preserve the canonical dashboard title during outbound create/backfill unless
+  the provider title is explicitly newer and non-generic.
+
+### iTop close path used resolution fields for change classes
+
+Status: fixed in source on 2026-05-15; live deployment pending API restart.
+
+Problem:
+
+- Provider-close backfill for resolved `RoutineChange` rows failed with
+  `Unknown attribute resolution_code from class RoutineChange`.
+- The iTop close adapter used Incident/UserRequest resolution fields for all
+  ticket classes.
+
+Fix:
+
+- `iTopProvider.close_ticket()` now sends `resolution_code`/`solution` only for
+  `Incident` and `UserRequest` classes, and retries without fields if iTop
+  reports an unknown close-field attribute.

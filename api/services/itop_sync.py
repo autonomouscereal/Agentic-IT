@@ -82,6 +82,12 @@ def _normalize_ticket_class(ticket_class):
     return value
 
 
+def _resolution_fields(ticket_class, notes):
+    if ticket_class in ("Incident", "UserRequest"):
+        return {"resolution_code": "assistance", "solution": notes}
+    return {}
+
+
 def _effective_local_status(provider_status, local_status=None, has_active_agent=False):
     """Preserve active dashboard work when provider sync lags local agent state."""
     provider_value = (provider_status or "").strip()
@@ -671,7 +677,7 @@ class iTopProvider(TicketProvider):
         if not ticket:
             return {"error": "Ticket not found"}
 
-        fields = {"resolution_code": "assistance", "solution": notes}
+        fields = _resolution_fields(ticket["itop_class"], notes)
         stimulus_result = await itop_request("core/apply_stimulus", **{
             "class": ticket["itop_class"],
             "key": ticket["itop_ref"],
@@ -679,6 +685,19 @@ class iTopProvider(TicketProvider):
             "comment": notes,
             "fields": fields,
         })
+        if (
+            stimulus_result.get("code") != 0
+            and "Unknown attribute" in str(stimulus_result.get("message", ""))
+            and fields
+        ):
+            fields = {}
+            stimulus_result = await itop_request("core/apply_stimulus", **{
+                "class": ticket["itop_class"],
+                "key": ticket["itop_ref"],
+                "stimulus": "ev_resolve",
+                "comment": notes,
+                "fields": fields,
+            })
 
         if stimulus_result.get("code") != 0 and "Invalid stimulus" in str(stimulus_result.get("message", "")):
             assign_result = await itop_request("core/apply_stimulus", **{
@@ -716,6 +735,19 @@ class iTopProvider(TicketProvider):
                         "comment": notes,
                         "fields": fields,
                     })
+                    if (
+                        stimulus_result.get("code") != 0
+                        and "Unknown attribute" in str(stimulus_result.get("message", ""))
+                        and fields
+                    ):
+                        fields = {}
+                        stimulus_result = await itop_request("core/apply_stimulus", **{
+                            "class": ticket["itop_class"],
+                            "key": ticket["itop_ref"],
+                            "stimulus": "ev_resolve",
+                            "comment": notes,
+                            "fields": fields,
+                        })
 
         if stimulus_result.get("code") == 0:
             await execute(

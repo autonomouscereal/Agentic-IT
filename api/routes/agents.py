@@ -237,7 +237,6 @@ async def create_from_prompt(
         description=prompt[:2000],
         ticket_class="UserRequest",
         status="in_progress",
-        provider="local",
         created_by="dashboard",
     )
     ticket_id = ticket["id"]

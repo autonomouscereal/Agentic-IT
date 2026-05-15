@@ -46,14 +46,14 @@ async def create_setup_ticket(
     ai_base_url: str = Body(None),
     model: str = Body("qwen/qwen3.6-27b"),
     notes: str = Body(""),
-    sync_provider: bool = Body(False),
+    sync_provider: bool = Body(None),
     spawn_agent: bool = Body(False),
 ):
     """Create a tracked setup ticket and optionally assign an agent.
 
     This keeps deployment work visible in the same ticket/approval/audit system
-    used for customer operations. External ITSM sync is explicit and provider
-    agnostic.
+    used for customer operations. External ITSM sync uses the active provider
+    automatically unless the caller explicitly selects the local provider.
     """
     plan = platform_manifest.build_setup_plan(
         profile=profile,
@@ -69,7 +69,6 @@ async def create_setup_ticket(
         ticket_class="NormalChange",
         status="new",
         priority="P2",
-        provider="local",
         sync_provider=sync_provider,
         created_by="setup-wizard",
         auto_assign=False,

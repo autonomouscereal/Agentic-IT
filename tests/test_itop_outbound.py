@@ -52,6 +52,11 @@ class iTopOutboundTests(unittest.TestCase):
         module = load_itop_sync()
         self.assertEqual(module._normalize_ticket_class("Change"), "RoutineChange")
         self.assertEqual(module._normalize_ticket_class("Incident"), "Incident")
+        self.assertEqual(module._resolution_fields("Incident", "done"), {
+            "resolution_code": "assistance",
+            "solution": "done",
+        })
+        self.assertEqual(module._resolution_fields("RoutineChange", "done"), {})
         self.assertEqual(module._priority_to_impact_urgency("P1"), (1, 1))
         self.assertEqual(module._priority_to_impact_urgency("P2"), (2, 2))
         self.assertEqual(module._priority_to_impact_urgency("P4"), (3, 4))
@@ -223,6 +228,50 @@ class iTopOutboundTests(unittest.TestCase):
         self.assertEqual(result["status"], "resolved")
         self.assertEqual(sleeps, [1])
         self.assertEqual(calls[-1][1]["stimulus"], "ev_resolve")
+
+    def test_close_change_omits_incident_resolution_fields(self):
+        module = load_itop_sync()
+        calls = []
+
+        async def fake_fetchrow(query, *args):
+            return {"itop_ref": "346", "itop_class": "RoutineChange", "status": "assigned"}
+
+        async def fake_itop_request(operation, **fields):
+            calls.append((operation, fields))
+            return {"code": 0}
+
+        module.fetchrow = fake_fetchrow
+        module.itop_request = fake_itop_request
+
+        provider = module.iTopProvider()
+        result = asyncio.run(provider.close_ticket(98, "change close proof"))
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(calls[0][1]["class"], "RoutineChange")
+        self.assertEqual(calls[0][1]["fields"], {})
+
+    def test_close_retries_without_fields_on_unknown_attribute(self):
+        module = load_itop_sync()
+        calls = []
+
+        async def fake_fetchrow(query, *args):
+            return {"itop_ref": "170", "itop_class": "Incident", "status": "assigned"}
+
+        async def fake_itop_request(operation, **fields):
+            calls.append((operation, fields))
+            if len(calls) == 1:
+                return {"code": 1, "message": "Unknown attribute resolution_code from class Incident"}
+            return {"code": 0}
+
+        module.fetchrow = fake_fetchrow
+        module.itop_request = fake_itop_request
+
+        provider = module.iTopProvider()
+        result = asyncio.run(provider.close_ticket(127, "retry close proof"))
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(calls[0][1]["fields"]["resolution_code"], "assistance")
+        self.assertEqual(calls[1][1]["fields"], {})
 
     def test_full_sync_imports_without_auto_assigning_historical_rows(self):
         module = load_itop_sync()

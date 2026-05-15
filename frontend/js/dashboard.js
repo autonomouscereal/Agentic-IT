@@ -1035,13 +1035,35 @@ async function loadSkills() {
         list.innerHTML = '<div class="learning-empty">No skills configured</div>';
         return;
     }
-    list.innerHTML = skills.map(s => `
+    const operational = skills
+        .filter(s => s.enabled && !isGeneratedLearningSkill(s))
+        .sort((a, b) => `${a.category || ""}${a.name || ""}`.localeCompare(`${b.category || ""}${b.name || ""}`));
+    const generated = skills
+        .filter(s => s.enabled && isGeneratedLearningSkill(s))
+        .sort((a, b) => `${a.category || ""}${a.name || ""}`.localeCompare(`${b.category || ""}${b.name || ""}`));
+    const disabled = skills
+        .filter(s => !s.enabled)
+        .sort((a, b) => `${a.category || ""}${a.name || ""}`.localeCompare(`${b.category || ""}${b.name || ""}`));
+    const renderSkill = s => `
         <div class="learning-item">
             <div><strong>${escHtml(s.name)}</strong> <span class="source-badge local">${escHtml(s.category || "general")}</span></div>
             <div>${escHtml(s.description || "")}</div>
             <div class="learning-meta">${s.enabled ? "enabled" : "disabled"} ${s.assigned_to_all ? "&middot; global" : ""}</div>
         </div>
-    `).join("");
+    `;
+    list.innerHTML = `
+        <div class="learning-meta">Operational skills: ${operational.length} enabled · Generated enabled: ${generated.length} · Disabled legacy/test: ${disabled.length}</div>
+        ${operational.map(renderSkill).join("") || '<div class="learning-empty">No operational skills enabled</div>'}
+        ${generated.length ? `<details class="learning-details"><summary>Generated skills still enabled (${generated.length})</summary>${generated.map(renderSkill).join("")}</details>` : ""}
+        ${disabled.length ? `<details class="learning-details"><summary>Disabled legacy/test skills (${disabled.length})</summary>${disabled.map(renderSkill).join("")}</details>` : ""}
+    `;
+}
+
+function isGeneratedLearningSkill(skill) {
+    const name = String(skill?.name || "").toLowerCase();
+    const category = String(skill?.category || "").toLowerCase();
+    if (name === "postmortem-builder" || name === "workflow-builder") return false;
+    return name.startsWith("postmortem-") || name.startsWith("smoke-skill-") || category === "smoke";
 }
 
 async function loadKnowledge() {

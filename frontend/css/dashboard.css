@@ -906,6 +906,23 @@ body {
     font-size: 11px;
 }
 
+.learning-details {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    padding: 8px;
+}
+
+.learning-details summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.learning-details .learning-item {
+    margin-top: 8px;
+}
+
 .learning-empty {
     color: var(--text-muted);
     font-size: 12px;

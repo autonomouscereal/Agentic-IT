@@ -43,8 +43,6 @@ def create_ticket(title, description, stamp):
         "ticket_class": "Incident",
         "status": "resolved",
         "priority": "3",
-        "provider": "local",
-        "sync_provider": False,
         "auto_assign": False,
         "created_by": "workflow-canonicalization-smoke",
     })
