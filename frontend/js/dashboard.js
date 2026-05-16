@@ -1630,12 +1630,38 @@ function escJs(str) {
 
 let setupManifest = null;
 let setupPlan = null;
+let setupRuntime = null;
 
 async function loadSetup() {
     setupManifest = await apiGet("/api/setup/manifest");
+    setupRuntime = await apiGet("/api/agents/runner-health");
     if (!setupManifest) return;
+    renderSetupRuntime();
     renderSetupModules();
     await generateSetupPlan();
+}
+
+function renderSetupRuntime() {
+    const panel = document.getElementById("setup-runtime-status");
+    if (!panel) return;
+    const health = setupRuntime || {};
+    const proxy = health.effective_anthropic_base_url || "";
+    const harness = health.harness || "unknown";
+    const available = (health.available_harnesses || []).map(h => h.name).join(", ") || "none";
+    const modelStatus = health.model_api?.status || "unknown";
+    const model = health.default_model || document.getElementById("setup-model")?.value || "deepseek/deepseek-v4-flash";
+    const aiInput = document.getElementById("setup-ai-base-url");
+    if (aiInput && !aiInput.value && proxy) aiInput.value = proxy;
+    const harnessSelect = document.getElementById("setup-harness");
+    if (harnessSelect && ["hermes", "claude-code"].includes(harness)) harnessSelect.value = harness;
+    panel.innerHTML = `
+        <div><strong>Proxy URL:</strong> ${escHtml(proxy || "not configured")}</div>
+        <div><strong>Proxy health:</strong> <span class="status-badge ${statusClass(modelStatus)}">${escHtml(modelStatus)}</span></div>
+        <div><strong>Harness:</strong> ${escHtml(harness)}</div>
+        <div><strong>Available harnesses:</strong> ${escHtml(available)}</div>
+        <div><strong>Selected model:</strong> ${escHtml(model)}</div>
+        <div><strong>Setup agent:</strong> created when installer or operator chooses Create + Assign Agent</div>
+    `;
 }
 
 function setupSelectedProfileModules() {
@@ -1749,7 +1775,11 @@ async function createSetupTicket(spawnAgent) {
     const result = await apiPost("/api/setup/ticket", {
         ...choices,
         ai_base_url: document.getElementById("setup-ai-base-url")?.value || null,
-        model: document.getElementById("setup-model")?.value || document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b",
+        model: document.getElementById("setup-model")?.value || document.getElementById("agent-model-select")?.value || "deepseek/deepseek-v4-flash",
+        proxy_mode: document.getElementById("setup-proxy-mode")?.value || "deploy",
+        proxy_url: document.getElementById("setup-ai-base-url")?.value || null,
+        harness: document.getElementById("setup-harness")?.value || setupRuntime?.harness || "auto",
+        provider: (document.getElementById("setup-model")?.value || "").startsWith("qwen/") ? "lmstudio" : "nous",
         notes: document.getElementById("setup-notes")?.value || "",
         spawn_agent: spawnAgent,
         sync_provider: false,

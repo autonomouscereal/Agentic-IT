@@ -1,6 +1,51 @@
 # Installer E2E Results
 
-Last verified: 2026-05-12
+Last verified: 2026-05-16
+
+## Source Dry-Run Installer Verification - 2026-05-16
+
+Purpose:
+
+- Confirm the one-line installer now plants the dashboard, built-in AI proxy
+  config, harness config, model defaults, and setup-ticket handoff without
+  requiring pre-existing proxy infrastructure.
+- Keep the shell/Python installer as a seed bootstrap; environment-specific
+  integration work remains agentic setup-ticket work with approvals.
+
+Commands:
+
+```bash
+python installer/bootstrap.py --dry-run --profile minimal
+python installer/bootstrap.py --dry-run --profile full-it --harness hermes --proxy-mode deploy
+```
+
+Result:
+
+- Both commands returned `status=dry_run`.
+- Linux/AI-server source dry-run also returned `status=dry_run` with
+  `proxy_url=http://192.168.50.222:4001`.
+- The installer reported a generated `runtime/proxy_config.json`.
+- The full IT dry-run selected `harness=hermes`, `proxy_mode=deploy`, provider
+  `nous`, and model `deepseek/deepseek-v4-flash`.
+- The dry-run setup-ticket payload included proxy mode, proxy URL, harness,
+  provider, model, and agentic onboarding notes.
+- Focused source tests passed:
+  `PYTHONPATH=. python3 -m unittest tests.test_agent_harness
+  tests.test_agentic_self_repair_marker`.
+- After a no-dependency API rebuild to avoid the existing live proxy port, setup
+  smoke against the live dashboard created setup ticket `570` without spawning
+  an agent, and `/api/agents/processes` returned no active processes.
+- Isolated proxy image build passed with `docker build -q deploy/ai-proxy`.
+
+Follow-up clean-host acceptance remains:
+
+- `docker compose ps` healthy for `db`, `agent-memory-db`, `ai-proxy`, and
+  `api`.
+- Dashboard `/health` returns `ok`.
+- Proxy `/health` and `/v1/models` return configured aliases.
+- `/api/agents/runner-health` shows selected harness and proxy URL.
+- Setup ticket is created automatically.
+- Setup agent either spawns or records a clear missing-credential/access reason.
 
 ## Full One-Line Install Verification - 2026-05-12
 

@@ -156,14 +156,27 @@ def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=N
     }
 
 
-def plan_to_ticket_description(plan, ai_base_url=None, model=None, notes=None):
+def plan_to_ticket_description(plan, ai_base_url=None, model=None, notes=None, runtime=None):
+    runtime = runtime or {}
     lines = [
         "Agentic IT/SOC platform setup plan",
         "",
         f"Profile: {plan.get('profile')}",
         f"Deploy missing modules: {plan.get('deploy_missing')}",
+        f"Proxy mode: {runtime.get('proxy_mode') or '<unknown>'}",
+        f"Proxy URL: {runtime.get('proxy_url') or ai_base_url or '<configure in environment>'}",
+        f"Agent harness: {runtime.get('harness') or '<auto/configured>'}",
+        f"Provider route: {runtime.get('provider') or '<auto/configured>'}",
         f"AI endpoint: {ai_base_url or '<configure in environment>'}",
         f"Agent model: {model or '<configure in dashboard>'}",
+        "",
+        "Agentic onboarding handoff:",
+        "- Inspect installed modules and compare source/runtime drift.",
+        "- Verify dashboard health, proxy health, harness health, and available models.",
+        "- Run a model smoke test and validate agent spawn/checkpoint/note behavior.",
+        "- Propose missing integrations and request credential/access approvals as needed.",
+        "- Use approval gates before environment-changing actions.",
+        "- Update setup notes, postmortem evidence, skills, and reusable workflows.",
         "",
         "Guardrails:",
     ]

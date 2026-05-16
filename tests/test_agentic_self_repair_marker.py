@@ -47,6 +47,15 @@ class AgentRuntimeImageTest(unittest.TestCase):
         self.assertIn('path == "v1/chat/completions"', proxy)
         self.assertIn("deepseek/deepseek-v4-flash", proxy)
         self.assertIn("proxy_nous_chat", proxy)
+        self.assertIn("PROXY_CONFIG_PATH", proxy)
+
+    def test_compose_deploys_first_class_ai_proxy(self):
+        compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertIn("ai-proxy:", compose)
+        self.assertIn("build: ./deploy/ai-proxy", compose)
+        self.assertIn("PROXY_CONFIG_PATH", compose)
+        self.assertIn("host.docker.internal:host-gateway", compose)
+        self.assertIn("AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:-http://ai-proxy:4001}", compose)
 
 
 if __name__ == "__main__":

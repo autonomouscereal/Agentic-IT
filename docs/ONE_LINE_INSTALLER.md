@@ -1,9 +1,10 @@
 # One-Line Installer
 
-The installer deploys the autonomous enterprise operations control plane and
-writes an initial setup plan. It does not assume the customer wants the
-reference open-source stack. Product choices are made in the Setup page and
-tracked as auditable work items.
+The installer deploys the autonomous enterprise operations control plane,
+plants the built-in AI proxy by default, writes an initial setup plan, and
+creates the first setup ticket. It does not try to finish customer-specific
+integration work in shell. The shell/Python bootstrap plants the seed; the
+platform agent continues onboarding from the setup ticket with approval gates.
 
 The near-term installer proves the SOC/IT seed domain. The long-term installer
 is the bootstrap for a private agentic operations layer that can connect to an
@@ -19,10 +20,17 @@ From a checked-out release:
 ./install.sh --profile soc --ai-base-url http://YOUR_AI_PROXY:4001
 ```
 
+Default proxy-first install:
+
+```bash
+./install.sh --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
+```
+
 Dry run:
 
 ```bash
 ./install.sh --dry-run --no-start --profile minimal
+./install.sh --dry-run --profile full-it --harness hermes --proxy-mode deploy
 ```
 
 ## Local Windows Install
@@ -46,8 +54,14 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
 - `--dashboard-port PORT`: host port for the UI/API.
 - `--db-port PORT`: host port for PostgreSQL.
 - `--project-name NAME`: Docker Compose project name. Defaults to a sanitized name from the target directory.
-- `--ai-base-url URL`: local or external model gateway endpoint.
+- `--harness auto|hermes|claude-code`: selected agent harness. `auto` prefers Hermes when a host Hermes install is available, otherwise Claude Code.
+- `--proxy-mode deploy|external`: deploy the built-in proxy or point the dashboard at an existing proxy.
+- `--proxy-port PORT`: host port for the built-in proxy, default `4001`.
+- `--provider openai|anthropic|nous|lmstudio|custom`: default provider route in the generated proxy config.
+- `--provider-base-url URL`: provider base URL override for custom/external routes.
+- `--ai-base-url URL`: external proxy compatibility endpoint. Built-in proxy mode uses `http://ai-proxy:4001` inside Docker and prints a host-facing proxy URL.
 - `--model MODEL_ID`: default agent model recorded in the setup plan.
+- `--spawn-setup-agent`: create the setup ticket and immediately assign the onboarding agent.
 - `--itop-sync-enabled true|false`: defaults to false for product-agnostic fresh installs.
 - `--no-start`: prepare files without starting Docker.
 - `--dry-run`: validate installer behavior without writing or starting containers.
@@ -59,6 +73,7 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
 - `docker-compose.override.yml`: reserved for site-specific overrides.
 - `runtime/empty_credentials.json`: empty placeholder so the control plane can start before Claude Code OAuth credentials are configured.
 - `runtime/claude_settings.json`: generated model/proxy settings for the runner.
+- `runtime/proxy_config.json`: generated provider/model routing config for the built-in AI proxy. It contains aliases and base URLs, not secrets.
 - `install_state/install-log.jsonl`: installer events.
 - `install_state/last-plan.json`: initial profile plan.
 
@@ -70,10 +85,10 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
    Splunk, Defender, Proofpoint, Okta, GitHub, Entra ID, AWS, Azure, GCP,
    Kubernetes, M365, or network/security tooling.
 4. Leave reference modules enabled only for gaps you want the platform to deploy.
-5. Create a setup ticket/work item.
-6. Assign an agent only after the AI endpoint and approval policy are ready.
+5. Review the setup ticket/work item created by the installer.
+6. Assign or resume the setup agent when model credentials and approval policy are ready. If `--spawn-setup-agent` was used, the agent starts immediately or records a clear missing-credential/access reason.
 
-The setup ticket becomes the auditable deployment record. Agents must request changes before modifying infrastructure.
+The setup ticket becomes the auditable deployment record. The onboarding agent must inspect installed modules, verify proxy and harness health, run model and spawn smoke tests, propose missing integrations, request access/credential approvals, and record notes/postmortems/workflows before marking setup complete. Agents must request changes before modifying infrastructure.
 
 The installer also deploys `agent-memory-db`, registers **Agent Memory** on the Tools page, and wires spawned dashboard agents to the `agent-memory` skill. Agent prompts, tool calls, session stops, deliberate notes, and smoke-test sentinels are stored in the shared memory service with async PostgreSQL writes, JSONB metadata, full-text search, trigram search, and pgvector retrieval. Running **Tools -> Check All** should report Agent Memory as healthy when the database service is deployed.
 
@@ -92,7 +107,18 @@ The doctor is read-only. It validates the dashboard, setup manifest, ticket sort
 
 ## Full Post-Install Regression
 
-The latest full one-line install proof used:
+The current source-level dry-run acceptance is:
+
+```bash
+python installer/bootstrap.py --dry-run --profile minimal
+python installer/bootstrap.py --dry-run --profile full-it --harness hermes --proxy-mode deploy
+```
+
+Expected result: JSON status `dry_run`, a generated proxy config summary,
+selected harness/model, proxy URL, dashboard URL, and a dry-run setup ticket
+handoff payload.
+
+The previous full one-line install proof used:
 
 ```bash
 cd /home/cereal/SOC_TESTING/soc-dashboard
@@ -163,7 +189,7 @@ The shim blueprint is documented in `docs/MAILCOW_API_SHIM.md`. It covers endpoi
 Latest dry-run proof:
 
 ```powershell
-python installer\bootstrap.py --dry-run --profile soc --target C:\Users\cereal\AppData\Local\Temp\soc-platform-dryrun --dashboard-port 25580 --db-port 55433 --ai-base-url http://192.168.50.222:4001 --model qwen/qwen3.6-27b
+python installer\bootstrap.py --dry-run --profile full-it --harness hermes --proxy-mode deploy --target C:\Users\cereal\AppData\Local\Temp\soc-platform-dryrun --dashboard-port 25580 --db-port 55433 --model deepseek/deepseek-v4-flash
 ```
 
 Expected result: JSON status `dry_run`, dashboard URL `http://localhost:25580`, and no files or containers created.

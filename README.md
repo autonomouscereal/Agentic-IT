@@ -115,7 +115,14 @@ Hermes is invoked with:
 hermes --provider <nous|dashboard-proxy> --model <selected_model> --toolsets hermes-cli --accept-hooks -z "<prompt>"
 ```
 
-The runner uses the configured proxy endpoint for harness traffic. For local models, `AGENT_LLM_AUTH_TOKEN` can use the non-secret `lmstudio` marker expected by the local proxy; external provider credentials stay in Claude Code OAuth files, Hermes Nous Portal auth state, or proxy runtime environment, not in source. `AGENT_LLM_BASE_URL` is required so each environment chooses a normal routable endpoint instead of relying on Docker host aliases. See `docs/HERMES_HARNESS.md`.
+The one-line installer now deploys the built-in `ai-proxy` service by default,
+generates `runtime/proxy_config.json`, points spawned agents at
+`http://ai-proxy:4001` inside Docker, and creates the first setup ticket for
+agentic onboarding. For local models, `AGENT_LLM_AUTH_TOKEN` can use the
+non-secret `lmstudio` marker expected by the local proxy; external provider
+credentials stay in Claude Code OAuth files, Hermes Nous Portal auth state, or
+proxy runtime environment, not in source. See `docs/HERMES_HARNESS.md` and
+`docs/ONE_LINE_INSTALLER.md`.
 
 Managed agents run with `acceptEdits` plus the narrow allowlist `Read,Write,Bash(curl *)`. This permits dashboard API calls without allowing arbitrary shell operations. Claude Code refuses full bypass mode when running as root, and full bypass is not needed because destructive work is guarded by dashboard change requests.
 
@@ -145,13 +152,14 @@ Models are configured in `agent_models.json`:
 ```json
 {
   "models": [
+    "deepseek/deepseek-v4-flash",
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-27b2",
     "qwen/qwen3.6-27b3",
     "qwen/qwen3.6-27b4",
     "qwen/qwen3.6-27b5"
   ],
-  "default": "qwen/qwen3.6-27b"
+  "default": "deepseek/deepseek-v4-flash"
 }
 ```
 

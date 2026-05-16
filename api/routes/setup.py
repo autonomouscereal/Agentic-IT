@@ -44,7 +44,11 @@ async def create_setup_ticket(
     existing_tools: list = Body([]),
     deploy_missing: bool = Body(True),
     ai_base_url: str = Body(None),
-    model: str = Body("qwen/qwen3.6-27b"),
+    model: str = Body("deepseek/deepseek-v4-flash"),
+    proxy_mode: str = Body(None),
+    proxy_url: str = Body(None),
+    harness: str = Body(None),
+    provider: str = Body(None),
     notes: str = Body(""),
     sync_provider: bool = Body(None),
     spawn_agent: bool = Body(False),
@@ -62,7 +66,18 @@ async def create_setup_ticket(
         existing_tools=existing_tools,
         deploy_missing=deploy_missing,
     )
-    description = platform_manifest.plan_to_ticket_description(plan, ai_base_url, model, notes)
+    description = platform_manifest.plan_to_ticket_description(
+        plan,
+        ai_base_url,
+        model,
+        notes,
+        runtime={
+            "proxy_mode": proxy_mode,
+            "proxy_url": proxy_url,
+            "harness": harness,
+            "provider": provider,
+        },
+    )
     ticket = await ticket_service.create_ticket(
         title=f"Deploy agentic IT/SOC platform profile: {profile}",
         description=description,
@@ -80,7 +95,14 @@ async def create_setup_ticket(
         source="dashboard",
     )
     await log_event("setup", "info", "setup-wizard", "setup_ticket_created",
-                    f"ticket_{ticket['id']}", {"profile": profile, "spawn_agent": spawn_agent})
+                    f"ticket_{ticket['id']}", {
+                        "profile": profile,
+                        "spawn_agent": spawn_agent,
+                        "proxy_mode": proxy_mode,
+                        "proxy_url": proxy_url,
+                        "harness": harness,
+                        "provider": provider,
+                    })
 
     result = {"ticket": ticket, "plan": plan}
     if spawn_agent:

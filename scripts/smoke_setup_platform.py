@@ -57,8 +57,12 @@ def main():
         "profile": "minimal",
         "existing_tools": ["servicenow"],
         "deploy_missing": False,
-        "ai_base_url": "http://127.0.0.1:4001",
-        "model": "qwen/qwen3.6-27b",
+        "ai_base_url": "http://ai-proxy:4001",
+        "proxy_mode": "deploy",
+        "proxy_url": "http://localhost:4001",
+        "harness": "hermes",
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4-flash",
         "notes": "Smoke test: integrate an existing ITSM provider and do not deploy optional reference modules.",
         "spawn_agent": False,
     })
@@ -77,6 +81,28 @@ def main():
         check=True,
     )
     assert_true('"status": "dry_run"' in dry_run.stdout, "installer dry-run did not report dry_run")
+    full_dry_run = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "installer" / "bootstrap.py"),
+            "--dry-run",
+            "--no-start",
+            "--profile",
+            "full-it",
+            "--harness",
+            "hermes",
+            "--proxy-mode",
+            "deploy",
+            "--target",
+            str(ROOT / ".tmp-install-full-smoke"),
+        ],
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert_true('"harness": "hermes"' in full_dry_run.stdout, "full dry-run did not select Hermes")
+    assert_true('"proxy_mode": "deploy"' in full_dry_run.stdout, "full dry-run did not deploy proxy")
 
     print(json.dumps({
         "status": "ok",

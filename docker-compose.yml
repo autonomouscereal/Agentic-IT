@@ -34,6 +34,32 @@ services:
       timeout: 3s
       retries: 10
 
+  ai-proxy:
+    build: ./deploy/ai-proxy
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "${AI_PROXY_PORT:-4001}:4001"
+    environment:
+      PROXY_PORT: 4001
+      PROXY_CONFIG_PATH: /runtime/proxy_config.json
+      LM_STUDIO_BASE: ${LM_STUDIO_BASE:-http://host.docker.internal:1234}
+      LM_STUDIO_TOKEN: ${LM_STUDIO_TOKEN:-lmstudio}
+      ANTHROPIC_BASE: ${ANTHROPIC_BASE:-https://api.anthropic.com}
+      NOUS_BASE: ${NOUS_BASE:-https://inference-api.nousresearch.com/v1}
+      NOUS_API_KEY: ${NOUS_API_KEY:-}
+      CREDENTIALS_PATH: /runtime/claude_credentials.json
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${PROXY_CONFIG_PATH:-./runtime/proxy_config.json}:/runtime/proxy_config.json:ro
+      - ${CLAUDE_CREDENTIALS_FILE:-./runtime/empty_credentials.json}:/runtime/claude_credentials.json:rw
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4001/health', timeout=5).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   api:
     build: ./api
     restart: unless-stopped
@@ -89,7 +115,7 @@ services:
       AGENT_AUDITOR_AUTO_RECOVER: ${AGENT_AUDITOR_AUTO_RECOVER:-false}
       AGENT_PERMISSION_MODE: ${AGENT_PERMISSION_MODE:-acceptEdits}
       AGENT_ALLOWED_TOOLS: ${AGENT_ALLOWED_TOOLS:-Read,Write,Bash(curl *)}
-      AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:?AGENT_LLM_BASE_URL must be set}
+      AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:-http://ai-proxy:4001}
       AGENT_LLM_AUTH_TOKEN: ${AGENT_LLM_AUTH_TOKEN:-}
       HERMES_BIN: ${HERMES_BIN:-/home/cereal/.hermes/hermes-agent/venv/bin/hermes}
       HERMES_HOME: ${HERMES_HOME:-/home/cereal/.hermes}
@@ -116,6 +142,8 @@ services:
       db:
         condition: service_healthy
       agent-memory-db:
+        condition: service_healthy
+      ai-proxy:
         condition: service_healthy
     volumes:
       - ./data/agent_logs:/app/data/agent_logs

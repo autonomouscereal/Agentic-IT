@@ -545,11 +545,26 @@
                             <span>Deploy missing reference modules when no existing product is selected</span>
                         </label>
                         <label class="setup-label">AI Endpoint</label>
-                        <input id="setup-ai-base-url" class="filter-input wide-input" placeholder="http://192.168.50.222:4001">
+                        <input id="setup-ai-base-url" class="filter-input wide-input" placeholder="http://ai-proxy:4001">
+                        <label class="setup-label">Proxy Mode</label>
+                        <select id="setup-proxy-mode" class="filter-select">
+                            <option value="deploy" selected>Built-in proxy</option>
+                            <option value="external">External proxy</option>
+                        </select>
+                        <label class="setup-label">Harness</label>
+                        <select id="setup-harness" class="filter-select">
+                            <option value="auto">Auto</option>
+                            <option value="hermes" selected>Hermes</option>
+                            <option value="claude-code">Claude Code</option>
+                        </select>
                         <label class="setup-label">Agent Model</label>
                         <select id="setup-model" class="filter-select" data-agent-model-select></select>
                         <label class="setup-label">Operator Notes</label>
                         <textarea id="setup-notes" class="setup-textarea" rows="6" placeholder="Existing products, deployment constraints, approval policy, network zones, tenant notes..."></textarea>
+                    </div>
+                    <div class="setup-panel">
+                        <div class="setup-section-title">Runtime Handoff</div>
+                        <div id="setup-runtime-status" class="setup-summary">Runtime status has not loaded yet.</div>
                     </div>
                     <div class="setup-panel wide">
                         <div class="setup-section-title">Provider-Agnostic Modules</div>

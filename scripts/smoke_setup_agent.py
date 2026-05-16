@@ -9,7 +9,7 @@ import urllib.request
 
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:25480"
-MODEL = sys.argv[2] if len(sys.argv) > 2 else "qwen/qwen3.6-27b"
+MODEL = sys.argv[2] if len(sys.argv) > 2 else "deepseek/deepseek-v4-flash"
 AGENT_WAIT_SECONDS = int(os.environ.get("AGENT_SMOKE_WAIT_SECONDS", "3600"))
 IDLE_WAIT_SECONDS = int(os.environ.get("AGENT_SMOKE_IDLE_WAIT_SECONDS", "3600"))
 POLL_SECONDS = int(os.environ.get("AGENT_SMOKE_POLL_SECONDS", "15"))
@@ -68,6 +68,9 @@ def wait_for_idle_agent_lane():
 
 def main():
     wait_for_idle_agent_lane()
+    health = request("GET", "/api/agents/runner-health")
+    ai_base_url = health.get("effective_anthropic_base_url") or "http://ai-proxy:4001"
+    harness = health.get("harness") or "hermes"
 
     setup = request("POST", "/api/setup/ticket", {
         "profile": "soc",
@@ -79,7 +82,11 @@ def main():
             "identity-provider-adapter",
         ],
         "deploy_missing": False,
-        "ai_base_url": "http://192.168.50.222:4001",
+        "ai_base_url": ai_base_url,
+        "proxy_mode": "deploy",
+        "proxy_url": ai_base_url,
+        "harness": harness,
+        "provider": "lmstudio" if MODEL.startswith("qwen/") else "nous",
         "model": MODEL,
         "notes": "Smoke test: validate setup-ticket context and provider-agnostic plan without deploying anything.",
         "spawn_agent": False,
