@@ -7,6 +7,7 @@ TOTAL=0; PASS=0; FAIL=0; SKIP=0
 GITLAB_PAT="${GITLAB_PAT:-}"
 GITLAB_URL="http://localhost"
 KC_URL="https://localhost:8443"
+EXPECTED_GITLAB_ISSUER="${EXPECTED_GITLAB_ISSUER:-https://192.168.50.222:8443/realms/gitlab}"
 
 assert() { local name="$1"; result="$2"; msg="$3";
   TOTAL=$((TOTAL + 1));
@@ -73,7 +74,7 @@ assert "OIDC form action present" "$rc" "form action missing"
 set +e; docker exec gitlab grep -q 'openid_connect' /etc/gitlab/gitlab.rb 2>/dev/null; rc=$?; set -e
 assert "OIDC in gitlab.rb" "$rc" "not configured"
 
-set +e; docker exec gitlab grep -q 'keycloak.internal:8443' /etc/gitlab/gitlab.rb 2>/dev/null; rc=$?; set -e
+set +e; docker exec gitlab grep -q "$EXPECTED_GITLAB_ISSUER" /etc/gitlab/gitlab.rb 2>/dev/null; rc=$?; set -e
 assert "Correct issuer in config" "$rc" "wrong issuer"
 
 set +e; docker exec gitlab grep -q 'omniauth_enabled.*true' /etc/gitlab/gitlab.rb 2>/dev/null; rc=$?; set -e
@@ -129,8 +130,8 @@ echo -e "\n[Group] Fail-Safety"
 set +e; docker exec gitlab curl -s http://localhost/users/sign_in 2>/dev/null | grep -q "Sign in"; rc=$?; set -e
 assert "GitLab works without proxy" "$rc" "GitLab depends on proxy"
 
-set +e; curl -sL http://localhost:8080 2>/dev/null | grep -qi "login\|account\|keycloak"; rc=$?; set -e
-assert "Keycloak accessible on 8080" "$rc" "direct access broken"
+set +e; curl -s http://localhost:8080/realms/gitlab 2>/dev/null | grep -q '"realm":"gitlab"'; rc=$?; set -e
+assert "Keycloak accessible on 8080" "$rc" "direct realm endpoint broken"
 
 # --- TEST 9: GitLab Runner ---
 echo -e "\n[Group] GitLab Runner"

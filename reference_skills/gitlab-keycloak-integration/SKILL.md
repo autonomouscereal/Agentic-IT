@@ -32,7 +32,7 @@ Browser <--HTTPS(8443)--> nginx proxy <----HTTP(8080)----> Keycloak 26.6.0
                                                                      PostgreSQL 16
 ```
 
-**Why nginx proxy?** GitLab 17.x requires HTTPS issuer URLs for OIDC. Keycloak runs on HTTP (port 8080). The nginx proxy provides TLS termination so the OIDC issuer is `https://keycloak.internal:8443/realms/gitlab` while Keycloak itself remains unaware of HTTPS.
+**Why nginx proxy?** GitLab 17.x requires HTTPS issuer URLs for OIDC. Keycloak runs on HTTP (port 8080). The nginx proxy provides TLS termination so the demo issuer can be `https://192.168.50.222:8443/realms/gitlab` while Keycloak itself remains on the internal HTTP service.
 
 ### Fail-Safety Design
 
@@ -58,13 +58,11 @@ extra_hosts:
   - 'keycloak.internal:host-gateway'
 ```
 
-This keeps the OIDC issuer URL stable while routing GitLab's backend discovery
-and token calls to the host-network proxy instead of the GitLab container's
-localhost.
-
-Browser-based demos must also resolve `keycloak.internal` to the AI server
-address (`192.168.50.222`) through DNS or a workstation hosts entry, because the
-Keycloak realm advertises that hostname in the authorization endpoint.
+This keeps the legacy `keycloak.internal` alias available for container-side
+compatibility while the browser-facing demo issuer uses the routable AI server
+URL. New demo deployments should set `KC_HOSTNAME` and `KC_HOSTNAME_ADMIN` to a
+full browser-routable URL such as `https://192.168.50.222:8443`, then configure
+GitLab OmniAuth with the matching realm issuer.
 
 ## File Structure
 
@@ -147,7 +145,7 @@ python3 scripts/setup_oidc.py
 This configures:
 
 **Realm:** `gitlab`
-- OIDC discovery at `https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration`
+- OIDC discovery at `https://192.168.50.222:8443/realms/gitlab/.well-known/openid-configuration`
 
 **Client:** `gitlab` (confidential, standard flow + client credentials)
 - Redirect URI: `http://192.168.50.222/users/auth/openid_connect/callback`
@@ -182,7 +180,7 @@ curl -s http://localhost/users/sign_in | grep -q "Keycloak" && echo "OK"
 
 # Verify GitLab can reach and trust the Keycloak issuer from inside the container
 docker exec gitlab bash -lc \
-  'curl -sk https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration | head -c 200'
+  'curl -sk https://192.168.50.222:8443/realms/gitlab/.well-known/openid-configuration | head -c 200'
 ```
 
 **Critical gitlab.rb config:**
@@ -192,7 +190,7 @@ gitlab_rails["omniauth_providers"] = [
   {
     "name" => "openid_connect",
     "label" => "Keycloak",
-    "issuer" => "https://keycloak.internal:8443/realms/gitlab",
+    "issuer" => "https://192.168.50.222:8443/realms/gitlab",
     "client_options" => {
       "identifier" => "gitlab",
       "secret" => "<client-secret-from-keycloak>",
@@ -304,9 +302,9 @@ bash scripts/manage_integration.sh certs-expiry
 |-----------|-----|
 | GitLab Web UI | `http://192.168.50.222` |
 | GitLab API | `http://192.168.50.222/api/v4/...` |
-| Keycloak Admin (direct) | `http://192.168.50.222:8080/admin` |
+| Keycloak Admin Console | `https://192.168.50.222:8443/admin/master/console/` |
 | Keycloak via Proxy | `https://192.168.50.222:8443` |
-| OIDC Discovery | `https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration` |
+| OIDC Discovery | `https://192.168.50.222:8443/realms/gitlab/.well-known/openid-configuration` |
 | Nginx Health | `https://localhost:8443/nginx-health` |
 
 ## Troubleshooting

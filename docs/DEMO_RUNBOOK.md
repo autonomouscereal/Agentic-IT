@@ -219,17 +219,14 @@ Latest verified on 2026-05-18:
 | Agentic Operations | `http://192.168.50.222:25480` | Operational | Control plane demo does not require a platform password in the current lab. |
 | iTop | `http://192.168.50.222:25432` | Verified | REST POST returns `code=0`; user has `Administrator` and `REST Services User`. |
 | Wazuh Dashboard | `https://192.168.50.222:26443` | Verified | Browser/dashboard login works; native Wazuh API auth for the same user currently returns 401. |
-| GitLab | `http://192.168.50.222` | Verified | Local login returns HTTP 302; Keycloak OIDC start redirects correctly. |
+| Keycloak | `https://192.168.50.222:8443/admin/master/console/` | Verified | Admin Console loads and logs in with the Keycloak admin vault credential; issuer and admin UI now use the browser-routable demo URL. |
+| GitLab | `http://192.168.50.222` | Verified | Local login returns HTTP 302; Keycloak OIDC start redirects to the browser-routable Keycloak realm. |
 | Mailcow | `http://192.168.50.222:2581` | Verified | Bare root URL is routed to the admin UI and stale user-session cookies are recovered; login reaches `/admin/dashboard`; dashboard, system, mailbox, queue, and quarantine pages show no invalid JSON, SQL-column warning, or blank-page errors. `/webmail` renders Roundcube backed by real Mailcow IMAP/SMTP, and `/SOGo/so` redirects there for compatibility. Use `demo_account_1@mailcow.local` and the shared vault password. Report Phish proof: legacy demo ticket `578`/iTop `370`/quarantine `28cd6d435f7c88cd9a7b46983c62a1cb`; Roundcube proof ticket `580`/iTop `372`/quarantine `21a705b151642568d375c748a9ea1a6b` with agent `229` and access request `581`. |
 
-For GitLab's Keycloak button, the demo workstation must resolve
-`keycloak.internal` to `192.168.50.222` because the Keycloak realm advertises
-that hostname. Add the hosts entry from an elevated PowerShell prompt when DNS
-is not configured:
-
-```powershell
-Add-Content "$env:SystemRoot\System32\drivers\etc\hosts" "`n192.168.50.222 keycloak.internal"
-```
+Keycloak and GitLab OIDC no longer require a workstation hosts-file entry for
+the demo path. The live Keycloak issuer and Admin Console URL are
+`https://192.168.50.222:8443`; the older `keycloak.internal` alias is retained
+only as a container-side compatibility route for internal service access.
 
 Latest verified GitLab runner artifacts:
 

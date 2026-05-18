@@ -8,7 +8,7 @@ gitlab_rails["omniauth_providers"] = [
       "name" => "openid_connect",
       "scope" => ["openid", "profile", "email"],
       "response_type" => "code",
-      "issuer" => "https://keycloak.internal:8443/realms/gitlab",
+      "issuer" => "https://192.168.50.222:8443/realms/gitlab",
       "discovery" => true,
       "client_auth_method" => "query",
       "uid_field" => "sub",
@@ -16,7 +16,7 @@ gitlab_rails["omniauth_providers"] = [
       "pkce" => true,
       "client_options" => {
         "identifier" => "gitlab",
-        "secret" => "Wveem5iXvZoJk49RIOJTSoxViL1FYsIV0_UMhXdvl_i_pP3Kd1T4Fev5ZmdZ2WZb",
+        "secret" => "<client-secret-from-keycloak-or-vault>",
         "redirect_uri" => "http://192.168.50.222/users/auth/openid_connect/callback"
       }
     }

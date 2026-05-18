@@ -475,7 +475,7 @@ INSERT INTO tools (name, type, host, port, description) VALUES
     ('Zeek IDS', 'ids', 'localhost', 26001, 'Zeek network analysis framework'),
     ('Suricata IDS', 'ids', 'localhost', NULL, 'Suricata IDS/IPS'),
     ('Mailcow', 'email', 'localhost', 25, 'Mailcow email server'),
-    ('Keycloak', 'iam', 'localhost', 8443, 'Keycloak identity provider'),
+    ('Keycloak', 'iam', 'host.docker.internal', 8443, 'Keycloak identity provider and Admin Console'),
     ('SOC Bridge', 'bridge', 'localhost', NULL, 'iTop <-> Mailcow notification bridge'),
     ('SIEM-Ticket Bridge', 'bridge', 'localhost', NULL, 'Wazuh <-> iTop alert bridge'),
     ('Agent Memory', 'memory', 'agent-memory-db', 5432, 'Shared PostgreSQL/pgvector memory service for dashboard agents'),

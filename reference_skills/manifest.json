@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-18T20:33:42.234502+00:00",
+  "generated_at": "2026-05-18T20:57:52.733610+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -92,13 +92,13 @@
         },
         {
           "path": "scripts/fix-gitlab-oidc.py",
-          "size": 2492,
-          "sha256": "80de68c5fbddaf4ee1efe46cef595657238486586cbc26ecd6d855f1b7abd9eb"
+          "size": 3136,
+          "sha256": "fcccfa0006a1966d6480b1f0c301ec94f947fa8bd91b2a5d78ac0c357e0d8c4c"
         },
         {
           "path": "scripts/gitlab-oidc-config.rb",
-          "size": 1047,
-          "sha256": "ca14b226275514ef36c18e23ee52796d763586d8849e2de99d6122e87c8ab111"
+          "size": 1018,
+          "sha256": "548fa101261770787eaa06f0d2882d13f70d690c689d71748b40da086fea0de8"
         },
         {
           "path": "scripts/manage_integration.sh",
@@ -112,13 +112,13 @@
         },
         {
           "path": "scripts/setup_oidc.py",
-          "size": 14537,
-          "sha256": "679d1a7cbcbe309ddb18e19d18e67d2c4a582c07951d65fd22650b1f5a553f14"
+          "size": 14519,
+          "sha256": "89ff6d0cb7c1dafa5cbe73a2936ce2e4c71729ea4306b73093c7e8a199dbad81"
         },
         {
           "path": "scripts/test_integration.sh",
-          "size": 8100,
-          "sha256": "1588a7e4c06fa1ad0a093f56771c6a900a94fc5aee48f9149404063efaead830"
+          "size": 8207,
+          "sha256": "b46b638f8610effa3d8ad0f4c86b86df57bfd7cfa60995b20f3d3f59733bd336"
         },
         {
           "path": "scripts/validate_automation.sh",
@@ -127,8 +127,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 16425,
-          "sha256": "5380b1a1b85422585cfaf527b13520f7cfe9dd483087352a84b159b3bd4c3c0c"
+          "size": 16412,
+          "sha256": "746fb7dcc135e9e5b3754506b46813a9974b30fe65448c8df7c81c4c0486e8cb"
         }
       ]
     },
@@ -403,8 +403,8 @@
       "files": [
         {
           "path": ".env.example",
-          "size": 596,
-          "sha256": "32b0a1c79343f0daa97d2f110a9bc0fa1de23c9b844d1c85158665d55b8ff84e"
+          "size": 650,
+          "sha256": "dac3bd881285ea0b4cdcbf7e68a399fae25bcca8bfd4aec18052d7e432b68bb2"
         },
         {
           "path": ".env.windows.example",
@@ -413,8 +413,8 @@
         },
         {
           "path": "docker-compose.yml",
-          "size": 2825,
-          "sha256": "06cc42c7991496798e41d8d5dc9a69888ce13440a9a03c30c9f0ed0a885d1e31"
+          "size": 2922,
+          "sha256": "9de190e000f3f4643982c655b0b2c8b6a4e1474b6bcd9338b84d4300505b78e8"
         },
         {
           "path": "reference.md",
@@ -438,8 +438,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 6905,
-          "sha256": "fce741c03a99b887f7633e11129d0c73ebabefa2b6adf1766d3caa5565405b52"
+          "size": 8149,
+          "sha256": "d2aea39730791b73f709f97aeea3851a78f76465d56090679e0efc0abbd2b26d"
         },
         {
           "path": "troubleshooting.md",

@@ -102,6 +102,8 @@ async def sync_manifest_tools(body: dict = None):
             description = EXCLUDED.description,
             updated_at = NOW()
     """, [
+        ("Keycloak", "iam", "host.docker.internal", 8443,
+         "Keycloak identity provider and Admin Console"),
         ("Mailcow API/UI Shim", "email-api", "host.docker.internal", 8081,
          "Optional Mailcow compatibility API and demo admin UI sidecar"),
         ("Roundcube Webmail", "email-ui", "host.docker.internal", 2581,

@@ -181,14 +181,20 @@ Verification:
   `https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration`.
 - OmniAuth start POST redirects to the Keycloak realm authorization endpoint.
 
-Demo operator note: browser-based Keycloak login also requires the demo
-workstation to resolve `keycloak.internal` to `192.168.50.222`, because the
-Keycloak realm advertises that hostname. If DNS is not configured, add a local
-hosts entry as administrator:
+Follow-up fix on 2026-05-18:
 
-```text
-192.168.50.222 keycloak.internal
-```
+- Keycloak Admin Console was failing from normal demo browsers with
+  `Timeout when waiting for 3rd party check iframe message` because the realm
+  advertised `keycloak.internal` while the browser opened
+  `192.168.50.222`.
+- The live Keycloak hostname was moved to the browser-routable full URL
+  `https://192.168.50.222:8443`, with the Admin Console using the same URL.
+- GitLab OmniAuth was updated to the matching issuer
+  `https://192.168.50.222:8443/realms/gitlab`, and the exposed historical OIDC
+  client secret was rotated.
+- Browser-based GitLab SSO and the Keycloak Admin Console no longer require a
+  workstation hosts-file entry. The `keycloak.internal` route is retained only
+  as an internal compatibility alias where needed.
 
 ### Mailcow demo UI was not exposed and schema drift blocked login
 

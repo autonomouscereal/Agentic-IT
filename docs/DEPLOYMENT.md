@@ -144,8 +144,13 @@ GitLab OIDC deployment requirements:
 - Keycloak integration CA is copied into
   `/etc/gitlab/trusted-certs/keycloak-internal-ca.crt`, followed by
   `gitlab-ctl reconfigure`.
-- Browser workstations resolve `keycloak.internal` to `192.168.50.222` via DNS
-  or a hosts-file entry.
+- Keycloak should use a browser-routable full URL for the demo issuer/admin
+  surface, for example `KC_HOSTNAME=https://192.168.50.222:8443` and
+  `KC_HOSTNAME_ADMIN=https://192.168.50.222:8443`.
+- GitLab OmniAuth should use the same browser-routable issuer,
+  `https://192.168.50.222:8443/realms/gitlab`. The `keycloak.internal`
+  host-gateway route can remain as an internal compatibility alias, but the
+  browser demo path should not require workstation hosts-file changes.
 
 After a source deployment, run the full live regression:
 

@@ -57,7 +57,8 @@ services:
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
 
       # Hostname configuration
-      KC_HOSTNAME: ${KC_HOSTNAME:-localhost}
+      KC_HOSTNAME: ${KC_HOSTNAME:-http://localhost:8080}
+      KC_HOSTNAME_ADMIN: ${KC_HOSTNAME_ADMIN:-${KC_HOSTNAME:-http://localhost:8080}}
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HTTP_ENABLED: "true"

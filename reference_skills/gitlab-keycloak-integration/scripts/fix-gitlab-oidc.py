@@ -1,13 +1,35 @@
 #!/usr/bin/env python3
 """Fix GitLab OIDC config in gitlab.rb - remove broken lines, write correct config."""
 import os
+import re
+import sys
 
 CONFIG_PATH = "/etc/gitlab/gitlab.rb"
 q = '"'  # double quote character
+issuer = os.environ.get("GITLAB_OIDC_ISSUER", "https://192.168.50.222:8443/realms/gitlab")
+redirect_uri = os.environ.get(
+    "GITLAB_OIDC_REDIRECT_URI",
+    "http://192.168.50.222/users/auth/openid_connect/callback",
+)
+client_secret = os.environ.get("GITLAB_OIDC_CLIENT_SECRET")
 
 # Step 1: Read existing config and remove any broken Keycloak OIDC lines
 with open(CONFIG_PATH, "r") as f:
     lines = f.readlines()
+
+if not client_secret:
+    existing = "".join(lines)
+    match = re.search(r'"secret"\s*=>\s*"([^"]+)"', existing)
+    if match:
+        client_secret = match.group(1)
+
+if not client_secret:
+    print(
+        "[ERROR] No GitLab OIDC client secret found. Set GITLAB_OIDC_CLIENT_SECRET "
+        "from the credential vault or run setup_oidc.py first.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 # Find and remove our previous (broken) Keycloak config
 start_idx = None
@@ -36,7 +58,7 @@ config_lines = [
     f'      {q}name{q} => {q}openid_connect{q},',
     f'      {q}scope{q} => [{q}openid{q}, {q}profile{q}, {q}email{q}],',
     f'      {q}response_type{q} => {q}code{q},',
-    f'      {q}issuer{q} => {q}https://keycloak.internal:8443/realms/gitlab{q},',
+    f'      {q}issuer{q} => {q}{issuer}{q},',
     f'      {q}discovery{q} => true,',
     f'      {q}client_auth_method{q} => {q}query{q},',
     f'      {q}uid_field{q} => {q}sub{q},',
@@ -44,8 +66,8 @@ config_lines = [
     f'      {q}pkce{q} => true,',
     f'      {q}client_options{q} => {{',
     f'        {q}identifier{q} => {q}gitlab{q},',
-    f'        {q}secret{q} => {q}Wveem5iXvZoJk49RIOJTSoxViL1FYsIV0_UMhXdvl_i_pP3Kd1T4Fev5ZmdZ2WZb{q},',
-    f'        {q}redirect_uri{q} => {q}http://192.168.50.222/users/auth/openid_connect/callback{q}',
+    f'        {q}secret{q} => {q}{client_secret}{q},',
+    f'        {q}redirect_uri{q} => {q}{redirect_uri}{q}',
     "      }",
     "    }",
     "  }",
@@ -64,4 +86,6 @@ with open(CONFIG_PATH, "w") as f:
     f.write("\n".join(config_lines))
 
 print(f"Wrote {len(config_lines)} config lines to {CONFIG_PATH}")
+print(f"OIDC issuer: {issuer}")
+print(f"Redirect URI: {redirect_uri}")
 print("Done - ready for gitlab-ctl reconfigure")

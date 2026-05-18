@@ -25,6 +25,7 @@ node_modules/
 # Dashboard runtime state
 data/
 agent_work/
+runtime/
 install_state/
 .tmp-install-*/
 _compare_live/

@@ -135,7 +135,10 @@ Important implementation notes:
 - Native Wazuh API auth is separate from Dashboard auth; the current demo user returns HTTP 401 and should not be used as the primary Wazuh demo path until repaired.
 - iTop demo users must be real `UserLocal` objects with `Administrator` and `REST Services User`; raw partial rows can be counted by OQL but fail object reload and login.
 - GitLab local login requires a valid personal namespace on the GitLab user. Missing namespace causes the generic GitLab 422 page even when the password is correct.
-- GitLab OIDC requires both the container-side `keycloak.internal:host-gateway` mapping and the Keycloak CA in GitLab trusted certs. Browser-based OIDC also requires the operator workstation to resolve `keycloak.internal` to `192.168.50.222`.
+- GitLab OIDC requires the Keycloak CA in GitLab trusted certs. The live demo
+  uses `https://192.168.50.222:8443/realms/gitlab` as the browser-routable
+  issuer; `keycloak.internal:host-gateway` may remain in compose only as a
+  container-side compatibility alias.
 - If a failed iTop debug trace logs a password in `/var/www/html/log/error.log`, rotate the vault key and scrub the log before demo use.
 
 ## Agentic API Smoke
@@ -1346,6 +1349,49 @@ Results:
 - Setup agent smoke: passed, setup ticket `583`, agent `230`, task `227`.
 - `/api/tools/check-all`: `Mailcow API/UI Shim` healthy and `Roundcube Webmail`
   healthy.
+
+## Keycloak Admin UI / GitLab OIDC Regression - 2026-05-18
+
+Live target: AI server `192.168.50.222`.
+
+Changes validated:
+
+- Keycloak Admin Console is accessible at
+  `https://192.168.50.222:8443/admin/master/console/`.
+- Keycloak `KC_HOSTNAME` and `KC_HOSTNAME_ADMIN` use the browser-routable
+  full URL `https://192.168.50.222:8443`.
+- GitLab OmniAuth issuer now matches the browser-routable realm issuer:
+  `https://192.168.50.222:8443/realms/gitlab`.
+- Historical hardcoded GitLab OIDC client secret was removed from source and
+  the live Keycloak GitLab client secret was rotated.
+
+Validation:
+
+```text
+Playwright Keycloak Admin Console login: PASS
+  URL: https://192.168.50.222:8443/admin/master/console/
+  visible markers: Manage realms, Realm settings, Clients, Users, Sessions,
+  Events, master
+
+python3 scripts/test_keycloak.py --url http://localhost:8080
+  PASSED: 26
+  FAILED: 0
+
+bash /home/cereal/gitlab-keycloak-integration/scripts/diagnose.sh
+  13 passed, 0 warnings, 0 failed
+
+bash /home/cereal/gitlab-keycloak-integration/scripts/test_integration.sh
+  Total: 24
+  Passed: 21
+  Failed: 0
+  Skipped: 3
+  Note: skipped GitLab project/API checks require GITLAB_PAT from a
+  vault-backed environment.
+
+Playwright GitLab Keycloak button check: PASS
+  GitLab button redirects to:
+  https://192.168.50.222:8443/realms/gitlab/protocol/openid-connect/auth...
+```
 
 Mailcow/Roundcube checks:
 

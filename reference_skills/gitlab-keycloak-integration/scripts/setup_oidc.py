@@ -17,7 +17,7 @@ BASE_URL = os.environ.get("KEYCLOAK_URL", "http://localhost:8080").rstrip("/")
 ADMIN_REALM = "master"
 CLIENT_ID = "admin-cli"
 GITLAB_REALM = "gitlab"
-GITLAB_ISSUER = os.environ.get("GITLAB_ISSUER", "https://keycloak.internal:8443")
+GITLAB_ISSUER = os.environ.get("GITLAB_ISSUER", "https://192.168.50.222:8443")
 GITLAB_HOST = os.environ.get("GITLAB_HOST", "192.168.50.222")
 
 SSL_CTX = ssl.create_default_context()
@@ -123,7 +123,7 @@ def setup_oidc_client(token):
         "enabled": True,
         "clientAuthenticatorType": "client-secret",
         "secret": client_secret,
-        "baseUrl": f"https://keycloak.internal:8443/realms/{GITLAB_REALM}",
+        "baseUrl": f"{GITLAB_ISSUER}/realms/{GITLAB_REALM}",
         "redirectUris": [
             f"http://{GITLAB_HOST}/users/auth/openid_connect/callback",
             f"http://localhost/users/auth/openid_connect/callback",

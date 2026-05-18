@@ -155,7 +155,8 @@ All secrets are loaded from `.env` file. Key environment variables:
 | `KC_BOOTSTRAP_ADMIN_PASSWORD` | *(required)* | Keycloak admin password |
 | `POSTGRES_DB` | `keycloak` | Database name |
 | `POSTGRES_USER` | `keycloak_user` | Database user |
-| `KC_HOSTNAME` | `localhost` | Keycloak hostname |
+| `KC_HOSTNAME` | `http://localhost:8080` | Keycloak frontend/issuer URL. Use a full URL when also setting `KC_HOSTNAME_ADMIN`. |
+| `KC_HOSTNAME_ADMIN` | `KC_HOSTNAME` | Browser-visible Admin Console URL. Set this when the OIDC issuer hostname is internal but the demo/operator browser uses a routable IP or DNS name. |
 | `KC_LOG_LEVEL` | `INFO` | Logging level |
 | `KC_CACHE` | `local` | Cache mode (`local` for single instance) |
 
@@ -197,11 +198,32 @@ keycloak-manager/
 
 | Interface | URL |
 |---|---|
-| Admin Console | `http://server_ip:8080/admin` |
+| Admin Console | `http://server_ip:8080/admin/master/console/` or the URL configured with `KC_HOSTNAME_ADMIN` |
 | Login Page | `http://server_ip:8080/realms/master/account` |
 | Health Endpoint | `http://server_ip:9000/health` |
 | Metrics Endpoint | `http://server_ip:9000/metrics` |
 | Admin REST API | `http://server_ip:8080/admin/realms/{realm}/...` |
+
+## Demo UI Hostname Notes
+
+Keycloak 26 uses the configured hostname when generating Admin Console
+resource URLs. If `KC_HOSTNAME` is an internal issuer such as
+`https://keycloak.internal:8443`, browser-based demos from an operator
+workstation must set `KC_HOSTNAME_ADMIN` to the browser-visible URL, for
+example `https://192.168.50.222:8443`. This keeps OIDC issuer URLs stable for
+GitLab while allowing the Admin Console SPA to load its JavaScript resources
+and third-party check iframe from the same host the browser actually opened.
+
+Important: when `KC_HOSTNAME_ADMIN` is set, Keycloak requires `KC_HOSTNAME` to
+be a full URL, not a bare hostname.
+
+Validation:
+
+```bash
+curl -sk https://server_ip:8443/admin/master/console/ | grep -q "Keycloak Administration Console"
+curl -sk https://server_ip:8443/realms/master | grep -q '"realm":"master"'
+python3 scripts/test_keycloak.py --url http://localhost:8080
+```
 
 ## When to Use
 
