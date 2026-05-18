@@ -24,7 +24,7 @@ user-invocable: true
 
 Complete, reproducible blueprint for deploying a fully functional Mailcow email server on a bare-metal Ubuntu server using Docker Compose. Covers every step, every error encountered, every fix applied, and every configuration file.
 
-**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. Admin login for `demo_account_1` redirects to `/admin/dashboard`; IMAP auth for `demo_account_1@mailcow.local` returns `OK`. The shim also keeps the read-only compatibility API on `8081`.
+**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. The bare root URL is routed to the admin login surface, stale `MCSESSID` user sessions are recovered, admin login for `demo_account_1` reaches `/admin/dashboard`, and IMAP auth for `demo_account_1@mailcow.local` returns `OK`. The shim also keeps the read-only compatibility API on `8081`.
 
 This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-built, hand-tailored Mailcow stack with modified entrypoints, TCP database connectivity (no socket sharing), and custom database seeding.
 
@@ -58,6 +58,8 @@ This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-bui
 | `set +e` in entrypoint | Several upstream checks fail in our environment (missing templates, no replication) |
 | Optional UI/API sidecars | `nginx-mailcow-api` serves API compatibility on `8081` and the demo UI on `2581`; `php-fpm-mailcow-api` uses the mounted web root with writable Twig cache |
 | UI compatibility schema/assets | The custom seed must include `logs`, current-shape `tfa`, and `mailbox.authsource`; extensionless routes must rewrite through FastCGI; generated CSS/JS must write to `/web/cache` with `?v=<filemtime>` URLs and no-store cache headers so nginx can serve fresh `/cache/<hash>` assets |
+| Demo root route | The `:2581` bare root URL must FastCGI-route to `/admin/`; the custom root user-login flow can return a blank body after submit |
+| Stale session recovery | `/` and `/admin/` strip incoming cookies, while `/user` clears `PHPSESSID` and `MCSESSID`; stale user sessions otherwise redirect to a blank 5-byte `/user` response |
 
 ---
 
@@ -865,6 +867,35 @@ test_mailcow_api_shim.py --mysql-parity: 13 passed, 0 failed
 platform_doctor.py: 18 passed, 0 failed, 0 warned
 Keycloak-Mailcow bridge E2E: 47 passed, 0 failed, 1 skipped
 ```
+
+### Error 0c: Demo Root or Admin Login Redirects To Blank `/user`
+
+**Symptom:** `http://HOST:2581/`, `/admin`, or `/admin/` shows a login form,
+but after logging in the browser displays a blank page. Nginx access logs show
+`GET /user` returning HTTP `200` with a 5-byte body.
+
+**Root Cause:** In this custom sidecar deployment, the root user-login path is
+incomplete. A stale Mailcow user-session cookie (`MCSESSID`) can cause the
+admin entrypoint to redirect back into `/user`, even when the admin UI itself
+is healthy.
+
+**Fix:** Re-run the shim deployer:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+```
+
+The deployer routes exact `/` and `/admin/` through FastCGI to
+`/web/admin/index.php`, strips incoming cookies on those admin login
+entrypoints, and clears both `PHPSESSID` and `MCSESSID` on `/user` before
+redirecting back to `/`.
+
+**Verified in lab:** 2026-05-18. Headless browser login from the bare root URL,
+including a pre-seeded stale `MCSESSID`, reached `/admin/dashboard` with visible
+dashboard content, loaded versioned `/cache` assets, and reported no failed
+requests or console errors. The deployer now includes a stale-session recovery
+check.
 
 ### Error 1: Dovecot Infinite "Waiting for Database" Loop
 

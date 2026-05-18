@@ -192,6 +192,52 @@ Verification:
 - Headless browser login to `/admin/dashboard` shows visible dashboard text,
   zero login inputs, zero failed network requests, and zero console errors.
 
+
+### Mailcow root login flow still lands on blank user page
+
+Status: fixed on live AI server and bundled deployer.
+
+Reported on 2026-05-18 after the admin dashboard/cache fixes. Multiple browsers
+with cleared cache still show a blank page after login. This likely affects the
+root `/` user login flow rather than the `/admin/` admin login flow that was
+previously validated.
+
+Root cause:
+
+- The bare `/` URL hit Mailcow's root user-login flow in this custom sidecar
+  deployment. That path returned a tiny blank response after form submit, while
+  the verified admin flow at `/admin/` worked correctly.
+- Demo operators naturally open `http://192.168.50.222:2581/`, so the blank
+  root flow looked like the whole Mailcow UI was still broken.
+- A stale Mailcow user-session cookie (`MCSESSID`) made `/` and `/admin/`
+  redirect back to `/user`; nginx logged those user-flow responses as HTTP 200
+  with a 5-byte body.
+
+Fix:
+
+- Routed exact `/` in the nginx sidecar to the Mailcow admin login page through
+  FastCGI by setting `SCRIPT_FILENAME` to `/web/admin/index.php` and
+  `REQUEST_URI` to `/admin/`, with incoming cookies stripped on the login
+  entrypoint.
+- Routed exact `/admin/` the same way so stale user sessions cannot redirect
+  the admin login page back to `/user`.
+- Added exact `/user` and `/user/` handlers that clear both `PHPSESSID` and
+  `MCSESSID` and redirect to `/`.
+- Added the same route to `scripts/deploy_mailcow_api.py` so a shim redeploy
+  preserves the behavior.
+- Redeployed only the Mailcow API/UI sidecars.
+
+Verification:
+
+- Re-running `python3 scripts/deploy_mailcow_api.py` succeeds.
+- Browser login from `http://192.168.50.222:2581/` redirects to
+  `http://192.168.50.222:2581/admin/dashboard`.
+- Headless browser evidence shows visible dashboard text, versioned CSS/JS
+  loaded from `/cache`, zero failed requests, and zero console errors.
+- The deployer now checks stale-session recovery: root with an existing
+  `MCSESSID` still returns the admin login, and `/user` recovers back to the
+  admin login instead of serving the blank user page.
+
 ## Found During 2026-05-18 Documentation Refresh
 
 ### Live AI server has standalone proxy owning port 4001

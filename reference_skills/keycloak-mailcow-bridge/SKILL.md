@@ -79,6 +79,11 @@ Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Ma
 
 - listen on a nonstandard port, normally `8081`
 - expose the demo UI on `2581` when enabled in the reference lab
+- route exact `/` on the demo UI port to the admin login surface through
+  FastCGI, because the custom root user-login flow can return a blank body
+- strip incoming cookies on `/` and `/admin/`, and clear `PHPSESSID` plus
+  `MCSESSID` on `/user`, because stale user sessions can redirect admin
+  entrypoints to the blank user UI
 - forward `X-API-Key` to FastCGI as `HTTP_X_API_KEY`
 - set `HTTP_SEC_FETCH_DEST=empty`
 - create the Mailcow `identity_provider` compatibility table if missing
@@ -127,10 +132,13 @@ Latest reference verification on 2026-05-12:
 
 Latest demo UI verification on 2026-05-18:
 
-- `http://192.168.50.222:2581/` returns the Mailcow login page
-- admin login for `demo_account_1` returns HTTP `302` to `/admin/dashboard`
+- `http://192.168.50.222:2581/` returns the Mailcow admin login page
+- admin login for `demo_account_1` from the bare root URL reaches
+  `/admin/dashboard`
 - `/admin/dashboard` renders via FastCGI and does not expose PHP source
 - generated `/cache` CSS and JS assets return HTTP `200`
+- stale `MCSESSID` recovery returns the admin login instead of the blank
+  `/user` body
 - headless browser login shows visible dashboard text with no failed network
   requests or console errors
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`

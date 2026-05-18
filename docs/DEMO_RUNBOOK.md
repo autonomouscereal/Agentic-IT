@@ -220,7 +220,7 @@ Latest verified on 2026-05-18:
 | iTop | `http://192.168.50.222:25432` | Verified | REST POST returns `code=0`; user has `Administrator` and `REST Services User`. |
 | Wazuh Dashboard | `https://192.168.50.222:26443` | Verified | Browser/dashboard login works; native Wazuh API auth for the same user currently returns 401. |
 | GitLab | `http://192.168.50.222` | Verified | Local login returns HTTP 302; Keycloak OIDC start redirects correctly. |
-| Mailcow | `http://192.168.50.222:2581` | Verified | Admin UI login redirects to `/admin/dashboard`; demo mailbox IMAP auth works as `demo_account_1@mailcow.local`. Use the shared vault password. |
+| Mailcow | `http://192.168.50.222:2581` | Verified | Bare root URL is routed to the admin UI and stale user-session cookies are recovered; login reaches `/admin/dashboard`; demo mailbox IMAP auth works as `demo_account_1@mailcow.local`. Use the shared vault password. |
 
 For GitLab's Keycloak button, the demo workstation must resolve
 `keycloak.internal` to `192.168.50.222` because the Keycloak realm advertises

@@ -518,6 +518,53 @@ http {{
             add_header Cache-Control public;
         }}
 
+        # Demo entrypoint: route the bare UI URL to the admin surface.
+        # The custom deployment's root/user-login path can return an empty body,
+        # while /admin/ is the verified Mailcow admin UI used for demos. Strip
+        # stale user-session cookies here so old /user sessions cannot redirect
+        # operators back to the blank user UI.
+        location = / {{
+            include /etc/nginx/fastcgi_params;
+            fastcgi_pass 127.0.0.1:{PHPFPM_PORT};
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root/admin/index.php;
+            fastcgi_param SCRIPT_NAME /admin/index.php;
+            fastcgi_param REQUEST_URI /admin/;
+            fastcgi_param HTTP_COOKIE "";
+            fastcgi_param HTTP_X_API_KEY $http_x_api_key;
+            fastcgi_param HTTP_SEC_FETCH_DEST empty;
+            fastcgi_param HTTP_CONTENT_TYPE $content_type;
+            fastcgi_read_timeout 3600;
+            fastcgi_send_timeout 3600;
+        }}
+
+        location = /admin/ {{
+            include /etc/nginx/fastcgi_params;
+            fastcgi_pass 127.0.0.1:{PHPFPM_PORT};
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root/admin/index.php;
+            fastcgi_param SCRIPT_NAME /admin/index.php;
+            fastcgi_param REQUEST_URI /admin/;
+            fastcgi_param HTTP_COOKIE "";
+            fastcgi_param HTTP_X_API_KEY $http_x_api_key;
+            fastcgi_param HTTP_SEC_FETCH_DEST empty;
+            fastcgi_param HTTP_CONTENT_TYPE $content_type;
+            fastcgi_read_timeout 3600;
+            fastcgi_send_timeout 3600;
+        }}
+
+        location = /user {{
+            add_header Set-Cookie "PHPSESSID=deleted; Path=/; Max-Age=0; HttpOnly; SameSite=Lax" always;
+            add_header Set-Cookie "MCSESSID=deleted; Path=/; Max-Age=0; HttpOnly; SameSite=Lax" always;
+            return 302 /;
+        }}
+
+        location = /user/ {{
+            add_header Set-Cookie "PHPSESSID=deleted; Path=/; Max-Age=0; HttpOnly; SameSite=Lax" always;
+            add_header Set-Cookie "MCSESSID=deleted; Path=/; Max-Age=0; HttpOnly; SameSite=Lax" always;
+            return 302 /;
+        }}
+
         location / {{
             try_files $uri $uri/ @php_extension;
         }}
@@ -657,6 +704,29 @@ def test_ui():
                             print(f"  [FAIL] Demo UI cache asset failed: {ref}")
                             return False
                 print(f"  [PASS] Demo UI cache assets - {len(refs)} checked")
+                stale_req = urllib.request.Request(
+                    url,
+                    headers={"Cookie": "MCSESSID=stale-demo-session"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(stale_req, timeout=15) as stale_resp:
+                    stale_body = stale_resp.read()
+                    if stale_resp.status != 200 or b"Administrator Login" not in stale_body:
+                        print("  [FAIL] Demo UI stale session did not return admin login")
+                        return False
+                user_req = urllib.request.Request(
+                    f"http://127.0.0.1:{UI_DEMO_PORT}/user",
+                    headers={"Cookie": "MCSESSID=stale-demo-session"},
+                    method="GET",
+                )
+                opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler)
+                with opener.open(user_req, timeout=15) as user_resp:
+                    final_url = user_resp.geturl()
+                    user_body = user_resp.read()
+                    if "/user" in final_url or b"Administrator Login" not in user_body:
+                        print("  [FAIL] Demo UI /user stale session did not recover to admin login")
+                        return False
+                print("  [PASS] Demo UI stale session recovery")
                 return True
             print(f"  [FAIL] Demo UI unexpected response on port {UI_DEMO_PORT}")
             return False

@@ -75,7 +75,11 @@ http://192.168.50.222:2581
 
 The UI port is for lab/demo access to the Mailcow admin surface. Keep the API
 shim on `8081` for compatibility reads and use `2581` when showing Mailcow in a
-browser.
+browser. The bare `/` path on `2581` is intentionally routed to the admin login
+surface because the custom deployment's root user-login path can return a blank
+post-login body. The demo entrypoints also strip or clear stale `MCSESSID`
+cookies so an old user session cannot redirect the browser back to `/user`;
+demo operators should not need to know or type `/admin/`.
 
 Required request header:
 
@@ -135,6 +139,11 @@ The deployer is idempotent:
 - writes the API key only to the restricted `api-nginx/.api_key` file
 - recreates only the sidecar containers `php-fpm-mailcow-api` and `nginx-mailcow-api`
 - exposes the read API on `8081` and the demo UI on `2581`
+- routes exact `/` on the demo UI port to `/admin/` through FastCGI so the
+  browser-visible demo entrypoint cannot land on the incomplete user-login path
+- strips incoming cookies on `/` and `/admin/`, and clears both `PHPSESSID` and
+  `MCSESSID` on `/user` and `/user/`, so stale user sessions recover to the
+  admin login instead of a blank page
 - runs built-in endpoint tests and demo UI cache-asset checks before reporting
   success
 
@@ -209,6 +218,12 @@ Network:
 - Treat the shim as operational infrastructure. It should not be public internet-facing.
 - The `dockerapi-mailcow` helper is host-networked in this custom deployment. Keep it loopback-only with firewall policy; do not expose its raw port externally.
 - Extensionless Mailcow UI routes such as `/admin/dashboard` must be rewritten through FastCGI. Do not use `try_files $uri.php` in a plain static location because that can serve PHP source.
+- The exact root URL `/` on the demo UI port should also be FastCGI-routed to
+  `/admin/`. Do not send operators into the root user-login path unless that
+  path has been separately repaired and browser-tested.
+- Stale Mailcow user sessions can redirect admin entrypoints to `/user`. The
+  reference shim strips cookies on the demo admin login entrypoints and clears
+  `MCSESSID` on `/user`.
 
 Data minimization:
 
@@ -341,6 +356,31 @@ patches `header.inc.php` and `footer.inc.php` to use `/web/cache`, appends a
 file-mtime version query to generated asset URLs, and verifies the generated
 cache refs return HTTP `200`.
 
+### Root URL or `/admin/` is blank after submit.
+
+Likely cause:
+
+- The browser is using `http://HOST:2581/`, which historically hit the custom
+  deployment's incomplete root user-login flow. That flow can return an empty
+  body after a successful-looking submit even though the admin UI is healthy.
+- The browser may also hold a stale Mailcow `MCSESSID` from the user-login path.
+  In that case `/admin/` redirects to `/user`, and `/user` returns the blank
+  5-byte response.
+
+Repair:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+```
+
+The deployer routes exact `/` and `/admin/` through FastCGI to the admin login
+surface by using `/web/admin/index.php` as the script and `/admin/` as the
+request URI. It strips incoming cookies on those login entrypoints and clears
+both `PHPSESSID` and `MCSESSID` on `/user` before redirecting back to `/`.
+After repair, a browser login from the bare root URL should land on
+`/admin/dashboard` with visible dashboard content.
+
 ### Admin login loops or fails after the password is correct.
 
 Likely causes:
@@ -355,8 +395,14 @@ Repair with the deployer. It creates `logs`, repairs `tfa`, adds
 Latest live verification on 2026-05-18:
 
 - `http://192.168.50.222:2581/` returns the Mailcow login page.
-- Admin form login for `demo_account_1` returns HTTP `302` to `/admin/dashboard`.
+- Admin form login from the bare root URL for `demo_account_1` reaches
+  `/admin/dashboard`.
 - `/admin/dashboard` renders through FastCGI and does not expose PHP source.
+- Generated `/cache` CSS/JS assets load with versioned URLs and no-store
+  headers.
+- Stale `MCSESSID` recovery is verified by the deployer.
+- Headless browser verification reports zero failed network requests and zero
+  console errors.
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`.
 - Browser check after login has visible dashboard text, zero failed network
   requests, and zero console errors.
