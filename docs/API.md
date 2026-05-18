@@ -1,6 +1,6 @@
-# SOC Dashboard API Reference
+# Agentic Operations API Reference
 
-Last updated: 2026-05-12.
+Last updated: 2026-05-18.
 
 Base URL in the current lab:
 
@@ -14,7 +14,10 @@ Agent workspaces inside the API container should use:
 http://localhost:8000
 ```
 
-All request/response bodies are JSON unless noted. The API uses raw PostgreSQL through `asyncpg`; no application ORM/Pydantic/SQLAlchemy models are used.
+All request/response bodies are JSON unless noted. The API is the canonical
+contract for tickets, agents, approvals, workflows, setup, tools, learning, and
+audit across provider-backed enterprise work. It uses raw PostgreSQL through
+`asyncpg`; no application ORM/Pydantic/SQLAlchemy models are used.
 
 External product APIs are documented separately from this dashboard API. The reference Mailcow HTTP compatibility shim is documented in `docs/MAILCOW_API_SHIM.md`; it exposes read-only Mailcow-style domain, mailbox, and alias endpoints on the Mailcow host and is not part of the dashboard API namespace.
 
@@ -274,7 +277,8 @@ Returns models from `agent_models.json`.
 
 Returns:
 
-- Claude Code availability
+- selected harness availability
+- Hermes and Claude Code diagnostics when configured
 - credentials mount status
 - configured harness
 - default model

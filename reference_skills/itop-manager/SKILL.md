@@ -66,7 +66,7 @@ Full Docker management commands in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Dashboard Outbound Create Defaults
 
-The SOC Dashboard iTop adapter prefers explicit defaults:
+The Agentic Operations iTop adapter prefers explicit defaults:
 
 | Variable | Purpose |
 |----------|---------|

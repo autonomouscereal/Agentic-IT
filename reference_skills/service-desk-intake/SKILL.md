@@ -1,17 +1,19 @@
 ---
 name: service-desk-intake
 description: >
-  Provider-agnostic service desk intake and RACI routing workflow. Turns a
+  Provider-agnostic request intake and RACI routing workflow. Turns a
   plain-language user ask into a correctly classified incident, request, or
   change with assignment group, RACI context, related tickets, knowledge
   references, attachment metadata, and approval gates.
 ---
 
-# Service Desk Intake
+# Request Intake And RACI Routing
 
-Use this skill when a user asks the platform to create or route a ticket from
-plain language. The goal is to make intake easy for the requester while giving
-the next agent or human a complete, routed work item.
+Use this skill when a user asks the platform to create or route enterprise work
+from plain language. The request may be service desk, IAM, DevOps, SOC,
+infrastructure, compliance, or business operations work. The goal is to make
+intake easy for the requester while giving the next agent or human a complete,
+routed work item.
 
 ## Flow
 

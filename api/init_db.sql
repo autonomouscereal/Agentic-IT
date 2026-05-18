@@ -1,4 +1,4 @@
--- SOC Dashboard Database Schema
+-- Agentic Operations Database Schema
 -- Raw PostgreSQL, no ORM
 
 -- SOC tools inventory

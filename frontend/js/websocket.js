@@ -1,4 +1,4 @@
-// SOC Dashboard - WebSocket for Real-time Updates
+// Agentic Operations - WebSocket for Real-time Updates
 
 let ws = null;
 let reconnectTimer = null;

@@ -1,11 +1,11 @@
 # Autonomous Enterprise Operations Architecture
 
-Last updated: 2026-05-14.
+Last updated: 2026-05-18.
 
 ## Purpose
 
-The current SOC Dashboard is the first deployed control plane for a broader
-autonomous enterprise operations platform. SOC/ITSM is the seed domain because
+Agentic Operations is the deployed control plane for a broader autonomous
+enterprise operations platform. SOC/ITSM remains the seed proof domain because
 it exercises alerts, tickets, logs, identity, approvals, remediation, evidence,
 and postmortems, but the architecture is intended to scale toward replacing or
 radically reducing enterprise IT/security/DevOps/service-desk labor with
@@ -22,7 +22,10 @@ The control plane is designed to be:
 - auditable enough for demos, troubleshooting, and future compliance review
 - modular enough to deploy into a new environment without rewriting the dashboard
 
-The current implementation uses iTop and Claude Code because those are the active lab systems. Neither is treated as the permanent center of the architecture.
+The current implementation uses iTop as the reference ticketing provider,
+Hermes Agent as the preferred queue harness, Claude Code as a fallback harness,
+and the built-in AI proxy as the model gateway. None of these is treated as the
+permanent center of the architecture.
 
 ## Runtime Components
 
@@ -32,8 +35,8 @@ The current implementation uses iTop and Claude Code because those are the activ
 | Database | PostgreSQL 16 | PostgreSQL is mandatory |
 | Frontend | Vanilla HTML/CSS/JS | Can be rebuilt as long as API contract remains |
 | Ticket provider | iTop plus local provider | `services/ticket_provider.py` and `services/provider_registry.py` |
-| Agent harness | Claude Code | `services/agent_harness.py` |
-| Model access | LAN proxy at `AGENT_LLM_BASE_URL` | Any OpenAI/Anthropic-compatible proxy/harness bridge |
+| Agent harness | Hermes Agent by default; Claude Code fallback | `services/agent_harness.py` |
+| Model access | Built-in `ai-proxy` at `AGENT_LLM_BASE_URL` | Any OpenAI/Anthropic-compatible proxy/harness bridge |
 | Approval system | Dashboard `change_requests` table/API | Can later sync to external CAB/change platforms |
 | Memory/learning | Skills, KB, workflows, postmortems | Can later ingest external KB/tickets/docs |
 | Email provider | Mailcow reference stack plus optional API shim | Exchange, Gmail, Proofpoint, Mimecast, or another email/security adapter |
@@ -109,9 +112,15 @@ Without those values, the dashboard records `create_failed` instead of claiming 
 2. API inserts an `agents` row.
 3. API inserts an `agent_tasks` row.
 4. Runner creates `/app/agent_work/<agent_id>`.
-5. Runner writes `.claude/CLAUDE.md`, `.claude/settings.json`, `checkpoint.json`, and `output.log`.
+5. Runner writes `AGENTS.md`, `.claude/CLAUDE.md`, `.claude/settings.json`, `checkpoint.json`, and `output.log`.
 6. Runner invokes the configured harness through `services/agent_harness.py`.
-7. Claude Code currently runs with:
+7. Hermes currently runs with:
+
+```bash
+hermes --provider <nous|dashboard-proxy> --model <model> --toolsets hermes-cli --accept-hooks -z "<prompt>"
+```
+
+Claude Code remains available with:
 
 ```bash
 claude --allowedTools "Read,Write,Bash(curl *)" -p --settings <settings> --model <model> --permission-mode acceptEdits --no-session-persistence --output-format stream-json --verbose "<prompt>"
@@ -193,7 +202,9 @@ Fresh environment:
 - PostgreSQL starts from `api/init_db.sql`.
 - iTop can be disabled with `ITOP_SYNC_ENABLED=false`.
 - Local provider allows dashboard/agent workflows without any external ticketing system.
-- Agents can run if `AGENT_LLM_BASE_URL` and Claude Code credentials/proxy are configured.
+- Agents can run when `AGENT_LLM_BASE_URL`, proxy routing, and the selected
+  harness auth state are configured. Hermes uses OpenAI-compatible
+  `/v1/chat/completions`; Claude Code uses Anthropic-compatible `/v1/messages`.
 
 Developed environment:
 

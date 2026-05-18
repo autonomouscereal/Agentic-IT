@@ -1,6 +1,46 @@
 # Known Issues And Fix Log
 
-Last updated: 2026-05-15.
+Last updated: 2026-05-18.
+
+## Found During 2026-05-18 Documentation Refresh
+
+### Live AI server has standalone proxy owning port 4001
+
+Status: known issue; dashboard restored, proxy ownership not migrated.
+
+During the documentation refresh deploy, `docker compose up -d --build api`
+attempted to create the Compose-managed `soc-dashboard-ai-proxy-1`, but host
+port `4001` was already bound by the pre-existing standalone `ai-proxy`
+container. The API was safely restored with `docker compose up -d --no-deps api`
+after confirming no active agents or runner processes were present. Runner
+health then returned `harness=hermes`, default model
+`deepseek/deepseek-v4-flash`, and model API status `ok` through the existing
+proxy.
+
+Before a future full Compose-managed proxy migration, decide whether to keep
+the standalone `ai-proxy` or replace it with the Compose service. Do not remove
+or restart the standalone proxy while agents are running. If migrating, drain
+agents, stop the standalone proxy, start the Compose `ai-proxy`, verify
+`/health` and `/v1/models`, then rebuild/start `api` normally.
+
+### Reference skill bundle has unrelated source drift
+
+Status: known issue, not fixed in this documentation pass.
+
+`python scripts/sync_reference_skills.py check --source-roots "C:/Users/cereal/.agents/skills"`
+currently reports drift for:
+
+- `ai-proxy`
+- `login-troubleshooting`
+- `platform-credentials`
+
+The documentation refresh updated selected skill text in both the live
+`.agents` skill tree and the portable `reference_skills/` bundle, but did not
+run a full `stage` because that would pull unrelated skill changes into the
+documentation commit. Before the next skill-release commit, review those three
+skills intentionally, decide whether the live skill or bundled skill is the
+source of truth, then run `sync_reference_skills.py stage` and commit the
+resulting bundle/manifest together.
 
 ## Found In Hermes Harness Bring-Up
 

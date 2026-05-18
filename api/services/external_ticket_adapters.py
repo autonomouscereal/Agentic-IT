@@ -105,7 +105,7 @@ class ServiceNowProvider(EnvHttpTicketProvider):
             return {"error": "ServiceNow provider is not configured.", "provider": self.name, "ticket_id": ticket_id}
         table = self._table(fields)
         payload = {
-            "short_description": fields.get("title") or f"SOC Dashboard ticket {ticket_id}",
+            "short_description": fields.get("title") or f"Agentic Operations ticket {ticket_id}",
             "description": fields.get("description") or "",
         }
         if fields.get("priority"):
@@ -159,7 +159,7 @@ class JiraProvider(EnvHttpTicketProvider):
         payload = {
             "fields": {
                 "project": {"key": os.getenv("JIRA_PROJECT_KEY")},
-                "summary": fields.get("title") or f"SOC Dashboard ticket {ticket_id}",
+                "summary": fields.get("title") or f"Agentic Operations ticket {ticket_id}",
                 "description": {
                     "type": "doc",
                     "version": 1,

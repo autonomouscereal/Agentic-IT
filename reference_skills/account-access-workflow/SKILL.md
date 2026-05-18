@@ -35,7 +35,7 @@ resumed agent without exposing any credential value.
 
 If a local model omits `lease_request` but names a known provider resource such
 as `wazuh.manager API`, `Wazuh alert index <name>`, or
-`GitLab project <group/project>`, the SOC Dashboard now infers the scoped lease
+`GitLab project <group/project>`, the Agentic Operations control plane now infers the scoped lease
 request and records `lease_request_inferred` in audit/event evidence. This is a
 fallback only; explicit `lease_request` is still preferred for exact scopes.
 

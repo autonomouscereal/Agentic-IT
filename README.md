@@ -1,11 +1,11 @@
-# Autonomous Enterprise Operations Control Plane
+# Agentic Operations Control Plane
 
 FastAPI + raw PostgreSQL + vanilla JS control plane for a modular,
-product-agnostic autonomous enterprise operations platform. The current SOC
-dashboard is the first proof domain: it starts with ITSM, SOC, DevSecOps, IAM,
-email, and infrastructure operations, but the long-term goal is a one-line
-installed agentic layer that can operate or replace broad enterprise IT work
-with scoped agents, approval gates, audit evidence, and continuous learning.
+product-agnostic agentic enterprise operations platform. The dashboard is now
+framed as **Agentic Operations**: a private control plane that turns enterprise
+work into governed agent work across IT, SOC/security, service desk, IAM,
+DevOps, cloud, network, email, compliance, maintenance, and internal platform
+self-repair.
 
 The local open-source stack is a reference deployment, not the product boundary.
 Customer environments can integrate existing ITSM, SIEM, EDR, IAM, email,
@@ -16,10 +16,12 @@ approved reference modules when those capabilities are missing.
 
 - UI/API: `http://192.168.50.222:25480`
 - API health: `http://192.168.50.222:25480/health`
+- Model gateway/proxy: `http://192.168.50.222:4001`
 - Current Windows working copy: `D:\IT AGENT PROJECT`
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
-- Containers: `soc-dashboard-api`, `soc-dashboard-db`
+- Containers: `soc-dashboard-api`, `soc-dashboard-db`, `ai-proxy`, `agent-memory-db`
 - Database: PostgreSQL 16 only, accessed through `asyncpg` with parameterized raw SQL
+- Default harness/model: Hermes Agent with `deepseek/deepseek-v4-flash`; Claude Code remains available as a fallback harness.
 
 ## Documentation Map
 
@@ -27,8 +29,10 @@ approved reference modules when those capabilities are missing.
 - [Architecture](docs/ARCHITECTURE.md)
 - [Full Platform Blueprint](docs/FULL_PLATFORM.md)
 - [One-Line Installer](docs/ONE_LINE_INSTALLER.md)
+- [Hermes Harness](docs/HERMES_HARNESS.md)
 - [Module Registry](docs/MODULE_REGISTRY.md)
 - [Skill Sync And Git Workflow](docs/SKILL_SYNC.md)
+- [Documentation Refresh](docs/DOCUMENTATION_REFRESH_2026-05-18.md)
 - [Workflow Tests](docs/WORKFLOW_TESTS.md)
 - [Installer E2E Results](docs/INSTALLER_E2E_RESULTS.md)
 - [API Reference](docs/API.md)
@@ -66,16 +70,18 @@ The Setup page reads `platform/manifest.json` and builds a deployment plan from 
 Installer entrypoints:
 
 ```bash
-./install.sh --profile soc --ai-base-url http://YOUR_AI_PROXY:4001
+./install.sh --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
 ```
 
 ```powershell
-.\install.ps1 --profile soc --ai-base-url http://YOUR_AI_PROXY:4001
+.\install.ps1 --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
 ```
 
-The installer starts the control plane and writes `install_state/last-plan.json`; product-specific integration continues in the dashboard Setup page.
+The installer starts the control plane, built-in model gateway, PostgreSQL
+memory service, and setup ticket. Product-specific integration continues from
+the dashboard Setup page as an auditable agentic onboarding workflow.
 
-The default profiles include the `agent-memory` module. The installer deploys a PostgreSQL/pgvector memory service, seeds the global agent-memory dashboard skill, and wires spawned Claude Code agents with prompt/tool/session hooks so their work is searchable and auditable across agents.
+The default profiles include the `agent-memory` module. The installer deploys a PostgreSQL/pgvector memory service, seeds the global agent-memory dashboard skill, and wires spawned Hermes and Claude Code agents with prompt/tool/session hooks so their work is searchable and auditable across agents.
 
 Side-by-side installs are supported by passing unique `--target`, `--dashboard-port`, `--db-port`, and optional `--project-name` values. Docker Compose service names are project-scoped instead of hardcoded.
 
@@ -95,7 +101,7 @@ Each task gets:
 - `agent_tasks` row for queue/status/progress/output.
 - `agents` row for dashboard lifecycle state.
 - isolated work directory under `AGENT_WORK_BASE`, default `/app/agent_work/<agent_id>`.
-- `.claude/CLAUDE.md` with ticket context, skill instructions, and checkpoint protocol.
+- `AGENTS.md` and `.claude/CLAUDE.md` with ticket context, skill instructions, and checkpoint protocol.
 - `.claude/settings.json` with only non-secret runtime settings.
 - `checkpoint.json` that the agent updates as it works.
 - `output.log` with stdout/stderr captured for audit.
@@ -214,7 +220,7 @@ Then on the AI server:
 
 ```bash
 cd /home/cereal/SOC_TESTING/soc-dashboard
-docker compose up -d --build api
+docker compose up -d --build
 docker exec -i soc-dashboard-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < api/migrations/002_agent_runner_hardening.sql
 docker exec -i soc-dashboard-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < api/migrations/003_agentic_system_objects.sql
 curl -sS http://localhost:25480/health
@@ -231,18 +237,18 @@ sudo chown -R cereal:cereal /home/cereal/SOC_TESTING/soc-dashboard/agent_work
 1. `python -m py_compile` over all API modules.
 2. `node --check` over all frontend JS files.
 3. Secret and prohibited-library sweep: search for old placeholder credentials, dummy local-model keys, API key literals, Pydantic, and SQLAlchemy. The command should return no matches outside intentional policy text.
-4. Rebuild API container.
+4. Rebuild API/proxy containers when runtime code changes.
 5. Health check:
    ```bash
    curl -sS http://localhost:25480/health
    curl -sS http://localhost:25480/api/agents/runner-health
    curl -sS http://localhost:25480/api/agents/processes
    ```
-6. Spawn a short proof agent:
+6. Spawn a short proof agent through the selected harness:
    ```bash
    curl -sS -X POST http://localhost:25480/api/agents/create-from-prompt \
      -H 'Content-Type: application/json' \
-     -d '{"model":"qwen/qwen3.6-27b","prompt":"Write checkpoint.json with step=test, status=done, progress_pct=100, and output=agent runner smoke test complete. Then respond with a one-line summary."}'
+     -d '{"model":"deepseek/deepseek-v4-flash","prompt":"Write checkpoint.json with step=test, status=done, progress_pct=100, and output=agent runner smoke test complete. Then respond with a one-line summary."}'
    ```
 7. Poll `/api/agents/tasks` until the task is `completed` or `failed`.
 8. Open the UI and verify the Agents page shows model, task status, progress, checkpoints, stop/restart controls, and output/error detail.
@@ -256,8 +262,8 @@ cd /home/cereal/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_agentic_system.py http://localhost:25480
 python3 scripts/smoke_setup_platform.py http://localhost:25480
 python3 scripts/smoke_phishing_workflow_lifecycle.py http://localhost:25480
-python3 scripts/smoke_local_model_agent.py http://localhost:25480 qwen/qwen3.6-27b
-python3 scripts/smoke_setup_agent.py http://localhost:25480 qwen/qwen3.6-27b
+python3 scripts/smoke_local_model_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
+python3 scripts/smoke_setup_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
 curl -sS http://localhost:25480/api/agents/processes
 ```
 
@@ -266,5 +272,5 @@ Expected results:
 - `smoke_agentic_system.py` creates and verifies a local canonical ticket, note, attachment metadata, KB article, skill, approval-gated change, postmortem, workflow, and unified context bundle.
 - `smoke_setup_platform.py` verifies the module manifest, product-agnostic setup planning, setup ticket creation, exclusions, and installer dry-run.
 - `smoke_phishing_workflow_lifecycle.py` verifies a safe phishing ticket lifecycle across approval, workflow, postmortem, context, and audit objects without invoking a model.
-- `smoke_local_model_agent.py` spawns Claude Code through the local proxy using `qwen/qwen3.6-27b`; the agent reads context, writes a ticket note through the dashboard API, writes a done checkpoint, completes the task, and leaves no active Claude processes.
-- `smoke_setup_agent.py` verifies a setup ticket can be worked by a short local-model agent without deploying anything.
+- `smoke_local_model_agent.py` spawns the configured harness through the proxy; the agent reads context, writes a ticket note through the dashboard API, writes a done checkpoint, completes the task, and leaves no active harness process.
+- `smoke_setup_agent.py` verifies a setup ticket can be worked by a short agent without deploying anything.

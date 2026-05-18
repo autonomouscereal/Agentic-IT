@@ -1,7 +1,7 @@
 ﻿---
 name: platform-credentials
 description: >
-  Multi-platform credential management for all AI Server services (iTop, Wazuh, GitLab, Keycloak, Mailcow, SOC Dashboard).
+  Multi-platform credential management for all AI Server services (Agentic Operations, iTop, Wazuh, GitLab, Keycloak, Mailcow).
   Covers credential storage via encrypted vault, user management across platforms,
   the demo_account_1 unified credentials, and the multi-platform user manager script.
   Use when creating/deleting users, checking credentials, managing passwords, or troubleshooting login issues.
@@ -36,7 +36,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 
 | Platform | URL | Port | Auth Method | Status |
 |----------|-----|------|-------------|--------|
-| SOC Dashboard | http://192.168.50.222:25480 | 25480 | Direct (FastAPI) | Operational |
+| Agentic Operations | http://192.168.50.222:25480 | 25480 | Direct (FastAPI) | Operational |
 | iTop | http://192.168.50.222:25432 | 25432 | Local DB (bcrypt) | Demo REST login verified |
 | Wazuh Dashboard | https://192.168.50.222:26443 | 26443 | OpenSearch Security | Demo backend auth verified |
 | Wazuh API | https://127.0.0.1:26500 | 26500 | Native Wazuh API auth | Demo API auth verified |

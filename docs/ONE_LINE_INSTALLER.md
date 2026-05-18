@@ -17,7 +17,7 @@ compliance, and maintenance work to governed agents.
 From a checked-out release:
 
 ```bash
-./install.sh --profile soc --ai-base-url http://YOUR_AI_PROXY:4001
+./install.sh --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
 ```
 
 Default proxy-first install:
@@ -36,7 +36,7 @@ Dry run:
 ## Local Windows Install
 
 ```powershell
-.\install.ps1 --profile soc --ai-base-url http://YOUR_AI_PROXY:4001
+.\install.ps1 --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
 ```
 
 ## Remote Curl Form
@@ -44,7 +44,7 @@ Dry run:
 When this repo is published behind an internal release URL:
 
 ```bash
-curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --profile soc --ai-base-url http://YOUR_AI_PROXY:4001
+curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
 ```
 
 ## Important Flags
@@ -72,8 +72,9 @@ curl -fsSL https://YOUR_RELEASE_HOST/soc-dashboard/install.sh | bash -s -- --pro
 - `AGENT_MEMORY_DB_PASSWORD`: generated in `.env` for the shared PostgreSQL/pgvector agent memory service.
 - `docker-compose.override.yml`: reserved for site-specific overrides.
 - `runtime/empty_credentials.json`: empty placeholder so the control plane can start before Claude Code OAuth credentials are configured.
-- `runtime/claude_settings.json`: generated model/proxy settings for the runner.
+- `runtime/claude_settings.json`: generated model/proxy settings for Claude Code fallback runs.
 - `runtime/proxy_config.json`: generated provider/model routing config for the built-in AI proxy. It contains aliases and base URLs, not secrets.
+- Hermes auth state is mounted from the operator/host runtime when Hermes is selected; the installer does not write Nous Portal tokens into source-controlled files.
 - `install_state/install-log.jsonl`: installer events.
 - `install_state/last-plan.json`: initial profile plan.
 
@@ -129,8 +130,11 @@ cd /home/cereal/SOC_TESTING/soc-dashboard
   --dashboard-port 25482 \
   --db-port 5435 \
   --project-name soc-dashboard-e2e-20260512 \
-  --ai-base-url http://192.168.50.222:4001 \
-  --model qwen/qwen3.6-27b \
+  --proxy-mode deploy \
+  --proxy-port 4001 \
+  --harness hermes \
+  --provider nous \
+  --model deepseek/deepseek-v4-flash \
   --itop-sync-enabled false \
   --non-interactive
 ```
@@ -150,8 +154,8 @@ python3 scripts/smoke_cicd_security_pipeline.py "$BASE"
 python3 scripts/smoke_agent_auditor.py "$BASE"
 docker compose cp scripts/smoke_change_auto_completion.py api:/app/smoke_change_auto_completion.py
 docker compose exec -T api python /app/smoke_change_auto_completion.py
-python3 scripts/smoke_local_model_agent.py "$BASE" qwen/qwen3.6-27b
-python3 scripts/smoke_setup_agent.py "$BASE" qwen/qwen3.6-27b
+python3 scripts/smoke_local_model_agent.py "$BASE" deepseek/deepseek-v4-flash
+python3 scripts/smoke_setup_agent.py "$BASE" deepseek/deepseek-v4-flash
 docker compose exec -T api python /root/.claude/skills/agent-memory/scripts/agent_memory.py --json status
 ```
 

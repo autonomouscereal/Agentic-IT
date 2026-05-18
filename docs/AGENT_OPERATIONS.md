@@ -1,6 +1,6 @@
 # Agent Operations Runbook
 
-Last updated: 2026-05-13.
+Last updated: 2026-05-18.
 
 ## Operator Mental Model
 
@@ -59,8 +59,12 @@ curl -s http://localhost:25480/api/agents/processes
 
 Interpretation:
 
-- Recent `POST /v1/messages` lines from `claude-cli` through `ai-proxy` to
-  `localhost:1234` mean the harness is actively using LM Studio/local model.
+- Recent `POST /v1/chat/completions` lines from Hermes through `ai-proxy`
+  mean the Hermes harness is actively using a local or cloud OpenAI-compatible
+  model route.
+- Recent `POST /v1/messages` lines from `claude-cli` through `ai-proxy` mean
+  the Claude Code fallback harness is actively using an Anthropic-compatible
+  route.
 - Repeated `GET /v1/models` alone proves the runner health probe is alive, not
   that the agent is making reasoning progress.
 - Combine proxy timestamps with agent heartbeat, process PID, output log

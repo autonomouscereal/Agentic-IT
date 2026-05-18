@@ -490,9 +490,9 @@ class iTopProvider(TicketProvider):
         if not caller:
             result = await itop_request("core/create", **{
                 "class": "Person",
-                "comment": "Created by SOC Dashboard outbound ticket sync",
+                "comment": "Created by Agentic Operations outbound ticket sync",
                 "fields": {
-                    "name": "SOC Dashboard",
+                    "name": "Agentic Operations",
                     "first_name": "Service Desk",
                     "org_id": org_id,
                     "email": "",
@@ -533,7 +533,7 @@ class iTopProvider(TicketProvider):
             }
 
         create_fields = {
-            "title": fields.get("title") or f"SOC Dashboard ticket {ticket_id}",
+            "title": fields.get("title") or f"Agentic Operations ticket {ticket_id}",
             "description": fields.get("description") or "",
             "org_id": refs["org_id"],
         }
@@ -548,7 +548,7 @@ class iTopProvider(TicketProvider):
 
         result = await itop_request("core/create", **{
             "class": ticket_class,
-            "comment": "Created by SOC Dashboard canonical ticket sync",
+            "comment": "Created by Agentic Operations canonical ticket sync",
             "fields": create_fields,
             "output_fields": "id,friendlyname,title,status",
         })
@@ -645,7 +645,7 @@ class iTopProvider(TicketProvider):
         result = await itop_request("core/update", **{
             "class": ticket["itop_class"],
             "key": ticket["itop_ref"],
-            "comment": "Updated via SOC Dashboard",
+            "comment": "Updated via Agentic Operations",
             "fields": update_fields,
         })
 

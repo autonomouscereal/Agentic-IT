@@ -154,7 +154,7 @@ async def list_models():
 
 @router.get("/runner-health")
 async def runner_health():
-    """Return Claude Code runner diagnostics."""
+    """Return selected agent harness diagnostics."""
     from services.agent_runner import get_runner_health
     return await get_runner_health()
 
@@ -187,13 +187,13 @@ async def get_ws_info():
 @router.post("/spawn")
 async def spawn_agent(
     ticket_id: int = Body(...),
-    model: str = Body("qwen/qwen3.6-27b"),
+    model: str = Body("deepseek/deepseek-v4-flash"),
     prompt: str = Body(None),
     task_type: str = Body("ticket_resolution"),
     requested_permissions: list = Body(None),
     request: Request = None,
 ):
-    """Spawn a Claude Code agent to work on a ticket."""
+    """Spawn the selected agent harness to work on a ticket."""
     from services import agent_runner
 
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
@@ -227,7 +227,7 @@ async def spawn_agent(
 @router.post("/create-from-prompt")
 async def create_from_prompt(
     prompt: str = Body(...),
-    model: str = Body("qwen/qwen3.6-27b"),
+    model: str = Body("deepseek/deepseek-v4-flash"),
     request: Request = None,
 ):
     """Create a ticket from a prompt and spawn an agent to work it."""
@@ -558,7 +558,7 @@ async def wake_agent(agent_id: int):
         return {"error": "No previous task prompt found for this agent"}
 
     from services import agent_runner
-    model = agent.get("selected_model") or agent.get("model") or "qwen/qwen3.6-27b"
+    model = agent.get("selected_model") or agent.get("model") or "deepseek/deepseek-v4-flash"
     result = await agent_runner.spawn_agent(
         agent["ticket_id"],
         model,
@@ -585,7 +585,7 @@ async def restart_agent(agent_id: int):
     if not agent:
         return {"error": "Agent not found"}
 
-    model = agent.get("selected_model") or agent.get("model", "qwen/qwen3.6-27b")
+    model = agent.get("selected_model") or agent.get("model", "deepseek/deepseek-v4-flash")
     ticket_id = agent["ticket_id"]
 
     from services import agent_runner

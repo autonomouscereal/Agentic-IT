@@ -1,6 +1,6 @@
 ---
 name: agent-memory
-description: Deploy, test, search, and integrate the shared PostgreSQL/pgvector async memory backend for Codex, Claude Code, SOC dashboard agents, and other local agent harnesses. Use when configuring persistent agent memory, debugging memory hooks, auditing prompts/tool calls, wiring memory into agent workspaces, or adding the memory service to the agentic IT/SOC platform installer.
+description: Deploy, test, search, and integrate the shared PostgreSQL/pgvector async memory backend for Codex, Hermes, Claude Code, Agentic Operations dashboard agents, and other local agent harnesses. Use when configuring persistent agent memory, debugging memory hooks, auditing prompts/tool calls, wiring memory into agent workspaces, or adding the memory service to the agentic enterprise operations platform installer.
 ---
 
 # Agent Memory
@@ -136,16 +136,17 @@ The hook reads JSON from stdin first and argv fallback second. It captures full 
 - Use `relate` to connect concepts across workstreams instead of relying on accidental semantic similarity.
 - Use `entities` and `graph` to inspect whether memories are clustering around the right concepts.
 
-## SOC Dashboard Pattern
+## Agentic Operations Pattern
 
-For the agentic IT/SOC dashboard:
+For the Agentic Operations control plane:
 
 1. Deploy `agent-memory-db` as a `pgvector/pgvector:pg16` Compose service.
 2. Generate `AGENT_MEMORY_DB_PASSWORD` in `.env`.
 3. Create a venv inside the mounted skill path and install `requirements.txt` when the runtime does not already provide `asyncpg`.
 4. Pass `MEMORY_DB_HOST=agent-memory-db`, `MEMORY_DB_PORT=5432`, `MEMORY_DB_NAME=agent_memory`, `MEMORY_DB_USER=agent_memory`, and `MEMORY_DB_PASSWORD=${AGENT_MEMORY_DB_PASSWORD}` into the API container and spawned agent settings.
 5. Mount `reference_skills/agent-memory` into `/root/.claude/skills/agent-memory` and `/root/.agents/skills/agent-memory`.
-6. Write spawned-agent hooks into each workspace `.claude/settings.json`.
+6. Write spawned-agent hooks into each workspace `.claude/settings.json` and
+   Hermes shell hook configuration where the selected harness supports it.
 7. Set `AGENT_MEMORY_SPACE` per agent workspace, preferably from ticket/project identity, so spawned agents do not merge unrelated tickets by default.
 8. Seed a global dashboard skill that tells agents to search their current space before substantial work, use `--all-spaces` only for cross-project retrieval, and store durable notes after meaningful completion.
 

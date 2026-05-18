@@ -1,13 +1,14 @@
 # Deployment Runbook
 
-Last updated: 2026-05-12.
+Last updated: 2026-05-18.
 
 ## Requirements
 
 - Docker and Docker Compose on the target server.
 - PostgreSQL is provided by the compose stack.
-- Claude Code installed in the API image/runtime path if agent execution is enabled.
-- A reachable model/proxy endpoint in `AGENT_LLM_BASE_URL`.
+- Docker Compose can build the API and built-in AI proxy images.
+- Hermes Agent host auth/mounts or Claude Code credentials are available when agent execution is enabled.
+- A reachable model gateway in `AGENT_LLM_BASE_URL`; built-in installs use `http://ai-proxy:4001` inside Docker.
 - Server credentials stored in the server-manager vault.
 
 Do not hardcode secrets in compose, docs, or source. Use environment variables or vault-backed deployment tooling.
@@ -20,7 +21,8 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | Path | `/home/cereal/SOC_TESTING/soc-dashboard` |
 | URL | `http://192.168.50.222:25480` |
 | Proxy | `http://192.168.50.222:4001` |
-| Default model | `qwen/qwen3.6-27b` |
+| Default harness | Hermes Agent |
+| Default model | `deepseek/deepseek-v4-flash` |
 
 ## Upload
 
@@ -45,6 +47,8 @@ Create `.env` from `.env.example` on the server. Required for any deployment:
 SOC_DB_USER=<from vault or deployment secret>
 SOC_DB_PASSWORD=<from vault or deployment secret>
 AGENT_LLM_BASE_URL=http://<proxy-host>:4001
+AGENT_HARNESS=hermes
+AGENT_DEFAULT_MODEL=deepseek/deepseek-v4-flash
 ```
 
 For iTop deployments:
@@ -83,7 +87,7 @@ On the server:
 
 ```bash
 cd /home/cereal/SOC_TESTING/soc-dashboard
-docker compose up -d --build --force-recreate api
+docker compose up -d --build --force-recreate api ai-proxy
 ```
 
 Use `--force-recreate` after replacing bind-mounted source directories. This
@@ -113,8 +117,9 @@ python3 scripts/platform_doctor.py
 Expected:
 
 - health status `ok`
-- runner harness `claude-code`
+- runner harness `hermes` or the explicitly selected fallback harness
 - model API status `ok`
+- proxy health/model aliases are reachable
 - process diagnostics include `/usr/bin/ps`
 
 After a source deployment, run the full live regression:

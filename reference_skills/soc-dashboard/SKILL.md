@@ -1,11 +1,11 @@
 ---
 name: soc-dashboard
 description: >
-  SOC Dashboard / autonomous enterprise operations control plane - FastAPI + PostgreSQL + vanilla JS
-  platform for the AI Server (192.168.50.222). The current SOC dashboard is the seed proof
+  Agentic Operations control plane - FastAPI + PostgreSQL + vanilla JS
+  platform for the AI Server (192.168.50.222). The SOC/IT dashboard is the seed proof
   for a broader one-line installed agentic enterprise operations layer that can route IT,
-  SOC, DevOps, service desk, IAM, cloud, network, compliance, maintenance, and self-repair
-  work to governed agents.
+  SOC/security, DevOps, service desk, IAM, cloud, network, compliance, maintenance,
+  and self-repair work to governed agents through Hermes or Claude Code.
 allowed-tools:
   - Read
   - Bash(python *)
@@ -13,15 +13,15 @@ allowed-tools:
   - Bash(find *)
 ---
 
-# SOC Dashboard / Enterprise Operations Control Plane
+# Agentic Operations Control Plane
 
 Unified SOC/IT proof deployment for the autonomous enterprise operations control
-plane on the AI Server. Mirrors iTop tickets, orchestrates AI agents, manages
-approvals and access requests, monitors tool health, and provides real-time
-updates. The current SOC scope is the seed; the platform goal is a governed
-agentic layer that can eventually operate or replace broad enterprise IT,
-security, DevOps, service desk, IAM, cloud, network, compliance, maintenance,
-and internal tooling work.
+plane on the AI Server. It mirrors iTop tickets, orchestrates Hermes or Claude
+Code agents, manages approvals and access requests, monitors tool health, and
+provides real-time updates. The current SOC scope is the seed; the platform
+goal is a governed agentic layer that can eventually operate or replace broad
+enterprise IT, security, DevOps, service desk, IAM, cloud, network, compliance,
+maintenance, and internal tooling work.
 
 ## Project Mental Model
 
@@ -41,7 +41,10 @@ remediation, evidence, and postmortems.
 
 All concrete products are replaceable providers or reference modules. iTop, Wazuh, Zeek, Suricata, Mailcow, Keycloak, GitLab, SearXNG, and the AI proxy are the current lab/reference stack on `192.168.50.222`; ServiceNow, Jira, Splunk, Sentinel, Defender, CrowdStrike, Exchange, Gmail, Proofpoint, Okta, GitHub, Azure DevOps, Jenkins, and similar tools should be integrated through provider adapters without changing the canonical dashboard contract.
 
-Claude Code is the first working harness, not the permanent architecture boundary. Keep harness-specific command building isolated in `api/services/agent_harness.py` and preserve the dashboard task/checkpoint/API contract for future harnesses.
+Hermes Agent is the preferred current queue harness for long-running work;
+Claude Code remains a supported fallback. Keep harness-specific command
+building isolated in `api/services/agent_harness.py` and preserve the dashboard
+task/checkpoint/API contract for future harnesses.
 
 Default ticket agents should complete assigned work quickly and safely. They should not create reusable workflows unless explicitly asked. Postmortems and workflow-builds are separate learning tasks that convert completed work into reviewed knowledge, skills, tests, guardrails, and draft workflows.
 

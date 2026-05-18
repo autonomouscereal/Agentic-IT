@@ -1,4 +1,4 @@
-// SOC Dashboard - Chart.js Integration
+// Agentic Operations - Chart.js Integration
 
 let ticketTrendChart = null;
 let agentDistChart = null;

@@ -1,4 +1,4 @@
-// SOC Dashboard - Agent Management
+// Agentic Operations - Agent Management
 
 const activeStatuses = ['spawned', 'running', 'working'];
 const waitingStatuses = ['pending_approval', 'awaiting_access', 'awaiting_user_response', 'blocked'];

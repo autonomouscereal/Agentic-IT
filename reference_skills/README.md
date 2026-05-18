@@ -1,8 +1,12 @@
 # Reference Skills Bundle
 
-This directory is the portable, sanitized skill bundle used by the dashboard control plane.
+This directory is the portable, sanitized skill bundle used by the Agentic
+Operations control plane.
 
-The source skills still live in harness-specific locations such as `.agents/skills` or `.claude/skills`. Use `scripts/sync_reference_skills.py` to keep this bundle synchronized instead of manually copying folders.
+The source skills still live in harness-specific locations such as
+`.agents/skills` or `.claude/skills`. Use `scripts/sync_reference_skills.py`
+to keep this bundle synchronized instead of manually copying folders. Hermes
+and Claude Code both consume the same production-relevant skill contract.
 
 ## Stage From Harness Skills
 
@@ -10,7 +14,9 @@ The source skills still live in harness-specific locations such as `.agents/skil
 python scripts/sync_reference_skills.py stage
 ```
 
-This copies only allowlisted production skills from `platform/skill_sync_config.json` and excludes vaults, venvs, logs, caches, environment files, and unrelated tooling.
+This copies only allowlisted production skills from
+`platform/skill_sync_config.json` and excludes vaults, venvs, logs, caches,
+environment files, and unrelated tooling.
 
 ## Check Drift
 
@@ -39,4 +45,6 @@ Preferred flow:
 5. Run dashboard smoke tests.
 6. Commit both the changed source skill and the staged reference bundle in the same change set when this repo becomes a Git source of truth.
 
-Do not commit `.cred_key`, `.cred_vault.json`, `.env`, credentials, logs, venvs, caches, or generated run outputs.
+Do not commit `.cred_key`, `.cred_vault.json`, `.env`, credentials, logs,
+venvs, caches, provider tokens, Hermes auth state, Claude OAuth files, or
+generated run outputs.

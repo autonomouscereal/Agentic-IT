@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-15T19:11:05.881849+00:00",
+  "generated_at": "2026-05-18T13:25:00.196412+00:00",
   "config": "D:\\IT AGENT PROJECT\\platform\\skill_sync_config.json",
   "skills": [
     {
@@ -8,8 +8,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2591,
-          "sha256": "452ce23003591deee3bbf1f766129b408ce65b0d0ed330c5f4775dedb96b34c8"
+          "size": 3291,
+          "sha256": "0690fa1a93abbdbc01eb27779139886700e118682f7e3f2b8f5c27c0a192c618"
         }
       ],
       "copied_files": 1,
@@ -21,8 +21,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 7526,
-          "sha256": "750bdd75efa3e0539e34fd68a29eedf8b8df210a8560ee09e91ec768da7e0627"
+          "size": 7545,
+          "sha256": "6845039c31cea02c54e4e95fb0b1845d2e7623953c16a62fdf19d47a7e64ddfa"
         }
       ],
       "copied_files": 1,
@@ -216,6 +216,19 @@
       "skipped_paths": 0
     },
     {
+      "name": "hermes-harness",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\hermes-harness",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 2708,
+          "sha256": "7c0de994561d40f5072ab26be9e8a8589979eef3c6164436f56a7ac38eda8323"
+        }
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
+    },
+    {
       "name": "iam-bridge",
       "source": "C:\\Users\\cereal\\.agents\\skills\\iam-bridge",
       "files": [
@@ -284,8 +297,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 11381,
-          "sha256": "62dec2afa0d403d502aefd33e5e51c7c55d217ba0361b0f49d3cdabe1ad732e9"
+          "size": 11386,
+          "sha256": "ff04fe31cf091ca762714201ca45e38e1733113bc2def300b3115221078037f1"
         }
       ],
       "copied_files": 3,
@@ -438,8 +451,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 13764,
-          "sha256": "e7a35d3ac5f5194649a601c1c05d6fb7f2618a60fde1d0c408b8eb17e7d36c7d"
+          "size": 13504,
+          "sha256": "9bc411871a97b166df15672827c713d69dc81ef13d338dc85a59cf7c59f600e5"
         }
       ],
       "copied_files": 1,
@@ -551,8 +564,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 6019,
-          "sha256": "fd7a5fa665abc6ec8bc890991635bfb2c7f07bf381ed4ccfe6d58a5a85b61e87"
+          "size": 5945,
+          "sha256": "07f1f12026c73da9c5bda345287ae2f529dc47d015a3d923b2e98f2e08d6dfc7"
         }
       ],
       "copied_files": 1,
@@ -667,7 +680,7 @@
         }
       ],
       "copied_files": 18,
-      "skipped_paths": 1
+      "skipped_paths": 0
     },
     {
       "name": "semgrep-scanner",
@@ -814,13 +827,13 @@
       "files": [
         {
           "path": "architecture.md",
-          "size": 12244,
-          "sha256": "6237efc74e498ce6ef54c2a634dc43674fab2818631eaa99e77aa2470529f5ff"
+          "size": 2636,
+          "sha256": "6c52fe51de9b73a4b891af76cf1354d11959feaea4983bcb657ba998bfcf621b"
         },
         {
           "path": "SKILL.md",
-          "size": 37798,
-          "sha256": "deb8655683555b8327cd52785c71bcce90d632581420a419b6ecf5d5fa9419fa"
+          "size": 37838,
+          "sha256": "00bfb80f3e60f84aef4cad67225330976b367fecf1922814e786ba9151820bc3"
         }
       ],
       "copied_files": 2,
@@ -1040,7 +1053,7 @@
         }
       ],
       "copied_files": 17,
-      "skipped_paths": 2
+      "skipped_paths": 0
     },
     {
       "name": "wazuh-manager",
@@ -1074,8 +1087,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 4253,
-          "sha256": "063b3c396e0b5c1cbbfa6f41eb3df8c04119c1edb6df28b4e38b696e8c13f65f"
+          "size": 4375,
+          "sha256": "61717d95cdc28c8e4597a4049d93a59fd9ddec1cad5d68fd0358e3dbc672af30"
         }
       ],
       "copied_files": 1,

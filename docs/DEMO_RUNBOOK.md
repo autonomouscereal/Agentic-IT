@@ -1,13 +1,13 @@
 # Demo Runbook
 
-Last updated: 2026-05-14.
+Last updated: 2026-05-18.
 
 ## Demo Goal
 
-Show that this is not code completion and not a static playbook system. The SOC
-deployment is the first proof of an autonomous enterprise operations platform:
-a one-line installed, local/private control plane that turns enterprise work
-into governed agent work.
+Show that this is not code completion and not a static playbook system.
+Agentic Operations is a one-line installed, local/private control plane that
+turns enterprise work into governed agent work. The SOC deployment is the
+first proof domain, not the product boundary.
 
 The demo should explicitly frame SOC as the seed domain. The same primitives
 apply to service desk, IAM, endpoint, network, cloud, DevOps, compliance,
@@ -100,6 +100,9 @@ http://192.168.50.222:25480
 - proxy URL
 - model API status
 - process diagnostics
+
+Use Hermes/DeepSeek as the default long-running queue proof when available;
+Claude Code/local Qwen remains a fallback route for local-only demos.
 
 3. Create an ad hoc agent from prompt:
 

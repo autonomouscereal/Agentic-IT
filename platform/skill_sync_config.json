@@ -8,6 +8,7 @@
     "credential-vault",
     "gitlab-keycloak-integration",
     "gitlab-manager",
+    "hermes-harness",
     "iam-bridge",
     "itop-manager",
     "keycloak-mailcow-bridge",

@@ -28,7 +28,7 @@ from services import itop_sync, health_check, task_tracker, agent_auditor
 from services import access_control
 from services.event_logger import log_event
 
-APP_TITLE = "SOC Dashboard API"
+APP_TITLE = "Agentic Operations API"
 APP_VERSION = "1.3.0"
 
 _background_tasks = []

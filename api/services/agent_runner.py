@@ -443,7 +443,7 @@ async def _spawn_obsolete_wait_continuation(agent_id, task_id, task_meta, checkp
         }
     result = await spawn_agent(
         ticket_id,
-        (agent or {}).get("selected_model") or (agent or {}).get("model") or "qwen/qwen3.6-27b",
+        (agent or {}).get("selected_model") or (agent or {}).get("model") or "deepseek/deepseek-v4-flash",
         (prompt or "") + continuation,
         (task_meta or {}).get("task_type") or "ticket_resolution",
         actor_context=actor_context,
@@ -1210,8 +1210,8 @@ def _load_model_config():
                 _model_config = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             _model_config = {
-                "models": ["qwen/qwen3.6-27b"],
-                "default": "qwen/qwen3.6-27b",
+                "models": ["deepseek/deepseek-v4-flash"],
+                "default": "deepseek/deepseek-v4-flash",
             }
     return _model_config
 
@@ -1227,9 +1227,9 @@ def _build_agent_context_md(ticket, skills, prompt):
     else:
         skills_section = "- server-manager (SSH client)\n- web-research (SearXNG)\n- MemPalace MCP"
 
-    return f"""# SOC Agent - Ticket Resolution
+    return f"""# Agentic Operations Agent - Ticket Resolution
 
-You are an SOC agent assigned to resolve the following ticket.
+You are an Agentic Operations worker assigned to resolve the following ticket.
 
 ## Ticket Context
 - Title: {ticket.get('title', 'N/A')}
@@ -1305,6 +1305,11 @@ Before updating `checkpoint.json`, read it first, then write the updated JSON. D
 ## Instructions
 {prompt}
 """
+
+
+def _build_claude_md(ticket, skills, prompt):
+    """Backward-compatible wrapper for older tests and callers."""
+    return _build_agent_context_md(ticket, skills, prompt)
 
 
 def _build_settings(model, agent_id=None, ticket=None):
@@ -1449,7 +1454,7 @@ async def _run_agent(work_dir, prompt, task_id):
 
     settings_path = os.path.join(work_dir, ".claude", "settings.json")
     config = _load_model_config()
-    model = config.get("default", "qwen/qwen3.6-27b")
+    model = config.get("default", "deepseek/deepseek-v4-flash")
     task = await fetchrow("SELECT agent_id FROM agent_tasks WHERE id = $1", task_id)
     agent_id = task["agent_id"] if task else None
     if task:
@@ -1563,7 +1568,7 @@ async def _run_agent(work_dir, prompt, task_id):
 
 
 async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", actor_context=None, requested_permissions=None):
-    """Spawn a Claude Code agent to work on a ticket.
+    """Spawn the selected agent harness to work on a ticket.
 
     Returns task_id on success.
     """
@@ -2138,7 +2143,7 @@ async def get_process_snapshot():
 async def get_available_models():
     """Return list of available models from config file."""
     config = _load_model_config()
-    return config.get("models", ["qwen/qwen3.6-27b"])
+    return config.get("models", ["deepseek/deepseek-v4-flash"])
 
 
 async def get_runner_health():
