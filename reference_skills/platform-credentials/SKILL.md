@@ -42,7 +42,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 | Wazuh API | https://127.0.0.1:26500 | 26500 | Native Wazuh API auth | Current demo user returns 401; use dashboard/proxy-gated flows for demos |
 | GitLab | http://192.168.50.222:80 | 80 | Local Rails password + Keycloak OIDC | Demo local login and OIDC start verified |
 | Keycloak | Internal only | N/A | Master realm admin | Operational |
-| Mailcow | Internal only | N/A | Local + Keycloak bridge | Mailbox exists |
+| Mailcow | http://192.168.50.222:2581 | 2581 | Local + Keycloak bridge | Demo admin UI + mailbox IMAP verified |
 
 ## demo_account_1 Unified Credentials
 
@@ -58,7 +58,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 | Wazuh API | YES | Attempted | NO | Native API auth currently returns 401 for the demo user; dashboard auth works |
 | Wazuh OpenSearch Security | YES | YES | YES | Synced to `internal_users.yml`, security config reloaded |
 | GitLab | YES | YES (Rails verified) | YES | Local login returns 302; Keycloak OIDC start redirects to the realm |
-| Mailcow | YES | Delegated to Keycloak bridge | YES | Mailbox exists and active |
+| Mailcow | YES | YES (Mailcow `{BLF-CRYPT}` hash) | YES | Admin UI redirects to `/admin/dashboard`; IMAP auth works for `demo_account_1@mailcow.local` |
 
 ## Multi-Platform User Manager
 
@@ -99,7 +99,7 @@ Unified CLI for managing users across all 5 platforms:
 | Wazuh API | Wazuh REST API preferred; SQLite fallback | native API / scrypt:N:R:P$salt$hash | `wazuh_deploy-wazuh.manager-1` |
 | Wazuh Dashboard | OpenSearch Security | bcrypt `$2y$12$` | `wazuh_deploy-wazuh.indexer-1` -> `/usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml` |
 | GitLab | PostgreSQL | Rails encrypted | `gitlab` |
-| Mailcow | MySQL | Mailcow hash | `mysql-mailcow` |
+| Mailcow | MySQL | Mailcow `{BLF-CRYPT}` hash for demo UI/IMAP | `mysql-mailcow` |
 
 ## Important Notes
 
@@ -107,6 +107,7 @@ Unified CLI for managing users across all 5 platforms:
 - **GitLab supports both local login and Keycloak OIDC**: Keep `keycloak.internal:host-gateway` in the GitLab compose service and install the Keycloak proxy CA into `/etc/gitlab/trusted-certs/` before `gitlab-ctl reconfigure`.
 - **Keycloak is internal-only**: No external port mapping. Services reach it via Docker network hostname resolution.
 - **iTop uses local auth**: Form login against MariaDB bcrypt hashes. No SSO configured.
+- **Mailcow demo UI**: Use `http://192.168.50.222:2581` and login as `demo_account_1` with the vault password for admin UI. The mailbox identity is `demo_account_1@mailcow.local` for IMAP tests.
 
 ## Detailed Troubleshooting
 

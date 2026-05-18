@@ -136,7 +136,7 @@ Latest live credential smoke on 2026-05-18:
 | Wazuh API | Native `/security/user/authenticate?raw=true` | WARN, HTTP 401 |
 | GitLab local login | Fresh CSRF/session form POST | PASS, HTTP 302 |
 | GitLab Keycloak OIDC | OmniAuth start POST | PASS, redirects to Keycloak realm |
-| Mailcow | mailbox inventory through multi-platform user manager | PASS, mailbox exists |
+| Mailcow | demo UI plus mailbox auth | PASS, UI `http://192.168.50.222:2581` admin login redirects to `/admin/dashboard`; IMAP auth for `demo_account_1@mailcow.local` returns OK |
 
 GitLab OIDC deployment requirements:
 
@@ -180,7 +180,7 @@ python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
 
-The shim redeploys only `php-fpm-mailcow-api` and `nginx-mailcow-api`. It does not recycle the main Mailcow mail path. Full details, endpoint contracts, rollback, and troubleshooting are in `docs/MAILCOW_API_SHIM.md`.
+The shim redeploys only `php-fpm-mailcow-api` and `nginx-mailcow-api`. It does not recycle the main Mailcow mail path. The reference deployer also exposes the demo UI on port `2581`, repairs the custom deployment's UI compatibility schema, and keeps extensionless Mailcow routes behind FastCGI so PHP source is never served as static text. Full details, endpoint contracts, rollback, and troubleshooting are in `docs/MAILCOW_API_SHIM.md`.
 
 ## Rebuild Triggers
 

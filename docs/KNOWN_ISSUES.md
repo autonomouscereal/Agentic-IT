@@ -65,6 +65,45 @@ hosts entry as administrator:
 192.168.50.222 keycloak.internal
 ```
 
+### Mailcow demo UI was not exposed and schema drift blocked login
+
+Status: fixed on live AI server and documented in the Mailcow skills.
+
+Symptoms:
+
+- The reference Mailcow deployment was usable through direct MySQL and SMTP/IMAP
+  paths, but there was no browser-friendly UI URL for demos.
+- The optional API sidecar initially returned a blank or failed UI because the
+  mounted web root could not write Twig cache files and `dockerapi` was not
+  resolvable from the php-fpm sidecar.
+- After the UI loaded, admin login hit custom-schema drift: missing `logs`,
+  legacy `tfa(id,data)` shape without `key_id`, and an ambiguous `kind` query.
+- A first route repair briefly exposed PHP source for extensionless routes; this
+  was immediately replaced with a named FastCGI rewrite.
+
+Fix:
+
+- Exposed the demo UI on `http://192.168.50.222:2581` while keeping the
+  read-only compatibility API on `8081`.
+- Mounted the web root writable for the php-fpm sidecar so Twig cache can be
+  generated.
+- Added the `dockerapi:127.0.0.1` sidecar host mapping and kept raw dockerapi
+  access blocked from non-loopback traffic with the host firewall rule.
+- Created the missing `logs` table, repaired `tfa`, added
+  `mailbox.authsource`, and patched Mailcow UI queries to use `mailbox.kind`.
+- Replaced unsafe `try_files $uri.php` behavior with a named rewrite that
+  re-enters the FastCGI `.php` location.
+- Rotated the Mailcow demo admin/mailbox hashes to the shared vault password
+  using no-BOM secret handling.
+
+Verification:
+
+- `http://192.168.50.222:2581/` returns the Mailcow login page.
+- Admin form login for `demo_account_1` returns HTTP `302` to
+  `/admin/dashboard`.
+- `/admin/dashboard` renders through FastCGI and does not expose PHP source.
+- IMAP auth for `demo_account_1@mailcow.local` returns `OK`.
+
 ## Found During 2026-05-18 Documentation Refresh
 
 ### Live AI server has standalone proxy owning port 4001

@@ -1,6 +1,6 @@
 # Mailcow API Shim Blueprint
 
-Last updated: 2026-05-12.
+Last updated: 2026-05-18.
 
 This document is the operator blueprint for the optional Mailcow HTTP API shim in the agentic IT/SOC platform. It explains why the shim exists, how it is deployed, how it is tested, how it fits the provider-agnostic platform, and how to repair it without leaking secrets.
 
@@ -34,7 +34,7 @@ Mailcow is the reference implementation. Exchange, Gmail, Proofpoint, Mimecast, 
 
 ```mermaid
 flowchart LR
-  Operator["Operator / dashboard / tests"] --> Nginx["nginx-mailcow-api\n127.0.0.1:8081"]
+  Operator["Operator / dashboard / tests"] --> Nginx["nginx-mailcow-api\n127.0.0.1:8081\nhost:2581 demo UI"]
   Nginx --> Compat["/web/mailcow_compat_api.php"]
   Nginx --> Stock["/web/json_api.php\nfallback for non-compat routes"]
   Compat --> PHP["php-fpm-mailcow-api\n127.0.0.1:9002"]
@@ -66,6 +66,16 @@ Base URL in the reference lab:
 ```text
 http://127.0.0.1:8081
 ```
+
+Demo UI URL in the reference lab:
+
+```text
+http://192.168.50.222:2581
+```
+
+The UI port is for lab/demo access to the Mailcow admin surface. Keep the API
+shim on `8081` for compatibility reads and use `2581` when showing Mailcow in a
+browser.
 
 Required request header:
 
@@ -113,9 +123,14 @@ The deployer is idempotent:
 - verifies MySQL reachability from inside `mysql-mailcow`
 - creates or repairs the Mailcow `api` table columns
 - creates the `identity_provider` compatibility table when missing
+- creates the `logs` compatibility table when missing
+- repairs the custom `tfa` table shape expected by the mounted Mailcow UI
+- adds `mailbox.authsource` with default `mailcow` when missing
+- patches ambiguous custom-schema UI queries from `kind` to `mailbox.kind`
 - installs `mailcow_compat_api.php` into the Mailcow web root
 - writes the API key only to the restricted `api-nginx/.api_key` file
 - recreates only the sidecar containers `php-fpm-mailcow-api` and `nginx-mailcow-api`
+- exposes the read API on `8081` and the demo UI on `2581`
 - runs built-in endpoint tests before reporting success
 
 The deployer does not require host-side `MYSQL_ROOT_PASSWORD`. SQL setup is executed inside the `mysql-mailcow` container using the container-held environment. This prevents copying database passwords into command strings, docs, or dashboard config.
@@ -139,7 +154,7 @@ The regression checks:
 - POST to compatibility read endpoint returns `405`
 - API domain/mailbox/alias counts match direct MySQL counts
 
-Current verified result on 2026-05-12:
+Current verified result on 2026-05-18:
 
 ```text
 13 passed, 0 failed
@@ -184,9 +199,11 @@ Secrets:
 
 Network:
 
-- The reference shim listens on `127.0.0.1:8081` on the Mailcow host.
+- The reference shim exposes the compatibility API on `8081` and the demo UI on `2581` in the lab.
 - Expose it beyond localhost only behind an approved reverse proxy, network policy, and authentication plan.
 - Treat the shim as operational infrastructure. It should not be public internet-facing.
+- The `dockerapi-mailcow` helper is host-networked in this custom deployment. Keep it loopback-only with firewall policy; do not expose its raw port externally.
+- Extensionless Mailcow UI routes such as `/admin/dashboard` must be rewritten through FastCGI. Do not use `try_files $uri.php` in a plain static location because that can serve PHP source.
 
 Data minimization:
 
@@ -276,6 +293,45 @@ Preferred repair:
 cd /home/cereal/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 ```
+
+### UI login redirects to 404 or shows PHP source.
+
+Likely cause:
+
+- Nginx is serving extensionless routes such as `/admin/dashboard` as static
+  files instead of sending them through FastCGI.
+
+Required nginx behavior:
+
+- `location /` uses a named rewrite target such as `@php_extension`.
+- The named target rewrites `^(.+)$` to `$1.php last`.
+- The rewritten `.php` request is handled by the FastCGI `location ~ \.php$`
+  block.
+
+Repair:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+```
+
+### Admin login loops or fails after the password is correct.
+
+Likely causes:
+
+- The custom seed is missing the Mailcow `logs` table.
+- The `tfa` table still has the legacy `id,data` shape and lacks `key_id`.
+- The custom mailbox/domain schema makes unqualified `kind` ambiguous.
+
+Repair with the deployer. It creates `logs`, repairs `tfa`, adds
+`mailbox.authsource`, and patches the mounted UI query to use `mailbox.kind`.
+
+Latest live verification on 2026-05-18:
+
+- `http://192.168.50.222:2581/` returns the Mailcow login page.
+- Admin form login for `demo_account_1` returns HTTP `302` to `/admin/dashboard`.
+- `/admin/dashboard` renders through FastCGI and does not expose PHP source.
+- IMAP auth for `demo_account_1@mailcow.local` returns `OK`.
 
 ### MySQL parity fails.
 

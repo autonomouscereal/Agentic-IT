@@ -3,8 +3,8 @@
 
 Creates:
 1. php-fpm-mailcow-api container (mailcow/phpfpm:1.92, web code mounted, port 9002)
-2. nginx-mailcow-api container (nginx:alpine, FastCGI proxy on port 8081)
-3. API table schema fix + API key seed
+2. nginx-mailcow-api container (nginx:alpine, FastCGI proxy on port 8081 and demo UI on 2581)
+3. API/UI compatibility schema fixes + API key seed
 
 Keeps existing php-fpm-mailcow + MySQL bridge scripts fully functional.
 """
@@ -40,6 +40,7 @@ MAILCOW_DOCKERIZED_WEB = "/home/cereal/mailcow-dockerized/data/web"
 NGINX_CONF_DIR = "/home/cereal/Mailcow/deploy/api-nginx"
 MAILCOW_ENV_FILE = os.environ.get("MAILCOW_ENV_FILE", "/home/cereal/Mailcow/deploy/.env")
 API_PORT = 8081
+UI_DEMO_PORT = int(os.environ.get("MAILCOW_UI_DEMO_PORT", "2581"))
 PHPFPM_PORT = 9002
 MAILCOW_ENV = read_env_file(MAILCOW_ENV_FILE)
 MYSQL_DATABASE = os.environ.get("MYSQL_DATABASE") or os.environ.get("DBNAME") or MAILCOW_ENV.get("DBNAME") or "mailcow"
@@ -203,9 +204,67 @@ def setup_identity_provider_table():
     print("  identity_provider table: OK")
 
 
+def setup_ui_compat_schema():
+    """Repair schema drift that blocks the optional Mailcow demo UI."""
+    print("\n--- Step 1c: Ensuring Mailcow UI compatibility schema ---")
+    run_sql("""
+        CREATE TABLE IF NOT EXISTS `logs` (
+            `id` INT NOT NULL AUTO_INCREMENT,
+            `task` CHAR(32) NOT NULL DEFAULT '000000',
+            `type` VARCHAR(32) DEFAULT '',
+            `msg` TEXT,
+            `call` TEXT,
+            `user` VARCHAR(64) NOT NULL,
+            `role` VARCHAR(32) NOT NULL,
+            `remote` VARCHAR(39) NOT NULL,
+            `time` INT(11) NOT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+    """)
+    run_sql("""
+        ALTER TABLE `tfa`
+          ADD COLUMN IF NOT EXISTS `key_id` VARCHAR(255) NOT NULL DEFAULT 'unidentified' AFTER `id`,
+          ADD COLUMN IF NOT EXISTS `username` VARCHAR(255) NOT NULL DEFAULT '' AFTER `key_id`,
+          ADD COLUMN IF NOT EXISTS `authmech` ENUM('yubi_otp', 'u2f', 'hotp', 'totp', 'webauthn') NULL AFTER `username`,
+          ADD COLUMN IF NOT EXISTS `secret` VARCHAR(255) DEFAULT NULL AFTER `authmech`,
+          ADD COLUMN IF NOT EXISTS `keyHandle` VARCHAR(1023) DEFAULT NULL AFTER `secret`,
+          ADD COLUMN IF NOT EXISTS `publicKey` VARCHAR(4096) DEFAULT NULL AFTER `keyHandle`,
+          ADD COLUMN IF NOT EXISTS `counter` INT NOT NULL DEFAULT '0' AFTER `publicKey`,
+          ADD COLUMN IF NOT EXISTS `certificate` TEXT AFTER `counter`,
+          ADD COLUMN IF NOT EXISTS `active` TINYINT(1) NOT NULL DEFAULT '0' AFTER `certificate`
+    """)
+    run_sql("""
+        ALTER TABLE `mailbox`
+          ADD COLUMN IF NOT EXISTS `authsource` ENUM('mailcow', 'keycloak', 'generic-oidc', 'ldap') DEFAULT 'mailcow' AFTER `attributes`
+    """)
+    run_sql("UPDATE `mailbox` SET `authsource`='mailcow' WHERE `authsource` IS NULL OR `authsource`=''")
+    print("  logs/tfa/mailbox UI compatibility schema: OK")
+
+
+def patch_mailcow_web_for_ui():
+    """Patch mounted Mailcow web code for this custom schema."""
+    print("\n--- Step 1d: Patching Mailcow UI route/query compatibility ---")
+    auth_path = os.path.join(MAILCOW_DOCKERIZED_WEB, "inc", "functions.auth.inc.php")
+    if not os.path.exists(auth_path):
+        print(f"  [FAIL] Missing auth functions file: {auth_path}")
+        sys.exit(1)
+    with open(auth_path, encoding="utf-8") as handle:
+        content = handle.read()
+    patched = content.replace("WHERE `kind` NOT REGEXP", "WHERE `mailbox`.`kind` NOT REGEXP")
+    if patched != content:
+        backup = f"{auth_path}.bak.{int(time.time())}"
+        run(f"sudo cp {shlex.quote(auth_path)} {shlex.quote(backup)}")
+        with open("/tmp/mailcow_functions_auth.inc.php", "w", encoding="utf-8") as handle:
+            handle.write(patched)
+        run(f"sudo cp /tmp/mailcow_functions_auth.inc.php {shlex.quote(auth_path)}")
+        print("  functions.auth.inc.php mailbox.kind query patch: OK")
+    else:
+        print("  functions.auth.inc.php mailbox.kind query patch already present.")
+
+
 def install_compat_api():
     """Install read-only compatibility endpoints for custom Mailcow stacks."""
-    print("\n--- Step 1c: Installing compatibility API shim ---")
+    print("\n--- Step 1e: Installing compatibility API shim ---")
     source = os.path.join(SCRIPT_DIR, "mailcow_api_compat.php")
     destination = os.path.join(MAILCOW_DOCKERIZED_WEB, "mailcow_compat_api.php")
     if not os.path.exists(source):
@@ -304,13 +363,14 @@ exec php-fpm
         f"-e MAILCOW_HOSTNAME=mailcow.local "
         f"-e TZ=America/New_York "
         f"-e MAILCOW_PASS_SCHEME=BLF-CRYPT "
-        f"-v {MAILCOW_DOCKERIZED_WEB}:/web:ro "
+        f"--add-host dockerapi:127.0.0.1 "
+        f"-v {MAILCOW_DOCKERIZED_WEB}:/web:rw "
         f"-v {www_conf_path}:/usr/local/etc/php-fpm.d/www.conf:ro "
         f"-v {zz_conf_path}:/usr/local/etc/php-fpm.d/zz-docker.conf:ro "
-        f"-v {session_path}:/usr/local/etc/php/conf.d/session_store.ini:ro "
+        f"-v {startup_path}:/usr/local/bin/mailcow-api-start.sh:ro "
         f"-v deploy_mysql-socket:/var/run/mysqld:ro "
         f"--env-file {shlex.quote(MAILCOW_ENV_FILE)} "
-        f"--entrypoint php-fpm "
+        f"--entrypoint /usr/local/bin/mailcow-api-start.sh "
         f"mailcow/phpfpm:1.92"
     )
     stdout, stderr = run(cmd)
@@ -366,6 +426,8 @@ http {{
     server {{
         listen {API_PORT};
         listen [::]:{API_PORT};
+        listen {UI_DEMO_PORT};
+        listen [::]:{UI_DEMO_PORT};
         server_name _;
 
         root /web;
@@ -413,7 +475,11 @@ http {{
         }}
 
         location / {{
-            try_files $uri $uri/ =404;
+            try_files $uri $uri/ @php_extension;
+        }}
+
+        location @php_extension {{
+            rewrite ^(.+)$ $1.php last;
         }}
     }}
 }}
@@ -529,6 +595,23 @@ def test_api(api_key):
 
 # ─── Main ──────────────────────────────────────────────────────────────
 
+def test_ui():
+    """Smoke test the optional demo UI without credentials."""
+    print("\n--- Step 5: Testing demo UI surface ---")
+    url = f"http://127.0.0.1:{UI_DEMO_PORT}/"
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            body = resp.read()
+            if resp.status == 200 and b"login_user" in body and b"pass_user" in body:
+                print(f"  [PASS] Demo UI login page on port {UI_DEMO_PORT}")
+                return True
+            print(f"  [FAIL] Demo UI unexpected response on port {UI_DEMO_PORT}")
+            return False
+    except Exception as exc:
+        print(f"  [FAIL] Demo UI check failed: {exc}")
+        return False
+
+
 def main():
     print("=" * 60)
     print("Mailcow HTTP API Stack Deployment")
@@ -575,6 +658,8 @@ def main():
     api_key = setup_api_table()
     write_api_key_file(api_key)
     setup_identity_provider_table()
+    setup_ui_compat_schema()
+    patch_mailcow_web_for_ui()
     install_compat_api()
     deploy_php_fpm()
     deploy_nginx()
@@ -584,12 +669,13 @@ def main():
     time.sleep(5)
 
     # Test
-    success = test_api(api_key)
+    success = test_api(api_key) and test_ui()
 
     if success:
         print("\n" + "=" * 60)
         print("DEPLOYMENT SUCCESSFUL")
         print(f"  API URL: http://127.0.0.1:{API_PORT}/api/v1/")
+        print(f"  Demo UI: http://<host>:{UI_DEMO_PORT}/")
         print("  API Key: written to restricted local file")
         print(f"  php-fpm: port {PHPFPM_PORT}")
         print(f"  nginx:   port {API_PORT}")

@@ -23,7 +23,7 @@ argument-hint: "--deploy --test --status --sync --setup-keycloak --setup-mailcow
 
 Complete integration between Keycloak 26.x (Identity Provider) and Mailcow (Email Server) via OIDC on Linux servers.
 
-**CRITICAL ARCHITECTURE NOTE:** The reference deployment uses direct MySQL communication for canonical Mailcow operations via `docker exec mysql-mailcow`. The optional HTTP API shim can be deployed on a nonstandard port for environments that need API-compatible tooling, but direct MySQL remains the supported fallback because custom Mailcow deployments may not expose the stock nginx REST surface.
+**CRITICAL ARCHITECTURE NOTE:** The reference deployment uses direct MySQL communication for canonical Mailcow operations via `docker exec mysql-mailcow`. The optional HTTP API/UI shim can be deployed on nonstandard ports for environments that need API-compatible tooling or a lab demo UI, but direct MySQL remains the supported fallback because custom Mailcow deployments may not expose the stock nginx REST surface.
 
 ## Architecture
 
@@ -34,7 +34,7 @@ Complete integration between Keycloak 26.x (Identity Provider) and Mailcow (Emai
 | Mailcow IDP Config | `scripts/mailcow_idp_config.py` | Domain, distribution groups, shared mailboxes via direct MySQL |
 | Sync Engine | `scripts/sync_engine.py` | Bidirectional sync: Keycloak users <-> Mailcow mailboxes via MySQL |
 | E2E Test Suite | `scripts/test_integration.py` | 48 tests across 10 categories |
-| Optional HTTP API Shim | `scripts/deploy_mailcow_api.py` | Nonstandard-port nginx/php-fpm API shim; direct MySQL remains canonical |
+| Optional HTTP API/UI Shim | `scripts/deploy_mailcow_api.py` | Nonstandard-port nginx/php-fpm API shim on `8081` and demo UI on `2581`; direct MySQL remains canonical |
 | API Shim Regression | `scripts/test_mailcow_api_shim.py` | Auth, selector, password-redaction, and MySQL parity tests for the optional API shim |
 | Environment Template | `.env.example` | Secret template - copy to `.env` before deploying |
 
@@ -75,12 +75,16 @@ docker exec mysql-mailcow mysql -uroot -p"$MYSQL_PASSWORD" \
 
 ## Optional HTTP API Shim
 
-Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Mailcow HTTP API compatibility. The shim must:
+Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Mailcow HTTP API compatibility or a lab-visible Mailcow UI. The shim must:
 
 - listen on a nonstandard port, normally `8081`
+- expose the demo UI on `2581` when enabled in the reference lab
 - forward `X-API-Key` to FastCGI as `HTTP_X_API_KEY`
 - set `HTTP_SEC_FETCH_DEST=empty`
 - create the Mailcow `identity_provider` compatibility table if missing
+- create the Mailcow `logs` table if missing
+- repair legacy `tfa` and `mailbox.authsource` schema drift expected by the current UI
+- rewrite extensionless UI routes through FastCGI without serving PHP source
 - install `mailcow_compat_api.php` for read-only `get/domain`, `get/mailbox`, and `get/alias` compatibility when the stock `json_api.php` path returns empty bodies in custom deployments
 - reject invalid API keys with HTTP 401
 - never print API keys in logs
@@ -116,6 +120,13 @@ Latest reference verification on 2026-05-12:
 - POST to the compatibility read endpoint returns HTTP `405`
 - regression test result: `13 passed, 0 failed`
 - bridge E2E result after API redeploy: `47 passed, 0 failed, 1 skipped`
+
+Latest demo UI verification on 2026-05-18:
+
+- `http://192.168.50.222:2581/` returns the Mailcow login page
+- admin login for `demo_account_1` returns HTTP `302` to `/admin/dashboard`
+- `/admin/dashboard` renders via FastCGI and does not expose PHP source
+- IMAP auth for `demo_account_1@mailcow.local` returns `OK`
 
 Operational blueprint:
 

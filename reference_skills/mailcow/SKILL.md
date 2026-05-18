@@ -24,6 +24,8 @@ user-invocable: true
 
 Complete, reproducible blueprint for deploying a fully functional Mailcow email server on a bare-metal Ubuntu server using Docker Compose. Covers every step, every error encountered, every fix applied, and every configuration file.
 
+**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. Admin login for `demo_account_1` redirects to `/admin/dashboard`; IMAP auth for `demo_account_1@mailcow.local` returns `OK`. The shim also keeps the read-only compatibility API on `8081`.
+
 This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-built, hand-tailored Mailcow stack with modified entrypoints, TCP database connectivity (no socket sharing), and custom database seeding.
 
 ### Architecture at a Glance
@@ -54,6 +56,8 @@ This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-bui
 | Custom docker-compose.yml | Upstream includes Unbound/netfilter/watchdog — not needed in our setup |
 | Bind mounts (not Docker volumes) | All data lives under `/home/cereal/Mailcow/deploy/data/` for easy backup |
 | `set +e` in entrypoint | Several upstream checks fail in our environment (missing templates, no replication) |
+| Optional UI/API sidecars | `nginx-mailcow-api` serves API compatibility on `8081` and the demo UI on `2581`; `php-fpm-mailcow-api` uses the mounted web root with writable Twig cache |
+| UI compatibility schema | The custom seed must include `logs`, current-shape `tfa`, and `mailbox.authsource`; extensionless routes must rewrite through FastCGI |
 
 ---
 
