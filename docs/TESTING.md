@@ -122,23 +122,27 @@ Latest verified result on 2026-05-18:
 
 ```text
 gitlab_local_login: PASS http=302
-gitlab_oidc_start: PASS http=302 keycloak_redirect=True
+gitlab_keycloak_full_sso: PASS lands_in_gitlab=True
 itop_rest_post: PASS code=0 count=1
 wazuh_dashboard_login_endpoint: PASS http=200
 mailcow_mailbox: PASS exists=True
-wazuh_api_auth: WARN http=401
+wazuh_api_auth: PASS token_issued=True
 ```
 
 Important implementation notes:
 
 - Wazuh Dashboard auth requires OpenSearch Security `internal_users.yml` sync and `securityadmin.sh` reload.
-- Native Wazuh API auth is separate from Dashboard auth; the current demo user returns HTTP 401 and should not be used as the primary Wazuh demo path until repaired.
+- Native Wazuh API auth is separate from Dashboard auth; verify both paths
+  before demos because the UI can work while API RBAC is stale.
 - iTop demo users must be real `UserLocal` objects with `Administrator` and `REST Services User`; raw partial rows can be counted by OQL but fail object reload and login.
 - GitLab local login requires a valid personal namespace on the GitLab user. Missing namespace causes the generic GitLab 422 page even when the password is correct.
 - GitLab OIDC requires the Keycloak CA in GitLab trusted certs. The live demo
   uses `https://192.168.50.222:8443/realms/gitlab` as the browser-routable
   issuer; `keycloak.internal:host-gateway` may remain in compose only as a
   container-side compatibility alias.
+- GitLab OIDC also depends on Keycloak protocol mapper shape. The setup script
+  updates existing mappers idempotently; rerun it if GitLab SSO fails with an
+  opaque OmniAuth `Unknown error` after Keycloak changes.
 - If a failed iTop debug trace logs a password in `/var/www/html/log/error.log`, rotate the vault key and scrub the log before demo use.
 
 ## Agentic API Smoke
@@ -1381,16 +1385,14 @@ bash /home/cereal/gitlab-keycloak-integration/scripts/diagnose.sh
   13 passed, 0 warnings, 0 failed
 
 bash /home/cereal/gitlab-keycloak-integration/scripts/test_integration.sh
-  Total: 24
-  Passed: 21
+  Total: 27
+  Passed: 27
   Failed: 0
-  Skipped: 3
-  Note: skipped GitLab project/API checks require GITLAB_PAT from a
-  vault-backed environment.
+  Skipped: 0
 
-Playwright GitLab Keycloak button check: PASS
-  GitLab button redirects to:
-  https://192.168.50.222:8443/realms/gitlab/protocol/openid-connect/auth...
+Playwright GitLab Keycloak full SSO check: PASS
+  Final URL: http://192.168.50.222/
+  visible markers: SOC Demo Account user's menu, Projects, Admin
 ```
 
 Mailcow/Roundcube checks:

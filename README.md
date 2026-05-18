@@ -26,13 +26,12 @@ approved reference modules when those capabilities are missing.
 
 The shared demo user is `demo_account_1`; its password is stored only in the
 local server-manager vault key `demo_account_1`. Latest 2026-05-18 login smoke:
-iTop REST PASS, Wazuh Dashboard PASS, Keycloak Admin Console login PASS, GitLab
-local login PASS, GitLab OIDC start PASS to the IP-based Keycloak issuer,
-Mailcow admin UI PASS across dashboard/system/mailbox/queue/quarantine pages,
-Roundcube webmail PASS at `/webmail`, Mailcow IMAP PASS, and the Roundcube
-`Report Phish` path creates Mailcow quarantine plus dashboard/iTop evidence.
-Native Wazuh API auth for the demo user is currently a follow-up (`401`) and is
-not the primary Wazuh demo path.
+iTop REST PASS, Wazuh API PASS, Wazuh Dashboard browser login PASS, Keycloak
+Admin Console login PASS, GitLab local login PASS, full GitLab Keycloak SSO
+PASS, Mailcow admin UI PASS across dashboard/system/mailbox/queue/quarantine
+pages, Roundcube webmail PASS at `/webmail`, Mailcow IMAP PASS, and the
+Roundcube `Report Phish` path creates Mailcow quarantine plus dashboard/iTop
+evidence.
 
 ## Documentation Map
 

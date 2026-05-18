@@ -24,7 +24,7 @@ Verified checks:
 | Platform | Verification |
 |----------|--------------|
 | iTop REST | PASS: `webservices/rest.php` returns `code:0` with `Administrator` + `REST Services User` profiles |
-| Wazuh API | SUPERSEDED: latest 2026-05-18 live smoke returns HTTP 401 for `demo_account_1` |
+| Wazuh API | PASS: latest 2026-05-18 live smoke issues a token for `demo_account_1` |
 | Wazuh Dashboard backend | PASS: Wazuh Dashboard login endpoint returns HTTP 200 for `demo_account_1` |
 | GitLab | PASS: Rails `valid_password?` returns true; user active and admin |
 | Mailcow | PASS: mailbox exists; password flow delegated to Keycloak/Mailcow bridge |
@@ -39,16 +39,21 @@ Verified checks:
 |------|--------------|
 | GitLab local login | PASS: fresh CSRF/session POST for `demo_account_1` returns HTTP 302 instead of 422 |
 | GitLab OIDC discovery | PASS: GitLab container can fetch `https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration` |
-| GitLab OIDC start | PASS: OmniAuth POST redirects to the Keycloak realm authorization endpoint |
+| GitLab Keycloak full SSO | PASS: browser login lands in GitLab as SOC Demo Account |
 | iTop REST | PASS: POST to `webservices/rest.php` returns `code:0`, count `1` |
 | Wazuh Dashboard | PASS: dashboard login endpoint returns HTTP 200 |
-| Wazuh API | WARN: native API auth returns HTTP 401 and is not required for the browser demo |
+| Wazuh API | PASS: native API auth issues a token |
 | Mailcow mailbox | PASS: mailbox exists and is active; full Mailcow web/SOGo demo remains a separate migration step |
 
 Fixes applied 2026-05-18:
 - Added `keycloak.internal:host-gateway` to the GitLab compose service so the GitLab container reaches the host-network Keycloak nginx proxy instead of its own localhost.
 - Installed the Keycloak integration CA at `/etc/gitlab/trusted-certs/keycloak-internal-ca.crt` and ran `gitlab-ctl reconfigure`.
 - Repaired the `demo_account_1` GitLab user by creating its missing personal namespace with the GitLab Rails model layer.
+- Corrected the GitLab realm Keycloak protocol mappers (`preferred_username`,
+  `groups`, `realm_roles`, UserInfo claims) and made `setup_oidc.py`
+  update existing mappers in place.
+- Linked the existing GitLab local user to the Keycloak subject so SSO resolves
+  to the approved local account instead of trying to auto-create a blocked user.
 - Updated the portable GitLab compose template so future deployments keep the OIDC route.
 
 Prior fixes from 2026-05-11:
@@ -64,9 +69,9 @@ Prior fixes from 2026-05-11:
 | Platform | Symptom | Root Cause | Status |
 |----------|---------|------------|--------|
 | GitLab web login | 422 error on login form | Demo GitLab user was missing its required personal namespace | FIXED 2026-05-18 |
-| GitLab Keycloak OIDC | Connection refused / certificate verify failure | GitLab container lacked host-gateway mapping and Keycloak proxy CA trust | FIXED 2026-05-18 |
+| GitLab Keycloak OIDC | Connection refused / certificate verify failure / opaque OmniAuth unknown error | GitLab container lacked host-gateway mapping and Keycloak proxy CA trust; realm mappers were stale or invalid | FIXED 2026-05-18 |
 | Wazuh dashboard | "Invalid credentials" | User missing from OpenSearch Security internal users | FIXED - dashboard login verified 2026-05-18 |
-| Wazuh API | 401 Invalid credentials | Native Wazuh API credentials are separate from dashboard auth | FOLLOW-UP - current demo smoke returns 401 |
+| Wazuh API | 401 Invalid credentials | Native Wazuh API credentials are separate from dashboard auth | FIXED - API token verified 2026-05-18 |
 | iTop | "Incorrect login/password" | Partial/invalid `UserLocal` object or missing REST profile | FIXED - REST POST verified 2026-05-18 |
 | Keycloak | N/A (IDP, not login target) | Passwords set in all realms | OPERATIONAL |
 
@@ -92,7 +97,7 @@ gitlab_rails["omniauth_allow_single_sign_on"] = true
 gitlab_rails["omniauth_block_auto_created_users"] = true
 ```
 
-Historical root cause: `keycloak.internal:8443` resolved to the GitLab container's own localhost, then failed certificate verification after the route was corrected. The local 422 path was a separate issue caused by `demo_account_1` missing its required personal namespace.
+Historical root cause: `keycloak.internal:8443` resolved to the GitLab container's own localhost, then failed certificate verification after the route was corrected. The local 422 path was a separate issue caused by `demo_account_1` missing its required personal namespace. The final opaque OmniAuth "Unknown error" came from invalid/stale Keycloak protocol mapper definitions and was fixed by updating mapper types and the existing mapper records.
 
 ### Diagnostic Findings
 - `demo_account_1` EXISTS in GitLab DB (User ID: 4, active, confirmed, admin)
@@ -101,6 +106,9 @@ Historical root cause: `keycloak.internal:8443` resolved to the GitLab container
 - Keycloak containers run on host networking; GitLab must use `keycloak.internal:host-gateway` to reach the host-network nginx proxy.
 - GitLab must trust the Keycloak integration CA from `/home/cereal/gitlab-keycloak-integration/certs/ca-cert.pem`.
 - `demo_account_1` must have a `Namespaces::UserNamespace` personal namespace.
+- The Keycloak GitLab realm must emit `preferred_username`, `email`, `groups`,
+  and `realm_roles` as simple OIDC/UserInfo claims. Rerun
+  `scripts/setup_oidc.py` if mapper drift is suspected.
 
 ### Fix Required If This Regresses
 1. Ensure `/home/cereal/gitlab/docker-compose.yml` has:
@@ -173,10 +181,14 @@ API calls -> Wazuh API -> RBAC SQLite DB (manager container)
 
 ---
 
-## Wazuh API - scrypt Hash Length Mismatch
+## Wazuh API - Historical scrypt Hash Length Mismatch
+
+Status: fixed for the current demo account. Keep this section as a regression
+guide because Wazuh API auth can still drift separately from Wazuh Dashboard
+auth.
 
 ### Symptom
-Wazuh API returns 401 "Invalid credentials" for `demo_account_1` even though the user exists in the RBAC DB.
+Wazuh API returned 401 "Invalid credentials" for `demo_account_1` even though the user existed in the RBAC DB.
 
 ### Root Cause
 The password hash was generated on the host (Python 3.12) with a 16-byte salt, producing a 178-character hash. Wazuh's internal users have 162-character hashes with 8-byte salts.
@@ -204,7 +216,7 @@ The Wazuh manager container runs Python 3.9 with OpenSSL 3.x, which blocks `hash
 - **TLS certs exist**: `/var/ossec/api/configuration/ssl/server.crt` and `server.key`
 - **TLS config commented out** in `api.yaml` but certs are present - API appears to use TLS anyway
 
-### Fix Required
+### Fix If This Regresses
 1. Generate correct scrypt hash on the HOST (Python 3.12 with `maxmem` parameter):
    ```python
    import hashlib, secrets
@@ -260,20 +272,18 @@ docker exec -i itop-deployment-db-1 mariadb -uitop -p"<from container MYSQL_PASS
 Services that need to connect to Keycloak (GitLab OIDC) get "connection refused" for `keycloak.internal:8443`
 
 ### Root Cause
-- Keycloak containers have NO external port mappings
-- Keycloak nginx reverse proxy has default config (no custom proxy to Keycloak)
-- Internal hostname `keycloak.internal` may not resolve from all Docker networks
-- Keycloak runs on internal port 8080 (HTTP) - port 8443 (HTTPS) may not be configured
+- Historical failures came from services resolving `keycloak.internal` to the wrong network namespace, missing GitLab trust for the Keycloak proxy CA, or stale browser-routable hostname settings.
+- Current demo deployments expose Keycloak through the nginx TLS proxy at `https://192.168.50.222:8443` while retaining `keycloak.internal` as a container-side compatibility alias.
 
 ### Keycloak Realms
-All 5 realms configured: `master`, `itop`, `wazuh`, `mailcow`, `gitlab`
-`demo_account_1` exists in `itop`, `wazuh`, and `gitlab` realms with passwords set.
+All 5 realms configured: `master`, `itop`, `wazuh`, `mailcow`, `gitlab`.
+`demo_account_1` exists in the service realms with passwords set for the demo flows.
 
-### Fix Required
-1. Verify Keycloak is listening on 8443 (or reconfigure GitLab to use 8080)
-2. Ensure Docker network connectivity between GitLab and Keycloak
-3. Fix DNS resolution for `keycloak.internal` across networks
-4. Check Keycloak nginx reverse proxy configuration
+### Fix If This Regresses
+1. Verify `https://192.168.50.222:8443/realms/gitlab/.well-known/openid-configuration` returns the GitLab realm.
+2. Verify GitLab can reach and trust the same issuer from inside the container.
+3. Keep `keycloak.internal:host-gateway` only as the internal compatibility alias.
+4. Rerun the relevant Keycloak setup script so protocol mappers are repaired in place.
 
 ---
 

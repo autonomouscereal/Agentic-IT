@@ -159,6 +159,11 @@ This configures:
 | `groups` | `groups` | Keycloak groups |
 | `realm_roles` | `realm_roles` | Realm roles |
 
+`setup_oidc.py` is idempotent for mapper repair. It reads existing client
+mappers and updates them in place, which prevents stale Keycloak mapper types
+from surviving redeploys and causing GitLab OmniAuth `Unknown error` failures
+after the user authenticates successfully in Keycloak.
+
 **Groups:** `gitlab-admins`, `gitlab-developers`, `gitlab-viewers`, `gitlab-auditors`
 
 **Roles:** `gitlab-admin`, `gitlab-developer`, `gitlab-viewer`
@@ -347,6 +352,10 @@ echo "$gl_status" | grep -q "run:"
 - OIDC discovery endpoint path changed from `/.well-known/openid-configuration` to `/realms/{realm}/.well-known/openid-configuration`
 - `KC_PROXY_HEADERS` values changed - verify proxy headers match Keycloak 26.x expectations
 - Health endpoint moved to management port 9000
+- Mapper provider ids are strict. Use `oidc-usermodel-property-mapper` for
+  username, `oidc-group-membership-mapper` for groups, and expose GitLab claims
+  in both tokens and UserInfo. Rerun `scripts/setup_oidc.py` after mapper
+  changes because it updates existing mappers instead of leaving bad duplicates.
 
 ### GitLab 17.x breaking changes
 

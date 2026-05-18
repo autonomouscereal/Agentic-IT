@@ -129,20 +129,24 @@ Verification:
   "error" is static queue help copy explaining mail-delivery error messages,
   not a UI failure.
 
-### Wazuh Dashboard demo login works but native Wazuh API auth returns 401
+### Wazuh Dashboard worked while native Wazuh API auth returned 401
 
-Status: known follow-up; dashboard demo path is verified.
+Status: fixed on live AI server 2026-05-18.
 
-Latest live credential smoke showed:
+Earlier live credential smoke showed:
 
 - Wazuh Dashboard login endpoint for `demo_account_1`: HTTP 200.
 - Native Wazuh API `/security/user/authenticate?raw=true` for the same user:
   HTTP 401.
 
-The Wazuh UI and the Wazuh API use different auth layers. For demos, use the
-Wazuh Dashboard path unless the task specifically needs direct Wazuh API auth.
-If direct API auth is needed, repair it as a separate credential/RBAC issue and
-rerun the cross-platform credential smoke before claiming API coverage.
+The Wazuh UI and the Wazuh API use different auth layers and can drift
+independently. The demo account has now been re-applied to both layers; latest
+smoke verifies browser Dashboard login and native API token issuance.
+
+Verification:
+
+- Wazuh API auth for `demo_account_1`: PASS, token issued.
+- Wazuh Dashboard browser login for `demo_account_1`: PASS.
 
 ### GitLab demo login returned 422 and Keycloak OIDC could not reach Keycloak
 
@@ -181,7 +185,7 @@ Verification:
   `https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration`.
 - OmniAuth start POST redirects to the Keycloak realm authorization endpoint.
 
-Follow-up fix on 2026-05-18:
+Follow-up fixes on 2026-05-18:
 
 - Keycloak Admin Console was failing from normal demo browsers with
   `Timeout when waiting for 3rd party check iframe message` because the realm
@@ -195,6 +199,13 @@ Follow-up fix on 2026-05-18:
 - Browser-based GitLab SSO and the Keycloak Admin Console no longer require a
   workstation hosts-file entry. The `keycloak.internal` route is retained only
   as an internal compatibility alias where needed.
+- A later full SSO test still failed with GitLab OmniAuth `Unknown error`.
+  Keycloak logs showed a token claim mapping error. The GitLab realm mappers
+  were corrected to emit simple `preferred_username`, `groups`, and
+  `realm_roles` claims, `setup_oidc.py` now updates existing mappers in place,
+  and the existing GitLab local user is linked to the Keycloak subject.
+- Full Playwright SSO as `demo_account_1` now lands in GitLab as SOC Demo
+  Account with Projects/Admin visible.
 
 ### Mailcow demo UI was not exposed and schema drift blocked login
 

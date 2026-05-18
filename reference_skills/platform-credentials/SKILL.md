@@ -39,8 +39,8 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 | Agentic Operations | http://192.168.50.222:25480 | 25480 | Direct (FastAPI) | Operational |
 | iTop | http://192.168.50.222:25432 | 25432 | Local DB (bcrypt) | Demo REST login verified |
 | Wazuh Dashboard | https://192.168.50.222:26443 | 26443 | OpenSearch Security | Demo UI/backend auth verified |
-| Wazuh API | https://127.0.0.1:26500 | 26500 | Native Wazuh API auth | Current demo user returns 401; use dashboard/proxy-gated flows for demos |
-| GitLab | http://192.168.50.222:80 | 80 | Local Rails password + Keycloak OIDC | Demo local login and OIDC start verified |
+| Wazuh API | https://127.0.0.1:26500 | 26500 | Native Wazuh API auth | Demo native API token issuance verified |
+| GitLab | http://192.168.50.222:80 | 80 | Local Rails password + Keycloak OIDC | Demo local login and full Keycloak SSO verified |
 | Keycloak | Internal only | N/A | Master realm admin | Operational |
 | Mailcow | http://192.168.50.222:2581 | 2581 | Local + Keycloak bridge | Demo admin UI, webmail, IMAP/SMTP, and report-phish quarantine verified |
 
@@ -55,9 +55,9 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 |----------|:-----------:|:------------:|:-----------:|-------|
 | Keycloak (all realms) | YES | YES | N/A | Central IDP, passwords set in wazuh/gitlab/itop realms |
 | iTop | YES | YES (bcrypt, 60 chars) | YES | Valid `UserLocal`, profiles `Administrator` + `REST Services User` |
-| Wazuh API | YES | Attempted | NO | Native API auth currently returns 401 for the demo user; dashboard auth works |
+| Wazuh API | YES | YES | YES | Native API auth issues a token for the demo user |
 | Wazuh OpenSearch Security | YES | YES | YES | Synced to `internal_users.yml`, security config reloaded |
-| GitLab | YES | YES (Rails verified) | YES | Local login returns 302; Keycloak OIDC start redirects to the realm |
+| GitLab | YES | YES (Rails verified) | YES | Local login works; Keycloak SSO lands in GitLab as SOC Demo Account |
 | Mailcow | YES | YES (Mailcow `{BLF-CRYPT}` hash) | YES | Admin UI redirects to `/admin/dashboard`; `/webmail` is Roundcube using `demo_account_1@mailcow.local`; Report Phish proof is ticket `580`, iTop Incident `372`, agent `229`, access request `581`, quarantine id `21a705b151642568d375c748a9ea1a6b` |
 
 ## Multi-Platform User Manager
@@ -84,7 +84,7 @@ Unified CLI for managing users across all 5 platforms:
 ### Fixed Bugs in User Manager
 1. **Hardcoded DB passwords removed**: iTop and Mailcow DB credentials are resolved from container environment or explicit environment variables.
 2. **Shell expansion fixed**: SQL is streamed to database clients over stdin, so bcrypt/scrypt `$` characters are not expanded by shell.
-3. **Wazuh Dashboard fixed**: the manager syncs Wazuh Dashboard OpenSearch Security so browser login works. Native Wazuh API auth for `demo_account_1` should be treated as a current follow-up because the latest live smoke returns HTTP 401.
+3. **Wazuh auth fixed**: the manager syncs both Wazuh Dashboard OpenSearch Security and native Wazuh API/RBAC credentials so browser login and API token issuance work.
 4. **iTop fixed**: the demo user was rebuilt as a valid `UserLocal` object with initialized local-auth fields and required profiles.
 5. **GitLab fixed**: GitLab user updates use the GitLab 17-compatible `User.new` / `save(validate: false)` flow, local Rails password checks pass, missing personal namespaces are repaired, and the GitLab container maps `keycloak.internal` to the Docker host gateway for OIDC.
 
@@ -103,8 +103,8 @@ Unified CLI for managing users across all 5 platforms:
 
 ## Important Notes
 
-- **Wazuh has TWO authentication layers**: OpenSearch Security (dashboard UI login) AND RBAC DB/API access. The demo account is verified for the Dashboard; native API auth is a separate follow-up if a demo needs direct Wazuh API calls.
-- **GitLab supports both local login and Keycloak OIDC**: Keep `keycloak.internal:host-gateway` in the GitLab compose service and install the Keycloak proxy CA into `/etc/gitlab/trusted-certs/` before `gitlab-ctl reconfigure`.
+- **Wazuh has TWO authentication layers**: OpenSearch Security (dashboard UI login) AND RBAC DB/API access. Verify both before demos because they can drift independently.
+- **GitLab supports both local login and Keycloak OIDC**: Keep `keycloak.internal:host-gateway` in the GitLab compose service and install the Keycloak proxy CA into `/etc/gitlab/trusted-certs/` before `gitlab-ctl reconfigure`. If Keycloak mappers change, rerun the GitLab Keycloak setup script so existing mappers are updated in place.
 - **Keycloak is internal-only**: No external port mapping. Services reach it via Docker network hostname resolution.
 - **iTop uses local auth**: Form login against MariaDB bcrypt hashes. No SSO configured.
 - **Mailcow demo UI**: Use `http://192.168.50.222:2581` and login as `demo_account_1` with the vault password for admin UI. Use `/webmail` for the Roundcube mailbox client with identity `demo_account_1@mailcow.local`; the `Report Phish` toolbar button creates Mailcow quarantine evidence and syncs an Agentic Operations ticket/iTop incident.

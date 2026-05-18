@@ -174,10 +174,11 @@ def setup_protocol_mappers(token):
         {
             "name": "username",
             "protocol": "openid-connect",
-            "protocolMapper": "oidc-usersessionmodel-note-mapper",
+            "protocolMapper": "oidc-usermodel-property-mapper",
             "consentRequired": False,
             "config": {
-                "user.session.note": "username",
+                "user.attribute": "username",
+                "userinfo.token.claim": "true",
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.name": "preferred_username",
@@ -191,6 +192,7 @@ def setup_protocol_mappers(token):
             "consentRequired": False,
             "config": {
                 "user.attribute": "email",
+                "userinfo.token.claim": "true",
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.name": "email",
@@ -200,14 +202,15 @@ def setup_protocol_mappers(token):
         {
             "name": "groups",
             "protocol": "openid-connect",
-            "protocolMapper": "oidc-groupmemberships-mapper",
+            "protocolMapper": "oidc-group-membership-mapper",
             "consentRequired": False,
             "config": {
                 "full.path": "false",
+                "userinfo.token.claim": "true",
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.name": "groups",
-                "jsonType.label": "JSON",
+                "jsonType.label": "String",
                 "multivalued": "true",
             },
         },
@@ -218,9 +221,10 @@ def setup_protocol_mappers(token):
             "consentRequired": False,
             "config": {
                 "id.token.claim": "true",
+                "userinfo.token.claim": "true",
                 "access.token.claim": "true",
-                "claim.name": "realm_access.roles",
-                "jsonType.label": "JSON",
+                "claim.name": "realm_roles",
+                "jsonType.label": "String",
                 "multivalued": "true",
             },
         },
@@ -231,6 +235,7 @@ def setup_protocol_mappers(token):
             "consentRequired": False,
             "config": {
                 "user.attribute": "firstName",
+                "userinfo.token.claim": "true",
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.name": "given_name",
@@ -244,6 +249,7 @@ def setup_protocol_mappers(token):
             "consentRequired": False,
             "config": {
                 "user.attribute": "lastName",
+                "userinfo.token.claim": "true",
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.name": "family_name",
@@ -252,8 +258,22 @@ def setup_protocol_mappers(token):
         },
     ]
 
+    path = f"/admin/realms/{GITLAB_REALM}/clients/{client_id}/protocol-mappers/models"
+    existing_result = post("GET", path, token)
+    existing = {}
+    if existing_result[0] == 200:
+        existing = {mapper.get("name"): mapper for mapper in (existing_result[1] or [])}
+
     for mapper in mappers:
-        path = f"/admin/realms/{GITLAB_REALM}/clients/{client_id}/protocol-mappers/models"
+        current = existing.get(mapper["name"])
+        if current:
+            mapper["id"] = current.get("id")
+            result = post("PUT", f"{path}/{current.get('id')}", token, mapper)
+            if result[0] in (200, 204):
+                print(f"  [OK] Mapper '{mapper['name']}' updated")
+            else:
+                print(f"  [WARN] Mapper '{mapper['name']}' update: {result[1]}")
+            continue
         result = post("POST", path, token, mapper)
         if result[0] == 201:
             print(f"  [OK] Mapper '{mapper['name']}' created")

@@ -218,9 +218,9 @@ Latest verified on 2026-05-18:
 | --- | --- | --- | --- |
 | Agentic Operations | `http://192.168.50.222:25480` | Operational | Control plane demo does not require a platform password in the current lab. |
 | iTop | `http://192.168.50.222:25432` | Verified | REST POST returns `code=0`; user has `Administrator` and `REST Services User`. |
-| Wazuh Dashboard | `https://192.168.50.222:26443` | Verified | Browser/dashboard login works; native Wazuh API auth for the same user currently returns 401. |
+| Wazuh Dashboard | `https://192.168.50.222:26443` | Verified | Browser login works and the native Wazuh API issues a token for the same demo user. |
 | Keycloak | `https://192.168.50.222:8443/admin/master/console/` | Verified | Admin Console loads and logs in with the Keycloak admin vault credential; issuer and admin UI now use the browser-routable demo URL. |
-| GitLab | `http://192.168.50.222` | Verified | Local login returns HTTP 302; Keycloak OIDC start redirects to the browser-routable Keycloak realm. |
+| GitLab | `http://192.168.50.222` | Verified | Local login works; the Keycloak button completes full SSO as `demo_account_1` and lands in GitLab as SOC Demo Account. |
 | Mailcow | `http://192.168.50.222:2581` | Verified | Bare root URL is routed to the admin UI and stale user-session cookies are recovered; login reaches `/admin/dashboard`; dashboard, system, mailbox, queue, and quarantine pages show no invalid JSON, SQL-column warning, or blank-page errors. `/webmail` renders Roundcube backed by real Mailcow IMAP/SMTP, and `/SOGo/so` redirects there for compatibility. Use `demo_account_1@mailcow.local` and the shared vault password. Report Phish proof: legacy demo ticket `578`/iTop `370`/quarantine `28cd6d435f7c88cd9a7b46983c62a1cb`; Roundcube proof ticket `580`/iTop `372`/quarantine `21a705b151642568d375c748a9ea1a6b` with agent `229` and access request `581`. |
 
 Keycloak and GitLab OIDC no longer require a workstation hosts-file entry for

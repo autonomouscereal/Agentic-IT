@@ -133,9 +133,9 @@ Latest live credential smoke on 2026-05-18:
 | --- | --- | --- |
 | iTop | REST POST to `webservices/rest.php` as `demo_account_1` | PASS, `code=0`, count `1` |
 | Wazuh Dashboard | Dashboard login endpoint | PASS, HTTP 200 |
-| Wazuh API | Native `/security/user/authenticate?raw=true` | WARN, HTTP 401 |
+| Wazuh API | Native `/security/user/authenticate?raw=true` | PASS, token issued |
 | GitLab local login | Fresh CSRF/session form POST | PASS, HTTP 302 |
-| GitLab Keycloak OIDC | OmniAuth start POST | PASS, redirects to Keycloak realm |
+| GitLab Keycloak OIDC | Full browser SSO as `demo_account_1` | PASS, lands in GitLab as SOC Demo Account |
 | Mailcow | demo UI, Roundcube webmail, mailbox auth, report phish | PASS, UI `http://192.168.50.222:2581` bare-root login reaches `/admin/dashboard`, including stale-session recovery; dashboard/system/mailbox/queue/quarantine pages show no invalid JSON or SQL-column warning banners; `/webmail` is Roundcube on real Mailcow IMAP/SMTP; `/SOGo/*` redirects to Roundcube; Report Phish proof created ticket `580`, iTop Incident `372`, agent `229`, access request `581`, and visible quarantine row `21a705b151642568d375c748a9ea1a6b` |
 
 GitLab OIDC deployment requirements:
@@ -151,6 +151,10 @@ GitLab OIDC deployment requirements:
   `https://192.168.50.222:8443/realms/gitlab`. The `keycloak.internal`
   host-gateway route can remain as an internal compatibility alias, but the
   browser demo path should not require workstation hosts-file changes.
+- Keycloak GitLab protocol mappers must be current. Run
+  `/home/cereal/gitlab-keycloak-integration/scripts/setup_oidc.py` after
+  mapper changes; it updates existing mappers in place so stale Keycloak
+  mapper types cannot leave GitLab SSO failing with an opaque OmniAuth error.
 
 After a source deployment, run the full live regression:
 
