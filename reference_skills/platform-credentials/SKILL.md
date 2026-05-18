@@ -40,7 +40,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 | iTop | http://192.168.50.222:25432 | 25432 | Local DB (bcrypt) | Demo REST login verified |
 | Wazuh Dashboard | https://192.168.50.222:26443 | 26443 | OpenSearch Security | Demo backend auth verified |
 | Wazuh API | https://127.0.0.1:26500 | 26500 | Native Wazuh API auth | Demo API auth verified |
-| GitLab | http://192.168.50.222:80 | 80 | Local Rails password + Keycloak OIDC | Rails password verified; OIDC routing depends on deployment |
+| GitLab | http://192.168.50.222:80 | 80 | Local Rails password + Keycloak OIDC | Demo local login and OIDC start verified |
 | Keycloak | Internal only | N/A | Master realm admin | Operational |
 | Mailcow | Internal only | N/A | Local + Keycloak bridge | Mailbox exists |
 
@@ -57,7 +57,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 | iTop | YES | YES (bcrypt, 60 chars) | YES | Valid `UserLocal`, profiles `Administrator` + `REST Services User` |
 | Wazuh API | YES | YES | YES | Updated via native Wazuh API; direct SQLite is fallback only |
 | Wazuh OpenSearch Security | YES | YES | YES | Synced to `internal_users.yml`, security config reloaded |
-| GitLab | YES | YES (Rails verified) | YES | Local Rails password validation passes; browser SSO depends on routing |
+| GitLab | YES | YES (Rails verified) | YES | Local login returns 302; Keycloak OIDC start redirects to the realm |
 | Mailcow | YES | Delegated to Keycloak bridge | YES | Mailbox exists and active |
 
 ## Multi-Platform User Manager
@@ -86,7 +86,7 @@ Unified CLI for managing users across all 5 platforms:
 2. **Shell expansion fixed**: SQL is streamed to database clients over stdin, so bcrypt/scrypt `$` characters are not expanded by shell.
 3. **Wazuh fixed**: the manager now uses the native Wazuh API for user/password/role/run_as updates and syncs Wazuh Dashboard OpenSearch Security.
 4. **iTop fixed**: the demo user was rebuilt as a valid `UserLocal` object with initialized local-auth fields and required profiles.
-5. **GitLab fixed**: GitLab user updates use the GitLab 17-compatible `User.new` / `save(validate: false)` flow and local Rails password checks pass.
+5. **GitLab fixed**: GitLab user updates use the GitLab 17-compatible `User.new` / `save(validate: false)` flow, local Rails password checks pass, missing personal namespaces are repaired, and the GitLab container maps `keycloak.internal` to the Docker host gateway for OIDC.
 
 ## Credential Storage Locations
 
@@ -104,7 +104,7 @@ Unified CLI for managing users across all 5 platforms:
 ## Important Notes
 
 - **Wazuh has TWO authentication layers**: OpenSearch Security (dashboard UI login) AND RBAC DB (API access). Both need the user created.
-- **GitLab uses Keycloak OIDC SSO**: Web login goes through Keycloak, not GitLab's own DB. The `keycloak.internal:8443` hostname is currently unreachable.
+- **GitLab supports both local login and Keycloak OIDC**: Keep `keycloak.internal:host-gateway` in the GitLab compose service and install the Keycloak proxy CA into `/etc/gitlab/trusted-certs/` before `gitlab-ctl reconfigure`.
 - **Keycloak is internal-only**: No external port mapping. Services reach it via Docker network hostname resolution.
 - **iTop uses local auth**: Form login against MariaDB bcrypt hashes. No SSO configured.
 

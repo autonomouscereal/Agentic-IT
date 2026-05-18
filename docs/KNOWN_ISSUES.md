@@ -2,6 +2,54 @@
 
 Last updated: 2026-05-18.
 
+## Fixed During 2026-05-18 Demo Credential Prep
+
+### GitLab demo login returned 422 and Keycloak OIDC could not reach Keycloak
+
+Status: fixed on live AI server and documented in reference skills.
+
+Symptoms:
+
+- Local GitLab login for `demo_account_1` returned GitLab's generic 422 page.
+- The Keycloak login button failed with
+  `Failed to open tcp connection to keycloak.internal:8443`.
+
+Root causes:
+
+- The GitLab container resolved `keycloak.internal` to its own localhost
+  instead of the host-network Keycloak nginx proxy.
+- After the network route was fixed, GitLab needed the Keycloak proxy CA in its
+  trusted cert store.
+- The `demo_account_1` GitLab user existed and the password was valid, but the
+  user was missing its required personal namespace.
+
+Fix:
+
+- Added `extra_hosts: ["keycloak.internal:host-gateway"]` to the live GitLab
+  compose service and the portable reference skill compose template.
+- Copied the Keycloak integration CA into
+  `/etc/gitlab/trusted-certs/keycloak-internal-ca.crt` and ran
+  `gitlab-ctl reconfigure`.
+- Created the missing GitLab personal namespace for `demo_account_1` with the
+  GitLab Rails model layer.
+
+Verification:
+
+- GitLab health: `healthy`.
+- Fresh local login POST for `demo_account_1`: HTTP 302, not 422.
+- GitLab container can fetch the OIDC discovery document from
+  `https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration`.
+- OmniAuth start POST redirects to the Keycloak realm authorization endpoint.
+
+Demo operator note: browser-based Keycloak login also requires the demo
+workstation to resolve `keycloak.internal` to `192.168.50.222`, because the
+Keycloak realm advertises that hostname. If DNS is not configured, add a local
+hosts entry as administrator:
+
+```text
+192.168.50.222 keycloak.internal
+```
+
 ## Found During 2026-05-18 Documentation Refresh
 
 ### Live AI server has standalone proxy owning port 4001

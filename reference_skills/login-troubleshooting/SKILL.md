@@ -29,7 +29,25 @@ Verified checks:
 | GitLab | PASS: Rails `valid_password?` returns true; user active and admin |
 | Mailcow | PASS: mailbox exists; password flow delegated to Keycloak/Mailcow bridge |
 
-Fixes applied:
+## GitLab Resolution Update - 2026-05-18
+
+GitLab local login and Keycloak OIDC were repaired for the demo account.
+
+Verified checks:
+
+| Path | Verification |
+|------|--------------|
+| GitLab local login | PASS: fresh CSRF/session POST for `demo_account_1` returns HTTP 302 instead of 422 |
+| GitLab OIDC discovery | PASS: GitLab container can fetch `https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration` |
+| GitLab OIDC start | PASS: OmniAuth POST redirects to the Keycloak realm authorization endpoint |
+
+Fixes applied 2026-05-18:
+- Added `keycloak.internal:host-gateway` to the GitLab compose service so the GitLab container reaches the host-network Keycloak nginx proxy instead of its own localhost.
+- Installed the Keycloak integration CA at `/etc/gitlab/trusted-certs/keycloak-internal-ca.crt` and ran `gitlab-ctl reconfigure`.
+- Repaired the `demo_account_1` GitLab user by creating its missing personal namespace with the GitLab Rails model layer.
+- Updated the portable GitLab compose template so future deployments keep the OIDC route.
+
+Prior fixes from 2026-05-11:
 - Rebuilt the iTop demo account as a valid `UserLocal` object. The previous direct SQL row could be counted by OQL but could not be reloaded as an object.
 - Added the iTop REST Services profile (`1024`) so REST authentication is not blocked after login.
 - Switched Wazuh password/user sync to the native Wazuh API first; direct RBAC SQLite is fallback only.
@@ -41,7 +59,8 @@ Fixes applied:
 
 | Platform | Symptom | Root Cause | Status |
 |----------|---------|------------|--------|
-| GitLab web login | 422 error on login form | GitLab uses Keycloak OIDC SSO; `keycloak.internal:8443` unreachable | BLOCKED - DNS/network |
+| GitLab web login | 422 error on login form | Demo GitLab user was missing its required personal namespace | FIXED 2026-05-18 |
+| GitLab Keycloak OIDC | Connection refused / certificate verify failure | GitLab container lacked host-gateway mapping and Keycloak proxy CA trust | FIXED 2026-05-18 |
 | Wazuh dashboard | "Invalid credentials" | User NOT in OpenSearch Security internal_users.yml; only in RBAC DB | FIXABLE - add to indexer |
 | Wazuh API | 401 Invalid credentials | scrypt hash length mismatch (178 vs 162 chars) | FIXABLE - regenerate hash |
 | iTop | "Incorrect login/password" | Hash correct in DB but login fails; possible cache/bridge issue | INVESTIGATING |
@@ -69,29 +88,33 @@ gitlab_rails["omniauth_allow_single_sign_on"] = true
 gitlab_rails["omniauth_block_auto_created_users"] = true
 ```
 
-**The `keycloak.internal:8443` hostname is unreachable from the GitLab container.** Keycloak has no external port mapping and the internal DNS resolution fails.
+Historical root cause: `keycloak.internal:8443` resolved to the GitLab container's own localhost, then failed certificate verification after the route was corrected. The local 422 path was a separate issue caused by `demo_account_1` missing its required personal namespace.
 
 ### Diagnostic Findings
 - `demo_account_1` EXISTS in GitLab DB (User ID: 4, active, confirmed, admin)
 - Password validated via Rails console: `valid_password?` returns `true`
 - `omniauth_block_auto_created_users = true` means users must pre-exist (they do)
-- Keycloak containers are running but have NO external port mappings
-- Keycloak nginx reverse proxy has default config (no custom proxy rules)
+- Keycloak containers run on host networking; GitLab must use `keycloak.internal:host-gateway` to reach the host-network nginx proxy.
+- GitLab must trust the Keycloak integration CA from `/home/cereal/gitlab-keycloak-integration/certs/ca-cert.pem`.
+- `demo_account_1` must have a `Namespaces::UserNamespace` personal namespace.
 
-### Fix Required
-1. **Option A (Recommended)**: Fix Keycloak external accessibility
-   - Add port mapping for Keycloak (8443 for HTTPS or 8080 for HTTP)
-   - Ensure `keycloak.internal` resolves from the GitLab container's network
-   - May need to add GitLab to the Keycloak Docker network or fix DNS
-
-2. **Option B**: Disable Keycloak SSO for GitLab, use native login
-   - Set `gitlab_rails["omniauth_enabled"] = false`
-   - Reconfigure to allow native password login
-   - Run `gitlab-ctl reconfigure` inside the container
-
-3. **Option C**: Add hostname resolution
-   - Ensure `keycloak.internal` resolves to the Keycloak container IP
-   - May need `/etc/hosts` entry or Docker network configuration
+### Fix Required If This Regresses
+1. Ensure `/home/cereal/gitlab/docker-compose.yml` has:
+   ```yaml
+   extra_hosts:
+     - 'keycloak.internal:host-gateway'
+   ```
+2. Recreate GitLab with `docker compose up -d gitlab`.
+3. Copy the CA into GitLab and reconfigure:
+   ```bash
+   docker exec gitlab mkdir -p /etc/gitlab/trusted-certs
+   docker cp /home/cereal/gitlab-keycloak-integration/certs/ca-cert.pem gitlab:/etc/gitlab/trusted-certs/keycloak-internal-ca.crt
+   docker exec gitlab gitlab-ctl reconfigure
+   ```
+4. If local login still returns 422, inspect the user namespace:
+   ```bash
+   docker exec gitlab gitlab-rails runner "u=User.find_by_username('demo_account_1'); puts({valid:u.valid?, namespace:u.namespace&.path, errors:u.errors.full_messages}.inspect)"
+   ```
 
 ---
 

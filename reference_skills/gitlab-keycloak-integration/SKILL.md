@@ -50,6 +50,22 @@ Browser <--HTTPS(8443)--> nginx proxy <----HTTP(8080)----> Keycloak 26.6.0
 | `keycloak` | `host` | 8080 (HTTP), 5432 (PG) | Keycloak identity provider |
 | `keycloak-nginx` | `host` | 8443 (HTTPS) | TLS termination proxy |
 
+Because Keycloak and its nginx TLS proxy use host networking while GitLab uses
+the `gitlab-net` bridge, the GitLab service must include:
+
+```yaml
+extra_hosts:
+  - 'keycloak.internal:host-gateway'
+```
+
+This keeps the OIDC issuer URL stable while routing GitLab's backend discovery
+and token calls to the host-network proxy instead of the GitLab container's
+localhost.
+
+Browser-based demos must also resolve `keycloak.internal` to the AI server
+address (`192.168.50.222`) through DNS or a workstation hosts entry, because the
+Keycloak realm advertises that hostname in the authorization endpoint.
+
 ## File Structure
 
 ```
@@ -106,6 +122,11 @@ docker compose up -d
 # 3. Verify proxy health
 curl -sk https://localhost:8443/nginx-health    # Should return "ok"
 curl -sk https://localhost:8443/realms/gitlab   # Should return 200
+
+# 4. GitLab must trust this CA before OmniAuth discovery succeeds
+docker exec gitlab mkdir -p /etc/gitlab/trusted-certs
+docker cp /home/cereal/gitlab-keycloak-integration/certs/ca-cert.pem gitlab:/etc/gitlab/trusted-certs/keycloak-internal-ca.crt
+docker exec gitlab gitlab-ctl reconfigure
 ```
 
 **Nginx config highlights:**
@@ -158,6 +179,10 @@ docker exec gitlab gitlab-ctl reconfigure
 
 # Verify Keycloak button appears on login page
 curl -s http://localhost/users/sign_in | grep -q "Keycloak" && echo "OK"
+
+# Verify GitLab can reach and trust the Keycloak issuer from inside the container
+docker exec gitlab bash -lc \
+  'curl -sk https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration | head -c 200'
 ```
 
 **Critical gitlab.rb config:**

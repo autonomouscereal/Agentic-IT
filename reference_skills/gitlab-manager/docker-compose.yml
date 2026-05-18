@@ -20,6 +20,9 @@ services:
       - '${GITLAB_HTTP_PORT:-80}:80'
       - '${GITLAB_SSH_PORT:-2222}:22'
 
+    extra_hosts:
+      - 'keycloak.internal:host-gateway'
+
     volumes:
       - gitlab-config:/etc/gitlab
       - gitlab-logs:/var/log/gitlab

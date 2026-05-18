@@ -26,6 +26,11 @@ This generates secure credentials, pulls images, starts containers, waits for he
 
 Both containers communicate over a private Docker bridge network (`gitlab-net`). Data persists in named Docker volumes.
 
+The GitLab service also maps `keycloak.internal` to `host-gateway` so GitLab
+OmniAuth can reach the host-network Keycloak nginx proxy used by the
+`gitlab-keycloak-integration` skill. Keep this mapping in any regenerated
+compose file.
+
 ## File Structure
 
 ```
@@ -172,6 +177,11 @@ curl -X POST http://192.168.50.222/api/v4/projects/$PID/repository/commits \
 **Health check from host:**
 ```bash
 docker exec gitlab curl -sf http://localhost/-/health
+```
+
+**OIDC backend route from GitLab container:**
+```bash
+docker exec gitlab bash -lc 'getent hosts keycloak.internal && curl -sk https://keycloak.internal:8443/nginx-health'
 ```
 
 ## E2E Test Suite
