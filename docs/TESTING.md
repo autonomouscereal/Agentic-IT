@@ -1,6 +1,6 @@
 # Testing Runbook
 
-Last updated: 2026-05-13.
+Last updated: 2026-05-18.
 
 ## Local Source Validation
 
@@ -118,21 +118,24 @@ wall-clock timeout or process kill was used.
 
 Credential value lives in the local encrypted vault key `demo_account_1`. Do not print it.
 
-Latest verified result on 2026-05-12:
+Latest verified result on 2026-05-18:
 
 ```text
-wazuh_api: PASS http=200
-itop_rest: PASS code=0
-gitlab_password: PASS active=true admin=true
-wazuh_dashboard_backend: PASS
-mailcow_mailbox: PASS exists
+gitlab_local_login: PASS http=302
+gitlab_oidc_start: PASS http=302 keycloak_redirect=True
+itop_rest_post: PASS code=0 count=1
+wazuh_dashboard_login_endpoint: PASS http=200
+mailcow_mailbox: PASS exists=True
+wazuh_api_auth: WARN http=401
 ```
 
 Important implementation notes:
 
-- Wazuh user/password sync should use the native Wazuh API first.
-- Wazuh Dashboard auth also requires OpenSearch Security `internal_users.yml` sync and `securityadmin.sh` reload.
+- Wazuh Dashboard auth requires OpenSearch Security `internal_users.yml` sync and `securityadmin.sh` reload.
+- Native Wazuh API auth is separate from Dashboard auth; the current demo user returns HTTP 401 and should not be used as the primary Wazuh demo path until repaired.
 - iTop demo users must be real `UserLocal` objects with `Administrator` and `REST Services User`; raw partial rows can be counted by OQL but fail object reload and login.
+- GitLab local login requires a valid personal namespace on the GitLab user. Missing namespace causes the generic GitLab 422 page even when the password is correct.
+- GitLab OIDC requires both the container-side `keycloak.internal:host-gateway` mapping and the Keycloak CA in GitLab trusted certs. Browser-based OIDC also requires the operator workstation to resolve `keycloak.internal` to `192.168.50.222`.
 - If a failed iTop debug trace logs a password in `/var/www/html/log/error.log`, rotate the vault key and scrub the log before demo use.
 
 ## Agentic API Smoke

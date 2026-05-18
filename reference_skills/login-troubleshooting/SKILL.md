@@ -24,8 +24,8 @@ Verified checks:
 | Platform | Verification |
 |----------|--------------|
 | iTop REST | PASS: `webservices/rest.php` returns `code:0` with `Administrator` + `REST Services User` profiles |
-| Wazuh API | PASS: `/security/user/authenticate?raw=true` returns HTTP 200 |
-| Wazuh Dashboard backend | PASS: OpenSearch Security `authinfo` recognizes `demo_account_1` |
+| Wazuh API | SUPERSEDED: latest 2026-05-18 live smoke returns HTTP 401 for `demo_account_1` |
+| Wazuh Dashboard backend | PASS: Wazuh Dashboard login endpoint returns HTTP 200 for `demo_account_1` |
 | GitLab | PASS: Rails `valid_password?` returns true; user active and admin |
 | Mailcow | PASS: mailbox exists; password flow delegated to Keycloak/Mailcow bridge |
 
@@ -40,6 +40,10 @@ Verified checks:
 | GitLab local login | PASS: fresh CSRF/session POST for `demo_account_1` returns HTTP 302 instead of 422 |
 | GitLab OIDC discovery | PASS: GitLab container can fetch `https://keycloak.internal:8443/realms/gitlab/.well-known/openid-configuration` |
 | GitLab OIDC start | PASS: OmniAuth POST redirects to the Keycloak realm authorization endpoint |
+| iTop REST | PASS: POST to `webservices/rest.php` returns `code:0`, count `1` |
+| Wazuh Dashboard | PASS: dashboard login endpoint returns HTTP 200 |
+| Wazuh API | WARN: native API auth returns HTTP 401 and is not required for the browser demo |
+| Mailcow mailbox | PASS: mailbox exists and is active; full Mailcow web/SOGo demo remains a separate migration step |
 
 Fixes applied 2026-05-18:
 - Added `keycloak.internal:host-gateway` to the GitLab compose service so the GitLab container reaches the host-network Keycloak nginx proxy instead of its own localhost.
@@ -61,9 +65,9 @@ Prior fixes from 2026-05-11:
 |----------|---------|------------|--------|
 | GitLab web login | 422 error on login form | Demo GitLab user was missing its required personal namespace | FIXED 2026-05-18 |
 | GitLab Keycloak OIDC | Connection refused / certificate verify failure | GitLab container lacked host-gateway mapping and Keycloak proxy CA trust | FIXED 2026-05-18 |
-| Wazuh dashboard | "Invalid credentials" | User NOT in OpenSearch Security internal_users.yml; only in RBAC DB | FIXABLE - add to indexer |
-| Wazuh API | 401 Invalid credentials | scrypt hash length mismatch (178 vs 162 chars) | FIXABLE - regenerate hash |
-| iTop | "Incorrect login/password" | Hash correct in DB but login fails; possible cache/bridge issue | INVESTIGATING |
+| Wazuh dashboard | "Invalid credentials" | User missing from OpenSearch Security internal users | FIXED - dashboard login verified 2026-05-18 |
+| Wazuh API | 401 Invalid credentials | Native Wazuh API credentials are separate from dashboard auth | FOLLOW-UP - current demo smoke returns 401 |
+| iTop | "Incorrect login/password" | Partial/invalid `UserLocal` object or missing REST profile | FIXED - REST POST verified 2026-05-18 |
 | Keycloak | N/A (IDP, not login target) | Passwords set in all realms | OPERATIONAL |
 
 ---

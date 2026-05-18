@@ -202,6 +202,35 @@ containers. In the reference deployment the runner uses `network_mode =
 "gitlab-net"`, mounts `/tmp/zap-wrk:/zap/wrk`, and passes
 `SOC_DASHBOARD_URL=http://192.168.50.222:25480` to jobs.
 
+## Demo Logins
+
+Use the shared demo credential only from the local encrypted vault:
+
+```powershell
+python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get demo_account_1
+```
+
+Never paste the password into docs, source, or chat transcripts.
+
+Latest verified on 2026-05-18:
+
+| System | URL | Login Status | Demo Notes |
+| --- | --- | --- | --- |
+| Agentic Operations | `http://192.168.50.222:25480` | Operational | Control plane demo does not require a platform password in the current lab. |
+| iTop | `http://192.168.50.222:25432` | Verified | REST POST returns `code=0`; user has `Administrator` and `REST Services User`. |
+| Wazuh Dashboard | `https://192.168.50.222:26443` | Verified | Browser/dashboard login works; native Wazuh API auth for the same user currently returns 401. |
+| GitLab | `http://192.168.50.222` | Verified | Local login returns HTTP 302; Keycloak OIDC start redirects correctly. |
+| Mailcow | internal/reference module | Mailbox verified | Mailbox exists; full Mailcow web/SOGo exposure is the next migration step. |
+
+For GitLab's Keycloak button, the demo workstation must resolve
+`keycloak.internal` to `192.168.50.222` because the Keycloak realm advertises
+that hostname. Add the hosts entry from an elevated PowerShell prompt when DNS
+is not configured:
+
+```powershell
+Add-Content "$env:SystemRoot\System32\drivers\etc\hosts" "`n192.168.50.222 keycloak.internal"
+```
+
 Latest verified GitLab runner artifacts:
 
 - GitLab project `root/agentic-cicd-demo-1778538475`, project id `15`

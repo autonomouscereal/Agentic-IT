@@ -4,6 +4,21 @@ Last updated: 2026-05-18.
 
 ## Fixed During 2026-05-18 Demo Credential Prep
 
+### Wazuh Dashboard demo login works but native Wazuh API auth returns 401
+
+Status: known follow-up; dashboard demo path is verified.
+
+Latest live credential smoke showed:
+
+- Wazuh Dashboard login endpoint for `demo_account_1`: HTTP 200.
+- Native Wazuh API `/security/user/authenticate?raw=true` for the same user:
+  HTTP 401.
+
+The Wazuh UI and the Wazuh API use different auth layers. For demos, use the
+Wazuh Dashboard path unless the task specifically needs direct Wazuh API auth.
+If direct API auth is needed, repair it as a separate credential/RBAC issue and
+rerun the cross-platform credential smoke before claiming API coverage.
+
 ### GitLab demo login returned 422 and Keycloak OIDC could not reach Keycloak
 
 Status: fixed on live AI server and documented in reference skills.

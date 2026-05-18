@@ -122,6 +122,31 @@ Expected:
 - proxy health/model aliases are reachable
 - process diagnostics include `/usr/bin/ps`
 
+## Reference Module Login Validation
+
+The lab demo account is `demo_account_1`; its password lives only in the local
+server-manager vault key `demo_account_1`. Do not commit or print the value.
+
+Latest live credential smoke on 2026-05-18:
+
+| Module | Check | Result |
+| --- | --- | --- |
+| iTop | REST POST to `webservices/rest.php` as `demo_account_1` | PASS, `code=0`, count `1` |
+| Wazuh Dashboard | Dashboard login endpoint | PASS, HTTP 200 |
+| Wazuh API | Native `/security/user/authenticate?raw=true` | WARN, HTTP 401 |
+| GitLab local login | Fresh CSRF/session form POST | PASS, HTTP 302 |
+| GitLab Keycloak OIDC | OmniAuth start POST | PASS, redirects to Keycloak realm |
+| Mailcow | mailbox inventory through multi-platform user manager | PASS, mailbox exists |
+
+GitLab OIDC deployment requirements:
+
+- `gitlab` compose service includes `extra_hosts: ["keycloak.internal:host-gateway"]`.
+- Keycloak integration CA is copied into
+  `/etc/gitlab/trusted-certs/keycloak-internal-ca.crt`, followed by
+  `gitlab-ctl reconfigure`.
+- Browser workstations resolve `keycloak.internal` to `192.168.50.222` via DNS
+  or a hosts-file entry.
+
 After a source deployment, run the full live regression:
 
 ```bash
