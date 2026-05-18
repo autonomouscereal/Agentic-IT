@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-18T19:58:02.952861+00:00",
+  "generated_at": "2026-05-18T20:21:06.836095+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -302,8 +302,8 @@
         },
         {
           "path": "scripts/debug_deploy.py",
-          "size": 1431,
-          "sha256": "d45581994990b5f550ec9eba8750e23f6e8b4cf106e7b38573954ed5ecb66a32"
+          "size": 726,
+          "sha256": "a52054c5de34b27cb23152143fcd47ebb5e762c9648540f060ad21d6cc73532c"
         },
         {
           "path": "scripts/deploy.py",
@@ -312,8 +312,8 @@
         },
         {
           "path": "scripts/deploy_mailcow_api.py",
-          "size": 47687,
-          "sha256": "e146c67c07f36e9637c7f99c46a30be221a6db18bd97fd8d5bf631b75096f803"
+          "size": 54603,
+          "sha256": "d6c1f6eef3e20b6a6fa53aa2f07658dbf03ff59edc44cf3987325c5363fa5acf"
         },
         {
           "path": "scripts/find_mailcow_creds.py",
@@ -336,6 +336,11 @@
           "sha256": "ffc495b283c418f95dadd7f85d2746be1867a98658734b0d3b37a475893e187f"
         },
         {
+          "path": "scripts/mailcow_demo_report.php",
+          "size": 4963,
+          "sha256": "57409132edd4a88c06391a7b87f4425eb9a8ad26e0b9c41999ae65bdff15d456"
+        },
+        {
           "path": "scripts/mailcow_demo_webmail.php",
           "size": 13796,
           "sha256": "23bdf5206a106a4958aa185a695efc650301e4499cae5c65291c26a158ea3516"
@@ -344,6 +349,21 @@
           "path": "scripts/mailcow_idp_config.py",
           "size": 14570,
           "sha256": "70df0834b75d695d3df90eeb791272c0542cfa051585e94418fafcb36f0c1d90"
+        },
+        {
+          "path": "scripts/roundcube_report_phish/localization/en_US.inc",
+          "size": 322,
+          "sha256": "8e28c00838805198dec015ef9dbc91d5496723afb9b2e36136600c82a02e7219"
+        },
+        {
+          "path": "scripts/roundcube_report_phish/report_phish.js",
+          "size": 1189,
+          "sha256": "046a2a6537146bba0677090490a8fdfa6b2b03c69a6f79c899dd89fc9d41cc0f"
+        },
+        {
+          "path": "scripts/roundcube_report_phish/report_phish.php",
+          "size": 4126,
+          "sha256": "018bca45eb9e5f4b89fb685b84859f19577d93e725eda4d9ab929ac00a10b8e8"
         },
         {
           "path": "scripts/setup_bridge_env.py",
@@ -367,8 +387,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 17133,
-          "sha256": "f49b5f971dfcacf060cf18faf2f5b44c848e0ee917ee435644c14a9dd663fbce"
+          "size": 17428,
+          "sha256": "3f7e36ad58ff198c000f9058311ee04ef374087df405d53cbf5c52ae83307475"
         },
         {
           "path": "troubleshooting.md",
@@ -445,8 +465,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 43541,
-          "sha256": "477321dbdb4f54c66b9a7fd41fe258ccce833cdf101ee9d3cec4986933934342"
+          "size": 43879,
+          "sha256": "6f76ea3539e9c736c946829d7c918774d91a690ec4724010e155606c6d144fe3"
         }
       ]
     },
@@ -535,8 +555,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 6918,
-          "sha256": "a3ecaf32dfae87f8b2f4016e2030b402be264d489600eada3e7066751b63e8b7"
+          "size": 7054,
+          "sha256": "9d2f2814fd2c6f4829a778aa5e61fcfa136cb1abd589638b4bea2919d968c085"
         }
       ]
     },

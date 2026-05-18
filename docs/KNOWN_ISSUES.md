@@ -20,7 +20,8 @@ Observed symptoms:
 - Log-related UI surfaces show many warnings/errors.
 - JSON popups occur for mailboxes, TLS policy maps, address rewriting, routing,
   and related tables.
-- Webmail/SOGo is still not a real working browser surface in the custom shim.
+- Webmail needed a real mailbox client instead of the earlier custom demo
+  surface.
 - The UI exposes a Keycloak/identity-provider integration area, but it may not
   be configured through Mailcow's own UI data model.
 
@@ -46,22 +47,29 @@ Fix:
   existing client secret and never printing it.
 - Added direct delivery aliases for every active user mailbox so local SMTP
   demo mail reaches the mailbox being shown.
-- Added `mailcow_demo_webmail.php` and routes `/webmail` plus `/SOGo/*` through
-  the sidecar to a demo webmail surface backed by real Mailcow IMAP/SMTP.
-- Put upstream SOGo into `SKIP_SOGO=y` sleep mode on the live lab because the
-  demo webmail route now provides the browser surface without SOGo log spam.
+- Deployed `roundcube-mailcow-demo` on loopback port `2582`, proxied `/webmail`
+  to Roundcube, and redirected `/SOGo/*` to `/webmail/`.
+- Added a Roundcube `report_phish` plugin plus hidden `/demo-report` endpoint
+  so the polished webmail client still creates Mailcow quarantine evidence and
+  Agentic Operations intake tickets.
+- Put upstream SOGo into `SKIP_SOGO=y` sleep mode on the live lab because
+  Roundcube now provides the browser webmail surface without SOGo log spam.
 
 Verification:
 
 - `python3 scripts/deploy_mailcow_api.py`: PASS.
 - `python3 scripts/test_mailcow_api_shim.py --mysql-parity`: `13 passed, 0 failed`.
-- PHP lint: `mailcow_compat_api.php` and `demo_webmail.php` have no syntax errors.
-- Browser login to `/webmail` as `demo_account_1@mailcow.local` works with the
-  vault password, sends local mail through Mailcow SMTP, and shows Report Phish
-  buttons in the inbox.
+- PHP lint: `mailcow_compat_api.php`, `mailcow_demo_report.php`, and the
+  Roundcube `report_phish` plugin have no syntax errors.
+- Browser and HTTP login checks for `/webmail` as
+  `demo_account_1@mailcow.local` work with the vault password, render the
+  Roundcube inbox, and show a human-readable `Report Phish` toolbar button.
 - Report Phish created dashboard ticket `578`, iTop Incident `370`, approval
   gate `167`, replacement Hermes/deepseek agent `227`, and Mailcow quarantine
   row `28cd6d435f7c88cd9a7b46983c62a1cb`.
+- Roundcube Report Phish created dashboard ticket `580`, iTop Incident `372`,
+  agent `229`, follow-up access request `581`, and Mailcow quarantine row
+  `21a705b151642568d375c748a9ea1a6b`.
 - Mailcow `/quarantine` visibly lists the quarantine id, subject, sender, and
   recipient with no invalid JSON or SQL banners.
 - Agent `227` completed the approved gate and resolved ticket `578` with
@@ -95,8 +103,8 @@ Root cause:
 - The Mailcow JavaScript expected native domain-search field names; a first
   compatibility response was valid JSON but lacked those fields, producing
   `undefined` and `NaN` display text.
-- Upstream SOGo was not exposed through the earlier custom demo shim, so the
-  top-nav Webmail link returned 404 before the demo webmail route existed.
+- Upstream SOGo is intentionally not the demo browser surface in this custom
+  stack; `/SOGo/*` now redirects to Roundcube.
 
 Fix:
 
@@ -108,13 +116,13 @@ Fix:
   while preserving API-key enforcement for unauthenticated external reads.
 - Set lab quarantine Redis defaults so the quarantine-disabled banner is not
   shown during demos.
-- Routed `/SOGo/*` to the Mailcow demo webmail surface after the webmail/report
-  phish demo was added; earlier cleanup routed it to `/admin/dashboard`.
+- Routed `/SOGo/*` to the Roundcube webmail surface after the webmail/report
+  phish demo was upgraded; earlier cleanup routed it to `/admin/dashboard`.
 
 Verification:
 
 - `python3 scripts/deploy_mailcow_api.py` passes, including stale-session,
-  table JSON, template JSON, and demo webmail/report-phish route checks.
+  table JSON, template JSON, and Roundcube webmail route checks.
 - Browser crawl of `/admin/dashboard`, `/admin/system`, `/admin/mailbox`,
   `/admin/queue`, `/quarantine`, `/webmail`, and `/SOGo/so` shows no invalid
   JSON dialogs or SQL warning alerts. The only crawler text hit containing

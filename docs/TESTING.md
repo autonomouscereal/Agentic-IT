@@ -597,10 +597,10 @@ POST to read compatibility endpoint: HTTP 405
 direct MySQL smoke: 2 domains, 11 mailboxes, 16 aliases
 test_mailcow_api_shim.py --mysql-parity: 13 passed, 0 failed
 demo UI table JSON: PASS for domain search, quarantine, domain templates, mailbox templates
-demo webmail/report-phish route: PASS for /webmail and /SOGo/so
+Roundcube webmail route: PASS for /webmail and /SOGo/so compatibility redirect
 demo UI browser crawl: PASS for /admin/dashboard, /admin/system, /admin/mailbox, /admin/queue, /quarantine, /webmail, /SOGo/so
-webmail local SMTP/IMAP: PASS as demo_account_1@mailcow.local
-report-phish quarantine proof: PASS ticket=578 itop=370 change=167 agent=227 quarantine=28cd6d435f7c88cd9a7b46983c62a1cb
+webmail IMAP auth: PASS as demo_account_1@mailcow.local; Roundcube inbox renders real Mailcow messages and a Report Phish toolbar button
+report-phish quarantine proof: PASS ticket=580 itop=372 agent=229 access_request=581 quarantine=21a705b151642568d375c748a9ea1a6b
 platform_doctor.py: 18 passed, 0 failed, 0 warned
 keycloak-mailcow bridge E2E: 47 passed, 0 failed, 1 skipped
 ```

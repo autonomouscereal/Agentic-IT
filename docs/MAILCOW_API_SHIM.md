@@ -41,7 +41,9 @@ flowchart LR
   Stock --> PHP
   PHP --> DB["mysql-mailcow\nmailcow database"]
   PHP --> Redis["redis-mailcow\nsessions"]
-  Nginx --> Webmail["/webmail + /SOGo/*\ndemo webmail/report phish"]
+  Nginx --> Webmail["/webmail + /SOGo/*\nRoundcube webmail"]
+  Webmail --> Roundcube["roundcube-mailcow-demo\n127.0.0.1:2582"]
+  Roundcube --> Report["/demo-report\nReport Phish endpoint"]
   Bridge["Keycloak-Mailcow bridge"] --> DB
 ```
 
@@ -51,7 +53,8 @@ Live reference paths:
 - Shim config root: `/home/cereal/Mailcow/deploy/api-nginx`
 - Restricted API key file: `/home/cereal/Mailcow/deploy/api-nginx/.api_key`
 - Compatibility PHP installed into web root: `/home/cereal/mailcow-dockerized/data/web/mailcow_compat_api.php`
-- Demo webmail PHP installed into web root: `/home/cereal/mailcow-dockerized/data/web/demo_webmail.php`
+- Hidden Report Phish endpoint installed into web root: `/home/cereal/mailcow-dockerized/data/web/mailcow_demo_report.php`
+- Roundcube plugin staged at: `/home/cereal/Mailcow/deploy/roundcube/plugins/report_phish`
 - Deployer script: `/home/cereal/Mailcow/deploy/scripts/deploy_mailcow_api.py`
 - Regression test: `/home/cereal/Mailcow/deploy/scripts/test_mailcow_api_shim.py`
 
@@ -59,6 +62,8 @@ Bundled reference skill paths:
 
 - `reference_skills/keycloak-mailcow-bridge/scripts/deploy_mailcow_api.py`
 - `reference_skills/keycloak-mailcow-bridge/scripts/mailcow_api_compat.php`
+- `reference_skills/keycloak-mailcow-bridge/scripts/mailcow_demo_report.php`
+- `reference_skills/keycloak-mailcow-bridge/scripts/roundcube_report_phish/`
 - `reference_skills/keycloak-mailcow-bridge/scripts/mailcow_demo_webmail.php`
 - `reference_skills/keycloak-mailcow-bridge/scripts/test_mailcow_api_shim.py`
 
@@ -90,12 +95,13 @@ Demo webmail URL:
 http://192.168.50.222:2581/webmail
 ```
 
-The Mailcow top-nav `/SOGo/*` path is routed to the demo webmail surface in the
-reference lab. The demo webmail uses real Mailcow IMAP and SMTP, and its Report
-Phish button creates platform intake evidence plus a real Mailcow quarantine row
-for the selected message. The upstream SOGo container is parked with
-`SKIP_SOGO=y` in the current lab to avoid noisy bootstrap loops; SOGo hardening
-is separate from the working demo webmail path.
+The Mailcow top-nav `/SOGo/*` path redirects to Roundcube in the reference lab.
+Roundcube uses real Mailcow IMAP and SMTP. Its Report Phish plugin posts to the
+hidden `/demo-report` endpoint, which creates platform intake evidence plus a
+real Mailcow quarantine row for the selected message. The upstream SOGo
+container is parked with `SKIP_SOGO=y` in the current lab to avoid noisy
+bootstrap loops; SOGo hardening is separate from the working Roundcube webmail
+path.
 
 Required request header:
 
@@ -175,10 +181,11 @@ The deployer is idempotent:
   stock API path: domain search, quarantine listing, and empty template lists
 - sets small lab quarantine defaults in Redis so the demo UI does not show a
   quarantine-disabled warning banner
-- installs `demo_webmail.php`, backed by real Mailcow IMAP/SMTP, with a Report
-  Phish action that writes Mailcow quarantine evidence and creates an Agentic
+- deploys `roundcube-mailcow-demo` on loopback port `2582`
+- installs a Roundcube `report_phish` plugin and hidden `mailcow_demo_report.php`
+  endpoint that write Mailcow quarantine evidence and create an Agentic
   Operations intake ticket
-- routes `/webmail` and `/SOGo/*` to the demo webmail surface
+- routes `/webmail` to Roundcube and redirects `/SOGo/*` to `/webmail/`
 - runs built-in endpoint tests and demo UI cache-asset checks before reporting
   success
 
@@ -254,17 +261,21 @@ the operator workstation when Playwright is available. The latest verified
 Expected result: no JavaScript dialogs, no console errors, no failed requests,
 no SQL warning alerts, and no invalid JSON alerts. Static help copy on the
 queue page may contain the phrase "error message"; that is not a UI failure.
-`/SOGo/so` should render the demo webmail/report-phish surface in the current
-shim.
+`/webmail/` should render Roundcube, and `/SOGo/so` should land on Roundcube
+through the compatibility redirect.
 
 Latest report-phish proof on 2026-05-18:
 
-- Webmail login as `demo_account_1@mailcow.local` succeeds using the vault
+- Roundcube login as `demo_account_1@mailcow.local` succeeds using the vault
   password.
-- Local SMTP send creates a message in the same mailbox.
+- The inbox shows real Mailcow IMAP messages and the toolbar renders a
+  human-readable `Report Phish` button.
 - Clicking Report Phish creates dashboard ticket `578`, iTop Incident `370`,
   approval gate `167`, and Mailcow quarantine row
   `28cd6d435f7c88cd9a7b46983c62a1cb`.
+- Latest Roundcube proof created dashboard ticket `580`, iTop Incident `372`,
+  agent `229`, follow-up access request `581`, and Mailcow quarantine row
+  `21a705b151642568d375c748a9ea1a6b`.
 - Mailcow `/quarantine` visibly lists the quarantine id, subject, sender, and
   recipient.
 - Hermes agent `227` using `deepseek/deepseek-v4-flash` completed the approved
@@ -491,7 +502,7 @@ Latest live verification on 2026-05-18:
 - Stale `MCSESSID` recovery is verified by the deployer.
 - Headless browser verification reports zero failed network requests and zero
   console errors across `/admin/dashboard`, `/admin/system`, `/admin/mailbox`,
-  `/admin/queue`, `/quarantine`, and `/SOGo/so`.
+  `/admin/queue`, `/quarantine`, `/webmail`, and `/SOGo/so`.
 - UI table JSON is verified for domain search, quarantine, domain templates,
   and mailbox templates, with no DataTables invalid JSON dialogs.
 - SQL compatibility schema is verified for `logs`, `tfa`, `fido2`,

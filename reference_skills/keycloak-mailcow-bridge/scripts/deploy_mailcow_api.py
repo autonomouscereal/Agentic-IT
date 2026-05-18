@@ -42,7 +42,11 @@ NGINX_CONF_DIR = "/home/cereal/Mailcow/deploy/api-nginx"
 MAILCOW_ENV_FILE = os.environ.get("MAILCOW_ENV_FILE", "/home/cereal/Mailcow/deploy/.env")
 API_PORT = 8081
 UI_DEMO_PORT = int(os.environ.get("MAILCOW_UI_DEMO_PORT", "2581"))
+ROUNDCUBE_PORT = int(os.environ.get("MAILCOW_ROUNDCUBE_PORT", "2582"))
 PHPFPM_PORT = 9002
+ROUNDCUBE_IMAGE = os.environ.get("ROUNDCUBE_IMAGE", "roundcube/roundcubemail:latest-apache")
+ROUNDCUBE_DIR = os.environ.get("MAILCOW_ROUNDCUBE_DIR", "/home/cereal/Mailcow/deploy/roundcube")
+REPORT_PHISH_TOKEN_FILE = os.path.join(NGINX_CONF_DIR, ".roundcube_report_token")
 MAILCOW_ENV = read_env_file(MAILCOW_ENV_FILE)
 MYSQL_DATABASE = os.environ.get("MYSQL_DATABASE") or os.environ.get("DBNAME") or MAILCOW_ENV.get("DBNAME") or "mailcow"
 MAILCOW_API_KEY = None  # Will be generated if not found
@@ -55,7 +59,9 @@ def run(cmd, check=True):
     """Run a shell command and return output."""
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     if check and result.returncode != 0:
-        print(f"  [ERROR] Command failed: {cmd}")
+        safe_cmd = re.sub(r"(REPORT_PHISH_TOKEN=)([^ ]+)", r"\1<redacted>", cmd)
+        safe_cmd = re.sub(r"(MYSQL_ROOT_PASSWORD=)([^ ]+)", r"\1<redacted>", safe_cmd)
+        print(f"  [ERROR] Command failed: {safe_cmd}")
         print(f"  stdout: {result.stdout}")
         print(f"  stderr: {result.stderr}")
         sys.exit(1)
@@ -66,7 +72,11 @@ def docker_run(args, check=True):
     """Run docker without shell interpolation so secrets never appear in errors."""
     result = subprocess.run(args, capture_output=True, text=True)
     if check and result.returncode != 0:
-        printable = " ".join(shlex.quote(a) for a in args if "PASSWORD" not in a and "PASS=" not in a)
+        printable = " ".join(
+            shlex.quote(a)
+            for a in args
+            if "PASSWORD" not in a and "PASS=" not in a and "TOKEN" not in a and "SECRET" not in a
+        )
         print(f"  [ERROR] Command failed: {printable}")
         print(f"  stdout: {result.stdout}")
         print(f"  stderr: {result.stderr}")
@@ -114,6 +124,24 @@ def write_api_key_file(api_key):
     run(f"cp /tmp/mailcow_api_key {shlex.quote(api_key_file)}")
     run(f"chmod 600 {shlex.quote(api_key_file)}")
     print("  API key file: OK")
+
+
+def read_or_create_report_token():
+    """Create the shared Roundcube -> sidecar report token without logging it."""
+    run(f"mkdir -p {shlex.quote(NGINX_CONF_DIR)}")
+    if os.path.exists(REPORT_PHISH_TOKEN_FILE):
+        with open(REPORT_PHISH_TOKEN_FILE, encoding="utf-8") as handle:
+            token = handle.read().strip()
+        if len(token) >= 32:
+            print("  Roundcube report token: existing")
+            return token
+    token = secrets.token_urlsafe(48)
+    with open("/tmp/mailcow_roundcube_report_token", "w", encoding="utf-8") as handle:
+        handle.write(token + "\n")
+    run(f"cp /tmp/mailcow_roundcube_report_token {shlex.quote(REPORT_PHISH_TOKEN_FILE)}")
+    run(f"chmod 600 {shlex.quote(REPORT_PHISH_TOKEN_FILE)}")
+    print("  Roundcube report token: generated")
+    return token
 
 
 def wait_for_port(host, port, timeout=30):
@@ -553,9 +581,37 @@ def install_demo_webmail():
     print("  demo webmail: OK")
 
 
+def install_report_endpoint():
+    """Install the hidden Roundcube report-phish intake endpoint."""
+    print("\n--- Step 1g: Installing Roundcube report endpoint ---")
+    source = os.path.join(SCRIPT_DIR, "mailcow_demo_report.php")
+    destination = os.path.join(MAILCOW_DOCKERIZED_WEB, "mailcow_demo_report.php")
+    if not os.path.exists(source):
+        print(f"  [FAIL] Missing report endpoint: {source}")
+        sys.exit(1)
+    run(f"sudo cp {shlex.quote(source)} {shlex.quote(destination)}")
+    run(f"sudo chmod 0444 {shlex.quote(destination)}")
+    print("  Roundcube report endpoint: OK")
+
+
+def install_roundcube_plugin():
+    """Stage the Roundcube Report Phish plugin for the webmail container."""
+    print("\n--- Step 1h: Installing Roundcube Report Phish plugin ---")
+    source = os.path.join(SCRIPT_DIR, "roundcube_report_phish")
+    destination = os.path.join(ROUNDCUBE_DIR, "plugins", "report_phish")
+    if not os.path.isdir(source):
+        print(f"  [FAIL] Missing Roundcube plugin directory: {source}")
+        sys.exit(1)
+    run(f"mkdir -p {shlex.quote(os.path.dirname(destination))}")
+    run(f"rm -rf {shlex.quote(destination)}")
+    run(f"cp -R {shlex.quote(source)} {shlex.quote(destination)}")
+    run(f"chmod -R a+rX {shlex.quote(destination)}")
+    print("  Roundcube Report Phish plugin: OK")
+
+
 # ─── Step 2: Deploy php-fpm-mailcow-api ────────────────────────────────
 
-def deploy_php_fpm():
+def deploy_php_fpm(report_token):
     """Deploy parallel php-fpm container with web code on port 9002."""
     print("\n--- Step 2: Deploying php-fpm-mailcow-api ---")
 
@@ -645,6 +701,7 @@ exec php-fpm
         f"-e TZ=America/New_York "
         f"-e MAILCOW_PASS_SCHEME=BLF-CRYPT "
         f"-e DASHBOARD_API_BASE={shlex.quote(os.environ.get('DASHBOARD_API_BASE', 'http://127.0.0.1:25480'))} "
+        f"-e REPORT_PHISH_TOKEN={shlex.quote(report_token)} "
         f"-e DEMO_WEBMAIL_IMAP_HOST={shlex.quote(os.environ.get('DEMO_WEBMAIL_IMAP_HOST', '127.0.0.1'))} "
         f"-e DEMO_WEBMAIL_IMAP_PORT={shlex.quote(os.environ.get('DEMO_WEBMAIL_IMAP_PORT', '143'))} "
         f"-e DEMO_WEBMAIL_SMTP_HOST={shlex.quote(os.environ.get('DEMO_WEBMAIL_SMTP_HOST', '127.0.0.1'))} "
@@ -671,6 +728,81 @@ exec php-fpm
 
 
 # ─── Step 3: Deploy nginx-mailcow-api ──────────────────────────────────
+
+def deploy_roundcube(report_token):
+    """Deploy a real Roundcube webmail client in front of Mailcow IMAP/SMTP."""
+    print("\n--- Step 2b: Deploying Roundcube webmail ---")
+
+    existing = run("sudo docker ps --filter name=roundcube-mailcow-demo --format '{{.Names}}'", check=False)
+    if existing[0] == "roundcube-mailcow-demo":
+        print("  roundcube-mailcow-demo already running. Stopping for redeploy...")
+        run("sudo docker stop roundcube-mailcow-demo")
+        run("sudo docker rm roundcube-mailcow-demo")
+
+    run(f"mkdir -p {shlex.quote(ROUNDCUBE_DIR)}/db {shlex.quote(ROUNDCUBE_DIR)}/plugins")
+    run(f"sudo docker pull {shlex.quote(ROUNDCUBE_IMAGE)}", check=False)
+
+    args = [
+        "sudo",
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        "roundcube-mailcow-demo",
+        "--restart",
+        "unless-stopped",
+        "--add-host",
+        "host.docker.internal:host-gateway",
+        "-p",
+        f"127.0.0.1:{ROUNDCUBE_PORT}:80",
+        "-e",
+        "TZ=America/New_York",
+        "-e",
+        "ROUNDCUBEMAIL_DEFAULT_HOST=host.docker.internal",
+        "-e",
+        "ROUNDCUBEMAIL_DEFAULT_PORT=143",
+        "-e",
+        "ROUNDCUBEMAIL_SMTP_SERVER=host.docker.internal",
+        "-e",
+        "ROUNDCUBEMAIL_SMTP_PORT=25",
+        "-e",
+        "ROUNDCUBEMAIL_USERNAME_DOMAIN=mailcow.local",
+        "-e",
+        "ROUNDCUBEMAIL_REQUEST_PATH=/webmail/",
+        "-e",
+        "ROUNDCUBEMAIL_SKIN=elastic",
+        "-e",
+        "ROUNDCUBEMAIL_PLUGINS=archive,zipdownload,report_phish",
+        "-e",
+        "REPORT_PHISH_ENDPOINT=http://host.docker.internal:2581/demo-report",
+        "-e",
+        f"REPORT_PHISH_TOKEN={report_token}",
+        "-v",
+        f"{ROUNDCUBE_DIR}/db:/var/roundcube/db:rw",
+        "-v",
+        f"{ROUNDCUBE_DIR}/plugins/report_phish:/var/www/html/plugins/report_phish:ro",
+        ROUNDCUBE_IMAGE,
+    ]
+    stdout, stderr = docker_run(args)
+    print(f"  Started roundcube-mailcow-demo (container ID: {stdout[:12]})")
+
+    if wait_for_port("127.0.0.1", ROUNDCUBE_PORT, timeout=60):
+        print(f"  Roundcube listening on port {ROUNDCUBE_PORT}")
+    else:
+        print(f"  [WARN] Roundcube port {ROUNDCUBE_PORT} not ready after 60s")
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{ROUNDCUBE_PORT}/", timeout=10) as resp:
+                body = resp.read(20000).decode("utf-8", errors="replace")
+                if "Roundcube" in body:
+                    print("  Roundcube login page: OK")
+                    return
+        except Exception:
+            pass
+        time.sleep(3)
+    print("  [WARN] Roundcube login page not ready after 90s")
+
 
 def deploy_nginx():
     """Deploy nginx container with FastCGI proxy on port 8081."""
@@ -825,20 +957,38 @@ http {{
             return 302 /;
         }}
 
-        # Demo webmail uses the real Mailcow IMAP/SMTP path and records
-        # Report Phish actions into the dashboard intake plus Mailcow
-        # quarantine table. Route SOGo links here until the upstream SOGo
-        # service is production-hardened in this custom stack.
+        # Roundcube is the demo webmail surface. The Report Phish plugin posts
+        # to /demo-report, which writes Mailcow quarantine evidence and creates
+        # the agentic intake ticket through the dashboard.
         location = /webmail {{
-            rewrite ^ /demo_webmail.php last;
+            return 302 /webmail/;
         }}
 
-        location = /webmail/ {{
-            rewrite ^ /demo_webmail.php last;
+        location ^~ /webmail/ {{
+            proxy_pass http://127.0.0.1:{ROUNDCUBE_PORT}/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_redirect off;
         }}
 
         location ~ ^/SOGo/ {{
-            rewrite ^ /demo_webmail.php last;
+            return 302 /webmail/;
+        }}
+
+        location = /demo-report {{
+            include /etc/nginx/fastcgi_params;
+            fastcgi_pass 127.0.0.1:{PHPFPM_PORT};
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root/mailcow_demo_report.php;
+            fastcgi_param SCRIPT_NAME /mailcow_demo_report.php;
+            fastcgi_param REQUEST_URI /demo-report;
+            fastcgi_param HTTP_X_REPORT_PHISH_TOKEN $http_x_report_phish_token;
+            fastcgi_param HTTP_CONTENT_TYPE $content_type;
+            fastcgi_read_timeout 3600;
+            fastcgi_send_timeout 3600;
         }}
 
         location / {{
@@ -1045,16 +1195,19 @@ def test_ui():
                             print(f"  [FAIL] Demo UI {template_type} template endpoint returned invalid JSON")
                             return False
                 print("  [PASS] Demo UI table JSON endpoints")
-                webmail_req = urllib.request.Request(
-                    f"http://127.0.0.1:{UI_DEMO_PORT}/SOGo/so",
-                    method="GET",
-                )
+                webmail_req = urllib.request.Request(f"http://127.0.0.1:{UI_DEMO_PORT}/webmail/", method="GET")
                 with urllib.request.urlopen(webmail_req, timeout=15) as webmail_resp:
                     webmail_body = webmail_resp.read(30000).decode("utf-8", errors="replace")
-                    if "Mailcow Demo Webmail" not in webmail_body or "Report Phish" not in webmail_body:
-                        print("  [FAIL] Demo webmail/report-phish route did not render")
+                    if "Roundcube" not in webmail_body:
+                        print("  [FAIL] Roundcube webmail route did not render")
                         return False
-                print("  [PASS] Demo webmail/report-phish route")
+                sogo_req = urllib.request.Request(f"http://127.0.0.1:{UI_DEMO_PORT}/SOGo/so", method="GET")
+                with urllib.request.urlopen(sogo_req, timeout=15) as sogo_resp:
+                    sogo_body = sogo_resp.read(30000).decode("utf-8", errors="replace")
+                    if "Roundcube" not in sogo_body:
+                        print("  [FAIL] SOGo compatibility route did not land on Roundcube")
+                        return False
+                print("  [PASS] Roundcube webmail and SOGo compatibility routes")
                 return True
             print(f"  [FAIL] Demo UI unexpected response on port {UI_DEMO_PORT}")
             return False
@@ -1100,7 +1253,7 @@ def main():
 
     # Check port availability
     import socket
-    for port in [PHPFPM_PORT, API_PORT]:
+    for port in [PHPFPM_PORT, API_PORT, ROUNDCUBE_PORT]:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex(("127.0.0.1", port)) == 0:
                 print(f"  [WARN] Port {port} already in use - will be reclaimed")
@@ -1108,6 +1261,7 @@ def main():
     # Deploy
     api_key = setup_api_table()
     write_api_key_file(api_key)
+    report_token = read_or_create_report_token()
     setup_identity_provider_table()
     setup_ui_compat_schema()
     setup_identity_provider_defaults()
@@ -1115,7 +1269,10 @@ def main():
     patch_mailcow_web_for_ui()
     install_compat_api()
     install_demo_webmail()
-    deploy_php_fpm()
+    install_report_endpoint()
+    install_roundcube_plugin()
+    deploy_php_fpm(report_token)
+    deploy_roundcube(report_token)
     deploy_nginx()
 
     # Wait a bit for everything to settle

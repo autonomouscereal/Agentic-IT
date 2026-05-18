@@ -24,7 +24,7 @@ user-invocable: true
 
 Complete, reproducible blueprint for deploying a fully functional Mailcow email server on a bare-metal Ubuntu server using Docker Compose. Covers every step, every error encountered, every fix applied, and every configuration file.
 
-**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. The bare root URL is routed to the admin login surface, stale `MCSESSID` user sessions are recovered, admin login for `demo_account_1` reaches `/admin/dashboard`, dashboard/system/mailbox/queue/quarantine pages are free of invalid JSON and SQL-column warning banners, `/webmail` and `/SOGo/*` route to a demo webmail surface backed by real Mailcow IMAP/SMTP, and IMAP auth for `demo_account_1@mailcow.local` returns `OK`. Report Phish proof: ticket `578`, iTop Incident `370`, gate `167`, Hermes agent `227`, and quarantine id `28cd6d435f7c88cd9a7b46983c62a1cb` visible in `/quarantine`. The shim also keeps the read-only compatibility API on `8081`.
+**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm/Roundcube shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. The bare root URL is routed to the admin login surface, stale `MCSESSID` user sessions are recovered, admin login for `demo_account_1` reaches `/admin/dashboard`, dashboard/system/mailbox/queue/quarantine pages are free of invalid JSON and SQL-column warning banners, `/webmail` is a real Roundcube client backed by Mailcow IMAP/SMTP, `/SOGo/*` redirects to Roundcube, and IMAP auth for `demo_account_1@mailcow.local` returns `OK`. Report Phish proof: legacy demo ticket `578`, iTop Incident `370`, gate `167`, Hermes agent `227`, quarantine id `28cd6d435f7c88cd9a7b46983c62a1cb`; Roundcube proof ticket `580`, iTop Incident `372`, agent `229`, access request `581`, quarantine id `21a705b151642568d375c748a9ea1a6b`. The shim also keeps the read-only compatibility API on `8081`.
 
 This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-built, hand-tailored Mailcow stack with modified entrypoints, TCP database connectivity (no socket sharing), and custom database seeding.
 
@@ -919,19 +919,20 @@ python3 scripts/deploy_mailcow_api.py
 
 The deployer repairs the UI schema, routes domain-search/quarantine/template
 reads through `/web/mailcow_compat_api.php`, sets small lab quarantine Redis
-defaults, creates direct delivery aliases for active user mailboxes, installs
-`/webmail`, and routes `/SOGo/*` to the demo webmail/report-phish surface
-backed by real Mailcow IMAP/SMTP. Keep upstream SOGo in `SKIP_SOGO=y` mode in
-the reference lab until it is separately hardened.
+defaults, creates direct delivery aliases for active user mailboxes, deploys
+`roundcube-mailcow-demo` on loopback port `2582`, proxies `/webmail` to
+Roundcube, and redirects `/SOGo/*` to Roundcube. Keep upstream SOGo in
+`SKIP_SOGO=y` mode in the reference lab until it is separately hardened.
 
 **Verified in lab:** 2026-05-18. The deployer table JSON checks passed, and a
 headless browser crawl of `/admin/dashboard`, `/admin/system`, `/admin/mailbox`,
 `/admin/queue`, `/quarantine`, `/webmail`, and `/SOGo/so` reported no invalid
-JSON dialogs or SQL warnings. Webmail login, local SMTP delivery, Report Phish,
-dashboard/iTop sync, agent gate completion, and visible Mailcow quarantine row
-were verified with ticket `578` and quarantine id
-`28cd6d435f7c88cd9a7b46983c62a1cb`. Static queue help copy may mention "error
-message"; treat that as normal copy, not a browser failure.
+JSON dialogs or SQL warnings. Roundcube login, real Mailcow inbox rendering,
+Report Phish, dashboard/iTop sync, and visible Mailcow quarantine row were
+verified with ticket `580`, iTop Incident `372`, agent `229`, access request
+`581`, and quarantine id `21a705b151642568d375c748a9ea1a6b`. Static queue help
+copy may mention "error message"; treat that as normal copy, not a browser
+failure.
 
 ### Error 1: Dovecot Infinite "Waiting for Database" Loop
 
@@ -1142,6 +1143,8 @@ bash /home/cereal/Mailcow/deploy/mailcow_start.sh
 | 6379 | redis-mailcow | Redis |
 | 9000 | php-fpm-mailcow | PHP-FPM |
 | 8080 | sogo-mailcow | SOGo HTTP |
+| 2581 | nginx-mailcow-api | Demo Mailcow UI, API shim, Roundcube proxy |
+| 2582 | roundcube-mailcow-demo | Loopback-only Roundcube webmail |
 | 24 | dovecot-mailcow | LMTP |
 | 10001 | dovecot-mailcow | SASL Auth |
 | 9900 | rspamd-mailcow | Milter |

@@ -136,7 +136,7 @@ Latest live credential smoke on 2026-05-18:
 | Wazuh API | Native `/security/user/authenticate?raw=true` | WARN, HTTP 401 |
 | GitLab local login | Fresh CSRF/session form POST | PASS, HTTP 302 |
 | GitLab Keycloak OIDC | OmniAuth start POST | PASS, redirects to Keycloak realm |
-| Mailcow | demo UI, webmail, mailbox auth, report phish | PASS, UI `http://192.168.50.222:2581` bare-root login reaches `/admin/dashboard`, including stale-session recovery; dashboard/system/mailbox/queue/quarantine pages show no invalid JSON or SQL-column warning banners; `/webmail` uses real Mailcow IMAP/SMTP; Report Phish proof created ticket `578`, iTop Incident `370`, gate `167`, agent `227`, and visible quarantine row `28cd6d435f7c88cd9a7b46983c62a1cb` |
+| Mailcow | demo UI, Roundcube webmail, mailbox auth, report phish | PASS, UI `http://192.168.50.222:2581` bare-root login reaches `/admin/dashboard`, including stale-session recovery; dashboard/system/mailbox/queue/quarantine pages show no invalid JSON or SQL-column warning banners; `/webmail` is Roundcube on real Mailcow IMAP/SMTP; `/SOGo/*` redirects to Roundcube; Report Phish proof created ticket `580`, iTop Incident `372`, agent `229`, access request `581`, and visible quarantine row `21a705b151642568d375c748a9ea1a6b` |
 
 GitLab OIDC deployment requirements:
 
@@ -180,7 +180,7 @@ python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
 
-The shim redeploys only `php-fpm-mailcow-api` and `nginx-mailcow-api`. It does not recycle the main Mailcow mail path. The reference deployer also exposes the demo UI on port `2581`, routes the bare root URL to the verified admin UI, recovers stale user-session cookies that would otherwise redirect to the blank `/user` path, repairs the custom deployment's UI compatibility schema, supplies Mailcow/DataTables JSON for domain search, quarantine, and template reads, installs the `/webmail` demo surface backed by real Mailcow IMAP/SMTP, routes `/SOGo/*` to that webmail/report-phish surface, and keeps extensionless Mailcow routes behind FastCGI so PHP source is never served as static text. Full details, endpoint contracts, rollback, and troubleshooting are in `docs/MAILCOW_API_SHIM.md`.
+The shim redeploys only the sidecars: `php-fpm-mailcow-api`, `nginx-mailcow-api`, and `roundcube-mailcow-demo`. It does not recycle the main Mailcow mail path. The reference deployer also exposes the demo UI on port `2581`, routes the bare root URL to the verified admin UI, recovers stale user-session cookies that would otherwise redirect to the blank `/user` path, repairs the custom deployment's UI compatibility schema, supplies Mailcow/DataTables JSON for domain search, quarantine, and template reads, proxies `/webmail` to Roundcube on loopback port `2582`, redirects `/SOGo/*` to Roundcube, and keeps extensionless Mailcow routes behind FastCGI so PHP source is never served as static text. Full details, endpoint contracts, rollback, and troubleshooting are in `docs/MAILCOW_API_SHIM.md`.
 
 ## Rebuild Triggers
 

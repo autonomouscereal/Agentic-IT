@@ -35,7 +35,7 @@ Complete integration between Keycloak 26.x (Identity Provider) and Mailcow (Emai
 | Sync Engine | `scripts/sync_engine.py` | Bidirectional sync: Keycloak users <-> Mailcow mailboxes via MySQL |
 | E2E Test Suite | `scripts/test_integration.py` | 48 tests across 10 categories |
 | Optional HTTP API/UI Shim | `scripts/deploy_mailcow_api.py` | Nonstandard-port nginx/php-fpm API shim on `8081` and demo UI on `2581`; direct MySQL remains canonical |
-| Demo Webmail | `scripts/mailcow_demo_webmail.php` | Lab webmail on `/webmail` and `/SOGo/*` backed by real Mailcow IMAP/SMTP with Report Phish -> intake -> quarantine evidence |
+| Roundcube Webmail | `scripts/roundcube_report_phish/` + `scripts/mailcow_demo_report.php` | Real Roundcube client on `/webmail` backed by Mailcow IMAP/SMTP; `/SOGo/*` redirects there; Report Phish -> intake -> quarantine evidence |
 | API Shim Regression | `scripts/test_mailcow_api_shim.py` | Auth, selector, password-redaction, and MySQL parity tests for the optional API shim |
 | Environment Template | `.env.example` | Secret template - copy to `.env` before deploying |
 
@@ -100,13 +100,14 @@ Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Ma
 - append a file-mtime `?v=` query and no-store cache headers for `/cache/*` so
   interactive browsers do not reuse stale broken assets after a repair
 - install `mailcow_compat_api.php` for read-only `get/domain`, `get/mailbox`, `get/alias`, `search/domain`, `get/quarantine/all`, and domain/mailbox template compatibility when the stock `json_api.php` path returns empty bodies in custom deployments
-- install `demo_webmail.php` for lab webmail using Mailcow IMAP/SMTP and a
-  Report Phish button that creates a dashboard intake ticket and Mailcow
-  quarantine row
+- deploy `roundcube-mailcow-demo` on loopback port `2582`
+- install the Roundcube `report_phish` plugin plus hidden
+  `mailcow_demo_report.php` endpoint so a real mailbox client can create a
+  dashboard intake ticket and Mailcow quarantine row
 - set lab quarantine Redis defaults so the demo UI does not show a quarantine-disabled warning banner
-- route `/webmail` and `/SOGo/*` to the demo webmail surface; keep upstream
-  SOGo parked with `SKIP_SOGO=y` in the reference lab until it is separately
-  production-hardened
+- route `/webmail` to Roundcube and redirect `/SOGo/*` to `/webmail/`; keep
+  upstream SOGo parked with `SKIP_SOGO=y` in the reference lab until it is
+  separately production-hardened
 - reject invalid API keys with HTTP 401
 - never print API keys in logs
 - use the Mailcow MySQL container environment for SQL setup instead of requiring host-side `MYSQL_ROOT_PASSWORD`
@@ -157,10 +158,13 @@ Latest demo UI verification on 2026-05-18:
   `/admin/mailbox`, `/admin/queue`, `/quarantine`, `/webmail`, and `/SOGo/so`
   shows no invalid JSON dialogs or SQL warning banners
 - `/webmail` login for `demo_account_1@mailcow.local` works with the vault
-  password, local SMTP delivery reaches the same inbox, and Report Phish
-  creates a visible Mailcow quarantine row
+  password, Roundcube renders the real Mailcow inbox, and Report Phish creates
+  a visible Mailcow quarantine row
 - report-phish proof: ticket `578`, iTop Incident `370`, gate `167`, Hermes
   agent `227`, quarantine id `28cd6d435f7c88cd9a7b46983c62a1cb`
+- Roundcube report-phish proof: ticket `580`, iTop Incident `372`, agent
+  `229`, access request `581`, quarantine id
+  `21a705b151642568d375c748a9ea1a6b`
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`
 
 Operational blueprint:
