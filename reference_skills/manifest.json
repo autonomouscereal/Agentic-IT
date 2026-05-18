@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-18T17:19:53.418312+00:00",
+  "generated_at": "2026-05-18T17:30:22.292377+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -312,8 +312,8 @@
         },
         {
           "path": "scripts/deploy_mailcow_api.py",
-          "size": 26084,
-          "sha256": "4b77f3034acfc2f9e4364dca9e441203041fd6dd65d3ca73e76a2782a48a4e19"
+          "size": 28593,
+          "sha256": "24cab16ab46f49604e1fc9991564e7a4f699f88f80052559182e1838225f8d28"
         },
         {
           "path": "scripts/find_mailcow_creds.py",
@@ -362,8 +362,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 14736,
-          "sha256": "ba51f688b3289e3dfce9ade53500f8aa41cadcbe9c2b0eda89adad3d424974b4"
+          "size": 15042,
+          "sha256": "ac71f6a538c38848da80591e6f526ea5e1e81ffdc1ba858a59d9c15eb3302e85"
         },
         {
           "path": "troubleshooting.md",
@@ -440,8 +440,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 39268,
-          "sha256": "c351a851dfe43de34a564f1abb1da79eb9aa0004f4fd7e7d9820dc4dbceb982d"
+          "size": 39355,
+          "sha256": "f80ff767ded9f9fdb98d66b9298b352bff19839cf254249e05e3401bf3c0d20f"
         }
       ]
     },

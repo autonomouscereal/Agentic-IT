@@ -127,11 +127,14 @@ The deployer is idempotent:
 - repairs the custom `tfa` table shape expected by the mounted Mailcow UI
 - adds `mailbox.authsource` with default `mailcow` when missing
 - patches ambiguous custom-schema UI queries from `kind` to `mailbox.kind`
+- patches generated CSS/JS paths to `/web/cache` so the nginx sidecar can serve
+  `/cache/<hash>.css` and `/cache/<hash>.js`
 - installs `mailcow_compat_api.php` into the Mailcow web root
 - writes the API key only to the restricted `api-nginx/.api_key` file
 - recreates only the sidecar containers `php-fpm-mailcow-api` and `nginx-mailcow-api`
 - exposes the read API on `8081` and the demo UI on `2581`
-- runs built-in endpoint tests before reporting success
+- runs built-in endpoint tests and demo UI cache-asset checks before reporting
+  success
 
 The deployer does not require host-side `MYSQL_ROOT_PASSWORD`. SQL setup is executed inside the `mysql-mailcow` container using the container-held environment. This prevents copying database passwords into command strings, docs, or dashboard config.
 
@@ -315,6 +318,26 @@ cd /home/cereal/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 ```
 
+### UI is unstyled or blank after login.
+
+Likely cause:
+
+- The generated Mailcow cache assets return `404`. In the split sidecar setup,
+  php-fpm must write minified CSS/JS into the mounted web root at `/web/cache`;
+  writing them to the php-fpm container's `/tmp` makes nginx unable to serve
+  `/cache/<hash>.css` and `/cache/<hash>.js`.
+
+Repair:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+```
+
+The deployer creates `/web/cache`, permissions it for the php-fpm worker,
+patches `header.inc.php` and `footer.inc.php` to use `/web/cache`, and verifies
+the generated cache refs return HTTP `200`.
+
 ### Admin login loops or fails after the password is correct.
 
 Likely causes:
@@ -332,6 +355,8 @@ Latest live verification on 2026-05-18:
 - Admin form login for `demo_account_1` returns HTTP `302` to `/admin/dashboard`.
 - `/admin/dashboard` renders through FastCGI and does not expose PHP source.
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`.
+- Browser check after login has visible dashboard text, zero failed network
+  requests, and zero console errors.
 
 ### MySQL parity fails.
 

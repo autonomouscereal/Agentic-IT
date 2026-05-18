@@ -85,6 +85,8 @@ Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Ma
 - create the Mailcow `logs` table if missing
 - repair legacy `tfa` and `mailbox.authsource` schema drift expected by the current UI
 - rewrite extensionless UI routes through FastCGI without serving PHP source
+- write generated CSS/JS to `/web/cache` so the nginx sidecar can serve the
+  `/cache/<hash>` assets and the UI does not render blank/unstyled
 - install `mailcow_compat_api.php` for read-only `get/domain`, `get/mailbox`, and `get/alias` compatibility when the stock `json_api.php` path returns empty bodies in custom deployments
 - reject invalid API keys with HTTP 401
 - never print API keys in logs
@@ -126,6 +128,9 @@ Latest demo UI verification on 2026-05-18:
 - `http://192.168.50.222:2581/` returns the Mailcow login page
 - admin login for `demo_account_1` returns HTTP `302` to `/admin/dashboard`
 - `/admin/dashboard` renders via FastCGI and does not expose PHP source
+- generated `/cache` CSS and JS assets return HTTP `200`
+- headless browser login shows visible dashboard text with no failed network
+  requests or console errors
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`
 
 Operational blueprint:

@@ -16,6 +16,7 @@ import shlex
 import subprocess
 import sys
 import time
+import re
 import urllib.error
 import urllib.request
 
@@ -261,6 +262,39 @@ def patch_mailcow_web_for_ui():
     else:
         print("  functions.auth.inc.php mailbox.kind query patch already present.")
 
+    asset_rewrites = {
+        os.path.join(MAILCOW_DOCKERIZED_WEB, "inc", "header.inc.php"): [
+            ("$CSSPath = '/tmp/' . $hash . '.css';", "$CSSPath = '/web/cache/' . $hash . '.css';"),
+            ("cleanupCSS($hash);", "cleanupCSS($hash, '/web/cache/*.css');"),
+        ],
+        os.path.join(MAILCOW_DOCKERIZED_WEB, "inc", "footer.inc.php"): [
+            ("$JSPath = '/tmp/' . $hash . '.js';", "$JSPath = '/web/cache/' . $hash . '.js';"),
+            ("cleanupJS($hash);", "cleanupJS($hash, '/web/cache/*.js');"),
+        ],
+    }
+    for file_path, replacements in asset_rewrites.items():
+        if not os.path.exists(file_path):
+            print(f"  [FAIL] Missing UI include file: {file_path}")
+            sys.exit(1)
+        with open(file_path, encoding="utf-8") as handle:
+            current = handle.read()
+        updated = current
+        for old, new in replacements:
+            if old not in updated and new not in updated:
+                print(f"  [FAIL] Missing expected asset-cache marker in {file_path}: {old}")
+                sys.exit(1)
+            updated = updated.replace(old, new)
+        if updated != current:
+            backup = f"{file_path}.bak.{int(time.time())}"
+            run(f"sudo cp {shlex.quote(file_path)} {shlex.quote(backup)}")
+            temp_path = f"/tmp/mailcow_{os.path.basename(file_path)}"
+            with open(temp_path, "w", encoding="utf-8") as handle:
+                handle.write(updated)
+            run(f"sudo cp {shlex.quote(temp_path)} {shlex.quote(file_path)}")
+            print(f"  {os.path.basename(file_path)} /web/cache asset path patch: OK")
+        else:
+            print(f"  {os.path.basename(file_path)} /web/cache asset path patch already present.")
+
 
 def install_compat_api():
     """Install read-only compatibility endpoints for custom Mailcow stacks."""
@@ -343,7 +377,10 @@ echo 'session.save_handler = redis' > /usr/local/etc/php/conf.d/session_store.in
 echo 'session.save_path = "tcp://127.0.0.1:6379?auth='${REDISPASS}'"' >> /usr/local/etc/php/conf.d/session_store.ini
 
 # Fix permissions
-chown -R 82:82 /web/templates/cache 2>/dev/null
+mkdir -p /web/cache /web/templates/cache
+chown -R 82:82 /web/cache /web/templates/cache 2>/dev/null
+chmod 775 /web/cache /web/templates/cache 2>/dev/null
+find /web/cache/* -not -name '.gitkeep' -delete 2>/dev/null
 find /web/templates/cache/* -not -name '.gitkeep' -delete 2>/dev/null
 
 # Start php-fpm
@@ -604,6 +641,15 @@ def test_ui():
             body = resp.read()
             if resp.status == 200 and b"login_user" in body and b"pass_user" in body:
                 print(f"  [PASS] Demo UI login page on port {UI_DEMO_PORT}")
+                text = body.decode("utf-8", "replace")
+                refs = re.findall(r"/cache/[^\"']+", text)
+                for ref in refs:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{UI_DEMO_PORT}{ref}", timeout=15) as asset_resp:
+                        asset_body = asset_resp.read(64)
+                        if asset_resp.status != 200 or not asset_body:
+                            print(f"  [FAIL] Demo UI cache asset failed: {ref}")
+                            return False
+                print(f"  [PASS] Demo UI cache assets - {len(refs)} checked")
                 return True
             print(f"  [FAIL] Demo UI unexpected response on port {UI_DEMO_PORT}")
             return False

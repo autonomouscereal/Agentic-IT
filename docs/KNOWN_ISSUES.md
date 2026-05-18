@@ -1,4 +1,4 @@
-# Known Issues And Fix Log
+﻿# Known Issues And Fix Log
 
 Last updated: 2026-05-18.
 
@@ -103,6 +103,50 @@ Verification:
   `/admin/dashboard`.
 - `/admin/dashboard` renders through FastCGI and does not expose PHP source.
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`.
+
+
+### Mailcow demo UI renders incorrectly and post-login page is blank
+
+Status: fixed on live AI server and bundled deployer.
+
+Reported on 2026-05-18 after the Mailcow demo UI was exposed on `:2581`.
+The login page is reachable, but the browser-rendered UI is not rendering
+correctly and the page after login appears blank. Treat this as a demo blocker
+until the shim is verified with real browser asset loading, not only curl-level
+HTTP status checks.
+
+Investigation checklist:
+
+- Verify CSS, JS, font, and image asset routes from `nginx-mailcow-api`.
+- Verify extensionless PHP route handling does not skip FastCGI execution.
+- Verify authenticated `/admin/dashboard` HTML includes complete layout output,
+  not partial PHP output or an exception body.
+- Verify browser console/network errors with a real browser or equivalent asset
+  fetch sweep.
+- Update the Mailcow shim deployer/docs after the fix so redeploys preserve it.
+
+Root cause:
+
+- Mailcow generated `/cache/<hash>.css` and `/cache/<hash>.js` URLs, but the
+  split php-fpm/nginx sidecar deployment wrote minified assets to the php-fpm
+  container's `/tmp`. The nginx sidecar served `/cache` from the mounted web
+  root, so the generated CSS/JS returned 404.
+
+Fix:
+
+- Created and permissioned `/home/cereal/mailcow-dockerized/data/web/cache`.
+- Patched `inc/header.inc.php` and `inc/footer.inc.php` in the reference shim to
+  write generated CSS/JS to `/web/cache`.
+- Updated the shim deployer startup script to create/chown `/web/cache` and
+  clear stale generated assets on redeploy.
+- Extended the deployer UI smoke to fetch `/cache` CSS/JS refs.
+
+Verification:
+
+- Deployer passes API regression and demo UI cache-asset smoke.
+- Browser login reaches `http://192.168.50.222:2581/admin/dashboard`.
+- Headless browser check reports visible dashboard text, `0` login inputs,
+  `0` failed network requests, and `0` console errors.
 
 ## Found During 2026-05-18 Documentation Refresh
 
