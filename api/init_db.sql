@@ -479,6 +479,7 @@ INSERT INTO tools (name, type, host, port, description) VALUES
     ('SOC Bridge', 'bridge', 'localhost', NULL, 'iTop <-> Mailcow notification bridge'),
     ('SIEM-Ticket Bridge', 'bridge', 'localhost', NULL, 'Wazuh <-> iTop alert bridge'),
     ('Agent Memory', 'memory', 'agent-memory-db', 5432, 'Shared PostgreSQL/pgvector memory service for dashboard agents'),
+    ('Roundcube Webmail', 'email-ui', 'host.docker.internal', 2581, 'Roundcube webmail client for Mailcow demo/report-phish workflows'),
     ('SearXNG', 'search', 'localhost', 7999, 'Local search engine for research'),
     ('GitLab', 'vcs', 'localhost', 80, 'GitLab CE for source management')
 ON CONFLICT (name) DO UPDATE SET

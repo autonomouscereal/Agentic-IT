@@ -63,6 +63,8 @@ services:
   api:
     build: ./api
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${DASHBOARD_PORT:-25480}:8000"
     environment:

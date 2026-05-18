@@ -64,7 +64,9 @@ async def check_tool(tool_id: int):
 
         if port:
             tool_type = tool.get("type", "")
-            if tool_type in ("siem-ui", "soc-platform", "iam", "vcs", "search"):
+            if tool_type == "email-ui":
+                ok = await check_http(host, port, path="/webmail/", schemes=["http", "https"])
+            elif tool_type in ("siem-ui", "soc-platform", "iam", "vcs", "search"):
                 schemes = ["https", "http"] if tool_type in ("siem-ui", "iam") else ["http", "https"]
                 ok = await check_http(host, port, schemes=schemes)
             elif tool_type == "email":

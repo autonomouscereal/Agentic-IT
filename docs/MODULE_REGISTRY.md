@@ -62,6 +62,7 @@ Important boundaries:
 - Direct MySQL through the Keycloak-Mailcow bridge remains the canonical Mailcow write/provisioning path in the reference deployment.
 - The optional Mailcow HTTP API shim is a read-only compatibility surface for domain, mailbox, alias, domain-search, quarantine, and template inventory needed by provider tooling and the lab demo UI.
 - The shim deployer repairs the custom seed's Mailcow UI schema drift (`logs`, `tfa`, `fido2`, `settingsmap`, `templates`, `mailbox.authsource`) and validates browser-facing table JSON so invalid JSON/DataTables banners do not reappear after redeploy.
+- Roundcube is a first-class deployable email UI module (`roundcube-webmail`) managed by the same shim deployer. It exposes a real mailbox client on `/webmail`, redirects `/SOGo/*` there for compatibility, and includes a Report Phish plugin that creates Mailcow quarantine evidence and dashboard/iTop intake.
 - The shim should be represented as part of the Mailcow reference module, not as a required platform-wide dependency.
 - If an environment already has Exchange, Gmail, Proofpoint, Mimecast, or another mail security provider, mark the email-provider capability as existing and use or build that provider adapter instead.
 
@@ -70,6 +71,7 @@ Reference docs:
 - `docs/MAILCOW_API_SHIM.md`
 - `reference_skills/keycloak-mailcow-bridge/SKILL.md`
 - `reference_skills/mailcow/SKILL.md`
+- `reference_skills/roundcube-webmail/SKILL.md`
 
 ## Adding A Module
 

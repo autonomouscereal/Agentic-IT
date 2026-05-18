@@ -1310,3 +1310,58 @@ Local-model agentic caveat:
 - Agent `180`, task `177`, marker `AGENTIC_PERMISSION_VAULT_1778768749`
   failed fast with a runner stall message after no output. This is the desired
   failure mode until a tool-capable local model/proxy is configured.
+
+## Roundcube Webmail / Tools Regression - 2026-05-18
+
+Source and local checks:
+
+```text
+python -m py_compile api/services/health_check.py api/routes/tools.py scripts/platform_doctor.py scripts/smoke_operational_metrics.py reference_skills/keycloak-mailcow-bridge/scripts/deploy_mailcow_api.py reference_skills/keycloak-mailcow-bridge/scripts/debug_deploy.py
+python scripts/sync_reference_skills.py manifest  # 37 skills, 0 missing
+python scripts/text_hygiene.py                    # passed
+git diff --check                                  # passed
+python -m pytest tests -q                         # 131 passed
+```
+
+Do not use bare `python -m pytest` from the repository root unless all live
+integration `.env` files are present. Root collection also discovers reference
+skill integration scripts such as `keycloak-mailcow-bridge/scripts/test_integration.py`,
+which intentionally exits when its deployment `.env` is absent.
+
+Live dashboard checks:
+
+```text
+python3 scripts/platform_doctor.py --base http://127.0.0.1:25480
+python3 scripts/smoke_operational_metrics.py http://127.0.0.1:25480
+python3 scripts/smoke_setup_platform.py http://127.0.0.1:25480
+python3 scripts/smoke_setup_agent.py http://127.0.0.1:25480
+```
+
+Results:
+
+- Platform doctor: `19 passed, 0 warned, 0 failed`.
+- Operational metrics smoke: passed; setup modules include
+  `Roundcube Webmail Client`, and tools include healthy `Roundcube Webmail`.
+- Setup platform smoke: passed, setup ticket `582`.
+- Setup agent smoke: passed, setup ticket `583`, agent `230`, task `227`.
+- `/api/tools/check-all`: `Mailcow API/UI Shim` healthy and `Roundcube Webmail`
+  healthy.
+
+Mailcow/Roundcube checks:
+
+```text
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+python3 scripts/test_mailcow_api_shim.py --mysql-parity
+curl -fsS http://127.0.0.1:2581/webmail/ | grep -q Roundcube
+docker exec roundcube-mailcow-demo sh -lc 'php -l /var/www/html/plugins/report_phish/report_phish.php && php -l /var/www/html/plugins/report_phish/localization/en_US.inc'
+docker exec php-fpm-mailcow-api sh -lc 'php -l /web/mailcow_demo_report.php'
+```
+
+Results:
+
+- Mailcow API/UI/Roundcube deployer: passed all built-in checks.
+- Mailcow API shim regression: `13 passed, 0 failed`.
+- Roundcube route check: passed.
+- Roundcube plugin PHP lint: passed.
+- Hidden report endpoint PHP lint: passed.

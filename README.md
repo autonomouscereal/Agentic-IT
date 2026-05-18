@@ -17,7 +17,7 @@ approved reference modules when those capabilities are missing.
 - UI/API: `http://192.168.50.222:25480`
 - API health: `http://192.168.50.222:25480/health`
 - Model gateway/proxy: `http://192.168.50.222:4001`
-- Reference modules: iTop `http://192.168.50.222:25432`, Wazuh Dashboard `https://192.168.50.222:26443`, GitLab `http://192.168.50.222`
+- Reference modules: iTop `http://192.168.50.222:25432`, Wazuh Dashboard `https://192.168.50.222:26443`, GitLab `http://192.168.50.222`, Mailcow/Roundcube `http://192.168.50.222:2581`
 - Current Windows working copy: `D:\IT AGENT PROJECT`
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
 - Containers: `soc-dashboard-api`, `soc-dashboard-db`, `ai-proxy`, `agent-memory-db`
@@ -28,8 +28,10 @@ The shared demo user is `demo_account_1`; its password is stored only in the
 local server-manager vault key `demo_account_1`. Latest 2026-05-18 login smoke:
 iTop REST PASS, Wazuh Dashboard PASS, GitLab local login PASS, GitLab OIDC
 start PASS, Mailcow admin UI PASS across dashboard/system/mailbox/queue/quarantine
-pages, Mailcow IMAP PASS. Native Wazuh API auth for the demo user is currently
-a follow-up (`401`) and is not the primary Wazuh demo path.
+pages, Roundcube webmail PASS at `/webmail`, Mailcow IMAP PASS, and the
+Roundcube `Report Phish` path creates Mailcow quarantine plus dashboard/iTop
+evidence. Native Wazuh API auth for the demo user is currently a follow-up
+(`401`) and is not the primary Wazuh demo path.
 
 ## Documentation Map
 

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-18T20:21:06.836095+00:00",
+  "generated_at": "2026-05-18T20:33:42.234502+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -568,6 +568,17 @@
           "path": "SKILL.md",
           "size": 8895,
           "sha256": "627ea64693b2490c390662a6bbf1daa69dd7ae8ac75b6293257f4a8ef9b5c00c"
+        }
+      ]
+    },
+    {
+      "name": "roundcube-webmail",
+      "source": "bundle",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 5356,
+          "sha256": "877b8c2dedba15c2b0a4e727dfb108f0a78bf9712711fa4e02c44a89b41776a1"
         }
       ]
     },

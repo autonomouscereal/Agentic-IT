@@ -21,6 +21,7 @@
     "owasp-zap-scanner",
     "platform-credentials",
     "report-phish",
+    "roundcube-webmail",
     "server-manager",
     "semgrep-scanner",
     "siem-ticket-bridge",

@@ -10,12 +10,12 @@
     "soc": {
       "name": "SOC Replacement Baseline",
       "description": "Control plane plus ITSM, SIEM, phishing, network telemetry, IAM, and bridge services.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "roundcube-webmail", "report-phish", "mailcow-wazuh-integration", "soc-bridge"]
     },
     "full-it": {
       "name": "Full IT Automation Platform",
       "description": "SOC baseline plus GitLab/DevSecOps, auth bridges, CI/CD security gates, postmortem learning, and workflow generation.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "cicd-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "report-phish", "mailcow-wazuh-integration", "soc-bridge", "gitlab", "gitlab-keycloak-integration", "keycloak-mailcow-bridge", "cicd-security-pipeline", "semgrep", "trivy", "owasp-zap", "nuclei", "misp"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "cicd-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "roundcube-webmail", "report-phish", "mailcow-wazuh-integration", "soc-bridge", "gitlab", "gitlab-keycloak-integration", "keycloak-mailcow-bridge", "cicd-security-pipeline", "semgrep", "trivy", "owasp-zap", "nuclei", "misp"]
     }
   },
   "modules": [
@@ -444,12 +444,28 @@
       "deploy_strategy": "skill",
       "skill": "mailcow",
       "depends_on": [],
-      "provides": ["smtp", "imap", "mailboxes", "mail-admin"],
+      "provides": ["smtp", "imap", "mailboxes", "mail-admin", "mailcow-api-shim"],
       "required_secrets": ["MAILCOW_ADMIN_PASSWORD", "mailbox credentials"],
       "ports": ["provider-defined"],
-      "health_checks": ["SMTP/IMAP/API checks"],
-      "test_commands": ["Run mailcow management diagnostics."],
-      "notes": "Email platform and test bed for phishing workflows."
+      "health_checks": ["SMTP/IMAP/API checks", "Mailcow API shim health", "Roundcube webmail health"],
+      "test_commands": ["Run mailcow management diagnostics.", "python3 scripts/deploy_mailcow_api.py", "python3 scripts/test_mailcow_api_shim.py --mysql-parity"],
+      "notes": "Email platform and test bed for phishing workflows. The optional deployer also manages Mailcow UI/API sidecars and Roundcube webmail."
+    },
+    {
+      "id": "roundcube-webmail",
+      "name": "Roundcube Webmail Client",
+      "category": "email",
+      "status": "implemented",
+      "deployable": true,
+      "deploy_strategy": "skill",
+      "skill": "roundcube-webmail",
+      "depends_on": ["mailcow"],
+      "provides": ["webmail-ui", "report-phish-button", "mailcow-quarantine-evidence"],
+      "required_secrets": ["mailbox credentials"],
+      "ports": ["2581", "2582 loopback"],
+      "health_checks": ["GET /webmail/ contains Roundcube", "Report Phish creates dashboard ticket and quarantine row"],
+      "test_commands": ["python3 scripts/deploy_mailcow_api.py", "python3 scripts/test_mailcow_api_shim.py --mysql-parity"],
+      "notes": "Roundcube sidecar and plugin managed by the Mailcow API/UI shim deployer; exposed as a first-class email UI module for setup/tool visibility."
     },
     {
       "id": "report-phish",

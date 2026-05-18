@@ -93,7 +93,7 @@ def check_dashboard(doctor, base):
         _status, data = json_request(base, "/api/setup/manifest")
         module_ids = {m.get("id") for m in data.get("modules", [])}
         excluded = {m.get("id") for m in data.get("excluded_modules", [])}
-        required = {"soc-dashboard", "local-ticketing", "itop", "wazuh", "mailcow", "gitlab"}
+        required = {"soc-dashboard", "local-ticketing", "itop", "wazuh", "mailcow", "roundcube-webmail", "gitlab"}
         missing = sorted(required - module_ids)
         banned = sorted(module_ids & {"comfyui", "torrent", "media"})
         if missing:
@@ -177,6 +177,15 @@ def check_mailcow_api(doctor):
             doctor.record(label, "pass" if status == 200 and count > 0 else "warn", f"HTTP {status}, count={count}")
         except Exception as exc:
             doctor.record(label, "warn", f"{exc}; keep direct MySQL bridge as canonical")
+
+    ui_base = os.environ.get("MAILCOW_UI_BASE", "http://127.0.0.1:2581").rstrip("/")
+    try:
+        status, raw, _headers = http_request(ui_base + "/webmail/", timeout=20)
+        body = raw[:50000].decode("utf-8", errors="replace")
+        ok = status == 200 and "Roundcube" in body
+        doctor.record("Roundcube webmail UI", "pass" if ok else "warn", f"HTTP {status}")
+    except Exception as exc:
+        doctor.record("Roundcube webmail UI", "warn", str(exc))
 
 
 def check_file_bundles(doctor):

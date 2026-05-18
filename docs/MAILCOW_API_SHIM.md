@@ -170,7 +170,8 @@ The deployer is idempotent:
   headers for `/cache/*` so browsers do not reuse stale broken demo assets
 - installs `mailcow_compat_api.php` into the Mailcow web root
 - writes the API key only to the restricted `api-nginx/.api_key` file
-- recreates only the sidecar containers `php-fpm-mailcow-api` and `nginx-mailcow-api`
+- recreates only the sidecar containers `php-fpm-mailcow-api`,
+  `nginx-mailcow-api`, and `roundcube-mailcow-demo`
 - exposes the read API on `8081` and the demo UI on `2581`
 - routes exact `/` on the demo UI port to `/admin/` through FastCGI so the
   browser-visible demo entrypoint cannot land on the incomplete user-login path
@@ -523,8 +524,8 @@ If API reads work but counts do not match MySQL:
 The shim is isolated from the primary Mailcow mail path. To disable the optional API sidecars:
 
 ```bash
-docker stop nginx-mailcow-api php-fpm-mailcow-api
-docker rm nginx-mailcow-api php-fpm-mailcow-api
+docker stop nginx-mailcow-api php-fpm-mailcow-api roundcube-mailcow-demo
+docker rm nginx-mailcow-api php-fpm-mailcow-api roundcube-mailcow-demo
 ```
 
 Do not remove the main Mailcow containers unless you are intentionally rolling back the full email stack. Direct MySQL bridge operations continue to work without the HTTP shim.
@@ -533,7 +534,8 @@ Do not remove the main Mailcow containers unless you are intentionally rolling b
 
 Before a demo or deployment review:
 
-- `docker ps` shows `nginx-mailcow-api` and `php-fpm-mailcow-api` running.
+- `docker ps` shows `nginx-mailcow-api`, `php-fpm-mailcow-api`, and
+  `roundcube-mailcow-demo` running.
 - `python3 scripts/test_mailcow_api_shim.py --mysql-parity` passes.
 - `python3 scripts/platform_doctor.py` passes from the dashboard repo.
 - `python3 scripts/test_integration.py` passes from the Keycloak-Mailcow bridge repo.

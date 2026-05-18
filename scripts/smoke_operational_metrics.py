@@ -67,11 +67,14 @@ def main():
     require(all("review_state" in row for row in workflows), "workflow list missing review_state")
     require(all("run_count" in row for row in workflows), "workflow list missing run counters")
 
+    request("POST", "/api/tools/sync-manifest", {})
     tools = request("GET", "/api/tools")
     tool_names = [str(row.get("name", "")).lower() for row in tools.get("tools", [])]
     module_names = [str(row.get("name", "")).lower() for row in tools.get("setup_modules", [])]
     require("comfyui" not in tool_names, "ComfyUI should not be shown on tools dashboard")
     require(module_names, "setup modules should be reflected on tools dashboard")
+    require("roundcube webmail" in tool_names, "Roundcube Webmail should be shown on tools dashboard")
+    require("roundcube webmail client" in module_names, "Roundcube Webmail Client setup module should be reflected")
 
     stamp = int(time.time())
     payload = {

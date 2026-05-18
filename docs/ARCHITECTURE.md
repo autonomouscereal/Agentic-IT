@@ -221,5 +221,7 @@ The dashboard should treat email as a provider capability, not as a hard depende
 - Mailcow for the open-source email stack.
 - Keycloak-Mailcow bridge scripts for provisioning and sync through direct MySQL.
 - Optional Mailcow HTTP API shim for read-only compatibility checks and future adapter-style reads.
+- Roundcube webmail as the deployable browser mailbox client and report-phish
+  button surface for demos and email workflow tests.
 
-The Mailcow HTTP shim is documented in `docs/MAILCOW_API_SHIM.md`. It exposes only domain, mailbox, and alias inventory and intentionally omits password hashes. It should not be used as a generic write API. In production-style deployments, a customer email product should satisfy the same provider contract through its own adapter while tickets, approvals, audit logs, and agent context remain canonical in the dashboard.
+The Mailcow HTTP shim and Roundcube sidecar are documented in `docs/MAILCOW_API_SHIM.md`. The API shim exposes only domain, mailbox, and alias inventory and intentionally omits password hashes. It should not be used as a generic write API. In production-style deployments, a customer email product should satisfy the same provider contract through its own adapter while tickets, approvals, audit logs, and agent context remain canonical in the dashboard.
