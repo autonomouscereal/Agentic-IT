@@ -37,6 +37,13 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn("Queued Agents", self.agents_js)
         self.assertIn("Waiting On Gate", self.agents_js)
 
+    def test_agent_history_prioritizes_demo_evidence(self):
+        self.assertIn("const AGENT_DEMO_TICKET_IDS", self.agents_js)
+        self.assertIn("Recent Agent Evidence", self.agents_js)
+        self.assertIn("function isArchivedAgentNoise(a)", self.agents_js)
+        self.assertIn("Archived lab history:", self.agents_js)
+        self.assertIn("Use Tickets -> Demo Proofs", self.agents_js)
+
     def test_ops_metrics_labels_postmortem_tasks_and_renders_status_chips(self):
         self.assertIn("function agentTaskMetricLabel(taskType)", self.dashboard_js)
         self.assertIn('postmortem: "Postmortem agent task"', self.dashboard_js)
@@ -51,8 +58,8 @@ class FrontendUiRegressionTests(unittest.TestCase):
     def test_overview_agent_count_uses_open_lifecycle_total(self):
         index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
         self.assertIn("Open Agents", index_html)
-        self.assertIn("/static/js/dashboard.js?v=20260514-open-agents", index_html)
-        self.assertIn("/static/js/agents.js?v=20260514-open-agents", index_html)
+        self.assertRegex(index_html, r"/static/js/dashboard\.js\?v=[0-9a-z-]+")
+        self.assertRegex(index_html, r"/static/js/agents\.js\?v=[0-9a-z-]+")
         self.assertIn("function computeAgentLifecycleCounts(agents)", self.dashboard_js)
         self.assertIn("function setAgentOpenCount(count)", self.dashboard_js)
         self.assertIn("function agentOpenCountFromStats(agents)", self.dashboard_js)

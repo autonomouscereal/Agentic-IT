@@ -649,6 +649,16 @@ body {
     background: rgba(0, 212, 255, 0.08);
 }
 
+.source-badge.demo {
+    color: var(--accent-success);
+    border-color: rgba(0, 255, 136, 0.26);
+    background: rgba(0, 255, 136, 0.1);
+}
+
+.demo-ticket-row {
+    background: rgba(0, 255, 136, 0.035);
+}
+
 /* Slide-in animation for notifications */
 @keyframes slide-in {
     from { transform: translateX(100px); opacity: 0; }
@@ -821,6 +831,18 @@ body {
     text-align: center;
     padding: 60px;
     color: var(--text-muted);
+}
+
+.agent-archive-note {
+    grid-column: 1 / -1;
+    color: var(--text-muted);
+    border: 1px dashed rgba(120, 139, 169, 0.26);
+    border-radius: 8px;
+    background: rgba(16, 24, 38, 0.42);
+    font-size: 12px;
+    line-height: 1.45;
+    padding: 9px 11px;
+    text-align: center;
 }
 
 /* Tools Grid */
@@ -1372,6 +1394,77 @@ body {
     color: var(--text-muted);
     font-size: 11px;
     margin-bottom: 8px;
+}
+
+.evidence-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin: 10px 0 14px;
+}
+
+.evidence-tile {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: rgba(16, 24, 38, 0.72);
+    padding: 9px 10px;
+    min-height: 76px;
+}
+
+.evidence-tile span,
+.evidence-tile small {
+    display: block;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.evidence-tile strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 20px;
+    line-height: 1.25;
+    margin: 2px 0;
+}
+
+.trace-subsection {
+    margin: 14px 0 8px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.trace-card {
+    border: 1px solid rgba(45, 58, 79, 0.72);
+    border-radius: 8px;
+    background: rgba(8, 13, 24, 0.44);
+    padding: 9px 10px;
+    margin-bottom: 8px;
+}
+
+.trace-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.trace-card-meta {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.trace-card-body {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 6px;
+    overflow-wrap: anywhere;
 }
 
 .gate-card {

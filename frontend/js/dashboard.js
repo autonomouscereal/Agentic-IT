@@ -118,6 +118,8 @@ function openAuditTrail(query, source = "") {
 }
 
 let ticketSort = { by: "updated_at", dir: "desc" };
+const DEMO_TICKET_IDS = [531, 83, 82, 580, 578, 525, 539, 422, 558, 575, 530, 118, 363, 430];
+const DEMO_TICKET_ORDER = new Map(DEMO_TICKET_IDS.map((id, idx) => [id, idx]));
 
 function initTicketSorting() {
     document.querySelectorAll("[data-ticket-sort]").forEach(th => {
@@ -302,7 +304,7 @@ async function loadDashboardStats() {
 
     // Update charts
     updateTicketTrendChart(data.tickets?.trend || []);
-    updateAgentDistChart(data.agents?.distribution || []);
+    updateAgentDistChart(data.agents || {});
 
     // Update activity feed
     const feed = document.getElementById("activity-feed");
@@ -470,13 +472,18 @@ async function loadPendingChanges() {
 async function loadTickets() {
     const status = document.getElementById("ticket-filter-status")?.value || "";
     const params = new URLSearchParams();
-    if (status) params.set("status", status);
+    if (status && status !== "__demo") params.set("status", status);
     params.set("sort_by", ticketSort.by);
     params.set("sort_dir", ticketSort.dir);
-    params.set("limit", "200");
+    params.set("limit", status === "__demo" ? "1000" : "200");
 
     const data = await apiGet(`/api/tickets?${params}`);
     if (!data) return;
+    if (status === "__demo") {
+        data.tickets = (data.tickets || [])
+            .filter(t => DEMO_TICKET_ORDER.has(Number(t.id)))
+            .sort((a, b) => DEMO_TICKET_ORDER.get(Number(a.id)) - DEMO_TICKET_ORDER.get(Number(b.id)));
+    }
 
     const tbody = document.getElementById("tickets-tbody");
     if (!tbody) return;
@@ -492,10 +499,11 @@ async function loadTickets() {
             ? `<span class="source-badge itop" title="Synced from iTop">iTop</span>`
             : `<span class="source-badge local" title="Local">Local</span>`;
         return `
-        <tr data-itop-ref="${t.itop_ref}">
+        <tr data-itop-ref="${t.itop_ref}" class="${DEMO_TICKET_ORDER.has(Number(t.id)) ? "demo-ticket-row" : ""}">
             <td>${t.id}</td>
             <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(t.title)}">
                 ${sourceBadge}
+                ${DEMO_TICKET_ORDER.has(Number(t.id)) ? '<span class="source-badge demo">Demo</span>' : ""}
                 ${t.external_url ? `<a class="ticket-link" href="${escAttr(t.external_url)}" target="_blank" rel="noopener">${escHtml(t.title)}</a>` : escHtml(t.title)}
             </td>
             <td><span class="class-badge">${escHtml(t.itop_class || "Incident")}</span></td>
@@ -1285,6 +1293,86 @@ function jsonBlock(value) {
     return JSON.stringify(value, null, 2);
 }
 
+function shortText(value, max = 220) {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, accessRequests }) {
+    const completedTasks = tasks.filter(t => t.status === "completed").length;
+    const completedChanges = changes.filter(c => c.status === "completed").length;
+    const promotedPostmortems = postmortems.filter(p => ["promoted", "approved", "ready_for_review"].includes(p.status)).length;
+    const accessCompleted = accessRequests.filter(a => ["approved", "completed", "resolved"].includes(a.status) || ["approved", "completed"].includes(a.change_status)).length;
+    const tiles = [
+        ["Notes", notes.length, "human-readable updates"],
+        ["Audit", relevant.length, "events linked to ticket"],
+        ["Agent Work", `${completedTasks}/${tasks.length}`, "tasks completed"],
+        ["Approval Gates", `${completedChanges}/${changes.length}`, "gates completed"],
+        ["Access", `${accessCompleted}/${accessRequests.length}`, "requests approved"],
+        ["Learning", `${promotedPostmortems}/${postmortems.length}`, "postmortems ready+"],
+    ];
+    return `
+        <div class="evidence-grid">
+            ${tiles.map(([label, value, hint]) => `
+                <div class="evidence-tile">
+                    <span>${escHtml(label)}</span>
+                    <strong>${escHtml(value)}</strong>
+                    <small>${escHtml(hint)}</small>
+                </div>
+            `).join("")}
+        </div>
+    `;
+}
+
+function renderTaskTrace(tasks) {
+    if (!tasks.length) return '<div class="learning-meta">No agent task records linked yet.</div>';
+    return tasks.slice(0, 8).map(t => `
+        <div class="trace-card">
+            <div class="trace-card-head">
+                <span>Task #${escHtml(t.id)} &middot; ${escHtml(t.task_type || "agent")}</span>
+                <span class="status-badge ${statusClass(t.status)}">${escHtml(t.status || "-")}</span>
+            </div>
+            <div class="trace-card-meta">
+                Agent ${escHtml(t.agent_id || "-")} &middot; ${escHtml(t.progress_pct ?? 0)}% &middot; ${formatTime(t.completed_at || t.started_at || t.created_at)}
+            </div>
+            ${(t.error_message || t.output) ? `<div class="trace-card-body">${escHtml(shortText(t.error_message || t.output, 260))}</div>` : ""}
+        </div>
+    `).join("");
+}
+
+function renderPostmortemTrace(postmortems) {
+    if (!postmortems.length) return '<div class="learning-meta">No postmortem artifact linked yet.</div>';
+    return postmortems.slice(0, 5).map(p => `
+        <div class="trace-card">
+            <div class="trace-card-head">
+                <button class="inline-link" onclick="viewPostmortem(${Number(p.id)})">Postmortem #${escHtml(p.id)}</button>
+                <span class="status-badge ${statusClass(p.status)}">${escHtml(learningStatusLabel(p.status))}</span>
+            </div>
+            <div class="trace-card-meta">${escHtml(p.created_by || "system")} &middot; ${formatTime(p.updated_at || p.created_at)}</div>
+            <div class="trace-card-body">${escHtml(shortText(p.summary || p.improvements || "Postmortem recorded.", 280))}</div>
+        </div>
+    `).join("");
+}
+
+function renderAccessTrace(accessRequests) {
+    if (!accessRequests.length) return "";
+    return `
+        <div class="trace-subsection">Access Requests</div>
+        ${accessRequests.slice(0, 6).map(a => `
+            <div class="trace-card">
+                <div class="trace-card-head">
+                    <span>${escHtml(a.permission || "access")} for ${escHtml(a.resource || a.resource_id || "resource")}</span>
+                    <span class="status-badge ${statusClass(a.status || a.change_status)}">${escHtml(a.status || a.change_status || "-")}</span>
+                </div>
+                <div class="trace-card-meta">
+                    ${a.access_ticket_id ? `ticket #${escHtml(a.access_ticket_id)} &middot; ` : ""}${escHtml(a.assignment_group || "approval group")}
+                </div>
+                ${a.reason ? `<div class="trace-card-body">${escHtml(shortText(a.reason, 240))}</div>` : ""}
+            </div>
+        `).join("")}
+    `;
+}
+
 async function viewPostmortem(id) {
     const data = await apiGet(`/api/postmortems/${id}`);
     if (!data) return;
@@ -1390,6 +1478,8 @@ async function loadTicketActivity(ticketId) {
         const notes = contextData?.notes || [];
         const tasks = contextData?.tasks || [];
         const changes = contextData?.change_requests || [];
+        const postmortems = contextData?.postmortems || [];
+        const accessRequests = contextData?.access_requests || [];
 
         const modalBody = document.getElementById("modal-body");
         if (!modalBody) return;
@@ -1401,12 +1491,21 @@ async function loadTicketActivity(ticketId) {
         const activityHtml = `
             <div class="modal-section">
                 <div class="section-title">
-                    Ticket Timeline
+                    Evidence Trail
                     <button class="inline-link" onclick="openAuditTrail('ticket_${ticketId}')">open full trail</button>
                 </div>
                 <div class="timeline-summary">
-                    ${notes.length} notes &middot; ${relevant.length} audit/events &middot; ${tasks.length} tasks &middot; ${changes.length} changes
+                    Canonical ticket evidence, approval gates, agent work, postmortems, and audit entries linked to this ticket.
                 </div>
+                ${renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, accessRequests })}
+                <div class="trace-subsection">Agent Work</div>
+                ${renderTaskTrace(tasks)}
+                <div class="trace-subsection">Approval Gates</div>
+                ${changes.length ? changes.slice(0, 8).map(c => renderGateSummary(c)).join("") : '<div class="learning-meta">No approval gates recorded.</div>'}
+                ${renderAccessTrace(accessRequests)}
+                <div class="trace-subsection">Postmortems & Learning</div>
+                ${renderPostmortemTrace(postmortems)}
+                <div class="trace-subsection">Human Notes & Audit</div>
                 ${notes.length === 0 ? '<div style="color:var(--text-muted);font-size:12px">No notes recorded yet</div>' : ""}
                 ${notes.slice(-8).reverse().map(n => `
                     <div class="modal-activity-item note-item">

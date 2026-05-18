@@ -120,6 +120,20 @@ Additional reconstructed context for future Codex sessions lives at:
 | Health endpoint | http://192.168.50.222:25480/health | 25480 |
 | PostgreSQL DB | 192.168.50.222:5433 | 5433 |
 
+## Demo Readiness Catalog
+
+The prepared demo examples are tracked in
+`docs/DEMO_TICKET_CATALOG.md`. The Tickets page includes a `Demo Proofs`
+filter that shows the curated resolved proof tickets in demo order. Use the
+ticket modal's `Evidence Trail` section for an audience-facing explanation of
+notes, audit entries, agent work, approval gates, access requests, and
+postmortems before dropping into the full audit trail.
+
+When cleaning old test data, do not delete tickets. Archive stale smoke/proof
+artifacts by moving them to `closed`, adding a `demo-curation` note, and
+reconciling dangling approval gates to `rejected` or `completed` with clear
+cleanup rationale.
+
 ## Docker Containers
 
 | Container | Image | Internal Port | Status |
@@ -667,8 +681,8 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai
 # Restart API container (no rebuild needed for frontend changes)
 python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker restart soc-dashboard-api"
 
-# Access PostgreSQL
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker exec -it soc-dashboard-db psql -U soc_admin -d soc_dashboard"
+# Access PostgreSQL using the live container's own env-backed user/database
+python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc-dashboard && docker compose exec db sh -lc 'psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\"'"
 
 # Rebuild API container (after Python code changes)
 python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc-dashboard && docker compose up -d --build api"

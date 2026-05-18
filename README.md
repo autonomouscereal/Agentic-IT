@@ -53,6 +53,7 @@ evidence.
 - [Testing Runbook](docs/TESTING.md)
 - [Known Issues And Fix Log](docs/KNOWN_ISSUES.md)
 - [Demo Runbook](docs/DEMO_RUNBOOK.md)
+- [Demo Ticket Catalog](docs/DEMO_TICKET_CATALOG.md)
 
 ## Hard Rules
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agentic Operations</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260518-demo-readiness">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -171,7 +171,7 @@
                     </div>
                     <div class="chart-card">
                         <div class="chart-header">
-                            <h3>Agent Status</h3>
+                            <h3>Open Agent Load</h3>
                         </div>
                         <div class="chart-body">
                             <canvas id="agent-dist-chart"></canvas>
@@ -214,8 +214,9 @@
                 <div class="page-header">
                     <h2>Tickets</h2>
                     <div class="header-actions">
-                        <select id="ticket-filter-status" class="filter-select">
+                        <select id="ticket-filter-status" class="filter-select" onchange="loadTickets()">
                             <option value="">All Statuses</option>
+                            <option value="__demo">Demo Proofs</option>
                             <option value="new">New</option>
                             <option value="assigned">Assigned</option>
                             <option value="resolved">Resolved</option>
@@ -666,9 +667,9 @@
         </div>
     </div>
 
-    <script src="/static/js/dashboard.js?v=20260514-open-agents"></script>
-    <script src="/static/js/charts.js"></script>
-    <script src="/static/js/agents.js?v=20260514-open-agents"></script>
+    <script src="/static/js/dashboard.js?v=20260518-demo-readiness"></script>
+    <script src="/static/js/charts.js?v=20260518-demo-readiness"></script>
+    <script src="/static/js/agents.js?v=20260518-demo-readiness"></script>
     <script src="/static/js/websocket.js"></script>
 </body>
 </html>

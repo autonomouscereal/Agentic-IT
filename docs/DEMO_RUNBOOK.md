@@ -228,6 +228,14 @@ the demo path. The live Keycloak issuer and Admin Console URL are
 `https://192.168.50.222:8443`; the older `keycloak.internal` alias is retained
 only as a container-side compatibility route for internal service access.
 
+## Prepared Ticket Catalog
+
+Use [Demo Ticket Catalog](DEMO_TICKET_CATALOG.md) for the current curated list
+of prepared dashboard examples. The Tickets page has a `Demo Proofs` filter
+that shows the strongest resolved examples in demo order. Each ticket modal now
+has an `Evidence Trail` section with notes, audit count, agent work, approval
+gates, access requests, and postmortems in a human-readable layout.
+
 Latest verified GitLab runner artifacts:
 
 - GitLab project `root/agentic-cicd-demo-1778538475`, project id `15`

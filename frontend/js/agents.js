@@ -4,6 +4,8 @@ const activeStatuses = ['spawned', 'running', 'working'];
 const waitingStatuses = ['pending_approval', 'awaiting_access', 'awaiting_user_response', 'blocked'];
 const stalledStatuses = ['stalled'];
 const finishedStatuses = ['finished', 'failed', 'stopped', 'terminated', 'resolved'];
+const AGENT_DEMO_TICKET_IDS = [531, 83, 82, 580, 578, 525, 539, 422, 558, 575, 530, 118, 363, 430];
+const AGENT_DEMO_TICKET_SET = new Set(AGENT_DEMO_TICKET_IDS);
 
 async function loadAgents() {
     loadRunnerHealth();
@@ -20,6 +22,11 @@ async function loadAgents() {
     const waiting = agents.filter(a => waitingStatuses.includes(a.status));
     const stalled = agents.filter(a => stalledStatuses.includes(a.status));
     const history = agents.filter(a => finishedStatuses.includes(a.status));
+    const archivedHistory = history.filter(a => isArchivedAgentNoise(a));
+    const demoHistory = history.filter(a => AGENT_DEMO_TICKET_SET.has(Number(a.ticket_id)));
+    const evidenceHistory = demoHistory.length
+        ? demoHistory.sort((a, b) => AGENT_DEMO_TICKET_IDS.indexOf(Number(a.ticket_id)) - AGENT_DEMO_TICKET_IDS.indexOf(Number(b.ticket_id)))
+        : history.filter(a => !isArchivedAgentNoise(a));
 
     let html = "";
 
@@ -47,13 +54,16 @@ async function loadAgents() {
         html += stalled.map(a => renderAgentCard(a, true)).join("");
     }
 
-    // History section (collapsed by default)
-    if (history.length > 0) {
-        html += `<div class="agent-section-header history">Agent History (${history.length})</div>`;
-        html += history.slice(0, 10).map(a => renderAgentCard(a, false)).join("");
-        if (history.length > 10) {
-            html += `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);font-size:12px;padding:8px">...and ${history.length - 10} more</div>`;
+    if (evidenceHistory.length > 0) {
+        html += `<div class="agent-section-header history">Recent Agent Evidence (${evidenceHistory.length})</div>`;
+        html += evidenceHistory.slice(0, 10).map(a => renderAgentCard(a, false)).join("");
+        if (evidenceHistory.length > 10) {
+            html += `<div class="agent-archive-note">...and ${evidenceHistory.length - 10} more evidence records. Use Tickets -> Demo Proofs for the curated walkthrough.</div>`;
         }
+    }
+
+    if (archivedHistory.length > 0) {
+        html += `<div class="agent-archive-note">Archived lab history: ${archivedHistory.length} closed synthetic agents are retained in audit but hidden from the primary demo view.</div>`;
     }
 
     if (agents.length === 0) {
@@ -108,7 +118,7 @@ function renderAgentCard(a, isStalled) {
             <button class="btn btn-sm btn-warning" onclick="restartAgent(${a.id})">Restart</button>
             <button class="btn btn-sm btn-danger" onclick="stopAgent(${a.id})">Stop</button>
         `;
-    } else {
+    } else if (!isTerminalTicket(a)) {
         actionButtons += `<button class="btn btn-sm btn-warning" onclick="restartAgent(${a.id})">Restart</button>`;
     }
 
@@ -121,6 +131,7 @@ function renderAgentCard(a, isStalled) {
         <div class="agent-ticket">${renderAgentTicketLink(a)}</div>
         <div class="agent-meta">
             <span>Model: ${a.model || "-"}</span>
+            <span>Ticket: ${a.ticket_status || "-"}</span>
             <span>Total work time: ${workTime}</span>
         </div>
         ${renderTaskSummary(a)}
@@ -129,6 +140,21 @@ function renderAgentCard(a, isStalled) {
         </div>
     </div>
     `;
+}
+
+function isTerminalTicket(a) {
+    return ["resolved", "closed", "implemented", "cancelled"].includes(a?.ticket_status);
+}
+
+function isArchivedAgentNoise(a) {
+    const title = String(a?.ticket_title || "").toLowerCase();
+    const error = String(a?.task_error_message || a?.error_message || "").toLowerCase();
+    return isTerminalTicket(a)
+        && ["failed", "stopped", "terminated"].includes(a?.status)
+        && (error.includes("archived stale synthetic/demo artifact")
+            || title.includes("smoke test")
+            || title.includes("runner smoke")
+            || title.includes("deploy agentic it/soc platform profile"));
 }
 
 function isQueuedAgent(a) {

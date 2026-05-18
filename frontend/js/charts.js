@@ -113,14 +113,20 @@ function updateTicketTrendChart(trend) {
     ticketTrendChart.update("none");
 }
 
-function updateAgentDistChart(distribution) {
-    if (!agentDistChart || !distribution) return;
+function updateAgentDistChart(agentStats) {
+    if (!agentDistChart || !agentStats) return;
 
-    const labels = distribution.map(d => d.status);
-    const data = distribution.map(d => d.count);
+    const rows = Array.isArray(agentStats) ? agentStats : (agentStats.distribution || []);
+    const openStatuses = new Set(["queued", "spawned", "running", "working", "pending_approval", "awaiting_access", "awaiting_user_response", "blocked", "stalled"]);
+    const openRows = rows.filter(d => openStatuses.has(d.status) && Number(d.count || 0) > 0);
+    const labels = openRows.length ? openRows.map(d => d.status) : ["No open agents"];
+    const data = openRows.length ? openRows.map(d => d.count) : [1];
 
     agentDistChart.data.labels = labels;
     agentDistChart.data.datasets[0].data = data;
+    agentDistChart.data.datasets[0].backgroundColor = openRows.length
+        ? [chartColors.cyan, chartColors.green, chartColors.yellow, chartColors.orange, chartColors.purple, chartColors.gray]
+        : ["rgba(100, 116, 139, 0.35)"];
     agentDistChart.update("none");
 }
 
