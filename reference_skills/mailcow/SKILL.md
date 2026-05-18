@@ -57,7 +57,7 @@ This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-bui
 | Bind mounts (not Docker volumes) | All data lives under `/home/cereal/Mailcow/deploy/data/` for easy backup |
 | `set +e` in entrypoint | Several upstream checks fail in our environment (missing templates, no replication) |
 | Optional UI/API sidecars | `nginx-mailcow-api` serves API compatibility on `8081` and the demo UI on `2581`; `php-fpm-mailcow-api` uses the mounted web root with writable Twig cache |
-| UI compatibility schema/assets | The custom seed must include `logs`, current-shape `tfa`, and `mailbox.authsource`; extensionless routes must rewrite through FastCGI; generated CSS/JS must write to `/web/cache` so nginx can serve `/cache/<hash>` |
+| UI compatibility schema/assets | The custom seed must include `logs`, current-shape `tfa`, and `mailbox.authsource`; extensionless routes must rewrite through FastCGI; generated CSS/JS must write to `/web/cache` with `?v=<filemtime>` URLs and no-store cache headers so nginx can serve fresh `/cache/<hash>` assets |
 
 ---
 

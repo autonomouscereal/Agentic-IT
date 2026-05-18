@@ -129,6 +129,8 @@ The deployer is idempotent:
 - patches ambiguous custom-schema UI queries from `kind` to `mailbox.kind`
 - patches generated CSS/JS paths to `/web/cache` so the nginx sidecar can serve
   `/cache/<hash>.css` and `/cache/<hash>.js`
+- appends `?v=<filemtime>` to generated CSS/JS URLs and sends no-store cache
+  headers for `/cache/*` so browsers do not reuse stale broken demo assets
 - installs `mailcow_compat_api.php` into the Mailcow web root
 - writes the API key only to the restricted `api-nginx/.api_key` file
 - recreates only the sidecar containers `php-fpm-mailcow-api` and `nginx-mailcow-api`
@@ -335,8 +337,9 @@ python3 scripts/deploy_mailcow_api.py
 ```
 
 The deployer creates `/web/cache`, permissions it for the php-fpm worker,
-patches `header.inc.php` and `footer.inc.php` to use `/web/cache`, and verifies
-the generated cache refs return HTTP `200`.
+patches `header.inc.php` and `footer.inc.php` to use `/web/cache`, appends a
+file-mtime version query to generated asset URLs, and verifies the generated
+cache refs return HTTP `200`.
 
 ### Admin login loops or fails after the password is correct.
 

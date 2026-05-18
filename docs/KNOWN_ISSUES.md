@@ -148,6 +148,50 @@ Verification:
 - Headless browser check reports visible dashboard text, `0` login inputs,
   `0` failed network requests, and `0` console errors.
 
+
+### Mailcow authenticated dashboard still blank in interactive browser
+
+Status: fixed on live AI server and bundled deployer.
+
+Reported on 2026-05-18 after the cache asset repair. The login page renders,
+but after successful login the interactive browser view is blank. Previous
+headless checks saw HTML and no failed asset requests, so this needs a deeper
+check of authenticated dashboard JavaScript, API/XHR calls, CSS visibility, and
+browser-specific rendering state.
+
+Investigation checklist:
+
+- Capture an authenticated dashboard screenshot and pixel/DOM evidence.
+- Inspect dashboard JS/XHR calls after login.
+- Check whether body content exists but is hidden by CSS/overlay/theme state.
+- Check `/api/v1/*`, `/json_api.php`, docker/status, and dashboard widgets that
+  run after page load.
+- Patch the shim/deployer/docs once the browser-visible blank page is fixed.
+
+Root cause:
+
+- The first asset-cache repair made generated CSS/JS available, but the generated
+  URLs were stable (`/cache/<hash>.css` and `/cache/<hash>.js`). Browsers that
+  had already loaded the broken/404 assets could keep a stale blank/unstyled
+  dashboard state.
+
+Fix:
+
+- Appended `?v=<filemtime>` to generated Mailcow CSS/JS cache URLs in
+  `header.inc.php` and `footer.inc.php`.
+- Added `Cache-Control: no-store, no-cache, must-revalidate` for `/cache/*` in
+  the nginx sidecar config.
+- Re-ran the deployer after updating the bundled source to prove the fix
+  survives sidecar redeploys.
+
+Verification:
+
+- Authenticated dashboard HTML now references versioned generated assets.
+- `/cache/*.css?v=...` and `/cache/*.js?v=...` return HTTP `200` and no-store
+  cache headers.
+- Headless browser login to `/admin/dashboard` shows visible dashboard text,
+  zero login inputs, zero failed network requests, and zero console errors.
+
 ## Found During 2026-05-18 Documentation Refresh
 
 ### Live AI server has standalone proxy owning port 4001

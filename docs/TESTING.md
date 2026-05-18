@@ -45,7 +45,7 @@ Expected:
 - `ps_path` present
 - no active processes after completed smoke tests
 
-`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, provider adapters, iTop UI reachability, Mailcow HTTP API domain/mailbox/alias counts, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence. For the Mailcow demo surface, also verify `http://192.168.50.222:2581` renders the login page, generated `/cache` CSS/JS assets return HTTP `200`, admin form login reaches `/admin/dashboard` with visible dashboard text, and IMAP login for `demo_account_1@mailcow.local` returns `OK` using the vault password.
+`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, provider adapters, iTop UI reachability, Mailcow HTTP API domain/mailbox/alias counts, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence. For the Mailcow demo surface, also verify `http://192.168.50.222:2581` renders the login page, generated `/cache` CSS/JS assets return HTTP `200` with no-store cache headers and `?v=` URL versions, admin form login reaches `/admin/dashboard` with visible dashboard text, and IMAP login for `demo_account_1@mailcow.local` returns `OK` using the vault password.
 
 Latest verified result on 2026-05-13:
 

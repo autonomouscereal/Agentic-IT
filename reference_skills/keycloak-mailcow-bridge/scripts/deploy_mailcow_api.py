@@ -266,10 +266,12 @@ def patch_mailcow_web_for_ui():
         os.path.join(MAILCOW_DOCKERIZED_WEB, "inc", "header.inc.php"): [
             ("$CSSPath = '/tmp/' . $hash . '.css';", "$CSSPath = '/web/cache/' . $hash . '.css';"),
             ("cleanupCSS($hash);", "cleanupCSS($hash, '/web/cache/*.css');"),
+            ("'css_path' => '/cache/'.basename($CSSPath),", "'css_path' => '/cache/'.basename($CSSPath).'?v='.filemtime($CSSPath),"),
         ],
         os.path.join(MAILCOW_DOCKERIZED_WEB, "inc", "footer.inc.php"): [
             ("$JSPath = '/tmp/' . $hash . '.js';", "$JSPath = '/web/cache/' . $hash . '.js';"),
             ("cleanupJS($hash);", "cleanupJS($hash, '/web/cache/*.js');"),
+            ("'js_path' => '/cache/'.basename($JSPath),", "'js_path' => '/cache/'.basename($JSPath).'?v='.filemtime($JSPath),"),
         ],
     }
     for file_path, replacements in asset_rewrites.items():
@@ -506,6 +508,11 @@ http {{
         }}
 
         # Static files
+        location ~ ^/cache/ {{
+            add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+            try_files $uri =404;
+        }}
+
         location ~ ^/(fonts|js|css|img)/ {{
             expires max;
             add_header Cache-Control public;

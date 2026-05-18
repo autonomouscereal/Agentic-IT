@@ -87,6 +87,8 @@ Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Ma
 - rewrite extensionless UI routes through FastCGI without serving PHP source
 - write generated CSS/JS to `/web/cache` so the nginx sidecar can serve the
   `/cache/<hash>` assets and the UI does not render blank/unstyled
+- append a file-mtime `?v=` query and no-store cache headers for `/cache/*` so
+  interactive browsers do not reuse stale broken assets after a repair
 - install `mailcow_compat_api.php` for read-only `get/domain`, `get/mailbox`, and `get/alias` compatibility when the stock `json_api.php` path returns empty bodies in custom deployments
 - reject invalid API keys with HTTP 401
 - never print API keys in logs
