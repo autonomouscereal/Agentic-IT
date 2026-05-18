@@ -40,6 +40,29 @@ Encrypted, agnostic SSH management tool. Zero hardcoded secrets. Zero escaping i
 
 **Command flow (no escaping issues):** Script writes command to file -> `--command-file` or `--script` reads it -> passes to remote bash via SFTP upload + execution. Bash shell never parses the command string.
 
+## Stable Credential Access After Skill Sync
+
+For the Windows lab, the stable credential command is:
+
+```powershell
+python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get <vault-key>
+```
+
+Use this for application credentials such as `demo_account_1` and
+`keycloak_admin`. The command prints the secret because that is its purpose, so
+do not paste the value into docs, source, logs, or chat transcripts.
+
+The skill sync installer preserves local-only excluded files in this directory:
+
+- `.cred_key`
+- `.cred_vault.json`
+- `servers.json`
+
+Those files are deliberately not committed to the portable `reference_skills`
+bundle. If a legacy sync ever removes them, restore them from
+`C:\Users\cereal\.claude\skills\server-manager` or the `vault-backup` skill
+checkpoints before running credential commands again.
+
 ---
 
 ## First-Time Setup (any environment)

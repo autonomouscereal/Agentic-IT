@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -121,7 +122,20 @@ def assert_inside(child, parent):
         raise RuntimeError(f"Refusing to modify {child}; expected it under {parent}")
 
 
-def copy_skill(src, dest, config):
+def copy_skill(src, dest, config, preserve_existing_excluded=False):
+    preserved_root = None
+    preserved_files = []
+    if preserve_existing_excluded and dest.exists():
+        preserved_root = Path(tempfile.mkdtemp(prefix="skill-sync-preserve-"))
+        for path in dest.rglob("*"):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(dest)
+            if is_excluded(rel, config) or is_excluded(path, config):
+                target = preserved_root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+                preserved_files.append(rel)
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -148,6 +162,13 @@ def copy_skill(src, dest, config):
             else:
                 shutil.copy2(path, target)
             copied += 1
+    if preserved_root:
+        for rel in preserved_files:
+            src_file = preserved_root / rel
+            target = dest / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, target)
+        shutil.rmtree(preserved_root, ignore_errors=True)
     return copied, skipped
 
 
@@ -245,7 +266,7 @@ def install(args, config):
         if not (src / "SKILL.md").exists():
             continue
         dest = destination / skill
-        copied, skipped = copy_skill(src, dest, config)
+        copied, skipped = copy_skill(src, dest, config, preserve_existing_excluded=True)
         records.append({"name": skill, "destination": str(dest), "copied_files": copied, "skipped_paths": skipped})
     print(json.dumps({"status": "installed", "destination": str(destination), "skills": records}, indent=2))
     return 0

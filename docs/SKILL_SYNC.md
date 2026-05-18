@@ -38,6 +38,14 @@ Install bundled skills into a clean harness:
 python scripts/sync_reference_skills.py install --destination /path/to/skills
 ```
 
+Install mode preserves local-only excluded files that already exist in the
+destination, including server-manager `.cred_key`, `.cred_vault.json`, and
+`servers.json`. This is intentional: the portable reference bundle must never
+contain secrets, but installing refreshed skills must also never wipe the local
+credential vault. If an older sync run removed those files, restore them from
+`C:\Users\cereal\.claude\skills\server-manager` or a vault-backup checkpoint,
+then rerun install with the current script.
+
 Use explicit roots when needed:
 
 ```bash
@@ -51,6 +59,7 @@ On Windows, separate roots with `;` instead of `:`.
 The sync config excludes:
 
 - Credential vault files.
+- Server connection inventory such as `servers.json`.
 - `.env` files and credential JSON.
 - Python virtual environments.
 - Node modules.

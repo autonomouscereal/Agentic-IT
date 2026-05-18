@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-18T21:33:46.609481+00:00",
+  "generated_at": "2026-05-18T22:02:31.762690+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -663,8 +663,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 10594,
-          "sha256": "df3c2e95c7cb592d8a6e807e2b5eddaadaa33babd674cf0ec2455e7c3b3686fc"
+          "size": 11418,
+          "sha256": "08815979fe1e9e8fc8cf1bdc6c244537e04953b6e0d89e1922016be66effee00"
         },
         {
           "path": "ssh_client.py",
