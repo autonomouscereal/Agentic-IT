@@ -42,7 +42,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 | Wazuh API | https://127.0.0.1:26500 | 26500 | Native Wazuh API auth | Current demo user returns 401; use dashboard/proxy-gated flows for demos |
 | GitLab | http://192.168.50.222:80 | 80 | Local Rails password + Keycloak OIDC | Demo local login and OIDC start verified |
 | Keycloak | Internal only | N/A | Master realm admin | Operational |
-| Mailcow | http://192.168.50.222:2581 | 2581 | Local + Keycloak bridge | Demo admin UI + mailbox IMAP verified |
+| Mailcow | http://192.168.50.222:2581 | 2581 | Local + Keycloak bridge | Demo admin UI, webmail, IMAP/SMTP, and report-phish quarantine verified |
 
 ## demo_account_1 Unified Credentials
 
@@ -58,7 +58,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 | Wazuh API | YES | Attempted | NO | Native API auth currently returns 401 for the demo user; dashboard auth works |
 | Wazuh OpenSearch Security | YES | YES | YES | Synced to `internal_users.yml`, security config reloaded |
 | GitLab | YES | YES (Rails verified) | YES | Local login returns 302; Keycloak OIDC start redirects to the realm |
-| Mailcow | YES | YES (Mailcow `{BLF-CRYPT}` hash) | YES | Admin UI redirects to `/admin/dashboard`; IMAP auth works for `demo_account_1@mailcow.local` |
+| Mailcow | YES | YES (Mailcow `{BLF-CRYPT}` hash) | YES | Admin UI redirects to `/admin/dashboard`; `/webmail` uses `demo_account_1@mailcow.local`; Report Phish proof is ticket `578`, iTop Incident `370`, gate `167`, agent `227`, quarantine id `28cd6d435f7c88cd9a7b46983c62a1cb` |
 
 ## Multi-Platform User Manager
 
@@ -107,7 +107,7 @@ Unified CLI for managing users across all 5 platforms:
 - **GitLab supports both local login and Keycloak OIDC**: Keep `keycloak.internal:host-gateway` in the GitLab compose service and install the Keycloak proxy CA into `/etc/gitlab/trusted-certs/` before `gitlab-ctl reconfigure`.
 - **Keycloak is internal-only**: No external port mapping. Services reach it via Docker network hostname resolution.
 - **iTop uses local auth**: Form login against MariaDB bcrypt hashes. No SSO configured.
-- **Mailcow demo UI**: Use `http://192.168.50.222:2581` and login as `demo_account_1` with the vault password for admin UI. The mailbox identity is `demo_account_1@mailcow.local` for IMAP tests.
+- **Mailcow demo UI**: Use `http://192.168.50.222:2581` and login as `demo_account_1` with the vault password for admin UI. Use `/webmail` with mailbox identity `demo_account_1@mailcow.local` for IMAP/SMTP and Report Phish demos.
 
 ## Detailed Troubleshooting
 

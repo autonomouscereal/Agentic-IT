@@ -35,7 +35,7 @@ password=<admin_password>
 {
   "username": "user@example.com",
   "email": "user@example.com",
-  "credentials": [{"type": "password", "value": "NewPass123!", "temporary": false}]
+  "credentials": [{"type": "password", "value": "<from-vault-or-prompt>", "temporary": false}]
 }
 ```
 

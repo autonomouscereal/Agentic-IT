@@ -24,7 +24,7 @@ user-invocable: true
 
 Complete, reproducible blueprint for deploying a fully functional Mailcow email server on a bare-metal Ubuntu server using Docker Compose. Covers every step, every error encountered, every fix applied, and every configuration file.
 
-**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. The bare root URL is routed to the admin login surface, stale `MCSESSID` user sessions are recovered, admin login for `demo_account_1` reaches `/admin/dashboard`, dashboard/system/mailbox/queue/quarantine pages are free of invalid JSON and SQL-column warning banners, SOGo links recover to the admin UI, and IMAP auth for `demo_account_1@mailcow.local` returns `OK`. The shim also keeps the read-only compatibility API on `8081`.
+**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. The bare root URL is routed to the admin login surface, stale `MCSESSID` user sessions are recovered, admin login for `demo_account_1` reaches `/admin/dashboard`, dashboard/system/mailbox/queue/quarantine pages are free of invalid JSON and SQL-column warning banners, `/webmail` and `/SOGo/*` route to a demo webmail surface backed by real Mailcow IMAP/SMTP, and IMAP auth for `demo_account_1@mailcow.local` returns `OK`. Report Phish proof: ticket `578`, iTop Incident `370`, gate `167`, Hermes agent `227`, and quarantine id `28cd6d435f7c88cd9a7b46983c62a1cb` visible in `/quarantine`. The shim also keeps the read-only compatibility API on `8081`.
 
 This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-built, hand-tailored Mailcow stack with modified entrypoints, TCP database connectivity (no socket sharing), and custom database seeding.
 
@@ -906,9 +906,9 @@ visible `undefined`/`NaN` values on admin/system/mailbox/queue/quarantine pages.
 
 **Root Cause:** The mounted Mailcow web code expects newer UI schema and native
 Mailcow table JSON shapes. In the custom reference stack, the database seed can
-miss `fido2`, `settingsmap`, `templates`, current `tfa`, `logs`, or
-`mailbox.authsource`, and stock `json_api.php` can return empty bodies for
-browser table routes.
+miss `fido2`, `settingsmap`, `templates`, `relayhosts`, `bcc_maps`,
+`tls_policy_override`, current `tfa`, `logs`, or `mailbox.authsource`, and
+stock `json_api.php` can return empty bodies for browser table routes.
 
 **Fix:** Re-run the shim deployer:
 
@@ -919,15 +919,19 @@ python3 scripts/deploy_mailcow_api.py
 
 The deployer repairs the UI schema, routes domain-search/quarantine/template
 reads through `/web/mailcow_compat_api.php`, sets small lab quarantine Redis
-defaults, and routes `/SOGo/*` back to `/admin/dashboard` because webmail is
-not exposed through this custom demo shim.
+defaults, creates direct delivery aliases for active user mailboxes, installs
+`/webmail`, and routes `/SOGo/*` to the demo webmail/report-phish surface
+backed by real Mailcow IMAP/SMTP. Keep upstream SOGo in `SKIP_SOGO=y` mode in
+the reference lab until it is separately hardened.
 
 **Verified in lab:** 2026-05-18. The deployer table JSON checks passed, and a
 headless browser crawl of `/admin/dashboard`, `/admin/system`, `/admin/mailbox`,
-`/admin/queue`, `/quarantine`, and `/SOGo/so` reported no dialogs, failed
-requests, console errors, SQL warnings, or invalid JSON alerts. Static queue
-help copy may mention "error message"; treat that as normal copy, not a browser
-failure.
+`/admin/queue`, `/quarantine`, `/webmail`, and `/SOGo/so` reported no invalid
+JSON dialogs or SQL warnings. Webmail login, local SMTP delivery, Report Phish,
+dashboard/iTop sync, agent gate completion, and visible Mailcow quarantine row
+were verified with ticket `578` and quarantine id
+`28cd6d435f7c88cd9a7b46983c62a1cb`. Static queue help copy may mention "error
+message"; treat that as normal copy, not a browser failure.
 
 ### Error 1: Dovecot Infinite "Waiting for Database" Loop
 

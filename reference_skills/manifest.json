@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-18T18:16:50.209735+00:00",
+  "generated_at": "2026-05-18T19:58:02.952861+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -312,8 +312,8 @@
         },
         {
           "path": "scripts/deploy_mailcow_api.py",
-          "size": 39369,
-          "sha256": "43b5fee0f0db1cfe1b3b050b9dda8236dfb9e20e30d20423bf3d0bffce8047d1"
+          "size": 47687,
+          "sha256": "e146c67c07f36e9637c7f99c46a30be221a6db18bd97fd8d5bf631b75096f803"
         },
         {
           "path": "scripts/find_mailcow_creds.py",
@@ -334,6 +334,11 @@
           "path": "scripts/mailcow_api_pool.conf",
           "size": 281,
           "sha256": "ffc495b283c418f95dadd7f85d2746be1867a98658734b0d3b37a475893e187f"
+        },
+        {
+          "path": "scripts/mailcow_demo_webmail.php",
+          "size": 13796,
+          "sha256": "23bdf5206a106a4958aa185a695efc650301e4499cae5c65291c26a158ea3516"
         },
         {
           "path": "scripts/mailcow_idp_config.py",
@@ -362,8 +367,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 16168,
-          "sha256": "ab04e3353deae2f04fd6b5f6beb9536f7d597d0a96fcf68bdf22cc298ed6e3f8"
+          "size": 17133,
+          "sha256": "f49b5f971dfcacf060cf18faf2f5b44c848e0ee917ee435644c14a9dd663fbce"
         },
         {
           "path": "troubleshooting.md",
@@ -393,8 +398,8 @@
         },
         {
           "path": "reference.md",
-          "size": 7252,
-          "sha256": "b314606670e405457ab3c8209788b52a42d9415fd06acfe13f7925f5df303698"
+          "size": 7263,
+          "sha256": "e60d89d8f4393052a5c9f9a53822a68621e4236becbad83bcce1ce3e9088cd94"
         },
         {
           "path": "scripts/deploy.py",
@@ -418,8 +423,8 @@
         },
         {
           "path": "troubleshooting.md",
-          "size": 5898,
-          "sha256": "e0cc4248253044dc8a7f63a8c8303e11dbe720b67c04e8fd64a2944e3433dc67"
+          "size": 5909,
+          "sha256": "5f9c5530edf3e2dada7d44a069f126ab82cdd18041c290c15d676d96675b78f6"
         }
       ]
     },
@@ -440,8 +445,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 42925,
-          "sha256": "574e01b3fbca1457f94cd81a27e6b2b10677f7d92dd2ddcd31f419a3ce04831e"
+          "size": 43541,
+          "sha256": "477321dbdb4f54c66b9a7fd41fe258ccce833cdf101ee9d3cec4986933934342"
         }
       ]
     },
@@ -530,8 +535,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 6721,
-          "sha256": "370aace4c06aeff3cc70b9aee262d3797295039d57f584e6cfb1bd361d63e077"
+          "size": 6918,
+          "sha256": "a3ecaf32dfae87f8b2f4016e2030b402be264d489600eada3e7066751b63e8b7"
         }
       ]
     },

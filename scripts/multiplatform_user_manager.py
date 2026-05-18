@@ -14,7 +14,7 @@ Usage:
 Examples:
     python3 multiplatform_user_manager.py create demo_account_1 "<from vault: demo_account_1>" --platforms all --role administrator
     python3 multiplatform_user_manager.py delete demo_account_1 --platforms keycloak,itop
-    python3 multiplatform_user_manager.py update demo_account_1 --new-password "NewPass123!" --platforms wazuh,gitlab
+    python3 multiplatform_user_manager.py update demo_account_1 --new-password "<from-vault-or-prompt>" --platforms wazuh,gitlab
     python3 multiplatform_user_manager.py list --platform all
     python3 multiplatform_user_manager.py status
 """

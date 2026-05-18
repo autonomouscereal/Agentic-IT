@@ -4,6 +4,69 @@ Last updated: 2026-05-18.
 
 ## Fixed During 2026-05-18 Demo Credential Prep
 
+### Mailcow admin UI still has missing tables, invalid JSON popups, and broken tabs
+
+Status: fixed on live AI server and bundled deployer.
+
+Reported on 2026-05-18 after the first Mailcow UI cleanup. The admin UI can
+render after login, but several pages still show database exceptions, blank
+content, log warnings, and DataTables invalid JSON popups.
+
+Observed symptoms:
+
+- `mailcow.templates` missing from `/web/inc/functions.mailbox.inc.php` through
+  `/web/admin/system.php`.
+- A blank page still appears on at least one Mailcow page.
+- Log-related UI surfaces show many warnings/errors.
+- JSON popups occur for mailboxes, TLS policy maps, address rewriting, routing,
+  and related tables.
+- Webmail/SOGo is still not a real working browser surface in the custom shim.
+- The UI exposes a Keycloak/identity-provider integration area, but it may not
+  be configured through Mailcow's own UI data model.
+
+Root causes:
+
+- The custom Mailcow database was missing current stock-UI tables:
+  `templates`, `relayhosts`, `bcc_maps`, and `tls_policy_override`.
+- The custom seed had only catch-all aliases, so mail sent to
+  `demo_account_1@mailcow.local` landed in `postmaster@mailcow.local` instead
+  of the demo mailbox.
+- The upstream SOGo container was not viable in this custom stack because it
+  lacked the expected MySQL socket/web-root bootstrap context and generated
+  noisy wait-loop logs.
+- The Mailcow Identity Provider tab had no durable Keycloak configuration in
+  Mailcow's own `identity_provider` table.
+
+Fix:
+
+- Extended `deploy_mailcow_api.py` to create/repair `templates`,
+  `relayhosts`, `bcc_maps`, `tls_policy_override`, and default domain/mailbox
+  templates.
+- Seeded Mailcow's `identity_provider` table for Keycloak while preserving the
+  existing client secret and never printing it.
+- Added direct delivery aliases for every active user mailbox so local SMTP
+  demo mail reaches the mailbox being shown.
+- Added `mailcow_demo_webmail.php` and routes `/webmail` plus `/SOGo/*` through
+  the sidecar to a demo webmail surface backed by real Mailcow IMAP/SMTP.
+- Put upstream SOGo into `SKIP_SOGO=y` sleep mode on the live lab because the
+  demo webmail route now provides the browser surface without SOGo log spam.
+
+Verification:
+
+- `python3 scripts/deploy_mailcow_api.py`: PASS.
+- `python3 scripts/test_mailcow_api_shim.py --mysql-parity`: `13 passed, 0 failed`.
+- PHP lint: `mailcow_compat_api.php` and `demo_webmail.php` have no syntax errors.
+- Browser login to `/webmail` as `demo_account_1@mailcow.local` works with the
+  vault password, sends local mail through Mailcow SMTP, and shows Report Phish
+  buttons in the inbox.
+- Report Phish created dashboard ticket `578`, iTop Incident `370`, approval
+  gate `167`, replacement Hermes/deepseek agent `227`, and Mailcow quarantine
+  row `28cd6d435f7c88cd9a7b46983c62a1cb`.
+- Mailcow `/quarantine` visibly lists the quarantine id, subject, sender, and
+  recipient with no invalid JSON or SQL banners.
+- Agent `227` completed the approved gate and resolved ticket `578` with
+  checkpoint status `done` and progress `100`.
+
 ### Mailcow admin UI loads but shows JSON/SQL warning banners
 
 Status: fixed on live AI server and bundled deployer.
@@ -32,8 +95,8 @@ Root cause:
 - The Mailcow JavaScript expected native domain-search field names; a first
   compatibility response was valid JSON but lacked those fields, producing
   `undefined` and `NaN` display text.
-- SOGo is not exposed through this custom demo shim, so the top-nav Webmail
-  link returned 404 before being routed back to the stable admin surface.
+- Upstream SOGo was not exposed through the earlier custom demo shim, so the
+  top-nav Webmail link returned 404 before the demo webmail route existed.
 
 Fix:
 
@@ -45,18 +108,18 @@ Fix:
   while preserving API-key enforcement for unauthenticated external reads.
 - Set lab quarantine Redis defaults so the quarantine-disabled banner is not
   shown during demos.
-- Routed `/SOGo/*` to `/admin/dashboard` for the current shim because SOGo is
-  not a working browser surface in this custom stack.
+- Routed `/SOGo/*` to the Mailcow demo webmail surface after the webmail/report
+  phish demo was added; earlier cleanup routed it to `/admin/dashboard`.
 
 Verification:
 
 - `python3 scripts/deploy_mailcow_api.py` passes, including stale-session,
-  table JSON, template JSON, and SOGo-link recovery checks.
+  table JSON, template JSON, and demo webmail/report-phish route checks.
 - Browser crawl of `/admin/dashboard`, `/admin/system`, `/admin/mailbox`,
-  `/admin/queue`, `/quarantine`, and `/SOGo/so` shows no dialogs, failed
-  requests, console errors, SQL warning alerts, or invalid JSON alerts. The
-  only crawler text hit containing "error" is static queue help copy explaining
-  mail-delivery error messages, not a UI failure.
+  `/admin/queue`, `/quarantine`, `/webmail`, and `/SOGo/so` shows no invalid
+  JSON dialogs or SQL warning alerts. The only crawler text hit containing
+  "error" is static queue help copy explaining mail-delivery error messages,
+  not a UI failure.
 
 ### Wazuh Dashboard demo login works but native Wazuh API auth returns 401
 

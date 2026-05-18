@@ -205,6 +205,73 @@ def setup_identity_provider_table():
     print("  identity_provider table: OK")
 
 
+def setup_identity_provider_defaults():
+    """Seed Mailcow's own IAM UI model when a Keycloak client secret is provided."""
+    client_secret = os.environ.get("MAILCOW_IAM_CLIENT_SECRET") or MAILCOW_ENV.get("MAILCOW_IAM_CLIENT_SECRET", "")
+    if not client_secret:
+        existing = run_sql("SELECT `value` FROM `identity_provider` WHERE `key`='client_secret' LIMIT 1")
+        if existing.strip():
+            print("  identity_provider Keycloak settings: existing config preserved")
+        else:
+            print("  [WARN] MAILCOW_IAM_CLIENT_SECRET unavailable; Mailcow IAM UI config not seeded")
+        return
+    settings = {
+        "authsource": "keycloak",
+        "server_url": os.environ.get("MAILCOW_IAM_SERVER_URL") or MAILCOW_ENV.get("MAILCOW_IAM_SERVER_URL", "https://keycloak.internal:8443"),
+        "realm": os.environ.get("MAILCOW_IAM_REALM") or MAILCOW_ENV.get("MAILCOW_IAM_REALM", "mailcow"),
+        "client_id": os.environ.get("MAILCOW_IAM_CLIENT_ID") or MAILCOW_ENV.get("MAILCOW_IAM_CLIENT_ID", "mailcow-oidc"),
+        "client_secret": client_secret,
+        "redirect_url": os.environ.get("MAILCOW_IAM_REDIRECT_URL") or MAILCOW_ENV.get("MAILCOW_IAM_REDIRECT_URL", "http://192.168.50.222:2581"),
+        "version": os.environ.get("MAILCOW_IAM_VERSION") or MAILCOW_ENV.get("MAILCOW_IAM_VERSION", "26"),
+        "mailpassword_flow": "1",
+        "periodic_sync": "1",
+        "import_users": "1",
+        "sync_interval": os.environ.get("MAILCOW_IAM_SYNC_INTERVAL") or MAILCOW_ENV.get("MAILCOW_IAM_SYNC_INTERVAL", "15"),
+        "ignore_ssl_error": "1",
+        "login_provisioning": "1",
+        "redirect_url_extra": json.dumps(["http://localhost:2581"]),
+        "default_template": "Default",
+        "mappers": json.dumps(["default"]),
+        "templates": json.dumps(["Default"]),
+        "access_token": "",
+    }
+    for key, value in settings.items():
+        run_sql(
+            "INSERT INTO `identity_provider` (`key`, `value`) "
+            f"VALUES ({sql_literal(key)}, {sql_literal(value)}) "
+            "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)"
+        )
+    print("  identity_provider Keycloak settings: OK")
+
+
+def setup_mailbox_delivery_aliases():
+    """Ensure direct mailbox addresses win before the demo catch-all alias."""
+    run_sql("""
+        INSERT INTO `alias` (
+            `address`, `goto`, `domain`, `active`, `sogo_visible`,
+            `is_group`, `is_dynamic`, `max_recipients`
+        )
+        SELECT
+            CONCAT(`username`, '@', `domain`),
+            CONCAT(`username`, '@', `domain`),
+            `domain`,
+            1,
+            1,
+            0,
+            0,
+            '0'
+        FROM `mailbox`
+        WHERE `active` = 1
+          AND `kind` = 'user'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM `alias` a
+              WHERE a.`address` = CONCAT(`mailbox`.`username`, '@', `mailbox`.`domain`)
+          )
+    """)
+    print("  direct mailbox delivery aliases: OK")
+
+
 def setup_ui_compat_schema():
     """Repair schema drift that blocks the optional Mailcow demo UI."""
     print("\n--- Step 1c: Ensuring Mailcow UI compatibility schema ---")
@@ -279,7 +346,110 @@ def setup_ui_compat_schema():
             UNIQUE KEY `type_template` (`type`, `template`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
     """)
-    print("  logs/tfa/fido2/settingsmap/templates/mailbox UI compatibility schema: OK")
+    run_sql("""
+        CREATE TABLE IF NOT EXISTS `relayhosts` (
+            `id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `hostname` VARCHAR(255) NOT NULL DEFAULT '',
+            `username` VARCHAR(255) NOT NULL DEFAULT '',
+            `password` VARCHAR(255) NOT NULL DEFAULT '',
+            `active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `modified` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+    """)
+    run_sql("""
+        CREATE TABLE IF NOT EXISTS `bcc_maps` (
+            `id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `local_dest` VARCHAR(255) NOT NULL DEFAULT '',
+            `bcc_dest` VARCHAR(255) NOT NULL DEFAULT '',
+            `domain` VARCHAR(255) NOT NULL DEFAULT '',
+            `active` TINYINT(1) NOT NULL DEFAULT 1,
+            `type` ENUM('sender','rcpt') NOT NULL DEFAULT 'rcpt',
+            `created` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `modified` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `domain` (`domain`),
+            KEY `local_dest_type` (`local_dest`, `type`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+    """)
+    run_sql("""
+        CREATE TABLE IF NOT EXISTS `tls_policy_override` (
+            `id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `dest` VARCHAR(255) NOT NULL DEFAULT '',
+            `policy` VARCHAR(32) NOT NULL DEFAULT 'none',
+            `parameters` TEXT DEFAULT NULL,
+            `active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `modified` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `dest` (`dest`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+    """)
+    default_domain_template = {
+        "tags": [],
+        "max_num_aliases_for_domain": 400,
+        "max_num_mboxes_for_domain": 100,
+        "def_quota_for_mbox": 5368709120,
+        "max_quota_for_mbox": 10737418240,
+        "max_quota_for_domain": 107374182400,
+        "rl_frame": "s",
+        "rl_value": "",
+        "active": 1,
+        "gal": 1,
+        "backupmx": 0,
+        "relay_all_recipients": 0,
+        "relay_unknown_only": 0,
+        "dkim_selector": "dkim",
+        "key_size": 2048,
+    }
+    default_mailbox_template = {
+        "quota": 5368709120,
+        "tags": [],
+        "tagged_mail_handler": "subfolder",
+        "quarantine_notification": "never",
+        "quarantine_category": "reject",
+        "rl_frame": "s",
+        "rl_value": "",
+        "force_pw_update": 0,
+        "force_tfa": 0,
+        "sogo_access": 1,
+        "active": 1,
+        "tls_enforce_in": 0,
+        "tls_enforce_out": 0,
+        "imap_access": 1,
+        "pop3_access": 1,
+        "smtp_access": 1,
+        "sieve_access": 1,
+        "eas_access": 1,
+        "dav_access": 1,
+        "acl_spam_alias": 1,
+        "acl_tls_policy": 1,
+        "acl_spam_score": 1,
+        "acl_spam_policy": 1,
+        "acl_delimiter_action": 1,
+        "acl_syncjobs": 1,
+        "acl_eas_reset": 1,
+        "acl_sogo_profile_reset": 1,
+        "acl_pushover": 0,
+        "acl_quarantine": 1,
+        "acl_quarantine_attachments": 1,
+        "acl_quarantine_notification": 1,
+        "acl_quarantine_category": 1,
+        "acl_app_passwds": 1,
+        "acl_pw_reset": 1,
+    }
+    for template_type, attributes in (
+        ("domain", default_domain_template),
+        ("mailbox", default_mailbox_template),
+    ):
+        run_sql(
+            "INSERT INTO `templates` (`type`, `template`, `attributes`) "
+            f"VALUES ({sql_literal(template_type)}, 'Default', "
+            f"{sql_literal(json.dumps(attributes, separators=(',', ':')))}) "
+            "ON DUPLICATE KEY UPDATE `attributes` = VALUES(`attributes`)"
+        )
+    print("  logs/tfa/fido2/settingsmap/templates/routing UI compatibility schema: OK")
     redispass = os.environ.get("REDISPASS") or MAILCOW_ENV.get("REDISPASS", "")
     if redispass:
         docker_run(
@@ -368,6 +538,19 @@ def install_compat_api():
     run(f"sudo cp {shlex.quote(source)} {shlex.quote(destination)}")
     run(f"sudo chmod 0444 {shlex.quote(destination)}")
     print("  compatibility API: OK")
+
+
+def install_demo_webmail():
+    """Install lab webmail with a Report Phish button."""
+    print("\n--- Step 1f: Installing demo webmail surface ---")
+    source = os.path.join(SCRIPT_DIR, "mailcow_demo_webmail.php")
+    destination = os.path.join(MAILCOW_DOCKERIZED_WEB, "demo_webmail.php")
+    if not os.path.exists(source):
+        print(f"  [FAIL] Missing demo webmail script: {source}")
+        sys.exit(1)
+    run(f"sudo cp {shlex.quote(source)} {shlex.quote(destination)}")
+    run(f"sudo chmod 0444 {shlex.quote(destination)}")
+    print("  demo webmail: OK")
 
 
 # ─── Step 2: Deploy php-fpm-mailcow-api ────────────────────────────────
@@ -461,6 +644,11 @@ exec php-fpm
         f"-e MAILCOW_HOSTNAME=mailcow.local "
         f"-e TZ=America/New_York "
         f"-e MAILCOW_PASS_SCHEME=BLF-CRYPT "
+        f"-e DASHBOARD_API_BASE={shlex.quote(os.environ.get('DASHBOARD_API_BASE', 'http://127.0.0.1:25480'))} "
+        f"-e DEMO_WEBMAIL_IMAP_HOST={shlex.quote(os.environ.get('DEMO_WEBMAIL_IMAP_HOST', '127.0.0.1'))} "
+        f"-e DEMO_WEBMAIL_IMAP_PORT={shlex.quote(os.environ.get('DEMO_WEBMAIL_IMAP_PORT', '143'))} "
+        f"-e DEMO_WEBMAIL_SMTP_HOST={shlex.quote(os.environ.get('DEMO_WEBMAIL_SMTP_HOST', '127.0.0.1'))} "
+        f"-e DEMO_WEBMAIL_SMTP_PORT={shlex.quote(os.environ.get('DEMO_WEBMAIL_SMTP_PORT', '25'))} "
         f"--add-host dockerapi:127.0.0.1 "
         f"--add-host nginx:127.0.0.1 "
         f"-v {MAILCOW_DOCKERIZED_WEB}:/web:rw "
@@ -637,10 +825,20 @@ http {{
             return 302 /;
         }}
 
-        # SOGo is not exposed through this custom demo shim. Avoid a 404 from
-        # the top-nav Webmail link during demos and return to the stable admin UI.
+        # Demo webmail uses the real Mailcow IMAP/SMTP path and records
+        # Report Phish actions into the dashboard intake plus Mailcow
+        # quarantine table. Route SOGo links here until the upstream SOGo
+        # service is production-hardened in this custom stack.
+        location = /webmail {{
+            rewrite ^ /demo_webmail.php last;
+        }}
+
+        location = /webmail/ {{
+            rewrite ^ /demo_webmail.php last;
+        }}
+
         location ~ ^/SOGo/ {{
-            return 302 /admin/dashboard;
+            rewrite ^ /demo_webmail.php last;
         }}
 
         location / {{
@@ -847,19 +1045,16 @@ def test_ui():
                             print(f"  [FAIL] Demo UI {template_type} template endpoint returned invalid JSON")
                             return False
                 print("  [PASS] Demo UI table JSON endpoints")
-                class NoRedirect(urllib.request.HTTPRedirectHandler):
-                    def redirect_request(self, req, fp, code, msg, headers, newurl):
-                        return None
-                no_redirect = urllib.request.build_opener(NoRedirect)
-                try:
-                    no_redirect.open(f"http://127.0.0.1:{UI_DEMO_PORT}/SOGo/so", timeout=15)
-                    print("  [FAIL] Demo UI SOGo link did not return a redirect")
-                    return False
-                except urllib.error.HTTPError as exc:
-                    if exc.code != 302 or "/admin/dashboard" not in exc.headers.get("Location", ""):
-                        print("  [FAIL] Demo UI SOGo link did not recover to admin dashboard")
+                webmail_req = urllib.request.Request(
+                    f"http://127.0.0.1:{UI_DEMO_PORT}/SOGo/so",
+                    method="GET",
+                )
+                with urllib.request.urlopen(webmail_req, timeout=15) as webmail_resp:
+                    webmail_body = webmail_resp.read(30000).decode("utf-8", errors="replace")
+                    if "Mailcow Demo Webmail" not in webmail_body or "Report Phish" not in webmail_body:
+                        print("  [FAIL] Demo webmail/report-phish route did not render")
                         return False
-                print("  [PASS] Demo UI SOGo link recovery")
+                print("  [PASS] Demo webmail/report-phish route")
                 return True
             print(f"  [FAIL] Demo UI unexpected response on port {UI_DEMO_PORT}")
             return False
@@ -915,8 +1110,11 @@ def main():
     write_api_key_file(api_key)
     setup_identity_provider_table()
     setup_ui_compat_schema()
+    setup_identity_provider_defaults()
+    setup_mailbox_delivery_aliases()
     patch_mailcow_web_for_ui()
     install_compat_api()
+    install_demo_webmail()
     deploy_php_fpm()
     deploy_nginx()
 

@@ -35,6 +35,7 @@ Complete integration between Keycloak 26.x (Identity Provider) and Mailcow (Emai
 | Sync Engine | `scripts/sync_engine.py` | Bidirectional sync: Keycloak users <-> Mailcow mailboxes via MySQL |
 | E2E Test Suite | `scripts/test_integration.py` | 48 tests across 10 categories |
 | Optional HTTP API/UI Shim | `scripts/deploy_mailcow_api.py` | Nonstandard-port nginx/php-fpm API shim on `8081` and demo UI on `2581`; direct MySQL remains canonical |
+| Demo Webmail | `scripts/mailcow_demo_webmail.php` | Lab webmail on `/webmail` and `/SOGo/*` backed by real Mailcow IMAP/SMTP with Report Phish -> intake -> quarantine evidence |
 | API Shim Regression | `scripts/test_mailcow_api_shim.py` | Auth, selector, password-redaction, and MySQL parity tests for the optional API shim |
 | Environment Template | `.env.example` | Secret template - copy to `.env` before deploying |
 
@@ -89,14 +90,23 @@ Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Ma
 - create the Mailcow `identity_provider` compatibility table if missing
 - create the Mailcow `logs` table if missing
 - repair legacy `tfa`, `fido2`, `settingsmap`, `templates`, and `mailbox.authsource` schema drift expected by the current UI
+- create routing/address/TLS UI tables `relayhosts`, `bcc_maps`, and
+  `tls_policy_override` if missing
+- seed Default domain/mailbox templates and direct delivery aliases for active
+  user mailboxes so demo mail does not fall through to the catch-all alias
 - rewrite extensionless UI routes through FastCGI without serving PHP source
 - write generated CSS/JS to `/web/cache` so the nginx sidecar can serve the
   `/cache/<hash>` assets and the UI does not render blank/unstyled
 - append a file-mtime `?v=` query and no-store cache headers for `/cache/*` so
   interactive browsers do not reuse stale broken assets after a repair
 - install `mailcow_compat_api.php` for read-only `get/domain`, `get/mailbox`, `get/alias`, `search/domain`, `get/quarantine/all`, and domain/mailbox template compatibility when the stock `json_api.php` path returns empty bodies in custom deployments
+- install `demo_webmail.php` for lab webmail using Mailcow IMAP/SMTP and a
+  Report Phish button that creates a dashboard intake ticket and Mailcow
+  quarantine row
 - set lab quarantine Redis defaults so the demo UI does not show a quarantine-disabled warning banner
-- route `/SOGo/*` to `/admin/dashboard` in the current shim because SOGo webmail is not exposed through the custom sidecar
+- route `/webmail` and `/SOGo/*` to the demo webmail surface; keep upstream
+  SOGo parked with `SKIP_SOGO=y` in the reference lab until it is separately
+  production-hardened
 - reject invalid API keys with HTTP 401
 - never print API keys in logs
 - use the Mailcow MySQL container environment for SQL setup instead of requiring host-side `MYSQL_ROOT_PASSWORD`
@@ -120,13 +130,13 @@ cd /home/cereal/Mailcow/deploy
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
 
-Latest reference verification on 2026-05-12:
+Latest reference verification on 2026-05-18:
 
 - invalid API key returns HTTP `401`
 - valid API key returns HTTP `200`
 - `GET /api/v1/get/domain/all`: `2` domains
 - `GET /api/v1/get/mailbox/all`: `11` mailboxes
-- `GET /api/v1/get/alias/all`: `6` aliases
+- `GET /api/v1/get/alias/all`: `16` aliases
 - selector reads for domain, mailbox, and alias each return at least one matching object
 - POST to the compatibility read endpoint returns HTTP `405`
 - regression test result: `13 passed, 0 failed`
@@ -144,8 +154,13 @@ Latest demo UI verification on 2026-05-18:
 - UI table JSON checks pass for domain search, quarantine, domain templates,
   and mailbox templates
 - headless browser crawl of `/admin/dashboard`, `/admin/system`,
-  `/admin/mailbox`, `/admin/queue`, `/quarantine`, and `/SOGo/so` shows no
-  invalid JSON dialogs, SQL warning banners, failed requests, or console errors
+  `/admin/mailbox`, `/admin/queue`, `/quarantine`, `/webmail`, and `/SOGo/so`
+  shows no invalid JSON dialogs or SQL warning banners
+- `/webmail` login for `demo_account_1@mailcow.local` works with the vault
+  password, local SMTP delivery reaches the same inbox, and Report Phish
+  creates a visible Mailcow quarantine row
+- report-phish proof: ticket `578`, iTop Incident `370`, gate `167`, Hermes
+  agent `227`, quarantine id `28cd6d435f7c88cd9a7b46983c62a1cb`
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`
 
 Operational blueprint:

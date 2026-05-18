@@ -583,7 +583,7 @@ curl -H "X-API-Key: <from restricted key file or vault>" http://localhost:8081/a
 curl -H "X-API-Key: <from restricted key file or vault>" http://localhost:8081/api/v1/get/alias/all
 ```
 
-Latest verified result on 2026-05-12:
+Latest verified result on 2026-05-18:
 
 ```text
 deploy_mailcow_api.py: DEPLOYMENT SUCCESSFUL
@@ -591,13 +591,16 @@ invalid key: HTTP 401
 missing key: HTTP 401
 valid get/domain/all: HTTP 200, 2 domains
 valid get/mailbox/all: HTTP 200, 11 mailboxes, no password hashes in response
-valid get/alias/all: HTTP 200, 6 aliases
+valid get/alias/all: HTTP 200, 16 aliases
 selector reads: domain=1, mailbox=1, alias=1
 POST to read compatibility endpoint: HTTP 405
-direct MySQL smoke: 2 domains, 11 mailboxes, 6 aliases
+direct MySQL smoke: 2 domains, 11 mailboxes, 16 aliases
 test_mailcow_api_shim.py --mysql-parity: 13 passed, 0 failed
 demo UI table JSON: PASS for domain search, quarantine, domain templates, mailbox templates
-demo UI browser crawl: PASS for /admin/dashboard, /admin/system, /admin/mailbox, /admin/queue, /quarantine, /SOGo/so
+demo webmail/report-phish route: PASS for /webmail and /SOGo/so
+demo UI browser crawl: PASS for /admin/dashboard, /admin/system, /admin/mailbox, /admin/queue, /quarantine, /webmail, /SOGo/so
+webmail local SMTP/IMAP: PASS as demo_account_1@mailcow.local
+report-phish quarantine proof: PASS ticket=578 itop=370 change=167 agent=227 quarantine=28cd6d435f7c88cd9a7b46983c62a1cb
 platform_doctor.py: 18 passed, 0 failed, 0 warned
 keycloak-mailcow bridge E2E: 47 passed, 0 failed, 1 skipped
 ```

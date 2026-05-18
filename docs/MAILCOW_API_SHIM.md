@@ -41,6 +41,7 @@ flowchart LR
   Stock --> PHP
   PHP --> DB["mysql-mailcow\nmailcow database"]
   PHP --> Redis["redis-mailcow\nsessions"]
+  Nginx --> Webmail["/webmail + /SOGo/*\ndemo webmail/report phish"]
   Bridge["Keycloak-Mailcow bridge"] --> DB
 ```
 
@@ -50,6 +51,7 @@ Live reference paths:
 - Shim config root: `/home/cereal/Mailcow/deploy/api-nginx`
 - Restricted API key file: `/home/cereal/Mailcow/deploy/api-nginx/.api_key`
 - Compatibility PHP installed into web root: `/home/cereal/mailcow-dockerized/data/web/mailcow_compat_api.php`
+- Demo webmail PHP installed into web root: `/home/cereal/mailcow-dockerized/data/web/demo_webmail.php`
 - Deployer script: `/home/cereal/Mailcow/deploy/scripts/deploy_mailcow_api.py`
 - Regression test: `/home/cereal/Mailcow/deploy/scripts/test_mailcow_api_shim.py`
 
@@ -57,6 +59,7 @@ Bundled reference skill paths:
 
 - `reference_skills/keycloak-mailcow-bridge/scripts/deploy_mailcow_api.py`
 - `reference_skills/keycloak-mailcow-bridge/scripts/mailcow_api_compat.php`
+- `reference_skills/keycloak-mailcow-bridge/scripts/mailcow_demo_webmail.php`
 - `reference_skills/keycloak-mailcow-bridge/scripts/test_mailcow_api_shim.py`
 
 ## Endpoint Contract
@@ -80,6 +83,19 @@ surface because the custom deployment's root user-login path can return a blank
 post-login body. The demo entrypoints also strip or clear stale `MCSESSID`
 cookies so an old user session cannot redirect the browser back to `/user`;
 demo operators should not need to know or type `/admin/`.
+
+Demo webmail URL:
+
+```text
+http://192.168.50.222:2581/webmail
+```
+
+The Mailcow top-nav `/SOGo/*` path is routed to the demo webmail surface in the
+reference lab. The demo webmail uses real Mailcow IMAP and SMTP, and its Report
+Phish button creates platform intake evidence plus a real Mailcow quarantine row
+for the selected message. The upstream SOGo container is parked with
+`SKIP_SOGO=y` in the current lab to avoid noisy bootstrap loops; SOGo hardening
+is separate from the working demo webmail path.
 
 Required request header:
 
@@ -135,7 +151,12 @@ The deployer is idempotent:
 - repairs the custom `tfa` table shape expected by the mounted Mailcow UI
 - repairs `fido2`, `settingsmap`, and `templates` schema drift used by the
   admin/configuration pages
+- creates routing/address/TLS compatibility tables `relayhosts`, `bcc_maps`,
+  and `tls_policy_override`
+- seeds default domain/mailbox templates used by the Mailcow UI
 - adds `mailbox.authsource` with default `mailcow` when missing
+- adds direct delivery aliases for active user mailboxes so local demo mail
+  reaches the mailbox being shown before the catch-all alias
 - patches ambiguous custom-schema UI queries from `kind` to `mailbox.kind`
 - patches generated CSS/JS paths to `/web/cache` so the nginx sidecar can serve
   `/cache/<hash>.css` and `/cache/<hash>.js`
@@ -154,8 +175,10 @@ The deployer is idempotent:
   stock API path: domain search, quarantine listing, and empty template lists
 - sets small lab quarantine defaults in Redis so the demo UI does not show a
   quarantine-disabled warning banner
-- routes `/SOGo/*` back to `/admin/dashboard` because SOGo is not exposed
-  through this custom demo shim
+- installs `demo_webmail.php`, backed by real Mailcow IMAP/SMTP, with a Report
+  Phish action that writes Mailcow quarantine evidence and creates an Agentic
+  Operations intake ticket
+- routes `/webmail` and `/SOGo/*` to the demo webmail surface
 - runs built-in endpoint tests and demo UI cache-asset checks before reporting
   success
 
@@ -226,12 +249,26 @@ the operator workstation when Playwright is available. The latest verified
 - `/admin/mailbox`
 - `/admin/queue`
 - `/quarantine`
-- `/SOGo/so`
+- `/SOGo/so` and `/webmail`
 
 Expected result: no JavaScript dialogs, no console errors, no failed requests,
 no SQL warning alerts, and no invalid JSON alerts. Static help copy on the
 queue page may contain the phrase "error message"; that is not a UI failure.
-`/SOGo/so` should redirect to `/admin/dashboard` in the current shim.
+`/SOGo/so` should render the demo webmail/report-phish surface in the current
+shim.
+
+Latest report-phish proof on 2026-05-18:
+
+- Webmail login as `demo_account_1@mailcow.local` succeeds using the vault
+  password.
+- Local SMTP send creates a message in the same mailbox.
+- Clicking Report Phish creates dashboard ticket `578`, iTop Incident `370`,
+  approval gate `167`, and Mailcow quarantine row
+  `28cd6d435f7c88cd9a7b46983c62a1cb`.
+- Mailcow `/quarantine` visibly lists the quarantine id, subject, sender, and
+  recipient.
+- Hermes agent `227` using `deepseek/deepseek-v4-flash` completed the approved
+  gate and resolved ticket `578`.
 
 ## Security Model
 
