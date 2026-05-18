@@ -1,4 +1,4 @@
-// SOC Dashboard - Main JavaScript
+// Agentic Operations - Main JavaScript
 const API = "";
 let agentOpenCountState = null;
 
@@ -829,7 +829,7 @@ async function viewCicdRun(id) {
     document.getElementById("modal-title").textContent = `CI/CD Run #${data.id}`;
     document.getElementById("modal-body").innerHTML = `
         <div class="modal-section">
-            <div class="section-title">Security Gate</div>
+            <div class="section-title">Policy Gate</div>
             <div class="detail-row"><span class="detail-label">Status:</span><span class="status-badge ${statusClass(data.status)}">${escHtml(data.status)}</span></div>
             <div class="detail-row"><span class="detail-label">Repo:</span><span>${escHtml(data.repo_ref || "-")} ${data.repo_url ? `<a class="inline-link" href="${escAttr(data.repo_url)}" target="_blank" rel="noopener">open repo</a>` : ""}</span></div>
             <div class="detail-row"><span class="detail-label">Branch:</span><span>${escHtml(data.branch || "-")}</span></div>

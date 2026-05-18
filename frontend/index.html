@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SOC Dashboard</title>
+    <title>Agentic Operations</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -14,17 +14,17 @@
         <nav class="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <svg viewBox="0 0 40 40" width="36" height="36">
+                    <svg viewBox="0 0 40 40" width="36" height="36" aria-hidden="true">
                         <circle cx="20" cy="20" r="18" fill="none" stroke="#00d4ff" stroke-width="2"/>
-                        <circle cx="20" cy="20" r="8" fill="#00d4ff" opacity="0.6"/>
+                        <path d="M14 14L26 12L28 26L12 28Z" fill="none" stroke="#00d4ff" stroke-width="1.8" stroke-linejoin="round"/>
+                        <circle cx="14" cy="14" r="4" fill="#00d4ff" opacity="0.85"/>
+                        <circle cx="26" cy="12" r="4" fill="#00ff88" opacity="0.8"/>
+                        <circle cx="28" cy="26" r="4" fill="#ffd700" opacity="0.78"/>
+                        <circle cx="12" cy="28" r="4" fill="#00d4ff" opacity="0.65"/>
                         <circle cx="20" cy="20" r="3" fill="#00d4ff"/>
-                        <line x1="20" y1="2" x2="20" y2="12" stroke="#00d4ff" stroke-width="1.5"/>
-                        <line x1="20" y1="28" x2="20" y2="38" stroke="#00d4ff" stroke-width="1.5"/>
-                        <line x1="2" y1="20" x2="12" y2="20" stroke="#00d4ff" stroke-width="1.5"/>
-                        <line x1="28" y1="20" x2="38" y2="20" stroke="#00d4ff" stroke-width="1.5"/>
                     </svg>
                 </div>
-                <h1>SOC COMMAND</h1>
+                <h1>AGENTIC OPS</h1>
             </div>
             <ul class="nav-list">
                 <li class="nav-item active" data-page="overview">
@@ -278,7 +278,7 @@
             <!-- Intake Page -->
             <div class="page" id="page-intake">
                 <div class="page-header">
-                    <h2>Service Desk Intake</h2>
+                    <h2>Request Intake</h2>
                     <div class="header-actions">
                         <button class="btn btn-sm" onclick="loadIntake()">Refresh</button>
                     </div>
@@ -291,9 +291,9 @@
                         <label class="setup-label">Email</label>
                         <input id="intake-requester-email" class="filter-input wide-input" value="demo@example.local">
                         <label class="setup-label">Short title</label>
-                        <input id="intake-title" class="filter-input wide-input" placeholder="Suspicious email, access request, outage...">
+                        <input id="intake-title" class="filter-input wide-input" placeholder="Access request, outage, deployment issue, suspicious email...">
                         <label class="setup-label">What do you need?</label>
-                        <textarea id="intake-message" class="setup-textarea" rows="9" placeholder="Paste the user's request, phishing report, error, screenshot notes, or deployment ask here."></textarea>
+                        <textarea id="intake-message" class="setup-textarea" rows="9" placeholder="Paste the user's request, error, screenshot notes, deployment ask, alert, or access need here."></textarea>
                         <label class="setup-label">Attachment metadata</label>
                         <input id="intake-attachment" class="filter-input wide-input" placeholder="optional filename or evidence reference">
                         <div class="modal-actions-bar inline-actions">
@@ -432,7 +432,7 @@
             <!-- CI/CD Page -->
             <div class="page" id="page-cicd">
                 <div class="page-header">
-                    <h2>CI/CD Security Gates</h2>
+                    <h2>CI/CD Delivery Gates</h2>
                     <div class="header-actions">
                         <button class="btn btn-sm" onclick="loadCicd()">Refresh</button>
                     </div>
@@ -466,7 +466,7 @@
                     </div>
                 </div>
                 <div class="chart-card wide">
-                    <div class="chart-header"><h3>Recent Security Runs</h3></div>
+                    <div class="chart-header"><h3>Recent Delivery Runs</h3></div>
                     <div class="table-container compact">
                         <table class="data-table">
                             <thead><tr><th>ID</th><th>Provider</th><th>Repo</th><th>Status</th><th>Ticket</th><th>Change</th><th>Created</th></tr></thead>
@@ -511,7 +511,7 @@
             <!-- Tools Page -->
             <div class="page" id="page-tools">
                 <div class="page-header">
-                    <h2>SOC Tools</h2>
+                    <h2>Provider Modules</h2>
                     <div class="header-actions">
                         <button class="btn btn-sm" onclick="checkAllTools()">Check All</button>
                     </div>
@@ -537,14 +537,14 @@
                         <label class="setup-label">Profile</label>
                         <select id="setup-profile" class="filter-select" onchange="generateSetupPlan()">
                             <option value="minimal">Control Plane Only</option>
-                            <option value="soc" selected>SOC Replacement Baseline</option>
-                            <option value="full-it">Full IT Automation Platform</option>
+                            <option value="soc" selected>IT/SOC Operations Baseline</option>
+                            <option value="full-it">Full Enterprise Operations</option>
                         </select>
                         <label class="setup-check">
                             <input type="checkbox" id="setup-deploy-missing" checked onchange="generateSetupPlan()">
-                            <span>Deploy missing reference modules when no existing product is selected</span>
+                            <span>Deploy missing reference modules when no existing enterprise tool is selected</span>
                         </label>
-                        <label class="setup-label">AI Endpoint</label>
+                        <label class="setup-label">Model Gateway</label>
                         <input id="setup-ai-base-url" class="filter-input wide-input" placeholder="http://ai-proxy:4001">
                         <label class="setup-label">Proxy Mode</label>
                         <select id="setup-proxy-mode" class="filter-select">
