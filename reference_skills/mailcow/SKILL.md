@@ -24,7 +24,7 @@ user-invocable: true
 
 Complete, reproducible blueprint for deploying a fully functional Mailcow email server on a bare-metal Ubuntu server using Docker Compose. Covers every step, every error encountered, every fix applied, and every configuration file.
 
-**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. The bare root URL is routed to the admin login surface, stale `MCSESSID` user sessions are recovered, admin login for `demo_account_1` reaches `/admin/dashboard`, and IMAP auth for `demo_account_1@mailcow.local` returns `OK`. The shim also keeps the read-only compatibility API on `8081`.
+**Current demo note (2026-05-18):** The custom mail path remains the canonical deployment, and the optional nginx/php-fpm shim now exposes a lab Mailcow UI at `http://192.168.50.222:2581`. The bare root URL is routed to the admin login surface, stale `MCSESSID` user sessions are recovered, admin login for `demo_account_1` reaches `/admin/dashboard`, dashboard/system/mailbox/queue/quarantine pages are free of invalid JSON and SQL-column warning banners, SOGo links recover to the admin UI, and IMAP auth for `demo_account_1@mailcow.local` returns `OK`. The shim also keeps the read-only compatibility API on `8081`.
 
 This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-built, hand-tailored Mailcow stack with modified entrypoints, TCP database connectivity (no socket sharing), and custom database seeding.
 
@@ -57,7 +57,8 @@ This is **NOT** the upstream `mailcow-dockerized` deployment. It is a custom-bui
 | Bind mounts (not Docker volumes) | All data lives under `/home/cereal/Mailcow/deploy/data/` for easy backup |
 | `set +e` in entrypoint | Several upstream checks fail in our environment (missing templates, no replication) |
 | Optional UI/API sidecars | `nginx-mailcow-api` serves API compatibility on `8081` and the demo UI on `2581`; `php-fpm-mailcow-api` uses the mounted web root with writable Twig cache |
-| UI compatibility schema/assets | The custom seed must include `logs`, current-shape `tfa`, and `mailbox.authsource`; extensionless routes must rewrite through FastCGI; generated CSS/JS must write to `/web/cache` with `?v=<filemtime>` URLs and no-store cache headers so nginx can serve fresh `/cache/<hash>` assets |
+| UI compatibility schema/assets | The custom seed must include `logs`, current-shape `tfa`, `fido2`, `settingsmap`, `templates`, and `mailbox.authsource`; extensionless routes must rewrite through FastCGI; generated CSS/JS must write to `/web/cache` with `?v=<filemtime>` URLs and no-store cache headers so nginx can serve fresh `/cache/<hash>` assets |
+| UI table JSON compatibility | The sidecar must provide Mailcow/DataTables-shaped JSON for domain search, quarantine, and template reads; otherwise the browser shows invalid JSON dialogs, undefined/NaN fields, or SQL warning banners after login |
 | Demo root route | The `:2581` bare root URL must FastCGI-route to `/admin/`; the custom root user-login flow can return a blank body after submit |
 | Stale session recovery | `/` and `/admin/` strip incoming cookies, while `/user` clears `PHPSESSID` and `MCSESSID`; stale user sessions otherwise redirect to a blank 5-byte `/user` response |
 
@@ -896,6 +897,37 @@ including a pre-seeded stale `MCSESSID`, reached `/admin/dashboard` with visible
 dashboard content, loaded versioned `/cache` assets, and reported no failed
 requests or console errors. The deployer now includes a stale-session recovery
 check.
+
+### Error 0d: Admin UI Shows Invalid JSON Or SQL Warning Banners After Login
+
+**Symptom:** Login succeeds and pages render, but the browser shows DataTables
+invalid JSON dialogs, SQL invalid-column warnings, missing-table warnings, or
+visible `undefined`/`NaN` values on admin/system/mailbox/queue/quarantine pages.
+
+**Root Cause:** The mounted Mailcow web code expects newer UI schema and native
+Mailcow table JSON shapes. In the custom reference stack, the database seed can
+miss `fido2`, `settingsmap`, `templates`, current `tfa`, `logs`, or
+`mailbox.authsource`, and stock `json_api.php` can return empty bodies for
+browser table routes.
+
+**Fix:** Re-run the shim deployer:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+```
+
+The deployer repairs the UI schema, routes domain-search/quarantine/template
+reads through `/web/mailcow_compat_api.php`, sets small lab quarantine Redis
+defaults, and routes `/SOGo/*` back to `/admin/dashboard` because webmail is
+not exposed through this custom demo shim.
+
+**Verified in lab:** 2026-05-18. The deployer table JSON checks passed, and a
+headless browser crawl of `/admin/dashboard`, `/admin/system`, `/admin/mailbox`,
+`/admin/queue`, `/quarantine`, and `/SOGo/so` reported no dialogs, failed
+requests, console errors, SQL warnings, or invalid JSON alerts. Static queue
+help copy may mention "error message"; treat that as normal copy, not a browser
+failure.
 
 ### Error 1: Dovecot Infinite "Waiting for Database" Loop
 

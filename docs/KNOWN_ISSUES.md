@@ -4,6 +4,60 @@ Last updated: 2026-05-18.
 
 ## Fixed During 2026-05-18 Demo Credential Prep
 
+### Mailcow admin UI loads but shows JSON/SQL warning banners
+
+Status: fixed on live AI server and bundled deployer.
+
+Reported on 2026-05-18 after stale-session recovery made the Mailcow admin UI
+visible again. The page renders, but the browser shows UI warnings, invalid JSON
+popups, and invalid-column errors from dashboard widgets/API calls.
+
+Investigation checklist:
+
+- Capture browser dialogs, console errors, and failed/invalid JSON responses
+  after admin login.
+- Inspect `nginx-mailcow-api` and `php-fpm-mailcow-api` logs during page load.
+- Identify whether the broken responses are stock `json_api.php` calls, custom
+  compatibility shim responses, or SQL/schema drift in the custom Mailcow seed.
+- Patch the deployer so fixes survive sidecar redeploys.
+- Re-run browser login with dialog/network capture and the shim deployer tests.
+
+Root cause:
+
+- The custom Mailcow seed was missing current UI compatibility tables/columns:
+  `fido2.credentialId`, `settingsmap`, and `templates`.
+- Stock `json_api.php` returned empty bodies for UI table routes such as
+  `POST /api/v1/search/domain` and `GET /api/v1/get/quarantine/all`, causing
+  DataTables invalid JSON dialogs.
+- The Mailcow JavaScript expected native domain-search field names; a first
+  compatibility response was valid JSON but lacked those fields, producing
+  `undefined` and `NaN` display text.
+- SOGo is not exposed through this custom demo shim, so the top-nav Webmail
+  link returned 404 before being routed back to the stable admin surface.
+
+Fix:
+
+- Extended the Mailcow shim deployer to create/repair `fido2`, `settingsmap`,
+  and `templates`.
+- Added compatibility JSON handlers for domain search, quarantine inventory,
+  and empty domain/mailbox template lists.
+- Allowed authenticated same-origin UI reads through the compatibility shim
+  while preserving API-key enforcement for unauthenticated external reads.
+- Set lab quarantine Redis defaults so the quarantine-disabled banner is not
+  shown during demos.
+- Routed `/SOGo/*` to `/admin/dashboard` for the current shim because SOGo is
+  not a working browser surface in this custom stack.
+
+Verification:
+
+- `python3 scripts/deploy_mailcow_api.py` passes, including stale-session,
+  table JSON, template JSON, and SOGo-link recovery checks.
+- Browser crawl of `/admin/dashboard`, `/admin/system`, `/admin/mailbox`,
+  `/admin/queue`, `/quarantine`, and `/SOGo/so` shows no dialogs, failed
+  requests, console errors, SQL warning alerts, or invalid JSON alerts. The
+  only crawler text hit containing "error" is static queue help copy explaining
+  mail-delivery error messages, not a UI failure.
+
 ### Wazuh Dashboard demo login works but native Wazuh API auth returns 401
 
 Status: known follow-up; dashboard demo path is verified.

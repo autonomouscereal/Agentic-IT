@@ -60,7 +60,8 @@ The Mailcow module is a reference implementation of the email-provider capabilit
 Important boundaries:
 
 - Direct MySQL through the Keycloak-Mailcow bridge remains the canonical Mailcow write/provisioning path in the reference deployment.
-- The optional Mailcow HTTP API shim is a read-only compatibility surface for domain, mailbox, and alias inventory.
+- The optional Mailcow HTTP API shim is a read-only compatibility surface for domain, mailbox, alias, domain-search, quarantine, and template inventory needed by provider tooling and the lab demo UI.
+- The shim deployer repairs the custom seed's Mailcow UI schema drift (`logs`, `tfa`, `fido2`, `settingsmap`, `templates`, `mailbox.authsource`) and validates browser-facing table JSON so invalid JSON/DataTables banners do not reappear after redeploy.
 - The shim should be represented as part of the Mailcow reference module, not as a required platform-wide dependency.
 - If an environment already has Exchange, Gmail, Proofpoint, Mimecast, or another mail security provider, mark the email-provider capability as existing and use or build that provider adapter instead.
 

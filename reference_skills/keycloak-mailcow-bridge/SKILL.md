@@ -88,13 +88,15 @@ Use `scripts/deploy_mailcow_api.py` only when a deployment specifically needs Ma
 - set `HTTP_SEC_FETCH_DEST=empty`
 - create the Mailcow `identity_provider` compatibility table if missing
 - create the Mailcow `logs` table if missing
-- repair legacy `tfa` and `mailbox.authsource` schema drift expected by the current UI
+- repair legacy `tfa`, `fido2`, `settingsmap`, `templates`, and `mailbox.authsource` schema drift expected by the current UI
 - rewrite extensionless UI routes through FastCGI without serving PHP source
 - write generated CSS/JS to `/web/cache` so the nginx sidecar can serve the
   `/cache/<hash>` assets and the UI does not render blank/unstyled
 - append a file-mtime `?v=` query and no-store cache headers for `/cache/*` so
   interactive browsers do not reuse stale broken assets after a repair
-- install `mailcow_compat_api.php` for read-only `get/domain`, `get/mailbox`, and `get/alias` compatibility when the stock `json_api.php` path returns empty bodies in custom deployments
+- install `mailcow_compat_api.php` for read-only `get/domain`, `get/mailbox`, `get/alias`, `search/domain`, `get/quarantine/all`, and domain/mailbox template compatibility when the stock `json_api.php` path returns empty bodies in custom deployments
+- set lab quarantine Redis defaults so the demo UI does not show a quarantine-disabled warning banner
+- route `/SOGo/*` to `/admin/dashboard` in the current shim because SOGo webmail is not exposed through the custom sidecar
 - reject invalid API keys with HTTP 401
 - never print API keys in logs
 - use the Mailcow MySQL container environment for SQL setup instead of requiring host-side `MYSQL_ROOT_PASSWORD`
@@ -139,8 +141,11 @@ Latest demo UI verification on 2026-05-18:
 - generated `/cache` CSS and JS assets return HTTP `200`
 - stale `MCSESSID` recovery returns the admin login instead of the blank
   `/user` body
-- headless browser login shows visible dashboard text with no failed network
-  requests or console errors
+- UI table JSON checks pass for domain search, quarantine, domain templates,
+  and mailbox templates
+- headless browser crawl of `/admin/dashboard`, `/admin/system`,
+  `/admin/mailbox`, `/admin/queue`, `/quarantine`, and `/SOGo/so` shows no
+  invalid JSON dialogs, SQL warning banners, failed requests, or console errors
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`
 
 Operational blueprint:

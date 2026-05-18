@@ -15,7 +15,7 @@ The API shim exists for compatibility:
 - Avoid making direct MySQL the only read path for inventory-style operations.
 - Preserve direct MySQL as the supported write/provisioning fallback until the real upstream Mailcow API is fully available in a target environment.
 
-The shim is intentionally narrow. It provides read-only compatibility for domains, mailboxes, and aliases. Mailbox creation, alias creation, user provisioning, distribution group setup, and Keycloak sync still use the direct MySQL bridge scripts unless a future environment provides a real Mailcow API with write support.
+The shim is intentionally narrow. It provides read-only compatibility for domains, mailboxes, aliases, and the Mailcow admin table endpoints needed for the lab demo. Mailbox creation, alias creation, user provisioning, distribution group setup, and Keycloak sync still use the direct MySQL bridge scripts unless a future environment provides a real Mailcow API with write support.
 
 ## Provider-Agnostic Position
 
@@ -97,6 +97,10 @@ Supported read endpoints:
 | `GET /api/v1/get/mailbox/{address}` | Returns matching mailbox rows |
 | `GET /api/v1/get/alias/all` | Returns all aliases as a JSON array |
 | `GET /api/v1/get/alias/{address}` | Returns matching alias rows |
+| `POST /api/v1/search/domain` | Returns Mailcow/DataTables-shaped domain rows for the admin mailbox page |
+| `GET /api/v1/get/quarantine/all` | Returns a JSON array of quarantine rows, empty when none exist |
+| `GET /api/v1/get/domain/template/all` | Returns domain template rows, empty when none exist |
+| `GET /api/v1/get/mailbox/template/all` | Returns mailbox template rows, empty when none exist |
 
 Auth and method behavior:
 
@@ -129,6 +133,8 @@ The deployer is idempotent:
 - creates the `identity_provider` compatibility table when missing
 - creates the `logs` compatibility table when missing
 - repairs the custom `tfa` table shape expected by the mounted Mailcow UI
+- repairs `fido2`, `settingsmap`, and `templates` schema drift used by the
+  admin/configuration pages
 - adds `mailbox.authsource` with default `mailcow` when missing
 - patches ambiguous custom-schema UI queries from `kind` to `mailbox.kind`
 - patches generated CSS/JS paths to `/web/cache` so the nginx sidecar can serve
@@ -144,6 +150,12 @@ The deployer is idempotent:
 - strips incoming cookies on `/` and `/admin/`, and clears both `PHPSESSID` and
   `MCSESSID` on `/user` and `/user/`, so stale user sessions recover to the
   admin login instead of a blank page
+- provides compatibility JSON for UI table routes that are empty in the custom
+  stock API path: domain search, quarantine listing, and empty template lists
+- sets small lab quarantine defaults in Redis so the demo UI does not show a
+  quarantine-disabled warning banner
+- routes `/SOGo/*` back to `/admin/dashboard` because SOGo is not exposed
+  through this custom demo shim
 - runs built-in endpoint tests and demo UI cache-asset checks before reporting
   success
 
@@ -201,6 +213,25 @@ Current verified result on 2026-05-12:
 ```
 
 The single skip is expected in the current Keycloak 26.x lab because the custom user profile attribute is not declared; the sync state is used instead.
+
+## Browser UI Regression
+
+The reference deployer includes lightweight checks for the demo shim's browser
+surface. After any UI/API shim repair, also run the headless browser crawl from
+the operator workstation when Playwright is available. The latest verified
+2026-05-18 crawl covered:
+
+- `/admin/dashboard`
+- `/admin/system`
+- `/admin/mailbox`
+- `/admin/queue`
+- `/quarantine`
+- `/SOGo/so`
+
+Expected result: no JavaScript dialogs, no console errors, no failed requests,
+no SQL warning alerts, and no invalid JSON alerts. Static help copy on the
+queue page may contain the phrase "error message"; that is not a UI failure.
+`/SOGo/so` should redirect to `/admin/dashboard` in the current shim.
 
 ## Security Model
 
@@ -381,6 +412,26 @@ both `PHPSESSID` and `MCSESSID` on `/user` before redirecting back to `/`.
 After repair, a browser login from the bare root URL should land on
 `/admin/dashboard` with visible dashboard content.
 
+### Admin pages show invalid JSON, SQL column, or missing-table warnings.
+
+Likely cause:
+
+- The custom Mailcow database seed has drifted from the mounted web code.
+- Stock `json_api.php` returns empty bodies for UI table endpoints in this
+  sidecar context.
+
+Repair:
+
+```bash
+cd /home/cereal/Mailcow/deploy
+python3 scripts/deploy_mailcow_api.py
+```
+
+The deployer repairs the known UI schema drift (`fido2`, `settingsmap`,
+`templates`, `tfa`, `mailbox.authsource`), routes UI DataTables calls to the
+compatibility API, validates those JSON endpoints, and clears the demo
+quarantine warning by setting lab Redis defaults.
+
 ### Admin login loops or fails after the password is correct.
 
 Likely causes:
@@ -402,10 +453,13 @@ Latest live verification on 2026-05-18:
   headers.
 - Stale `MCSESSID` recovery is verified by the deployer.
 - Headless browser verification reports zero failed network requests and zero
-  console errors.
+  console errors across `/admin/dashboard`, `/admin/system`, `/admin/mailbox`,
+  `/admin/queue`, `/quarantine`, and `/SOGo/so`.
+- UI table JSON is verified for domain search, quarantine, domain templates,
+  and mailbox templates, with no DataTables invalid JSON dialogs.
+- SQL compatibility schema is verified for `logs`, `tfa`, `fido2`,
+  `settingsmap`, `templates`, and `mailbox.authsource`.
 - IMAP auth for `demo_account_1@mailcow.local` returns `OK`.
-- Browser check after login has visible dashboard text, zero failed network
-  requests, and zero console errors.
 
 ### MySQL parity fails.
 

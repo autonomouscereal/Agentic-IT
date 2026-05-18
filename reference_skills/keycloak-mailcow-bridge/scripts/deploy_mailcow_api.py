@@ -239,7 +239,66 @@ def setup_ui_compat_schema():
           ADD COLUMN IF NOT EXISTS `authsource` ENUM('mailcow', 'keycloak', 'generic-oidc', 'ldap') DEFAULT 'mailcow' AFTER `attributes`
     """)
     run_sql("UPDATE `mailbox` SET `authsource`='mailcow' WHERE `authsource` IS NULL OR `authsource`=''")
-    print("  logs/tfa/mailbox UI compatibility schema: OK")
+    run_sql("""
+        CREATE TABLE IF NOT EXISTS `fido2` (
+            `id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `data` TEXT DEFAULT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+    """)
+    run_sql("""
+        ALTER TABLE `fido2`
+          ADD COLUMN IF NOT EXISTS `credentialId` VARBINARY(512) DEFAULT NULL AFTER `id`,
+          ADD COLUMN IF NOT EXISTS `credentialPublicKey` BLOB DEFAULT NULL AFTER `credentialId`,
+          ADD COLUMN IF NOT EXISTS `certificateSubject` VARCHAR(255) DEFAULT NULL AFTER `credentialPublicKey`,
+          ADD COLUMN IF NOT EXISTS `username` VARCHAR(255) NOT NULL DEFAULT '' AFTER `certificateSubject`,
+          ADD COLUMN IF NOT EXISTS `friendlyName` VARCHAR(255) DEFAULT NULL AFTER `username`,
+          ADD COLUMN IF NOT EXISTS `created` DATETIME DEFAULT CURRENT_TIMESTAMP AFTER `friendlyName`,
+          ADD COLUMN IF NOT EXISTS `modified` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER `created`
+    """)
+    run_sql("""
+        CREATE TABLE IF NOT EXISTS `settingsmap` (
+            `id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `desc` VARCHAR(255) NOT NULL DEFAULT '',
+            `content` TEXT DEFAULT NULL,
+            `active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `modified` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+    """)
+    run_sql("""
+        CREATE TABLE IF NOT EXISTS `templates` (
+            `id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `type` VARCHAR(32) NOT NULL,
+            `template` VARCHAR(255) NOT NULL,
+            `attributes` LONGTEXT NOT NULL,
+            `created` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `modified` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `type_template` (`type`, `template`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+    """)
+    print("  logs/tfa/fido2/settingsmap/templates/mailbox UI compatibility schema: OK")
+    redispass = os.environ.get("REDISPASS") or MAILCOW_ENV.get("REDISPASS", "")
+    if redispass:
+        docker_run(
+            [
+                "sudo",
+                "docker",
+                "exec",
+                "-e",
+                f"REDISPASS={redispass}",
+                "redis-mailcow",
+                "sh",
+                "-lc",
+                'redis-cli -a "$REDISPASS" SET Q_RETENTION_SIZE 50 >/dev/null && redis-cli -a "$REDISPASS" SET Q_MAX_SIZE 10 >/dev/null',
+            ],
+            check=False,
+        )
+        print("  quarantine demo defaults: OK")
+    else:
+        print("  [WARN] REDISPASS unavailable; quarantine demo defaults not set")
 
 
 def patch_mailcow_web_for_ui():
@@ -403,6 +462,7 @@ exec php-fpm
         f"-e TZ=America/New_York "
         f"-e MAILCOW_PASS_SCHEME=BLF-CRYPT "
         f"--add-host dockerapi:127.0.0.1 "
+        f"--add-host nginx:127.0.0.1 "
         f"-v {MAILCOW_DOCKERIZED_WEB}:/web:rw "
         f"-v {www_conf_path}:/usr/local/etc/php-fpm.d/www.conf:ro "
         f"-v {zz_conf_path}:/usr/local/etc/php-fpm.d/zz-docker.conf:ro "
@@ -482,6 +542,18 @@ http {{
 
         # Compatibility read endpoints for custom deployments where the stock
         # json_api.php returns empty bodies behind this shim.
+        location = /api/v1/search/domain {{
+            rewrite ^ /mailcow_compat_api.php?action=search_domain last;
+        }}
+
+        location = /api/v1/get/quarantine/all {{
+            rewrite ^ /mailcow_compat_api.php?action=get_quarantine last;
+        }}
+
+        location ~ ^/api/v1/get/(domain|mailbox)/template/all$ {{
+            rewrite ^/api/v1/get/(domain|mailbox)/template/all$ /mailcow_compat_api.php?action=get_template&type=$1 last;
+        }}
+
         location ~ ^/api/v1/get/(domain|mailbox|alias)/(.*)$ {{
             rewrite ^/api/v1/get/(domain|mailbox|alias)/(.*)$ /mailcow_compat_api.php?resource=$1&selector=$2 last;
         }}
@@ -563,6 +635,12 @@ http {{
             add_header Set-Cookie "PHPSESSID=deleted; Path=/; Max-Age=0; HttpOnly; SameSite=Lax" always;
             add_header Set-Cookie "MCSESSID=deleted; Path=/; Max-Age=0; HttpOnly; SameSite=Lax" always;
             return 302 /;
+        }}
+
+        # SOGo is not exposed through this custom demo shim. Avoid a 404 from
+        # the top-nav Webmail link during demos and return to the stable admin UI.
+        location ~ ^/SOGo/ {{
+            return 302 /admin/dashboard;
         }}
 
         location / {{
@@ -727,6 +805,61 @@ def test_ui():
                         print("  [FAIL] Demo UI /user stale session did not recover to admin login")
                         return False
                 print("  [PASS] Demo UI stale session recovery")
+                search_payload = json.dumps({
+                    "draw": 1,
+                    "start": 0,
+                    "length": 10,
+                    "search": {"value": ""},
+                }).encode("utf-8")
+                search_req = urllib.request.Request(
+                    f"http://127.0.0.1:{UI_DEMO_PORT}/api/v1/search/domain",
+                    data=search_payload,
+                    headers={
+                        "Cookie": "MCSESSID=demo-ui-session",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(search_req, timeout=15) as search_resp:
+                    search_data = json.loads(search_resp.read())
+                    if "data" not in search_data or "recordsTotal" not in search_data:
+                        print("  [FAIL] Demo UI domain search returned invalid DataTables JSON")
+                        return False
+                quarantine_req = urllib.request.Request(
+                    f"http://127.0.0.1:{UI_DEMO_PORT}/api/v1/get/quarantine/all",
+                    headers={"Cookie": "MCSESSID=demo-ui-session"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(quarantine_req, timeout=15) as quarantine_resp:
+                    quarantine_data = json.loads(quarantine_resp.read())
+                    if not isinstance(quarantine_data, list):
+                        print("  [FAIL] Demo UI quarantine endpoint returned invalid JSON")
+                        return False
+                for template_type in ("domain", "mailbox"):
+                    template_req = urllib.request.Request(
+                        f"http://127.0.0.1:{UI_DEMO_PORT}/api/v1/get/{template_type}/template/all",
+                        headers={"Cookie": "MCSESSID=demo-ui-session"},
+                        method="GET",
+                    )
+                    with urllib.request.urlopen(template_req, timeout=15) as template_resp:
+                        template_data = json.loads(template_resp.read())
+                        if not isinstance(template_data, list):
+                            print(f"  [FAIL] Demo UI {template_type} template endpoint returned invalid JSON")
+                            return False
+                print("  [PASS] Demo UI table JSON endpoints")
+                class NoRedirect(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self, req, fp, code, msg, headers, newurl):
+                        return None
+                no_redirect = urllib.request.build_opener(NoRedirect)
+                try:
+                    no_redirect.open(f"http://127.0.0.1:{UI_DEMO_PORT}/SOGo/so", timeout=15)
+                    print("  [FAIL] Demo UI SOGo link did not return a redirect")
+                    return False
+                except urllib.error.HTTPError as exc:
+                    if exc.code != 302 or "/admin/dashboard" not in exc.headers.get("Location", ""):
+                        print("  [FAIL] Demo UI SOGo link did not recover to admin dashboard")
+                        return False
+                print("  [PASS] Demo UI SOGo link recovery")
                 return True
             print(f"  [FAIL] Demo UI unexpected response on port {UI_DEMO_PORT}")
             return False

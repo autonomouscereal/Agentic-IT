@@ -27,9 +27,9 @@ approved reference modules when those capabilities are missing.
 The shared demo user is `demo_account_1`; its password is stored only in the
 local server-manager vault key `demo_account_1`. Latest 2026-05-18 login smoke:
 iTop REST PASS, Wazuh Dashboard PASS, GitLab local login PASS, GitLab OIDC
-start PASS, Mailcow admin UI PASS, Mailcow IMAP PASS. Native Wazuh API auth for
-the demo user is currently a follow-up (`401`) and is not the primary Wazuh demo
-path.
+start PASS, Mailcow admin UI PASS across dashboard/system/mailbox/queue/quarantine
+pages, Mailcow IMAP PASS. Native Wazuh API auth for the demo user is currently
+a follow-up (`401`) and is not the primary Wazuh demo path.
 
 ## Documentation Map
 

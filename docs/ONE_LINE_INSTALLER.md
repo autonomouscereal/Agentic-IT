@@ -188,7 +188,7 @@ python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
 ```
 
-The shim blueprint is documented in `docs/MAILCOW_API_SHIM.md`. It covers endpoint contracts, security posture, rollback, troubleshooting, and the difference between the Mailcow reference implementation and the provider-agnostic email capability contract.
+The shim blueprint is documented in `docs/MAILCOW_API_SHIM.md`. It covers endpoint contracts, security posture, rollback, troubleshooting, demo UI repair, and the difference between the Mailcow reference implementation and the provider-agnostic email capability contract. The 2026-05-18 deployer also repairs UI schema drift and validates that the Mailcow admin pages do not show invalid JSON/DataTables or SQL-column warnings after login.
 
 Latest dry-run proof:
 

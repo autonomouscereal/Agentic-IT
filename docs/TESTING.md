@@ -45,7 +45,7 @@ Expected:
 - `ps_path` present
 - no active processes after completed smoke tests
 
-`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, provider adapters, iTop UI reachability, Mailcow HTTP API domain/mailbox/alias counts, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence. For the Mailcow demo surface, also verify `http://192.168.50.222:2581` renders the login page, generated `/cache` CSS/JS assets return HTTP `200` with no-store cache headers and `?v=` URL versions, stale `MCSESSID` recovery sends `/user` back to the admin login, admin form login from the bare root URL reaches `/admin/dashboard` with visible dashboard text, and IMAP login for `demo_account_1@mailcow.local` returns `OK` using the vault password.
+`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, provider adapters, iTop UI reachability, Mailcow HTTP API domain/mailbox/alias counts, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence. For the Mailcow demo surface, also verify `http://192.168.50.222:2581` renders the login page, generated `/cache` CSS/JS assets return HTTP `200` with no-store cache headers and `?v=` URL versions, stale `MCSESSID` recovery sends `/user` back to the admin login, admin form login from the bare root URL reaches `/admin/dashboard` with visible dashboard text, admin/mailbox/quarantine UI table JSON does not raise DataTables dialogs, System/Mailbox/Queue/Quarantine pages show no SQL or invalid JSON alerts, and IMAP login for `demo_account_1@mailcow.local` returns `OK` using the vault password.
 
 Latest verified result on 2026-05-13:
 
@@ -307,7 +307,7 @@ Covers:
 - ServiceNow/Jira adapters fail closed when not configured
 - failed external push records `provider_sync_status=create_failed` and `provider_last_error`
 
-Latest verified result on 2026-05-12:
+Latest verified result on 2026-05-18:
 
 ```text
 providers: generic-webhook, itop, jira, local, servicenow
@@ -596,6 +596,8 @@ selector reads: domain=1, mailbox=1, alias=1
 POST to read compatibility endpoint: HTTP 405
 direct MySQL smoke: 2 domains, 11 mailboxes, 6 aliases
 test_mailcow_api_shim.py --mysql-parity: 13 passed, 0 failed
+demo UI table JSON: PASS for domain search, quarantine, domain templates, mailbox templates
+demo UI browser crawl: PASS for /admin/dashboard, /admin/system, /admin/mailbox, /admin/queue, /quarantine, /SOGo/so
 platform_doctor.py: 18 passed, 0 failed, 0 warned
 keycloak-mailcow bridge E2E: 47 passed, 0 failed, 1 skipped
 ```
