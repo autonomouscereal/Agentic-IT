@@ -670,6 +670,11 @@ async def update_agent_status(
 
 @router.websocket("/ws")
 async def agent_ws(websocket: WebSocket):
+    decision = await access_control.evaluate_headers("GET", "/api/agents/ws", websocket.headers)
+    if not decision.get("allow"):
+        await websocket.close(code=1008, reason=decision.get("reason") or "access_denied")
+        await access_control.audit_decision(decision, "WEBSOCKET", "/api/agents/ws", 403)
+        return
     await websocket.accept()
     _connected_ws.append(websocket)
     try:

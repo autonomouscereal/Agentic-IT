@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${SOC_DB_USER:?SOC_DB_USER must be set}
       POSTGRES_PASSWORD: ${SOC_DB_PASSWORD:?SOC_DB_PASSWORD must be set}
     ports:
-      - "${SOC_DB_PORT:-5433}:5432"
+      - "${SOC_DB_BIND:-127.0.0.1}:${SOC_DB_PORT:-5433}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./api/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
@@ -25,7 +25,7 @@ services:
       POSTGRES_USER: agent_memory
       POSTGRES_PASSWORD: ${AGENT_MEMORY_DB_PASSWORD:?AGENT_MEMORY_DB_PASSWORD must be set}
     ports:
-      - "${AGENT_MEMORY_DB_PORT:-25490}:5432"
+      - "${AGENT_MEMORY_DB_BIND:-127.0.0.1}:${AGENT_MEMORY_DB_PORT:-25490}:5432"
     volumes:
       - agent-memory-db-data:/var/lib/postgresql/data
     healthcheck:
@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
     working_dir: /app
     ports:
-      - "${AI_PROXY_PORT:-4001}:4001"
+      - "${AI_PROXY_BIND:-127.0.0.1}:${AI_PROXY_PORT:-4001}:4001"
     environment:
       PROXY_PORT: 4001
       PROXY_CONFIG_PATH: /runtime/proxy_config.json
@@ -66,7 +66,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${DASHBOARD_PORT:-25480}:8000"
+      - "${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-25480}:8000"
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -131,6 +131,15 @@ services:
       DASHBOARD_API_BASE: ${DASHBOARD_API_BASE:-http://localhost:8000}
       DASHBOARD_AUTH_MODE: ${DASHBOARD_AUTH_MODE:-disabled}
       DASHBOARD_AUTH_ENFORCEMENT: ${DASHBOARD_AUTH_ENFORCEMENT:-audit-only}
+      DASHBOARD_TRUSTED_AUTH_SECRET: ${DASHBOARD_TRUSTED_AUTH_SECRET:-}
+      DASHBOARD_SERVICE_TOKEN: ${DASHBOARD_SERVICE_TOKEN:-}
+      DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-}
+      DASHBOARD_SESSION_TTL_SECONDS: ${DASHBOARD_SESSION_TTL_SECONDS:-3600}
+      DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-true}
+      DASHBOARD_PROTECT_UI: ${DASHBOARD_PROTECT_UI:-true}
+      DASHBOARD_PUBLIC_HEALTH: ${DASHBOARD_PUBLIC_HEALTH:-false}
+      DASHBOARD_CORS_ORIGINS: ${DASHBOARD_CORS_ORIGINS:-}
+      DASHBOARD_HSTS: ${DASHBOARD_HSTS:-true}
       TRACK_INTERVAL: ${TRACK_INTERVAL:-10}
       STUCK_TIMEOUT_MINUTES: ${STUCK_TIMEOUT_MINUTES:-60}
       MODEL_CONFIG_PATH: /app/agent_models.json

@@ -16,6 +16,7 @@ vault references.
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -36,6 +37,9 @@ def request(base, method, path, payload=None, user=ADMIN, expect=(200,), timeout
         "X-Auth-Request-User": user,
         "X-Auth-Provider": "codex-permission-provider-matrix",
     }
+    trusted_secret = os.getenv("DASHBOARD_TRUSTED_AUTH_SECRET", "")
+    if trusted_secret:
+        headers["X-Dashboard-Auth-Secret"] = trusted_secret
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(base.rstrip("/") + path, data=data, headers=headers, method=method)
     try:

@@ -223,6 +223,27 @@ The 2026-05-14 access-control layer supports audit-only and enforcement modes.
 It uses role capabilities, ticket group/classification scopes, spawn-time agent
 permission snapshots, and per-agent vault leases.
 
+Current hardened posture, verified 2026-05-18:
+
+- `DASHBOARD_AUTH_MODE=header` and `DASHBOARD_AUTH_ENFORCEMENT=enforce` are
+  active on the live demo dashboard.
+- UI, static assets, `/health`, WebSocket, and every `/api/*` route are
+  protected in enforced mode.
+- Trusted identity headers are ignored unless `X-Dashboard-Auth-Secret`
+  matches the vault-backed `dashboard_trusted_auth_secret`.
+- The app mints a signed HttpOnly `dashboard_session` cookie after trusted
+  proxy authentication so WebSockets can authenticate without exposing the
+  proxy secret to JavaScript.
+- Internal agents/bridges use `X-Dashboard-Service-Token` from vault key
+  `dashboard_service_token`.
+- Dashboard PostgreSQL, agent memory PostgreSQL, and the AI proxy are bound to
+  `127.0.0.1` in the reference compose; only the authenticated dashboard port
+  remains LAN-facing.
+- Verification script:
+  `python scripts/smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480`.
+
+See `docs/FEDRAMP_SECURITY_HARDENING.md` for the current hardening contract.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/access/policies` | Shows auth mode, enforcement mode, route permission requirements, role capability map, classification order, and agent permission/vault boundary text |
@@ -231,10 +252,11 @@ permission snapshots, and per-agent vault leases.
 
 Current behavior:
 
-- `DASHBOARD_AUTH_MODE=disabled`: local lab default, equivalent to
-  platform-admin.
+- `DASHBOARD_AUTH_MODE=disabled`: development-only compatibility mode,
+  equivalent to platform-admin. Do not use for regulated demos.
 - `DASHBOARD_AUTH_MODE=header` plus `DASHBOARD_AUTH_ENFORCEMENT=enforce`:
-  trusted auth proxy/header identities are checked and denied with HTTP 403.
+  trusted auth proxy/header identities are checked and denied with HTTP 403
+  unless the shared proxy secret validates.
 - Ticket list/detail/note/assignment paths enforce group and classification
   scopes in enforce mode.
 - Agents are allowed to spawn, but requested permissions beyond the spawner are

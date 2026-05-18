@@ -1,7 +1,11 @@
 import fnmatch
+import base64
+import hashlib
+import hmac
 import os
 import json
 import re
+import time
 
 from database import fetchall, fetchrow, execute, json_dumps
 from services.event_logger import log_event
@@ -48,29 +52,55 @@ CLASSIFICATION_RANK = {
 DEFAULT_ROLE_CAPABILITIES = {
     "platform-admin": ["*"],
     "soc-manager": [
+        "ui:read",
+        "health:read",
+        "dashboard:read",
         "tickets:*",
         "agents:*",
         "changes:*",
         "workflows:*",
+        "postmortems:*",
+        "tools:*",
+        "providers:*",
+        "skills:*",
+        "knowledge:*",
+        "setup:*",
+        "intake:*",
+        "cicd:*",
         "audit:read",
-        "access:read",
+        "access:*",
     ],
     "analyst": [
+        "ui:read",
+        "dashboard:read",
         "tickets:read",
         "tickets:note",
         "tickets:request_info",
         "access:request",
         "changes:request",
+        "intake:write",
+        "intake:read",
         "agents:assigned",
     ],
     "auditor": [
+        "ui:read",
+        "health:read",
+        "dashboard:read",
         "tickets:read",
         "changes:read",
         "audit:read",
         "evidence:read",
         "access:read",
+        "agents:read",
+        "tools:read",
+        "workflows:read",
+        "postmortems:read",
+        "knowledge:read",
+        "cicd:read",
     ],
     "agent-operator": [
+        "ui:read",
+        "dashboard:read",
         "agents:spawn",
         "agents:read",
         "tickets:read",
@@ -80,6 +110,7 @@ DEFAULT_ROLE_CAPABILITIES = {
 }
 
 ROUTE_REQUIREMENTS = [
+    ("GET", "/api/access/me", "ui:read"),
     ("GET", "/api/tickets*", "tickets:read"),
     ("POST", "/api/tickets/*/notes", "tickets:note"),
     ("POST", "/api/tickets/*/request-info", "tickets:request_info"),
@@ -89,40 +120,61 @@ ROUTE_REQUIREMENTS = [
     ("POST", "/api/tickets/*/workflow", "agents:spawn"),
     ("POST", "/api/tickets/*/access-request", "access:request"),
     ("POST", "/api/tickets/*/status", "tickets:note"),
+    ("POST", "/api/tickets/*/attachments", "tickets:note"),
+    ("GET", "/api/tickets/*/access-requests", "access:read"),
+    ("POST", "/api/tickets/*/sync", "providers:sync"),
+    ("POST", "/api/tickets/*/push-provider", "providers:sync"),
+    ("POST", "/api/tickets/*/unassign-agent", "agents:stop"),
     ("POST", "/api/tickets*", "tickets:create"),
     ("GET", "/api/agents*", "agents:read"),
     ("POST", "/api/agents/spawn", "agents:spawn"),
+    ("POST", "/api/agents/create-from-prompt", "agents:spawn"),
+    ("POST", "/api/agents/audits/run", "agents:audit"),
+    ("POST", "/api/agents/heartbeat/*", "agents:heartbeat"),
     ("POST", "/api/agents/*/vault/lease", "agents:read"),
+    ("POST", "/api/agents/*/steering/*/ack", "agents:heartbeat"),
     ("POST", "/api/agents/*/stop", "agents:stop"),
     ("POST", "/api/agents/*/restart", "agents:restart"),
     ("POST", "/api/agents/*/wake", "agents:wake"),
+    ("POST", "/api/agents/*/update", "agents:update"),
+    ("POST", "/api/agents*", "agents:write"),
     ("GET", "/api/changes*", "changes:read"),
     ("POST", "/api/changes/request", "changes:request"),
     ("POST", "/api/changes/*/approve", "changes:approve"),
     ("POST", "/api/changes/*/reject", "changes:approve"),
     ("POST", "/api/changes/*/complete", "changes:complete"),
     ("GET", "/api/dashboard/audit*", "audit:read"),
+    ("GET", "/api/dashboard*", "dashboard:read"),
     ("GET", "/api/access*", "access:read"),
     ("POST", "/api/access*", "access:admin"),
     ("GET", "/api/tools*", "tools:read"),
     ("POST", "/api/tools*", "tools:operate"),
+    ("GET", "/api/providers*", "providers:read"),
+    ("POST", "/api/providers*", "providers:sync"),
+    ("GET", "/api/skills*", "skills:read"),
+    ("POST", "/api/skills*", "skills:write"),
+    ("PUT", "/api/skills*", "skills:write"),
+    ("DELETE", "/api/skills*", "skills:write"),
+    ("GET", "/api/intake*", "intake:read"),
+    ("POST", "/api/intake*", "intake:write"),
+    ("PUT", "/api/intake*", "intake:write"),
+    ("DELETE", "/api/intake*", "intake:write"),
     ("GET", "/api/cicd*", "cicd:read"),
     ("POST", "/api/cicd*", "cicd:write"),
     ("GET", "/api/workflows*", "workflows:read"),
     ("POST", "/api/workflows*", "workflows:write"),
+    ("PUT", "/api/workflows*", "workflows:write"),
     ("GET", "/api/postmortems*", "postmortems:read"),
     ("POST", "/api/postmortems*", "postmortems:write"),
+    ("PUT", "/api/postmortems*", "postmortems:write"),
     ("GET", "/api/knowledge*", "knowledge:read"),
     ("POST", "/api/knowledge*", "knowledge:write"),
+    ("PUT", "/api/knowledge*", "knowledge:write"),
     ("GET", "/api/setup*", "setup:read"),
     ("POST", "/api/setup*", "setup:write"),
 ]
 
-PUBLIC_PATHS = (
-    "/",
-    "/health",
-    "/static/",
-)
+PUBLIC_PATHS = ()
 
 
 def auth_mode():
@@ -133,18 +185,221 @@ def enforcement_mode():
     return os.getenv("DASHBOARD_AUTH_ENFORCEMENT", "audit-only").strip().lower()
 
 
-def request_identity(request):
-    headers = getattr(request, "headers", {}) or {}
-    mode = auth_mode()
+def protect_ui():
+    return os.getenv("DASHBOARD_PROTECT_UI", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
+def public_health():
+    return os.getenv("DASHBOARD_PUBLIC_HEALTH", "false").strip().lower() in ("1", "true", "yes", "on")
+
+
+def trusted_auth_secret():
+    return os.getenv("DASHBOARD_TRUSTED_AUTH_SECRET", "").strip()
+
+
+def service_token():
+    return os.getenv("DASHBOARD_SERVICE_TOKEN", "").strip()
+
+
+def session_secret():
+    return (
+        os.getenv("DASHBOARD_SESSION_SECRET", "").strip()
+        or trusted_auth_secret()
+        or service_token()
+    )
+
+
+def session_ttl_seconds():
+    try:
+        return max(300, int(os.getenv("DASHBOARD_SESSION_TTL_SECONDS", "3600")))
+    except ValueError:
+        return 3600
+
+
+def _b64url(data):
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(data):
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode((data + padding).encode("ascii"))
+
+
+def _session_signature(payload):
+    secret = session_secret()
+    if not secret:
+        return ""
+    return hmac.new(secret.encode("utf-8"), payload.encode("ascii"), hashlib.sha256).hexdigest()
+
+
+def create_session_cookie(identity):
+    if not identity or not identity.get("authenticated") or identity.get("auth_mode") == "service-token":
+        return None
+    payload = _b64url(json.dumps({
+        "username": identity.get("username"),
+        "email": identity.get("email"),
+        "provider": identity.get("provider") or "trusted-proxy",
+        "exp": int(time.time()) + session_ttl_seconds(),
+    }, separators=(",", ":")).encode("utf-8"))
+    sig = _session_signature(payload)
+    if not sig:
+        return None
+    return f"{payload}.{sig}"
+
+
+def _identity_from_session_cookie(headers, mode):
+    raw_cookie = _header_value(headers, "cookie") or ""
+    cookies = {}
+    for item in raw_cookie.split(";"):
+        if "=" in item:
+            key, value = item.split("=", 1)
+            cookies[key.strip()] = value.strip()
+    token = cookies.get("dashboard_session")
+    if not token or "." not in token:
+        return None
+    payload, sig = token.rsplit(".", 1)
+    expected = _session_signature(payload)
+    if not _token_matches(sig, expected):
+        return {
+            "username": "anonymous",
+            "email": None,
+            "provider": "session-cookie",
+            "auth_mode": mode,
+            "authenticated": False,
+            "auth_failure": "invalid_session_cookie",
+        }
+    try:
+        body = json.loads(_b64url_decode(payload))
+    except Exception:
+        return {
+            "username": "anonymous",
+            "email": None,
+            "provider": "session-cookie",
+            "auth_mode": mode,
+            "authenticated": False,
+            "auth_failure": "malformed_session_cookie",
+        }
+    if int(body.get("exp") or 0) < int(time.time()):
+        return {
+            "username": body.get("username") or "anonymous",
+            "email": body.get("email"),
+            "provider": body.get("provider") or "session-cookie",
+            "auth_mode": mode,
+            "authenticated": False,
+            "auth_failure": "expired_session_cookie",
+        }
     return {
-        "username": headers.get("x-auth-request-user")
-        or headers.get("x-forwarded-user")
-        or ("local-admin" if mode == "disabled" else "anonymous"),
-        "email": headers.get("x-auth-request-email")
-        or headers.get("x-forwarded-email"),
-        "provider": headers.get("x-auth-provider") or "local",
+        "username": body.get("username") or "anonymous",
+        "email": body.get("email"),
+        "provider": body.get("provider") or "session-cookie",
         "auth_mode": mode,
+        "authenticated": bool(body.get("username")),
+        "auth_strength": "signed-session-cookie",
     }
+
+
+def _header_value(headers, name):
+    if not headers:
+        return None
+    return headers.get(name) or headers.get(name.lower()) or headers.get(name.upper())
+
+
+def _token_matches(actual, expected):
+    return bool(actual and expected and hmac.compare_digest(str(actual), str(expected)))
+
+
+def _service_identity(headers):
+    token = _header_value(headers, "x-dashboard-service-token")
+    expected = service_token()
+    if not _token_matches(token, expected):
+        return None
+    username = _header_value(headers, "x-dashboard-service-user") or "platform-service"
+    return {
+        "username": username,
+        "email": None,
+        "provider": "service-token",
+        "auth_mode": "service-token",
+        "authenticated": True,
+        "auth_strength": "service-token",
+    }
+
+
+def _trusted_header_identity(headers, mode):
+    username = (
+        _header_value(headers, "x-auth-request-user")
+        or _header_value(headers, "x-forwarded-user")
+    )
+    email = (
+        _header_value(headers, "x-auth-request-email")
+        or _header_value(headers, "x-forwarded-email")
+    )
+    provider = _header_value(headers, "x-auth-provider") or "trusted-proxy"
+    secret = trusted_auth_secret()
+    supplied = _header_value(headers, "x-dashboard-auth-secret")
+    secret_ok = _token_matches(supplied, secret)
+    if enforcement_mode() == "enforce" and not secret:
+        return {
+            "username": username or "anonymous",
+            "email": email,
+            "provider": provider,
+            "auth_mode": mode,
+            "authenticated": False,
+            "auth_failure": "trusted_auth_secret_not_configured",
+        }
+    if secret and not secret_ok:
+        return {
+            "username": username or "anonymous",
+            "email": email,
+            "provider": provider,
+            "auth_mode": mode,
+            "authenticated": False,
+            "auth_failure": "missing_or_invalid_trusted_auth_secret",
+        }
+    return {
+        "username": username or "anonymous",
+        "email": email,
+        "provider": provider,
+        "auth_mode": mode,
+        "authenticated": bool(username),
+        "auth_failure": None if username else "missing_authenticated_user",
+        "auth_strength": "trusted-proxy-header",
+    }
+
+
+def request_identity_from_headers(headers):
+    mode = auth_mode()
+    service_identity = _service_identity(headers)
+    if service_identity:
+        return service_identity
+    if mode == "disabled":
+        return {
+            "username": "local-admin",
+            "email": None,
+            "provider": "local",
+            "auth_mode": mode,
+            "authenticated": True,
+            "auth_strength": "disabled-admin",
+        }
+    if mode == "header":
+        header_identity = _trusted_header_identity(headers, mode)
+        if header_identity.get("authenticated") or _header_value(headers, "x-auth-request-user"):
+            return header_identity
+        cookie_identity = _identity_from_session_cookie(headers, mode)
+        if cookie_identity:
+            return cookie_identity
+        return header_identity
+    return {
+        "username": "anonymous",
+        "email": None,
+        "provider": "unsupported",
+        "auth_mode": mode,
+        "authenticated": False,
+        "auth_failure": "unsupported_auth_mode",
+    }
+
+
+def request_identity(request):
+    return request_identity_from_headers(getattr(request, "headers", {}) or {})
 
 
 def subject_from_decision(decision):
@@ -174,14 +429,20 @@ def subject_from_request(request):
 
 def required_permission(method, path):
     upper_method = (method or "GET").upper()
-    if path == "/" or path in PUBLIC_PATHS or any(path.startswith(prefix) for prefix in PUBLIC_PATHS if prefix.endswith("/") and prefix != "/"):
+    if upper_method == "OPTIONS":
+        return None
+    if path == "/health":
+        return None if public_health() else "health:read"
+    if path == "/" or path.startswith("/static/") or path in ("/docs", "/redoc", "/openapi.json"):
+        return "ui:read" if protect_ui() else None
+    if path in PUBLIC_PATHS or any(path.startswith(prefix) for prefix in PUBLIC_PATHS if prefix.endswith("/")):
         return None
     for route_method, pattern, permission in ROUTE_REQUIREMENTS:
         if route_method == upper_method and fnmatch.fnmatch(path, pattern):
             return permission
     if path.startswith("/api/"):
         return "platform:unknown"
-    return None
+    return "ui:read" if protect_ui() else None
 
 
 def capability_matches(granted, required):
@@ -308,10 +569,10 @@ async def load_agent_subject(agent_id):
     }
 
 
-async def evaluate_request(request):
-    identity = request_identity(request)
+async def evaluate_headers(method, path, headers):
+    identity = request_identity_from_headers(headers or {})
     mode = identity["auth_mode"]
-    required = required_permission(getattr(request, "method", "GET"), getattr(getattr(request, "url", None), "path", "/"))
+    required = required_permission(method, path)
     if required is None:
         return {
             "allow": True,
@@ -331,6 +592,30 @@ async def evaluate_request(request):
             "identity": identity,
             "roles": ["platform-admin"],
             "capabilities": ["*"],
+            "required_permission": required,
+            "enforcement": enforcement_mode(),
+        }
+    if identity.get("auth_mode") == "service-token":
+        return {
+            "allow": True,
+            "decision": "allow",
+            "reason": "service_token_authenticated",
+            "identity": identity,
+            "roles": ["platform-admin"],
+            "capabilities": ["*"],
+            "required_permission": required,
+            "enforcement": enforcement_mode(),
+            "max_classification": "secret",
+            "scopes": [],
+        }
+    if not identity.get("authenticated"):
+        return {
+            "allow": enforcement_mode() != "enforce",
+            "decision": "deny",
+            "reason": identity.get("auth_failure") or "unauthenticated",
+            "identity": identity,
+            "roles": [],
+            "capabilities": [],
             "required_permission": required,
             "enforcement": enforcement_mode(),
         }
@@ -361,6 +646,14 @@ async def evaluate_request(request):
         "required_permission": required,
         "enforcement": enforcement_mode(),
     }
+
+
+async def evaluate_request(request):
+    return await evaluate_headers(
+        getattr(request, "method", "GET"),
+        getattr(getattr(request, "url", None), "path", "/"),
+        getattr(request, "headers", {}) or {},
+    )
 
 
 def _has_unbounded_ticket_access(subject):

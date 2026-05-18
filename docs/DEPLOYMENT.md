@@ -122,6 +122,16 @@ Expected:
 - proxy health/model aliases are reachable
 - process diagnostics include `/usr/bin/ps`
 
+Security posture for regulated demos, verified 2026-05-18:
+
+- dashboard auth is enforced with trusted header mode
+- direct unauthenticated UI, static, health, and API requests return `403`
+- dashboard PostgreSQL, agent-memory PostgreSQL, and the AI proxy are bound to
+  localhost on the AI Server
+- run `python scripts/smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480`
+  with `DASHBOARD_TRUSTED_AUTH_SECRET` and `DASHBOARD_SERVICE_TOKEN` sourced
+  from the credential vault before regulated demos
+
 ## Reference Module Login Validation
 
 The lab demo account is `demo_account_1`; its password lives only in the local

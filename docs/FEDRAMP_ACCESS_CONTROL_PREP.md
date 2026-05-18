@@ -1,7 +1,12 @@
 # FedRAMP Access Control Preparation
 
 Status: enforcement and per-agent vault lease proof deployed and live-verified
-on 2026-05-14.
+on 2026-05-14. On 2026-05-18, the live demo dashboard moved from preparation
+to enforced app-wide security: UI/static/health/API routes now require
+authentication, trusted proxy headers require a shared secret, service traffic
+uses a separate token, and databases are bound to localhost. See
+[FedRAMP Security Hardening](FEDRAMP_SECURITY_HARDENING.md) for the current
+deployment contract.
 
 ## Goal
 

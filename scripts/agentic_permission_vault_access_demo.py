@@ -17,6 +17,7 @@ No secret values are created or returned. Credential refs are vault references.
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -35,6 +36,9 @@ def request(base, method, path, payload=None, user=None, expect=(200,)):
     if user:
         headers["X-Auth-Request-User"] = user
         headers["X-Auth-Provider"] = "codex-agentic-permission-demo"
+    trusted_secret = os.getenv("DASHBOARD_TRUSTED_AUTH_SECRET", "")
+    if trusted_secret:
+        headers["X-Dashboard-Auth-Secret"] = trusted_secret
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(base.rstrip("/") + path, data=data, headers=headers, method=method)

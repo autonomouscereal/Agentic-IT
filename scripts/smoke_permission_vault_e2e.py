@@ -11,6 +11,7 @@ Demo users/scopes can be seeded with the SQL printed by --print-seed-sql.
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -29,6 +30,9 @@ def request(base, method, path, payload=None, user=ADMIN, expect=(200,)):
         "X-Auth-Request-User": user,
         "X-Auth-Provider": "codex-smoke",
     }
+    trusted_secret = os.getenv("DASHBOARD_TRUSTED_AUTH_SECRET", "")
+    if trusted_secret:
+        headers["X-Dashboard-Auth-Secret"] = trusted_secret
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(base.rstrip("/") + path, data=data, headers=headers, method=method)

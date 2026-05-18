@@ -911,10 +911,10 @@ async function loadAccess() {
     const meEl = document.getElementById("access-me");
     if (meEl && me) {
         meEl.innerHTML = `
-            <div class="learning-item">
-                <div><strong>${escHtml(me.identity?.username || "-")}</strong></div>
-                <div>${escHtml(me.identity?.provider || "local")} / ${escHtml(me.identity?.auth_mode || "disabled")}</div>
-                <div class="learning-meta">${escHtml((me.roles || []).join(", ") || "no roles")}</div>
+                <div class="learning-item">
+                    <div><strong>${escHtml(me.identity?.username || "-")}</strong></div>
+                    <div>${escHtml(me.identity?.provider || "local")} / ${escHtml(me.identity?.auth_mode || "disabled")}</div>
+                <div class="learning-meta">${escHtml(normalizeList(me.roles).join(", ") || "no roles")}</div>
             </div>
         `;
     }
@@ -924,7 +924,7 @@ async function loadAccess() {
             <div class="learning-item">
                 <div><strong>${escHtml(policy.auth_mode)}</strong> <span class="source-badge local">${escHtml(policy.enforcement)}</span></div>
                 <div>${escHtml(Object.keys(policy.role_capabilities || {}).join(", "))}</div>
-                <div class="learning-meta">Header-based provider adapter ready for Keycloak, Entra, Okta, or reverse proxy auth.</div>
+                <div class="learning-meta">Trusted proxy headers require a shared secret; WebSockets use signed HttpOnly sessions.</div>
             </div>
         `;
     }
@@ -939,7 +939,7 @@ async function loadAccess() {
                     <td>${u.id}</td>
                     <td>${escHtml(u.display_name || u.username)}<div class="module-meta">${escHtml(u.email || "")}</div></td>
                     <td>${escHtml(u.provider || "local")}</td>
-                    <td>${escHtml((u.roles || []).join(", "))}</td>
+                    <td>${escHtml(normalizeList(u.roles).join(", "))}</td>
                     <td>${u.enabled ? "yes" : "no"}</td>
                 </tr>
             `).join("");
@@ -1296,6 +1296,20 @@ function jsonBlock(value) {
 function shortText(value, max = 220) {
     const text = String(value || "").replace(/\s+/g, " ").trim();
     return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function normalizeList(value) {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) return parsed;
+        } catch {
+            return value.split(",").map(item => item.trim()).filter(Boolean);
+        }
+    }
+    return [];
 }
 
 function renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, accessRequests }) {

@@ -48,6 +48,21 @@ class AccessControlPolicyTests(unittest.TestCase):
     def test_route_requirements_make_agent_spawn_explicit(self):
         module, _ = load_access_control()
 
+        original_public_health = module.public_health
+        original_protect_ui = module.protect_ui
+        module.public_health = lambda: False
+        module.protect_ui = lambda: True
+        try:
+            self.assertEqual(module.required_permission("GET", "/"), "ui:read")
+            self.assertEqual(module.required_permission("GET", "/static/js/dashboard.js"), "ui:read")
+            self.assertEqual(module.required_permission("GET", "/health"), "health:read")
+            self.assertEqual(module.required_permission("GET", "/api/providers"), "providers:read")
+            self.assertEqual(module.required_permission("POST", "/api/skills/4/render"), "skills:write")
+            self.assertEqual(module.required_permission("POST", "/api/intake/submit"), "intake:write")
+        finally:
+            module.public_health = original_public_health
+            module.protect_ui = original_protect_ui
+
         self.assertEqual(
             module.required_permission("POST", "/api/tickets/447/assign-agent"),
             "agents:spawn",
@@ -60,6 +75,115 @@ class AccessControlPolicyTests(unittest.TestCase):
             module.required_permission("GET", "/api/dashboard/audit?actor=agent"),
             "audit:read",
         )
+
+    def test_header_auth_requires_trusted_proxy_secret_when_enforced(self):
+        module, database = load_access_control()
+        original_auth_mode = module.auth_mode
+        original_enforcement_mode = module.enforcement_mode
+        original_trusted_auth_secret = module.trusted_auth_secret
+        module.auth_mode = lambda: "header"
+        module.enforcement_mode = lambda: "enforce"
+        module.trusted_auth_secret = lambda: "trusted-secret"
+
+        async def fetchrow(query, *args):
+            if "FROM dashboard_users" in query:
+                return {"id": 1, "username": "demo_account_1", "enabled": True}
+            return None
+
+        async def fetchall(query, *args):
+            if "dashboard_user_roles" in query:
+                return [{"name": "platform-admin"}]
+            if "dashboard_role_permissions" in query:
+                return [{"permission_key": "*"}]
+            return []
+
+        database.fetchrow = fetchrow
+        database.fetchall = fetchall
+        module.fetchrow = fetchrow
+        module.fetchall = fetchall
+        try:
+            denied = asyncio.run(module.evaluate_headers("GET", "/api/tickets", {
+                "x-auth-request-user": "demo_account_1",
+            }))
+            allowed = asyncio.run(module.evaluate_headers("GET", "/api/tickets", {
+                "x-auth-request-user": "demo_account_1",
+                "x-dashboard-auth-secret": "trusted-secret",
+            }))
+
+            self.assertFalse(denied["allow"])
+            self.assertEqual(denied["reason"], "missing_or_invalid_trusted_auth_secret")
+            self.assertTrue(allowed["allow"])
+            self.assertEqual(allowed["reason"], "capability_match")
+        finally:
+            module.auth_mode = original_auth_mode
+            module.enforcement_mode = original_enforcement_mode
+            module.trusted_auth_secret = original_trusted_auth_secret
+
+    def test_service_token_is_explicit_platform_service_identity(self):
+        module, _ = load_access_control()
+        original_auth_mode = module.auth_mode
+        original_enforcement_mode = module.enforcement_mode
+        original_service_token = module.service_token
+        module.auth_mode = lambda: "header"
+        module.enforcement_mode = lambda: "enforce"
+        module.service_token = lambda: "service-secret"
+        try:
+            decision = asyncio.run(module.evaluate_headers("POST", "/api/agents/1/update", {
+                "x-dashboard-service-token": "service-secret",
+                "x-dashboard-service-user": "agent-runner",
+            }))
+            self.assertTrue(decision["allow"])
+            self.assertEqual(decision["reason"], "service_token_authenticated")
+            self.assertEqual(decision["identity"]["username"], "agent-runner")
+            self.assertEqual(decision["capabilities"], ["*"])
+        finally:
+            module.auth_mode = original_auth_mode
+            module.enforcement_mode = original_enforcement_mode
+            module.service_token = original_service_token
+
+    def test_signed_session_cookie_authenticates_websocket_style_requests(self):
+        module, database = load_access_control()
+        original_auth_mode = module.auth_mode
+        original_enforcement_mode = module.enforcement_mode
+        original_trusted_auth_secret = module.trusted_auth_secret
+        module.auth_mode = lambda: "header"
+        module.enforcement_mode = lambda: "enforce"
+        module.trusted_auth_secret = lambda: "trusted-secret"
+
+        async def fetchrow(query, *args):
+            if "FROM dashboard_users" in query:
+                return {"id": 1, "username": "demo_account_1", "enabled": True}
+            return None
+
+        async def fetchall(query, *args):
+            if "dashboard_user_roles" in query:
+                return [{"name": "platform-admin"}]
+            if "dashboard_role_permissions" in query:
+                return [{"permission_key": "*"}]
+            return []
+
+        database.fetchrow = fetchrow
+        database.fetchall = fetchall
+        module.fetchrow = fetchrow
+        module.fetchall = fetchall
+        try:
+            cookie = module.create_session_cookie({
+                "username": "demo_account_1",
+                "email": "demo@example.local",
+                "provider": "trusted-proxy",
+                "auth_mode": "header",
+                "authenticated": True,
+            })
+            self.assertIsNotNone(cookie)
+            decision = asyncio.run(module.evaluate_headers("GET", "/api/agents/ws", {
+                "cookie": f"dashboard_session={cookie}",
+            }))
+            self.assertTrue(decision["allow"])
+            self.assertEqual(decision["identity"]["auth_strength"], "signed-session-cookie")
+        finally:
+            module.auth_mode = original_auth_mode
+            module.enforcement_mode = original_enforcement_mode
+            module.trusted_auth_secret = original_trusted_auth_secret
 
     def test_agent_requested_permissions_cannot_exceed_spawner(self):
         module, _ = load_access_control()

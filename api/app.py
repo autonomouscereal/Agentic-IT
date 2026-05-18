@@ -81,9 +81,15 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 
+def _cors_origins():
+    raw = os.getenv("DASHBOARD_CORS_ORIGINS", "").strip()
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -94,7 +100,7 @@ async def access_control_middleware(request, call_next):
     request.state.access_decision = decision
     if not decision.get("allow"):
         await access_control.audit_decision(decision, request.method, request.url.path, 403)
-        return JSONResponse(
+        response = JSONResponse(
             {
                 "error": "access_denied",
                 "reason": decision.get("reason"),
@@ -102,9 +108,29 @@ async def access_control_middleware(request, call_next):
             },
             status_code=403,
         )
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        return response
     response = await call_next(request)
     if access_control.auth_mode() != "disabled":
         await access_control.audit_decision(decision, request.method, request.url.path, response.status_code)
+    session_cookie = access_control.create_session_cookie(decision.get("identity"))
+    if session_cookie:
+        response.set_cookie(
+            "dashboard_session",
+            session_cookie,
+            max_age=access_control.session_ttl_seconds(),
+            httponly=True,
+            secure=os.getenv("DASHBOARD_COOKIE_SECURE", "true").strip().lower() not in ("0", "false", "no", "off"),
+            samesite="lax",
+        )
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if os.getenv("DASHBOARD_HSTS", "true").strip().lower() not in ("0", "false", "no", "off"):
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
 app.include_router(tools.router)
