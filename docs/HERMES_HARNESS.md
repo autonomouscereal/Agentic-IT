@@ -161,6 +161,10 @@ and the target URL is the dashboard API.
 - One-line installer alternate-port proof created setup ticket `1`, setup
   agent `1`, and completed the bounded
   `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE` onboarding check at 100%.
+- Live route reconciliation aligned `AGENT_LLM_BASE_URL` to the
+  Compose-managed proxy at `http://ai-proxy:4001` inside Docker while keeping
+  the operator-facing host port on `4401`; Hermes setup smoke passed afterward
+  on ticket `620`, agent `255`, task `252`, and no active processes remained.
 
 2026-05-18 lab validation:
 

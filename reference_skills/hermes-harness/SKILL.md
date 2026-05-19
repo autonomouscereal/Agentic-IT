@@ -90,3 +90,6 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
   `254`, change `177`, Wazuh access granted.
 - One-line installer alternate proof: setup ticket `1`, setup agent `1`,
   bounded `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE` note, task completed at 100%.
+- Live route reconciliation: `AGENT_LLM_BASE_URL=http://ai-proxy:4001` inside
+  Docker, host-facing proxy on `4401`, post-route smoke ticket `620`, agent
+  `255`, task `252`, no active processes after hook shutdown.

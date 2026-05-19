@@ -167,6 +167,9 @@ Validation evidence from 2026-05-19:
 - Hermes setup smoke passed on ticket `613`; approval/access resume passed on
   ticket `614`; note steering passed on ticket `617`; Wazuh lease-gated access
   passed on ticket `618`.
+- Live proxy routing reconciled to the Compose-managed proxy internally:
+  `AGENT_LLM_BASE_URL=http://ai-proxy:4001`, host-facing proxy on `4401`;
+  post-route Hermes smoke completed on ticket `620`, agent `255`, task `252`.
 - Source regression passed: `142 passed`, JS syntax checks, text hygiene, and
   HTTPS smoke against `https://192.168.50.222:25443`.
 

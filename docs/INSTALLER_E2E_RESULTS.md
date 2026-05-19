@@ -50,6 +50,14 @@ Result:
 - Fresh stack was torn down with `docker compose down -v`, then the original
   live stack was restored and `scripts/smoke_dashboard_https.py
   https://localhost:25443` passed.
+- After restore, runtime proxy drift was reconciled: the live dashboard now
+  sends spawned agents to the Compose-managed proxy through
+  `AGENT_LLM_BASE_URL=http://ai-proxy:4001` from inside Docker. The
+  operator-facing host proxy remains `http://192.168.50.222:4401` because a
+  legacy global proxy still owns host port `4001`.
+- Post-route Hermes smoke passed on ticket `620`, agent `255`, task `252`;
+  the task completed, wrote its setup note, and `/api/agents/processes` cleared
+  after the Hermes memory stop hook finished.
 
 Non-disruptive alternate-port setup-agent completion proof:
 
