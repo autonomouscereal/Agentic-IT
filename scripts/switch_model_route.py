@@ -19,6 +19,7 @@ LOCAL_MODEL = "qwen/qwen3.6-27b"
 LOCAL_ALIAS = "local/agent-default"
 EXTERNAL_PROVIDER = "nous"
 EXTERNAL_MODEL = "deepseek/deepseek-v4-flash"
+RESTART_REQUIRED_ENV = ("SOC_DB_PASSWORD",)
 
 
 def read_env(path):
@@ -144,6 +145,25 @@ def route_updates(route, local_model, external_provider, external_model):
     }
 
 
+def validate_restart_environment(root):
+    env_path = root / ".env"
+    values = read_env(env_path)
+    missing = [key for key in RESTART_REQUIRED_ENV if not values.get(key)]
+    if missing:
+        message = "\n".join([
+            "Cannot restart docker compose from this directory.",
+            f"Missing required deployment env value(s): {', '.join(missing)}",
+            "",
+            "Run this command from an installed deployment directory, for example:",
+            "  cd /home/cereal/SOC_TESTING/soc-dashboard",
+            "  python3 scripts/switch_model_route.py --route external --restart",
+            "",
+            "For a source checkout without runtime secrets, omit --restart:",
+            "  python scripts/switch_model_route.py --route external",
+        ])
+        raise SystemExit(message)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Switch model routing profile for a deployment")
     parser.add_argument("--route", choices=["local", "external"], required=True)
@@ -155,6 +175,8 @@ def main():
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
+    if args.restart:
+        validate_restart_environment(root)
     env_path = root / ".env"
     updates = route_updates(args.route, args.local_model, args.external_provider, args.external_model)
     write_env(env_path, updates)

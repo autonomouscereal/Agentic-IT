@@ -140,6 +140,16 @@ vault/environment credentials are present. Local/on-prem deployments can point
 with an OpenAI-compatible shim, Azure OpenAI on a private endpoint, or another
 customer-managed gateway.
 
+Run the switch from the installed deployment directory, not from an arbitrary
+source checkout. With `--restart`, the script verifies required runtime env
+values such as `SOC_DB_PASSWORD` before editing files and restarting Compose.
+On the current lab server that means:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/switch_model_route.py --route external --restart
+```
+
 ## Post-Install
 
 1. Open the HTTPS dashboard URL printed by the installer. For default local-CA
