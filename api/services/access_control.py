@@ -104,8 +104,16 @@ DEFAULT_ROLE_CAPABILITIES = {
         "agents:spawn",
         "agents:read",
         "tickets:read",
+        "tickets:note",
+        "tickets:request_info",
         "access:request",
+        "changes:read",
         "changes:request",
+        "changes:complete",
+        "workflows:read",
+        "postmortems:read",
+        "postmortems:write",
+        "knowledge:read",
     ],
 }
 
@@ -232,15 +240,23 @@ def _session_signature(payload):
     return hmac.new(secret.encode("utf-8"), payload.encode("ascii"), hashlib.sha256).hexdigest()
 
 
-def create_session_cookie(identity):
+def create_session_cookie(identity, subject=None):
     if not identity or not identity.get("authenticated") or identity.get("auth_mode") == "service-token":
         return None
-    payload = _b64url(json.dumps({
+    body = {
         "username": identity.get("username"),
         "email": identity.get("email"),
         "provider": identity.get("provider") or "trusted-proxy",
         "exp": int(time.time()) + session_ttl_seconds(),
-    }, separators=(",", ":")).encode("utf-8"))
+    }
+    if subject:
+        body["subject"] = {
+            "roles": subject.get("roles") or [],
+            "capabilities": subject.get("capabilities") or [],
+            "scopes": subject.get("scopes") or [],
+            "max_classification": subject.get("max_classification") or "internal",
+        }
+    payload = _b64url(json.dumps(body, separators=(",", ":")).encode("utf-8"))
     sig = _session_signature(payload)
     if not sig:
         return None
@@ -295,6 +311,7 @@ def _identity_from_session_cookie(headers, mode):
         "auth_mode": mode,
         "authenticated": bool(body.get("username")),
         "auth_strength": "signed-session-cookie",
+        "session_subject": body.get("subject") if isinstance(body.get("subject"), dict) else None,
     }
 
 
@@ -620,6 +637,26 @@ async def evaluate_headers(method, path, headers):
             "enforcement": enforcement_mode(),
         }
 
+    session_subject = identity.get("session_subject")
+    if isinstance(session_subject, dict):
+        roles = session_subject.get("roles") or []
+        capabilities = session_subject.get("capabilities") or []
+        scopes = session_subject.get("scopes") or []
+        max_allowed = session_subject.get("max_classification") or "internal"
+        allowed = capability_matches(capabilities, required)
+        return {
+            "allow": allowed or enforcement_mode() != "enforce",
+            "decision": "allow" if allowed else "deny",
+            "reason": "signed_session_subject_match" if allowed else "missing_required_permission",
+            "identity": identity,
+            "roles": roles,
+            "capabilities": capabilities,
+            "scopes": scopes,
+            "max_classification": max_allowed,
+            "required_permission": required,
+            "enforcement": enforcement_mode(),
+        }
+
     subject = await load_subject(identity["username"])
     if not subject:
         return {
@@ -838,7 +875,20 @@ async def record_agent_permission_context(agent_id, ticket_id, subject=None, req
         "scopes": [],
         "max_classification": "secret",
     }
-    requested_permissions = requested_permissions or ["tickets:read", "tickets:note", "changes:request"]
+    requested_permissions = requested_permissions or [
+        "tickets:read",
+        "tickets:note",
+        "tickets:request_info",
+        "access:request",
+        "changes:read",
+        "changes:request",
+        "changes:complete",
+        "agents:read",
+        "workflows:read",
+        "postmortems:read",
+        "postmortems:write",
+        "knowledge:read",
+    ]
     denied = requested_permissions_within_subject(subject.get("capabilities", []), requested_permissions)
     allowed_permissions = [
         permission for permission in requested_permissions

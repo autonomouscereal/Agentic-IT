@@ -24,6 +24,7 @@ instead of Claude Code.
 - Workspace context: `AGENTS.md` plus `.claude/CLAUDE.md`
 - Checkpoint file: `checkpoint.json`
 - Memory: PostgreSQL agent-memory hooks, never local-only logs as the primary audit trail
+- Command path: `hermes chat -Q --query ... --toolsets terminal,file`
 
 ## Validation
 
@@ -33,22 +34,22 @@ appropriate:
 ```bash
 curl -sS http://localhost:4001/health
 curl -sS http://localhost:4001/v1/models
-curl -sS http://localhost:25480/api/agents/runner-health
-curl -sS http://localhost:25480/api/agents/processes
+curl -sS -H "X-Dashboard-Service-Token: <vault token>" http://localhost:25480/api/agents/runner-health
+curl -sS -H "X-Dashboard-Service-Token: <vault token>" http://localhost:25480/api/agents/processes
 ```
 
 Then run a short queue proof through the dashboard:
 
 ```bash
-python3 scripts/smoke_local_model_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
+python3 scripts/smoke_setup_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
 ```
 
 For direct harness probes, use the operator's mounted Hermes auth state and
 keep secrets out of command lines:
 
 ```bash
-HERMES_ACCEPT_HOOKS=1 hermes --provider nous -m deepseek/deepseek-v4-flash --toolsets hermes-cli -z "Reply exactly HERMES_EXTERNAL_OK."
-HERMES_ACCEPT_HOOKS=1 hermes --provider dashboard-proxy -m qwen/qwen3.6-27b --toolsets hermes-cli -z "Reply exactly HERMES_LOCAL_OK."
+HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider nous -m deepseek/deepseek-v4-flash --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_EXTERNAL_OK."
+HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-27b --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_LOCAL_OK."
 ```
 
 ## Guardrails
@@ -60,9 +61,13 @@ HERMES_ACCEPT_HOOKS=1 hermes --provider dashboard-proxy -m qwen/qwen3.6-27b --to
 - Keep sudo disabled for queue workers by default. If a deployment truly needs
   host elevation, expose it through approval-gated provider actions or a
   vault-backed runtime secret specific to that environment.
-- Do not add unsupported Hermes CLI flags to dashboard argv. Hermes v0.13.0
-  does not support `--source` or `--max-turns`; use environment metadata and
-  dashboard supervision instead.
+- Use `terminal,file` for dashboard queue work. The old `hermes-cli` label is
+  not a built-in toolset on the live Hermes v0.13.0 install.
+- Use `hermes chat -Q --query` for dashboard queue work. Top-level `-z`
+  can produce final text without enough tool-use evidence.
+- Spawned agents use a scoped signed dashboard session plus curl guards for
+  protected dashboard API calls; do not pass the trusted proxy secret or global
+  service token to the harness.
 - Judge agent health from runner-health, process state, proxy activity,
   output logs, checkpoints, ticket notes, audit records, and memory events, not
   `progress_pct` alone.

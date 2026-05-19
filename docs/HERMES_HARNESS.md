@@ -1,6 +1,6 @@
 # Hermes Harness Integration
 
-Last updated: 2026-05-15.
+Last updated: 2026-05-18.
 
 Hermes Agent is supported as a first-class dashboard harness alongside Claude
 Code. Use `AGENT_HARNESS=hermes` to make it the default queue worker.
@@ -33,7 +33,8 @@ HERMES_UV_PYTHON_DIR=/home/cereal/.local/share/uv
 HERMES_DEFAULT_PROVIDER=nous
 HERMES_LOCAL_PROVIDER=dashboard-proxy
 HERMES_AGENT_SOURCE=soc-dashboard
-HERMES_TOOLSETS=hermes-cli
+HERMES_TOOLSETS=terminal,file
+HERMES_MAX_TURNS=90
 HERMES_RUN_AS_UID=1000
 HERMES_RUN_AS_GID=1000
 HERMES_RUN_HOME=/home/cereal
@@ -102,14 +103,51 @@ Minimum validation after deployment:
 ```bash
 curl -sS http://localhost:4001/health
 curl -sS http://localhost:4001/v1/models
-HERMES_ACCEPT_HOOKS=1 hermes --provider nous -m deepseek/deepseek-v4-flash --toolsets hermes-cli -z "Reply exactly HERMES_EXTERNAL_OK."
-HERMES_ACCEPT_HOOKS=1 hermes --provider dashboard-proxy -m qwen/qwen3.6-27b --toolsets hermes-cli -z "Reply exactly HERMES_LOCAL_OK."
+HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider nous -m deepseek/deepseek-v4-flash --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_EXTERNAL_OK."
+HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-27b --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_LOCAL_OK."
 python3 scripts/smoke_local_model_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
 ```
 
 For queue work, inspect `/api/agents/runner-health`, `/api/agents/processes`,
 agent `output.log`, `checkpoint.json`, ticket notes, and memory search evidence.
 Do not judge task health from `progress_pct` alone.
+
+## Dashboard API Auth For Agents
+
+In enforced dashboard auth mode, spawned agents do not receive the global
+service token or trusted proxy secret. Instead the runner mints a short-lived,
+signed `dashboard_session` cookie with the agent's spawn-time subject:
+
+- roles and capabilities are copied from the spawning user or service account
+  and trimmed by the requested permission envelope
+- a ticket-specific scope is added for the assigned ticket
+- the cookie is written to `dashboard_auth.json` in the isolated work directory
+- the per-agent and container-level curl guards attach the cookie only for
+  dashboard API requests from that workspace
+- secret values are not printed in prompts, logs, docs, or ticket notes
+
+The container-level curl guard exists because Hermes terminal tool shells may
+prefer system `curl` over the per-workspace PATH wrapper. The global guard is
+inert unless it can find `dashboard_auth.json` in the current directory tree
+and the target URL is the dashboard API.
+
+## Live Validation
+
+2026-05-18 lab validation:
+
+- Enforced auth smoke passed against `http://192.168.50.222:25480`.
+- Authenticated browser UI pass loaded `Agentic Operations`, rendered 14 Demo
+  Proof rows, showed `demo_account_1 / header / platform-admin`, minted an
+  HttpOnly `dashboard_session`, and produced no console or network failures.
+- Hermes setup-agent smoke passed on ticket `606`, agent `243`, task `240`:
+  the agent called protected dashboard APIs through the scoped session and
+  wrote the expected setup note.
+- Permission/provider matrix passed with marker
+  `PERMISSION_PROVIDER_MATRIX_1779148832`: Dev Y could not see Dev Z data,
+  auditor mutation was denied, denied GitLab/iTop leases returned
+  `missing_agent_vault_lease`, the access request synced to iTop tickets
+  `391`/`392`, approval/completion granted lease `297`, and no active agents
+  remained.
 
 2026-05-15 lab validation:
 
@@ -123,10 +161,6 @@ Do not judge task health from `progress_pct` alone.
   `/api/tags`, `/v1/props`, `/props`, `/version`, and
   `/v1/models/qwen/qwen3.6-27b` returned HTTP `200`.
 
-Note: Hermes Agent v0.13.0 does not support a `--source` CLI flag. Keep source
-identity in `HERMES_AGENT_SOURCE` and memory hook metadata, not in the command
-argument list.
-
-Hermes Agent v0.13.0 also does not expose a `--max-turns` CLI flag. Queue
-limits should be enforced by the dashboard runner timeout, stall detector,
-approval gates, and task supervision rather than Hermes argv.
+Note: Hermes Agent v0.13.0 does not support top-level `--source` or
+`--max-turns` with one-shot `-z`; those flags are supported under
+`hermes chat -Q --query`, which is the dashboard runner command path.

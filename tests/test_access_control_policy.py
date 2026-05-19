@@ -185,6 +185,51 @@ class AccessControlPolicyTests(unittest.TestCase):
             module.enforcement_mode = original_enforcement_mode
             module.trusted_auth_secret = original_trusted_auth_secret
 
+    def test_signed_session_cookie_can_carry_agent_scoped_subject(self):
+        module, database = load_access_control()
+        original_auth_mode = module.auth_mode
+        original_enforcement_mode = module.enforcement_mode
+        original_trusted_auth_secret = module.trusted_auth_secret
+        module.auth_mode = lambda: "header"
+        module.enforcement_mode = lambda: "enforce"
+        module.trusted_auth_secret = lambda: "trusted-secret"
+
+        async def fetchrow(query, *args):
+            raise AssertionError("embedded signed subject should not need a dashboard_users lookup")
+
+        database.fetchrow = fetchrow
+        module.fetchrow = fetchrow
+        try:
+            cookie = module.create_session_cookie(
+                {
+                    "username": "agent-runner-service",
+                    "provider": "agent-runner",
+                    "auth_mode": "agent-session",
+                    "authenticated": True,
+                },
+                {
+                    "roles": ["agent-operator"],
+                    "capabilities": ["tickets:read", "tickets:note"],
+                    "scopes": [{"scope_type": "ticket", "scope_value": "589"}],
+                    "max_classification": "confidential",
+                },
+            )
+            allowed = asyncio.run(module.evaluate_headers("GET", "/api/tickets/589/context", {
+                "cookie": f"dashboard_session={cookie}",
+            }))
+            denied = asyncio.run(module.evaluate_headers("POST", "/api/access/users", {
+                "cookie": f"dashboard_session={cookie}",
+            }))
+
+            self.assertTrue(allowed["allow"])
+            self.assertEqual(allowed["reason"], "signed_session_subject_match")
+            self.assertFalse(denied["allow"])
+            self.assertEqual(denied["reason"], "missing_required_permission")
+        finally:
+            module.auth_mode = original_auth_mode
+            module.enforcement_mode = original_enforcement_mode
+            module.trusted_auth_secret = original_trusted_auth_secret
+
     def test_agent_requested_permissions_cannot_exceed_spawner(self):
         module, _ = load_access_control()
 

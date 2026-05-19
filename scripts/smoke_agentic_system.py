@@ -5,6 +5,7 @@ Uses only Python stdlib HTTP calls. Intended to run against a deployed dashboard
     python scripts/smoke_agentic_system.py http://localhost:25480
 """
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -12,11 +13,30 @@ import urllib.request
 
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:25480"
+AUTH_USER = os.environ.get("DASHBOARD_SMOKE_USER", "demo_account_1")
+AUTH_PROVIDER = os.environ.get("DASHBOARD_SMOKE_PROVIDER", "agentic-system-smoke")
+TRUSTED_SECRET = os.environ.get("DASHBOARD_TRUSTED_AUTH_SECRET", "")
+SERVICE_TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
+
+
+def auth_headers():
+    if TRUSTED_SECRET:
+        return {
+            "X-Auth-Request-User": AUTH_USER,
+            "X-Auth-Provider": AUTH_PROVIDER,
+            "X-Dashboard-Auth-Secret": TRUSTED_SECRET,
+        }
+    if SERVICE_TOKEN:
+        return {
+            "X-Dashboard-Service-User": AUTH_PROVIDER,
+            "X-Dashboard-Service-Token": SERVICE_TOKEN,
+        }
+    return {}
 
 
 def request(method, path, payload=None):
     data = None
-    headers = {}
+    headers = auth_headers()
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"

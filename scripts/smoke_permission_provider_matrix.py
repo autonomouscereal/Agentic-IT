@@ -176,6 +176,8 @@ def ensure_demo_identities(base):
 def maybe_read_itop_object(ticket_class, provider_ref, itop_client):
     if not itop_client or not provider_ref:
         return {"status": "skipped", "reason": "missing_itop_client_or_ref"}
+    if not os.path.exists(itop_client):
+        return {"status": "skipped", "reason": "itop_client_not_available_on_this_host"}
     completed = subprocess.run(
         [
             sys.executable,
@@ -418,7 +420,7 @@ def main():
             f"iTop access ticket did not close after gate completion: {access_fields}",
         )
 
-    _, active = request(base, "GET", "/api/agents/active", user=ADMIN)
+    active = wait_no_active(base, timeout=180)
     require(active.get("count") == 0, f"test left active agents: {active}")
 
     print(json.dumps({

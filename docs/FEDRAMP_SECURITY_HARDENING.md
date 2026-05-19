@@ -71,6 +71,25 @@ X-Dashboard-Service-User: <service name>
 This is for platform-owned service traffic only. Human users should use the
 trusted proxy flow so role and scope checks use their identity.
 
+### Spawned Agent Sessions
+
+Long-running Hermes and Claude Code workers do not receive the global service
+token or trusted proxy secret. At spawn time the runner creates a signed,
+short-lived `dashboard_session` cookie that embeds the agent's bounded subject:
+
+- roles/capabilities are inherited from the spawning user or service account
+  and trimmed by the requested permission envelope
+- a ticket-specific scope is added for the assigned ticket
+- the session is stored in `dashboard_auth.json` inside the isolated agent
+  workspace
+- per-agent and container-level curl guards attach it only for dashboard API
+  calls from that workspace
+- no provider credential values or auth secrets are returned to the agent
+
+This lets endpoint-wide auth stay enforced while allowing agents to read their
+assigned ticket, add notes, request approval/access gates, and complete approved
+work without bypassing the RBAC layer.
+
 ## Database Exposure
 
 The reference compose now binds databases to localhost:
@@ -116,3 +135,15 @@ Latest live proof on 2026-05-18:
 - Playwright authenticated UI pass: Demo Proofs rendered 14 rows, Access page
   showed `demo_account_1 / header / platform-admin`, WebSocket status `Live`,
   and no console errors.
+- DB/memory/proxy LAN checks: `5433`, `25491`, and `4401` refused external
+  TCP connections; dashboard `25480` remained reachable.
+- Broad authenticated API smoke passed: ticket `589`, local mirror ticket
+  `590`, change `171`, postmortem `104`, workflow `4`, skill `134`.
+- Hermes setup-agent E2E passed after auth hardening: ticket `606`,
+  agent `243`, task `240`, expected protected-API note written through the
+  scoped agent session.
+- Permission/provider matrix passed with marker
+  `PERMISSION_PROVIDER_MATRIX_1779148832`: Dev Y/Dev Z row separation,
+  auditor mutation denial, denied GitLab/iTop lease checks, approved
+  access-request grant, iTop synced tickets `391` and `392`, final granted
+  lease `297`, and no active agents left behind.

@@ -108,9 +108,10 @@ Fresh deployments get the current schema from `api/init_db.sql`.
 ## Health Checks
 
 ```bash
-curl -sS http://localhost:25480/health
-curl -sS http://localhost:25480/api/agents/runner-health
-curl -sS http://localhost:25480/api/agents/processes
+DASHBOARD_SERVICE_TOKEN="<from vault: dashboard_service_token>"
+curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" http://localhost:25480/health
+curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" http://localhost:25480/api/agents/runner-health
+curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" http://localhost:25480/api/agents/processes
 python3 scripts/platform_doctor.py
 ```
 
@@ -131,6 +132,12 @@ Security posture for regulated demos, verified 2026-05-18:
 - run `python scripts/smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480`
   with `DASHBOARD_TRUSTED_AUTH_SECRET` and `DASHBOARD_SERVICE_TOKEN` sourced
   from the credential vault before regulated demos
+- run `python scripts/smoke_setup_agent.py http://192.168.50.222:25480 deepseek/deepseek-v4-flash`
+  to prove a real Hermes worker can use scoped agent-session auth against
+  protected dashboard endpoints
+- run `python scripts/smoke_permission_provider_matrix.py http://192.168.50.222:25480 --model deepseek/deepseek-v4-flash`
+  to prove RBAC, row-level separation, vault lease denial/grant, and access
+  request gates
 
 ## Reference Module Login Validation
 

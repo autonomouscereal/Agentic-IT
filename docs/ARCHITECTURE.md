@@ -117,7 +117,7 @@ Without those values, the dashboard records `create_failed` instead of claiming 
 7. Hermes currently runs with:
 
 ```bash
-hermes --provider <nous|dashboard-proxy> --model <model> --toolsets hermes-cli --accept-hooks -z "<prompt>"
+hermes chat -Q --provider <nous|dashboard-proxy> --model <model> --toolsets terminal,file --accept-hooks --max-turns 90 --source soc-dashboard --query "<prompt>"
 ```
 
 Claude Code remains available with:

@@ -37,6 +37,7 @@ AGENT_ALLOWED_TOOLS = os.getenv("AGENT_ALLOWED_TOOLS", "Read,Write,Bash(curl *)"
 AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", "").strip()
 AGENT_LLM_AUTH_TOKEN = os.getenv("AGENT_LLM_AUTH_TOKEN", "").strip()
 DASHBOARD_API_BASE = os.getenv("DASHBOARD_API_BASE", "http://localhost:8000").strip()
+AGENT_DASHBOARD_SESSION_FILE = "dashboard_auth.json"
 AGENT_HARNESS = os.getenv("AGENT_HARNESS", "claude-code")
 AGENT_CURL_GUARD_ENABLED = _env_bool("AGENT_CURL_GUARD_ENABLED", True)
 AGENT_CURL_MAX_OUTPUT_BYTES = _env_int("AGENT_CURL_MAX_OUTPUT_BYTES", 250000)
@@ -543,12 +544,17 @@ def _curl_guard_script(real_curl, blocked_paths=None, max_output_bytes=None):
     paths = blocked_paths if blocked_paths is not None else _split_guard_paths(AGENT_CURL_BLOCKED_PATHS)
     limit = int(max_output_bytes if max_output_bytes is not None else AGENT_CURL_MAX_OUTPUT_BYTES)
     return f"""#!/usr/bin/env python3
+import os
 import subprocess
 import sys
+import json
+from urllib.parse import urlparse
 
 REAL_CURL = {json.dumps(real_curl)}
 BLOCKED_PATHS = {json.dumps(paths)}
 MAX_OUTPUT_BYTES = {limit}
+DASHBOARD_API_BASE = os.getenv("DASHBOARD_API_BASE", "http://localhost:8000").rstrip("/")
+DASHBOARD_AGENT_SESSION_COOKIE = os.getenv("DASHBOARD_AGENT_SESSION_COOKIE", "")
 
 args = sys.argv[1:]
 for blocked in BLOCKED_PATHS:
@@ -556,6 +562,48 @@ for blocked in BLOCKED_PATHS:
         sys.stderr.write("[curl-guard] blocked broad dashboard endpoint: " + blocked + "\\n")
         sys.stderr.write("[curl-guard] use a bounded ticket/evidence endpoint instead.\\n")
         sys.exit(64)
+
+def is_dashboard_url(value):
+    if not isinstance(value, str) or not value.startswith(("http://", "https://")):
+        return False
+    if DASHBOARD_API_BASE and value.startswith(DASHBOARD_API_BASE):
+        return True
+    parsed = urlparse(value)
+    return parsed.hostname in ("localhost", "127.0.0.1") and str(parsed.port or "") == "8000"
+
+def has_auth_header(values):
+    lowered = [str(item).lower() for item in values]
+    joined = "\\n".join(lowered)
+    return (
+        "dashboard_session=" in joined
+        or "x-dashboard-service-token" in joined
+        or "x-dashboard-auth-secret" in joined
+        or "cookie:" in joined
+    )
+
+def load_workspace_cookie():
+    if DASHBOARD_AGENT_SESSION_COOKIE:
+        return DASHBOARD_AGENT_SESSION_COOKIE
+    current = os.getcwd()
+    for _ in range(8):
+        candidate = os.path.join(current, "dashboard_auth.json")
+        try:
+            with open(candidate, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            cookie = payload.get("cookie")
+            if cookie:
+                return cookie
+        except (OSError, ValueError, TypeError):
+            pass
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return ""
+
+session_cookie = load_workspace_cookie()
+if session_cookie and any(is_dashboard_url(arg) for arg in args) and not has_auth_header(args):
+    args = ["-H", "Cookie: dashboard_session=" + session_cookie] + args
 
 try:
     proc = subprocess.Popen([REAL_CURL] + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -580,11 +628,37 @@ sys.exit(proc.returncode)
 """
 
 
+def _resolve_real_curl():
+    for candidate in ("/usr/bin/curl", "/bin/curl"):
+        if os.path.exists(candidate):
+            return candidate
+    return shutil.which("curl") or "/usr/bin/curl"
+
+
+def _write_global_curl_guard(real_curl=None, blocked_paths=None, max_output_bytes=None):
+    """Install a container-level curl guard for harnesses that reset PATH.
+
+    The guard remains inert unless the current working directory belongs to an
+    agent workspace containing dashboard_auth.json and the URL targets the
+    dashboard API.
+    """
+    if not AGENT_CURL_GUARD_ENABLED:
+        return None
+    guard_path = "/usr/local/bin/curl"
+    try:
+        with open(guard_path, "w", encoding="utf-8") as f:
+            f.write(_curl_guard_script(real_curl or _resolve_real_curl(), blocked_paths, max_output_bytes))
+        os.chmod(guard_path, 0o755)
+        return guard_path
+    except OSError:
+        return None
+
+
 def _write_curl_guard(work_dir, real_curl=None, blocked_paths=None, max_output_bytes=None):
     """Install a per-agent curl wrapper that blocks broad context pulls."""
     if not AGENT_CURL_GUARD_ENABLED:
         return None
-    resolved_curl = real_curl or shutil.which("curl") or "/usr/bin/curl"
+    resolved_curl = real_curl or _resolve_real_curl()
     bin_dir = os.path.join(work_dir, "bin")
     os.makedirs(bin_dir, exist_ok=True)
     guard_path = os.path.join(bin_dir, "curl")
@@ -627,6 +701,14 @@ def _apply_agent_path_guards(env, work_dir):
         env["AGENT_CURL_MAX_OUTPUT_BYTES"] = str(AGENT_CURL_MAX_OUTPUT_BYTES)
         env["AGENT_CURL_BLOCKED_PATHS"] = AGENT_CURL_BLOCKED_PATHS
         env["AGENT_NO_OUTPUT_STALL_SECONDS"] = str(AGENT_NO_OUTPUT_STALL_SECONDS)
+        auth_path = os.path.join(work_dir, AGENT_DASHBOARD_SESSION_FILE)
+        try:
+            with open(auth_path, "r", encoding="utf-8") as f:
+                auth_payload = json.load(f)
+            if auth_payload.get("cookie"):
+                env["DASHBOARD_AGENT_SESSION_COOKIE"] = auth_payload["cookie"]
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            pass
     return env
 
 
@@ -1245,6 +1327,9 @@ You are an Agentic Operations worker assigned to resolve the following ticket.
 ## Dashboard API
 Use the canonical dashboard API for ticket context, notes, approvals, postmortems, and workflows:
 - Base URL inside this runner: `{DASHBOARD_API_BASE}`
+- Authentication is attached automatically by the per-agent curl guard as a
+  signed, scoped session cookie. Do not print, copy, store, or manually add
+  dashboard auth material; use `curl` normally against the dashboard API.
 - Preferred bounded evidence: `GET /api/postmortems/evidence/{ticket.get('id', '{ticket_id}')}?task_log_lines=0&max_notes=8&max_articles=1&max_audit=6`
   - This includes relevant active/tested/approved reusable workflows and knowledge articles; follow matching active/approved workflows first and note any deviation.
 - Ticket detail: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}`
@@ -1382,7 +1467,73 @@ def _build_settings(model, agent_id=None, ticket=None):
     }
 
 
-async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, vault_manifest=None):
+def _agent_session_subject(actor_context, ticket_id, allowed_permissions=None):
+    actor_context = actor_context or {}
+    identity = dict(actor_context.get("identity") or {})
+    if not identity.get("username"):
+        identity = {
+            "username": os.getenv("AGENT_DASHBOARD_SERVICE_USER", "agent-runner-service"),
+            "provider": "agent-runner",
+            "authenticated": True,
+            "auth_mode": "agent-session",
+        }
+    else:
+        identity.setdefault("provider", "agent-runner")
+        identity["authenticated"] = True
+        identity.setdefault("auth_mode", "agent-session")
+
+    scopes = list(actor_context.get("scopes") or [])
+    if ticket_id:
+        ticket_scope = {"scope_type": "ticket", "scope_value": str(ticket_id), "permissions": []}
+        if ticket_scope not in scopes:
+            scopes.append(ticket_scope)
+
+    if allowed_permissions is None:
+        allowed_permissions = actor_context.get("capabilities") or []
+
+    return {
+        "identity": identity,
+        "roles": actor_context.get("roles") or ["agent-operator"],
+        "capabilities": allowed_permissions or [],
+        "scopes": scopes,
+        "max_classification": actor_context.get("max_classification") or "internal",
+    }
+
+
+async def _write_agent_dashboard_session(work_dir, agent_id, subject):
+    if not subject:
+        return None
+    try:
+        from services import access_control
+        cookie = access_control.create_session_cookie(subject.get("identity"), subject)
+    except Exception as exc:
+        await log_event("access", "warning", f"agent_{agent_id}", "agent_dashboard_session_failed",
+                        f"agent_{agent_id}", {"error": str(exc)})
+        return None
+    if not cookie:
+        return None
+    auth_path = os.path.join(work_dir, AGENT_DASHBOARD_SESSION_FILE)
+    with open(auth_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "cookie_name": "dashboard_session",
+            "cookie": cookie,
+            "username": subject.get("identity", {}).get("username"),
+            "provider": subject.get("identity", {}).get("provider"),
+            "capabilities": subject.get("capabilities") or [],
+            "scopes": subject.get("scopes") or [],
+            "secret_values_returned": False,
+        }, f, indent=2)
+    os.chmod(auth_path, 0o600)
+    await log_event("access", "info", f"agent_{agent_id}", "agent_dashboard_session_provisioned",
+                    f"agent_{agent_id}", {
+                        "username": subject.get("identity", {}).get("username"),
+                        "capabilities": subject.get("capabilities") or [],
+                        "secret_values_returned": False,
+                    })
+    return auth_path
+
+
+async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, vault_manifest=None, dashboard_subject=None):
     """Create isolated work directory with harness config."""
     work_dir = os.path.join(AGENT_WORK_BASE, str(agent_id))
     claude_dir = os.path.join(work_dir, ".claude")
@@ -1407,12 +1558,16 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, 
     with open(vault_manifest_path, "w", encoding="utf-8") as f:
         json.dump(vault_manifest or {"agent_id": agent_id, "leases": []}, f, indent=2, default=str)
 
+    await _write_agent_dashboard_session(work_dir, agent_id, dashboard_subject)
+
+    global_guard_path = _write_global_curl_guard()
     guard_path = _write_curl_guard(work_dir)
     if guard_path:
         await log_event("agent", "info", f"agent_{agent_id}", "agent_curl_guard_provisioned",
                         f"task_{task_id}", {
                             "work_dir": work_dir,
                             "guard_path": guard_path,
+                            "global_guard_path": global_guard_path,
                             "blocked_paths": _split_guard_paths(AGENT_CURL_BLOCKED_PATHS),
                             "max_output_bytes": AGENT_CURL_MAX_OUTPUT_BYTES,
                         })
@@ -1601,6 +1756,7 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
         "VALUES ($1, $2, $3, $4, 'queued') RETURNING id",
         agent_id, ticket_id, task_type, prompt,
     )
+    permission_context_result = {"status": "not_recorded", "allowed_permissions": [], "denied_permissions": []}
     try:
         from services import access_control
         permission_context_result = await access_control.record_agent_permission_context(
@@ -1656,7 +1812,21 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
         )
 
     # Provision isolated work directory with selected harness config
-    work_dir = await _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, vault_manifest)
+    dashboard_subject = _agent_session_subject(
+        actor_context,
+        ticket_id,
+        permission_context_result.get("allowed_permissions") if permission_context_result else None,
+    )
+    work_dir = await _provision_work_dir(
+        agent_id,
+        task_id,
+        model,
+        ticket,
+        skills,
+        prompt,
+        vault_manifest,
+        dashboard_subject,
+    )
     await execute(
         "UPDATE agent_tasks SET work_dir = $1 WHERE id = $2",
         work_dir, task_id,

@@ -118,7 +118,28 @@ Additional reconstructed context for future Codex sessions lives at:
 | Dashboard UI | http://192.168.50.222:25480 | 25480 |
 | API (programmatic) | http://192.168.50.222:25480/api | 25480 |
 | Health endpoint | http://192.168.50.222:25480/health | 25480 |
-| PostgreSQL DB | 192.168.50.222:5433 | 5433 |
+| PostgreSQL DB | 127.0.0.1:5433 on the AI Server only | 5433 |
+
+## Enforced Auth Posture
+
+The live dashboard is in enforced header-auth mode:
+
+- unauthenticated `/`, `/static/*`, `/health`, and `/api/*` return `403`
+- trusted proxy headers require `X-Dashboard-Auth-Secret`
+- browser sessions mint a signed HttpOnly `dashboard_session`
+- agents receive a scoped signed session in `dashboard_auth.json`, not the
+  global trusted proxy secret or service token
+- DB, memory DB, and AI proxy ports are bound to `127.0.0.1` on the server
+
+Validation evidence from 2026-05-18:
+
+- `scripts/smoke_dashboard_auth_enforcement.py` passed against
+  `http://192.168.50.222:25480`
+- authenticated browser UI test rendered 14 Demo Proof rows and no console or
+  network failures
+- Hermes setup-agent E2E passed on ticket `606`, agent `243`, task `240`
+- permission/provider matrix passed with marker
+  `PERMISSION_PROVIDER_MATRIX_1779148832` and left no active agents
 
 ## Demo Readiness Catalog
 

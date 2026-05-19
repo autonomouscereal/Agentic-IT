@@ -4588,13 +4588,13 @@ Verification:
   ticket `559` closed as iTop `UserRequest` `314` with provider status
   `resolved`.
 
-### Hermes queue invocation passed unsupported `--source` flag
+### Hermes queue invocation passed unsupported top-level `--source` flag
 
-Status: fixed, deployed, and verified on 2026-05-15.
+Status: fixed, superseded by chat-mode runner, and verified on 2026-05-18.
 
 Problem:
 
-- Hermes Agent v0.13.0 does not expose a `--source` CLI option.
+- Hermes Agent v0.13.0 does not expose a top-level `--source` CLI option.
 - The dashboard harness passed `--source soc-dashboard`, causing Hermes to
   interpret `soc-dashboard` as a command/subcommand during real queue execution.
 - Direct one-shot Hermes tests still passed because they did not include the
@@ -4602,41 +4602,40 @@ Problem:
 
 Fix:
 
-- `api/services/agent_harness.py` now keeps source identity in
-  `HERMES_AGENT_SOURCE` environment metadata and removes `--source` from the
-  command list.
-- `tests/test_agent_harness.py` asserts Hermes commands do not include
-  `--source` or `soc-dashboard`.
+- The dashboard runner now uses `hermes chat -Q --query`, where `--source` is
+  supported, instead of the top-level one-shot command path.
+- `tests/test_agent_harness.py` asserts Hermes commands use the chat-mode
+  source flag, not top-level `-z`.
 
 Verification:
 
-- Remote focused harness tests passed after API rebuild.
-- Real dashboard Hermes smoke completed on ticket `568`, agent `222`, task
-  `219`, using model `deepseek/deepseek-v4-flash`.
+- Real dashboard Hermes smoke completed on ticket `606`, agent `243`, task
+  `240`, using model `deepseek/deepseek-v4-flash` with enforced dashboard
+  auth.
 
-### Hermes queue invocation passed unsupported `--max-turns` flag
+### Hermes queue invocation passed unsupported top-level `--max-turns` flag
 
-Status: fixed, deployed, and verified on 2026-05-15.
+Status: fixed, superseded by chat-mode runner, and verified on 2026-05-18.
 
 Problem:
 
-- Hermes Agent v0.13.0 does not expose a `--max-turns` CLI option.
+- Hermes Agent v0.13.0 does not expose a top-level `--max-turns` CLI option.
 - The dashboard harness passed `--max-turns 90`, causing Hermes to interpret
   `90` as a command/subcommand during real queue execution.
 
 Fix:
 
-- `api/services/agent_harness.py` no longer emits `--max-turns`.
-- Dashboard-level timeout, no-output stall detection, approval gates, and task
-  supervision remain the queue control surface.
-- `tests/test_agent_harness.py` asserts Hermes commands do not include
-  `--max-turns`.
+- The dashboard runner now uses `hermes chat -Q --query`, where `--max-turns`
+  is supported, while keeping dashboard-level timeout, no-output stall
+  detection, approval gates, and task supervision.
+- `tests/test_agent_harness.py` asserts Hermes commands use chat-mode
+  `--max-turns`, not top-level `-z`.
 
 Verification:
 
-- Remote focused harness tests passed after API rebuild.
-- Real dashboard Hermes smoke completed on ticket `568`, agent `222`, task
-  `219`, using model `deepseek/deepseek-v4-flash`.
+- Real dashboard Hermes smoke completed on ticket `606`, agent `243`, task
+  `240`, using model `deepseek/deepseek-v4-flash` with enforced dashboard
+  auth.
 
 ### Hermes least-privilege queue process inherited `/root` home
 

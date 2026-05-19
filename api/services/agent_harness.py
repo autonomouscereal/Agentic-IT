@@ -50,7 +50,7 @@ class HermesHarness:
         env["PYTHONIOENCODING"] = "utf-8"
         env["HERMES_ACCEPT_HOOKS"] = "1"
         env.setdefault("HERMES_AGENT_SOURCE", "soc-dashboard")
-        env.setdefault("HERMES_TOOLSETS", "hermes-cli")
+        env.setdefault("HERMES_TOOLSETS", "terminal,file")
         env.setdefault("HERMES_DEFAULT_PROVIDER", "nous")
         env.setdefault("HERMES_LOCAL_PROVIDER", "dashboard-proxy")
         run_home = env.get("HERMES_RUN_HOME", "/home/cereal")
@@ -83,8 +83,10 @@ class HermesHarness:
 
     def build_command(self, prompt, settings_path, model, permission_mode, allowed_tools=None):
         hermes_bin = os.getenv("HERMES_BIN") or shutil.which("hermes") or "hermes"
-        toolsets = os.getenv("HERMES_TOOLSETS", "hermes-cli")
+        toolsets = os.getenv("HERMES_TOOLSETS", "terminal,file")
         provider = self._provider_for_model(model)
+        max_turns = os.getenv("HERMES_MAX_TURNS", "90").strip() or "90"
+        source = os.getenv("HERMES_AGENT_SOURCE", "soc-dashboard").strip() or "soc-dashboard"
         cmd = []
         run_uid = os.getenv("HERMES_RUN_AS_UID", "1000").strip()
         run_gid = os.getenv("HERMES_RUN_AS_GID", run_uid).strip()
@@ -92,6 +94,8 @@ class HermesHarness:
             cmd.extend(["setpriv", "--reuid", run_uid, "--regid", run_gid, "--clear-groups"])
         cmd.extend([
             hermes_bin,
+            "chat",
+            "-Q",
             "--provider",
             provider,
             "--model",
@@ -99,9 +103,15 @@ class HermesHarness:
             "--toolsets",
             toolsets,
             "--accept-hooks",
-            "-z",
+            "--max-turns",
+            max_turns,
+            "--source",
+            source,
+            "--query",
             prompt,
         ])
+        if os.getenv("HERMES_YOLO", "").strip().lower() in ("1", "true", "yes", "on"):
+            cmd.insert(-2, "--yolo")
         return cmd
 
 

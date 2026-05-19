@@ -14,11 +14,30 @@ AGENT_WAIT_SECONDS = int(os.environ.get("AGENT_SMOKE_WAIT_SECONDS", "3600"))
 IDLE_WAIT_SECONDS = int(os.environ.get("AGENT_SMOKE_IDLE_WAIT_SECONDS", "3600"))
 POLL_SECONDS = int(os.environ.get("AGENT_SMOKE_POLL_SECONDS", "15"))
 STOP_ON_TIMEOUT = os.environ.get("AGENT_SMOKE_STOP_ON_TIMEOUT", "").lower() in ("1", "true", "yes")
+AUTH_USER = os.environ.get("DASHBOARD_SMOKE_USER", "demo_account_1")
+AUTH_PROVIDER = os.environ.get("DASHBOARD_SMOKE_PROVIDER", "setup-agent-smoke")
+TRUSTED_SECRET = os.environ.get("DASHBOARD_TRUSTED_AUTH_SECRET", "")
+SERVICE_TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
+
+
+def auth_headers():
+    if TRUSTED_SECRET:
+        return {
+            "X-Auth-Request-User": AUTH_USER,
+            "X-Auth-Provider": AUTH_PROVIDER,
+            "X-Dashboard-Auth-Secret": TRUSTED_SECRET,
+        }
+    if SERVICE_TOKEN:
+        return {
+            "X-Dashboard-Service-User": AUTH_PROVIDER,
+            "X-Dashboard-Service-Token": SERVICE_TOKEN,
+        }
+    return {}
 
 
 def request(method, path, payload=None, timeout=30):
     data = None
-    headers = {}
+    headers = auth_headers()
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"

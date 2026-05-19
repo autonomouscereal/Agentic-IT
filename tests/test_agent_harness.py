@@ -39,10 +39,13 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertIn("--provider", cmd)
         self.assertEqual(cmd[cmd.index("--provider") + 1], "nous")
         self.assertIn("--accept-hooks", cmd)
-        self.assertNotIn("--source", cmd)
-        self.assertNotIn("soc-dashboard", cmd)
-        self.assertNotIn("--max-turns", cmd)
-        self.assertIn("-z", cmd)
+        self.assertIn("chat", cmd)
+        self.assertIn("-Q", cmd)
+        self.assertIn("--source", cmd)
+        self.assertIn("soc-dashboard", cmd)
+        self.assertIn("--max-turns", cmd)
+        self.assertIn("--query", cmd)
+        self.assertNotIn("-z", cmd)
         self.assertEqual(cmd[-1], "resolve ticket")
 
     def test_hermes_local_model_uses_dashboard_proxy_provider(self):
@@ -70,6 +73,7 @@ class AgentHarnessTests(unittest.TestCase):
 
         self.assertEqual(env["SUDO_PASSWORD"], "")
         self.assertEqual(env["HERMES_ACCEPT_HOOKS"], "1")
+        self.assertEqual(env["HERMES_TOOLSETS"], "terminal,file")
         self.assertEqual(env["HERMES_PROXY_BASE_URL"], "http://proxy.local:4001")
         self.assertEqual(env["OPENAI_BASE_URL"], "http://proxy.local:4001/v1")
         self.assertEqual(env["OPENAI_API_KEY"], "lmstudio")

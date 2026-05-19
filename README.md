@@ -130,7 +130,7 @@ claude --allowedTools "Read,Write,Bash(curl *)" -p --settings <work_dir>/.claude
 Hermes is invoked with:
 
 ```bash
-hermes --provider <nous|dashboard-proxy> --model <selected_model> --toolsets hermes-cli --accept-hooks -z "<prompt>"
+hermes chat -Q --provider <nous|dashboard-proxy> --model <selected_model> --toolsets terminal,file --accept-hooks --max-turns 90 --source soc-dashboard --query "<prompt>"
 ```
 
 The one-line installer now deploys the built-in `ai-proxy` service by default,
