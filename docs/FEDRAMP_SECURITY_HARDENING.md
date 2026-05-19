@@ -209,8 +209,11 @@ Latest live proof on 2026-05-18:
   the Windows workstation without `--insecure` after installing
   `dashboard-ca.crt` into the CurrentUser trusted root store; Chrome reaches
   `/login?next=/` as a secure context with no certificate bypass.
-- DB/memory/proxy LAN checks: `5433`, `25491`, and `4401` refused external
-  TCP connections; dashboard `25480` remained reachable.
+- DB/memory LAN checks: `5433` and `25491` refused external TCP connections;
+  dashboard `25480` remained reachable. The AI proxy is intentionally exposed
+  on `4001` in the current lab so non-dashboard local-model tooling can use
+  the same managed proxy; lock it back to loopback or an enterprise gateway for
+  regulated production deployments that do not need LAN model access.
 - Broad authenticated API smoke passed: ticket `589`, local mirror ticket
   `590`, change `171`, postmortem `104`, workflow `4`, skill `134`.
 - Fresh Hermes setup-agent E2E after the first-party login deployment: ticket

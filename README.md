@@ -17,11 +17,10 @@ approved reference modules when those capabilities are missing.
 - UI/API: `https://192.168.50.222:25443` (runtime local-CA certificate)
 - Local service API: `http://127.0.0.1:25480`
 - HTTPS proxy health: `https://192.168.50.222:25443/nginx-health`
-- Model gateway/proxy: `http://ai-proxy:4001` inside Docker; live lab
-  deployment-host port is `http://127.0.0.1:4401` on the AI server.
-- Legacy standalone proxy: `http://192.168.50.222:4001` is an older
-  standalone container kept temporarily for scratch E2E stacks; do not use it
-  to verify the live dashboard route.
+- Model gateway/proxy: `http://ai-proxy:4001` inside Docker and
+  `http://192.168.50.222:4001` from the LAN. Host port `4001` is owned by the
+  Compose-managed `soc-dashboard-ai-proxy-1`; there should be no `4401` proxy
+  listener in this lab.
 - Reference modules: iTop `http://192.168.50.222:25432`, Wazuh Dashboard `https://192.168.50.222:26443`, Keycloak `https://192.168.50.222:8443/admin/master/console/`, GitLab `http://192.168.50.222`, Mailcow/Roundcube `http://192.168.50.222:2581`
 - Current Windows working copy: `D:\IT AGENT PROJECT`
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
@@ -190,7 +189,7 @@ deployment directory, not from `D:\IT AGENT PROJECT`:
 cd /home/cereal/SOC_TESTING/soc-dashboard
 python3 scripts/switch_model_route.py --route external --restart
 python3 scripts/switch_model_route.py --route local --restart
-curl -sS http://127.0.0.1:4401/api/route \
+curl -sS http://127.0.0.1:4001/api/route \
   -H 'Content-Type: application/json' \
   -d '{"model":"deepseek/deepseek-v4-flash"}'
 ```

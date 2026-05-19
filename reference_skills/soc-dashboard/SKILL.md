@@ -209,9 +209,11 @@ Validation evidence from 2026-05-19:
   ticket `614`; note steering passed on ticket `617`; Wazuh lease-gated access
   passed on ticket `618`.
 - Live proxy routing reconciled to the Compose-managed proxy internally:
-  `AGENT_LLM_BASE_URL=http://ai-proxy:4001`, deployment-host local proxy on
-  `localhost:4401`; post-route Hermes smoke completed on ticket `620`, agent
-  `255`, task `252`.
+  `AGENT_LLM_BASE_URL=http://ai-proxy:4001`; the later 2026-05-19 proxy
+  cleanup made the same Compose proxy own host/LAN port `4001`, removed the
+  old standalone `ai-proxy` container, and removed the temporary host `4401`
+  listener. Post-route Hermes smoke completed on ticket `620`, agent `255`,
+  task `252`.
 - Complex phishing plus EDR live regression completed on ticket `621`, iTop
   `Incident::401`, agents `256`/`257`/`258`, access request `29`, changes
   `178`/`179`, postmortem `105`, and workflow `4` updated. Review later found

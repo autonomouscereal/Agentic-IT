@@ -24,8 +24,7 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | Path | `/home/cereal/SOC_TESTING/soc-dashboard` |
 | URL | `https://192.168.50.222:25443` |
 | Local API | `http://127.0.0.1:25480` |
-| Proxy | `http://ai-proxy:4001` inside Docker; `http://127.0.0.1:4401` on the deployment host |
-| Legacy standalone proxy | `http://192.168.50.222:4001`, older container `ai-proxy`; keep only until old scratch E2E stacks are migrated/retired |
+| Proxy | `http://ai-proxy:4001` inside Docker; `http://192.168.50.222:4001` from the LAN |
 | Default harness | Hermes Agent |
 | Product default model | `local/agent-default` |
 | Lab external model | `deepseek/deepseek-v4-flash` |
@@ -89,22 +88,17 @@ python3 scripts/switch_model_route.py --route local --restart
 Verify the current live route from the AI server:
 
 ```bash
-curl -sS http://127.0.0.1:4401/health
-curl -sS -X POST http://127.0.0.1:4401/api/route \
+curl -sS http://127.0.0.1:4001/health
+curl -sS -X POST http://127.0.0.1:4001/api/route \
   -H 'Content-Type: application/json' \
   -d '{"model":"deepseek/deepseek-v4-flash"}'
 ```
 
-The proxy host port is intentionally bound to localhost on the deployment
-server. Dashboard/API containers use `http://ai-proxy:4001`; operators and
-agents that need host-side checks should run them through server-manager on
-server `ai`.
-
-Do not confuse the managed proxy above with the legacy standalone `ai-proxy`
-container listening on host `0.0.0.0:4001`. The legacy service has the older
-minimal `/health` response and no `/api/route`. It was not created by the
-current Compose stack; older scratch E2E installs still reference it, so retire
-or migrate those installs before removing the container.
+In the current lab, the proxy host port is intentionally bound to
+`0.0.0.0:4001` so tools outside the dashboard harness can use the same managed
+proxy. Dashboard/API containers use `http://ai-proxy:4001`. There should be no
+separate standalone `ai-proxy` container and no host `4401` listener in this
+setup.
 
 ## HTTPS Edge
 

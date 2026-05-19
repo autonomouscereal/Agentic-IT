@@ -4,6 +4,14 @@ Last verified: 2026-05-19
 
 ## HTTPS/Hermes One-Line Regression - 2026-05-19
 
+Current proxy correction after the regression: the live lab now uses one
+Compose-managed proxy on host/LAN port `4001` (`0.0.0.0:4001->4001/tcp`) and
+containers use `http://ai-proxy:4001`. The old standalone `ai-proxy` container
+was removed and host `4401` is no longer listening. Clean installs default to
+`--proxy-port 4001`; the `4401` references below are historical artifacts from
+the same-port destructive test when an older standalone proxy still owned
+`4001`.
+
 Setup fan-out source regression on 2026-05-19:
 
 - Setup planning now accepts per-module `module_actions` so each capability can
@@ -80,12 +88,11 @@ Result:
 - Fresh stack was torn down with `docker compose down -v`, then the original
   live stack was restored and `scripts/smoke_dashboard_https.py
   https://localhost:25443` passed.
-- After restore, runtime proxy drift was reconciled: the live dashboard now
-  sends spawned agents to the Compose-managed proxy through
-  `AGENT_LLM_BASE_URL=http://ai-proxy:4001` from inside Docker. The
-  deployment-host local proxy is `http://localhost:4401`; it is intentionally
-  not reachable at `http://192.168.50.222:4401` because the compose proxy is
-  hardened to `127.0.0.1`.
+- After restore, runtime proxy drift was reconciled: the live dashboard sent
+  spawned agents to the Compose-managed proxy through
+  `AGENT_LLM_BASE_URL=http://ai-proxy:4001` from inside Docker. This was later
+  cleaned up so the same Compose-managed proxy owns host/LAN port `4001` and
+  host `4401` is gone.
 - Post-route Hermes smoke passed on ticket `620`, agent `255`, task `252`;
   the task completed, wrote its setup note, and `/api/agents/processes` cleared
   after the Hermes memory stop hook finished.

@@ -4,43 +4,44 @@ Last updated: 2026-05-19.
 
 ## Found During 2026-05-19 Agentic Regression Push
 
-### AI server has legacy standalone proxy on 4001 plus managed compose proxy on 4401
+### AI server briefly had two proxy ports, 4001 and 4401
 
-Status: documented; cleanup pending approval because older scratch E2E stacks
-still reference the legacy endpoint.
+Status: fixed on 2026-05-19. Host `4001` is again the single canonical proxy
+port, and host `4401` is gone.
 
-The live AI server currently has two different proxy services:
+During route-profile work, the live Compose-managed proxy was temporarily moved
+to host `127.0.0.1:4401` while an older standalone `ai-proxy` container owned
+host `0.0.0.0:4001`. That created two different proxy surfaces:
 
-- Current managed dashboard proxy:
-  `soc-dashboard-ai-proxy-1`, Compose project `soc-dashboard`,
-  host `127.0.0.1:4401 -> container :4001`, source
-  `/home/cereal/SOC_TESTING/soc-dashboard/deploy/ai-proxy/ai_proxy.py`.
-  This is the proxy used by the live dashboard/API containers through
-  `AGENT_LLM_BASE_URL=http://ai-proxy:4001`.
-- Legacy standalone proxy:
-  container `ai-proxy`, image `python:3.12-slim`, bind mount
-  `/home/cereal/ai-proxy`, listening on host `0.0.0.0:4001`. Its `/health`
-  response is only `{"status":"ok","port":4001}` and it does not support
-  `/api/route`, so it is older than the managed proxy.
+- Agents used `AGENT_LLM_BASE_URL=http://ai-proxy:4001` inside Docker, which
+  reached the Compose-managed proxy.
+- External tools using `http://192.168.50.222:4001` reached the older
+  standalone proxy, which had a minimal `/health` response and no `/api/route`.
 
-Verification on 2026-05-19:
+Fix:
 
-- `curl http://127.0.0.1:4401/health` returned routing profile details.
-- `POST http://127.0.0.1:4401/api/route` returned
+- Removed the standalone `ai-proxy` container.
+- Set the live Compose deployment to `AI_PROXY_BIND=0.0.0.0` and
+  `AI_PROXY_PORT=4001`.
+- Kept `AGENT_LLM_BASE_URL=http://ai-proxy:4001` for API/agent containers.
+- Kept source defaults local-first while leaving this lab environment on
+  `AI_MODEL_ROUTE=external` for the current demo.
+- Deleted the attempted `legacy_forwarder.py` source artifact.
+
+Verification:
+
+- `ss -ltnp` showed only `0.0.0.0:4001`; no listener remained on `4401`.
+- `docker ps` showed only `soc-dashboard-ai-proxy-1` mapped
+  `0.0.0.0:4001->4001/tcp`.
+- Host `http://127.0.0.1:4001/health`, LAN
+  `http://192.168.50.222:4001/api/route`, and API-container
+  `http://ai-proxy:4001/api/route` all returned the managed proxy routing
+  profile.
+- `POST /api/route` for `deepseek/deepseek-v4-flash` returned
   `nous -> openrouter -> lmstudio`.
-- `curl http://127.0.0.1:4001/health` returned the older minimal health body.
-- `POST http://127.0.0.1:4001/api/route` returned `Not found: api/route`.
-
-Impact:
-
-- Current live dashboard work should use the Compose-managed proxy:
-  `http://ai-proxy:4001` inside Docker and `http://127.0.0.1:4401` on the AI
-  server host.
-- Some older scratch E2E installs reference `http://192.168.50.222:4001`; do
-  not remove the legacy standalone proxy until those scratch stacks are either
-  migrated to their own managed proxy or intentionally retired.
-- Demo docs and skills now call out the difference so agents do not verify the
-  wrong proxy.
+- Runner health reported Hermes,
+  `effective_anthropic_base_url=http://ai-proxy:4001`, default model
+  `deepseek/deepseek-v4-flash`, and model API status `ok`.
 
 ### Proxy source default was lab-external instead of local/on-prem first
 
@@ -770,7 +771,8 @@ Verification:
 
 ### Live AI server has standalone proxy owning port 4001
 
-Status: known issue; dashboard restored, proxy ownership not migrated.
+Status: resolved on 2026-05-19; the Compose-managed proxy now owns host
+`0.0.0.0:4001`.
 
 During the documentation refresh deploy, `docker compose up -d --build api`
 attempted to create the Compose-managed `soc-dashboard-ai-proxy-1`, but host
@@ -781,11 +783,15 @@ health then returned `harness=hermes`, default model
 `deepseek/deepseek-v4-flash`, and model API status `ok` through the existing
 proxy.
 
-Before a future full Compose-managed proxy migration, decide whether to keep
-the standalone `ai-proxy` or replace it with the Compose service. Do not remove
-or restart the standalone proxy while agents are running. If migrating, drain
-agents, stop the standalone proxy, start the Compose `ai-proxy`, verify
-`/health` and `/v1/models`, then rebuild/start `api` normally.
+Resolution:
+
+- Stopped and removed the standalone `ai-proxy` container.
+- Set the live deployment to `AI_PROXY_BIND=0.0.0.0` and
+  `AI_PROXY_PORT=4001`.
+- Restarted the Compose-managed `soc-dashboard-ai-proxy-1` and verified only
+  `0.0.0.0:4001` was listening; host `4401` was not listening.
+- Verified `/health`, `/api/route`, and runner-health through the managed
+  proxy.
 
 ### Reference skill bundle has unrelated source drift
 

@@ -153,8 +153,8 @@ python3 scripts/switch_model_route.py --route local --restart
 
 Agents should execute the same commands through the `server-manager` skill
 against server `ai`. After switching, verify from the AI server with
-`curl http://127.0.0.1:4401/health` and `POST /api/route`; the live lab maps
-the proxy to deployment-host port `4401` while containers continue to use
+`curl http://127.0.0.1:4001/health` and `POST /api/route`; the live lab maps
+the Compose-managed proxy to host/LAN port `4001`, and containers use
 `http://ai-proxy:4001`.
 
 ## Post-Install

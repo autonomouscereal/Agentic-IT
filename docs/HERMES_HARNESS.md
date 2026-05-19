@@ -232,10 +232,11 @@ and the target URL is the dashboard API.
   agent `1`, and completed the bounded
   `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE` onboarding check at 100%.
 - Live route reconciliation aligned `AGENT_LLM_BASE_URL` to the
-  Compose-managed proxy at `http://ai-proxy:4001` inside Docker while keeping
-  the deployment-host local proxy on `http://localhost:4401`; Hermes setup
-  smoke passed afterward on ticket `620`, agent `255`, task `252`, and no
-  active processes remained.
+  Compose-managed proxy at `http://ai-proxy:4001` inside Docker. The later
+  2026-05-19 proxy cleanup made the same Compose proxy own host/LAN port
+  `4001`, removed the old standalone `ai-proxy` container, and removed the
+  temporary host `4401` listener. Hermes setup smoke passed afterward on
+  ticket `620`, agent `255`, task `252`, and no active processes remained.
 - URL-safe complex phishing plus EDR proof passed on ticket `690`, iTop
   `Incident::470`, initial agent `265`, continuation agents `266`/`267`,
   Wazuh access request `31`, gates `181` and `182`, postmortem `106`, URL

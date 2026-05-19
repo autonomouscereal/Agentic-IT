@@ -60,12 +60,12 @@ python scripts/switch_model_route.py --route local --restart
 For the current live lab, switch route profiles on server `ai` from
 `/home/cereal/SOC_TESTING/soc-dashboard` through the `server-manager` skill.
 The live proxy is `http://ai-proxy:4001` inside Docker and
-`http://127.0.0.1:4401` on the deployment host:
+`http://192.168.50.222:4001` from the LAN:
 
 ```bash
 cd /home/cereal/SOC_TESTING/soc-dashboard
 python3 scripts/switch_model_route.py --route external --restart
-curl -sS -X POST http://127.0.0.1:4401/api/route \
+curl -sS -X POST http://127.0.0.1:4001/api/route \
   -H 'Content-Type: application/json' \
   -d '{"model":"deepseek/deepseek-v4-flash"}'
 ```
@@ -130,9 +130,10 @@ customer or government demos that should not use external providers.
 - One-line installer alternate proof: setup ticket `1`, setup agent `1`,
   bounded `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE` note, task completed at 100%.
 - Live route reconciliation: `AGENT_LLM_BASE_URL=http://ai-proxy:4001` inside
-  Docker, deployment-host local proxy on `localhost:4401`, post-route smoke
-  ticket `620`, agent `255`, task `252`, no active processes after hook
-  shutdown.
+  Docker and host/LAN proxy on port `4001`; post-route smoke ticket `620`,
+  agent `255`, task `252`, no active processes after hook shutdown. The later
+  2026-05-19 cleanup removed the temporary host `4401` mapping and the old
+  standalone `ai-proxy` container.
 - Complex live Hermes regression case: ticket `621`, iTop `Incident::401`,
   agents `256`/`257`/`258`, Wazuh access request `29`, gates `178` and `179`,
   postmortem `105`, workflow `4` updated, no active processes afterward. This
