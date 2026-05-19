@@ -4,6 +4,7 @@ import argparse
 import http.cookiejar
 import json
 import os
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -44,6 +45,7 @@ def main():
     parser.add_argument("--username", default=os.getenv("DASHBOARD_LOGIN_USER", "demo_account_1"))
     parser.add_argument("--password", default=os.getenv("DASHBOARD_LOGIN_PASSWORD", ""))
     parser.add_argument("--password-file", default=os.getenv("DASHBOARD_LOGIN_PASSWORD_FILE", ""))
+    parser.add_argument("--insecure", action="store_true", help="Disable TLS verification for untrusted runtime certs")
     args = parser.parse_args()
 
     password = args.password
@@ -53,7 +55,10 @@ def main():
     if not password:
         raise SystemExit("missing password")
 
-    no_redirect = urllib.request.build_opener(NoRedirect, urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    handlers = [NoRedirect, urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())]
+    if args.insecure:
+        handlers.append(urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+    no_redirect = urllib.request.build_opener(*handlers)
     root = request(no_redirect, args.base, "GET", "/", headers={"Accept": "text/html"}, expect=303)
     assert root["location"].startswith("/login"), root
 
@@ -65,7 +70,10 @@ def main():
     assert bad["location"].startswith("/login?error=1"), bad
 
     jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(NoRedirect, urllib.request.HTTPCookieProcessor(jar))
+    handlers = [NoRedirect, urllib.request.HTTPCookieProcessor(jar)]
+    if args.insecure:
+        handlers.append(urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+    opener = urllib.request.build_opener(*handlers)
     good = request(opener, args.base, "POST", "/api/auth/login", {
         "username": args.username,
         "password": password,

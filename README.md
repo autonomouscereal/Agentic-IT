@@ -14,13 +14,14 @@ approved reference modules when those capabilities are missing.
 
 ## Current Deployment
 
-- UI/API: `http://192.168.50.222:25480`
-- API health: `http://192.168.50.222:25480/health`
+- UI/API: `https://192.168.50.222:25443` (runtime local-CA certificate)
+- Local service API: `http://127.0.0.1:25480`
+- HTTPS proxy health: `https://192.168.50.222:25443/nginx-health`
 - Model gateway/proxy: `http://192.168.50.222:4001`
 - Reference modules: iTop `http://192.168.50.222:25432`, Wazuh Dashboard `https://192.168.50.222:26443`, Keycloak `https://192.168.50.222:8443/admin/master/console/`, GitLab `http://192.168.50.222`, Mailcow/Roundcube `http://192.168.50.222:2581`
 - Current Windows working copy: `D:\IT AGENT PROJECT`
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
-- Containers: `soc-dashboard-api`, `soc-dashboard-db`, `ai-proxy`, `agent-memory-db`
+- Containers: `soc-dashboard-api`, `soc-dashboard-db`, `ai-proxy`, `agent-memory-db`, `dashboard-tls-proxy`
 - Database: PostgreSQL 16 only, accessed through `asyncpg` with parameterized raw SQL
 - Default harness/model: Hermes Agent with `deepseek/deepseek-v4-flash`; Claude Code remains available as a fallback harness.
 
@@ -29,7 +30,9 @@ local server-manager vault key `demo_account_1`. The dashboard itself now has
 a first-party login page at `/login`; failed UI login attempts redirect back to
 that page, successful logins mint a signed HttpOnly `dashboard_session`, and
 the sidebar shows the signed-in account plus sign-out. Latest 2026-05-18 login
-smoke: Agentic Operations login PASS, iTop REST PASS, Wazuh API PASS, Wazuh
+smoke: Agentic Operations HTTPS edge PASS with local CA trusted on the demo
+workstation, Agentic Operations login PASS, iTop REST PASS, Wazuh API PASS,
+Wazuh
 Dashboard browser login PASS, Keycloak Admin Console login PASS, GitLab local
 login PASS, full GitLab Keycloak SSO PASS, Mailcow admin UI PASS across
 dashboard/system/mailbox/queue/quarantine pages, Roundcube webmail PASS at

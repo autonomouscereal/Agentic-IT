@@ -9,6 +9,7 @@ runner.
 import argparse
 import json
 import os
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -23,13 +24,19 @@ def _read_secret(value, file_value):
     return ""
 
 
+VERIFY_TLS = True
+
+
 def request(base, method, path, payload=None, headers=None, expect=200):
     body = json.dumps(payload).encode("utf-8") if payload is not None else None
     req_headers = {"Content-Type": "application/json"}
     req_headers.update(headers or {})
     req = urllib.request.Request(base.rstrip("/") + path, data=body, headers=req_headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        context = None
+        if base.startswith("https://") and not VERIFY_TLS:
+            context = ssl._create_unverified_context()
+        with urllib.request.urlopen(req, timeout=30, context=context) as resp:
             text = resp.read().decode("utf-8", errors="replace")
             parsed = json.loads(text) if text and text.strip().startswith(("{", "[")) else {"raw": text[:200]}
             status = resp.status
@@ -67,7 +74,10 @@ def main():
     parser.add_argument("--trusted-secret-file", default=os.getenv("DASHBOARD_TRUSTED_AUTH_SECRET_FILE", ""))
     parser.add_argument("--service-token", default=os.getenv("DASHBOARD_SERVICE_TOKEN", ""))
     parser.add_argument("--service-token-file", default=os.getenv("DASHBOARD_SERVICE_TOKEN_FILE", ""))
+    parser.add_argument("--insecure", action="store_true", help="Disable TLS verification for untrusted runtime certs")
     args = parser.parse_args()
+    global VERIFY_TLS
+    VERIFY_TLS = not args.insecure
 
     trusted_secret = _read_secret(args.trusted_secret, args.trusted_secret_file)
     service_token = _read_secret(args.service_token, args.service_token_file)

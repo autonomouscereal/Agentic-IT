@@ -216,7 +216,7 @@ Latest verified on 2026-05-18:
 
 | System | URL | Login Status | Demo Notes |
 | --- | --- | --- | --- |
-| Agentic Operations | `http://192.168.50.222:25480` | Verified | Browser requests redirect to `/login`; use `demo_account_1` with the vault password. Bad credentials return to the login page with an error, successful login lands in the dashboard with a signed HttpOnly session, the sidebar shows the signed-in account, and Sign Out returns to `/login?logged_out=1`. API/static/health requests without credentials still fail closed. |
+| Agentic Operations | `https://192.168.50.222:25443` | Verified | HTTPS is served by the dashboard TLS proxy with a runtime local-CA certificate; the CA is trusted in the demo workstation CurrentUser root store. Browser requests redirect to `/login`; use `demo_account_1` with the vault password. Bad credentials return to the login page with an error, successful login lands in the dashboard with a signed HttpOnly session, the sidebar shows the signed-in account, and Sign Out returns to `/login?logged_out=1`. API/static/health requests without credentials still fail closed. |
 | iTop | `http://192.168.50.222:25432` | Verified | REST POST returns `code=0`; user has `Administrator` and `REST Services User`. |
 | Wazuh Dashboard | `https://192.168.50.222:26443` | Verified | Browser login works and the native Wazuh API issues a token for the same demo user. |
 | Keycloak | `https://192.168.50.222:8443/admin/master/console/` | Verified | Admin Console loads and logs in with the Keycloak admin vault credential; issuer and admin UI now use the browser-routable demo URL. |

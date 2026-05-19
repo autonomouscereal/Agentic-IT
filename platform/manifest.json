@@ -30,10 +30,10 @@
       "depends_on": [],
       "provides": ["dashboard", "canonical-tickets", "agent-runner", "change-approvals", "audit-log", "setup-wizard"],
       "required_secrets": ["SOC_DB_PASSWORD", "AGENT_LLM_AUTH_TOKEN when external provider requires it"],
-      "ports": ["25480/tcp", "5433/tcp"],
-      "health_checks": ["/health", "/api/agents/runner-health", "/api/setup/manifest"],
-      "test_commands": ["python3 scripts/smoke_agentic_system.py http://localhost:25480", "python3 scripts/smoke_setup_platform.py http://localhost:25480"],
-      "notes": "The control plane owns the canonical state and delegates provider-specific behavior through adapters."
+      "ports": ["25443/tcp (HTTPS operator UI)", "25480/tcp (loopback HTTP/API)", "5433/tcp (loopback PostgreSQL)"],
+      "health_checks": ["/nginx-health over HTTPS", "/health with service token", "/api/agents/runner-health", "/api/setup/manifest"],
+      "test_commands": ["python3 scripts/smoke_dashboard_https.py https://localhost:25443", "python3 scripts/smoke_agentic_system.py http://localhost:25480", "python3 scripts/smoke_setup_platform.py http://localhost:25480"],
+      "notes": "The control plane owns the canonical state and delegates provider-specific behavior through adapters. The default deployment exposes the operator UI through the dashboard TLS proxy with runtime-generated local-CA certificates while binding direct HTTP/API and databases to loopback."
     },
     {
       "id": "local-ticketing",

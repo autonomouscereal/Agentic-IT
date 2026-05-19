@@ -12,6 +12,7 @@ import os
 import re
 import secrets
 import shutil
+import ssl
 import stat
 import subprocess
 import sys
@@ -32,6 +33,10 @@ def parse_args():
     parser.add_argument("--target", default=str(DEFAULT_TARGET), help="Deployment directory")
     parser.add_argument("--source", default=str(ROOT), help="Source directory or copied release checkout")
     parser.add_argument("--dashboard-port", default="25480")
+    parser.add_argument("--https-port", default=os.getenv("DASHBOARD_HTTPS_PORT", "25443"))
+    parser.add_argument("--disable-https", action="store_true")
+    parser.add_argument("--tls-common-name", default=os.getenv("DASHBOARD_TLS_COMMON_NAME", "agentic-operations.local"))
+    parser.add_argument("--tls-days", default=os.getenv("DASHBOARD_TLS_DAYS", "825"))
     parser.add_argument("--db-port", default="5433")
     parser.add_argument("--project-name", default=os.getenv("COMPOSE_PROJECT_NAME", ""))
     parser.add_argument("--ai-base-url", default=os.getenv("AGENT_LLM_BASE_URL", ""))
@@ -173,7 +178,16 @@ def write_env(target, args, dry_run=False):
     env = {
         "COMPOSE_PROJECT_NAME": compose_project,
         "DASHBOARD_PORT": args.dashboard_port,
+        "DASHBOARD_BIND": "127.0.0.1",
+        "DASHBOARD_HTTPS_PORT": args.https_port,
+        "DASHBOARD_HTTPS_BIND": "0.0.0.0",
+        "DASHBOARD_TLS_DIR": "./runtime/tls",
+        "DASHBOARD_TLS_COMMON_NAME": args.tls_common_name,
+        "DASHBOARD_TLS_DAYS": args.tls_days,
         "SOC_DB_PORT": args.db_port,
+        "SOC_DB_BIND": "127.0.0.1",
+        "AGENT_MEMORY_DB_BIND": "127.0.0.1",
+        "AI_PROXY_BIND": "127.0.0.1",
         "AI_PROXY_MODE": args.proxy_mode,
         "AI_PROXY_PORT": args.proxy_port,
         "PROXY_CONFIG_PATH": "./runtime/proxy_config.json",
@@ -238,10 +252,20 @@ def write_env(target, args, dry_run=False):
         "HERMES_UV_PYTHON_DIR": os.getenv("HERMES_UV_PYTHON_DIR", "./runtime/hermes-uv-python"),
         "HERMES_DEFAULT_PROVIDER": os.getenv("HERMES_DEFAULT_PROVIDER", "nous"),
         "HERMES_LOCAL_PROVIDER": os.getenv("HERMES_LOCAL_PROVIDER", "dashboard-proxy"),
-        "HERMES_TOOLSETS": os.getenv("HERMES_TOOLSETS", "hermes-cli"),
+        "HERMES_TOOLSETS": os.getenv("HERMES_TOOLSETS", "terminal,file"),
         "HERMES_RUN_AS_UID": os.getenv("HERMES_RUN_AS_UID", "1000"),
         "HERMES_RUN_AS_GID": os.getenv("HERMES_RUN_AS_GID", "1000"),
         "DASHBOARD_API_BASE": "http://localhost:8000",
+        "DASHBOARD_AUTH_MODE": "header",
+        "DASHBOARD_AUTH_ENFORCEMENT": "enforce",
+        "DASHBOARD_TRUSTED_AUTH_SECRET": secrets.token_urlsafe(48),
+        "DASHBOARD_SERVICE_TOKEN": secrets.token_urlsafe(48),
+        "DASHBOARD_SESSION_SECRET": secrets.token_urlsafe(64),
+        "DASHBOARD_COOKIE_SECURE": "true",
+        "DASHBOARD_PROTECT_UI": "true",
+        "DASHBOARD_PUBLIC_HEALTH": "false",
+        "DASHBOARD_CORS_ORIGINS": "",
+        "DASHBOARD_HSTS": "true",
         "TRACK_INTERVAL": "10",
         "STUCK_TIMEOUT_MINUTES": "60",
         "CLAUDE_CREDENTIALS_FILE": os.getenv("CLAUDE_CREDENTIALS_FILE", "./runtime/empty_credentials.json"),
@@ -259,6 +283,20 @@ def write_env(target, args, dry_run=False):
     except OSError:
         pass
     return "created"
+
+
+def read_env_file(target):
+    values = {}
+    env_path = target / ".env"
+    if not env_path.exists():
+        return values
+    for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
 
 
 def write_compose_override(target, args, dry_run=False):
@@ -358,6 +396,35 @@ def write_agent_models(target, args, dry_run=False):
     return data
 
 
+def ensure_tls_assets(target, args, host, dry_run=False):
+    if args.disable_https:
+        return {"status": "disabled"}
+    if dry_run:
+        print("DRY RUN: generate runtime/tls dashboard local CA and server certificate")
+        return {"status": "dry_run", "https_port": args.https_port}
+    env = dict(os.environ)
+    existing_ips = [item.strip() for item in env.get("DASHBOARD_TLS_EXTRA_IPS", "").split(",") if item.strip()]
+    env["DASHBOARD_TLS_EXTRA_IPS"] = ",".join(sorted(set(existing_ips + [host])))
+    env["DASHBOARD_TLS_COMMON_NAME"] = args.tls_common_name
+    env["DASHBOARD_TLS_DAYS"] = str(args.tls_days)
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/generate_dashboard_tls.py",
+            "--out-dir",
+            "runtime/tls",
+            "--common-name",
+            args.tls_common_name,
+            "--days",
+            str(args.tls_days),
+        ],
+        cwd=str(target),
+        check=True,
+        env=env,
+    )
+    return {"status": "ready", "cert": "runtime/tls/dashboard.crt", "ca_cert": "runtime/tls/dashboard-ca.crt", "key": "runtime/tls/dashboard.key"}
+
+
 def read_manifest(target):
     manifest_path = target / "platform" / "manifest.json"
     with manifest_path.open("r", encoding="utf-8") as handle:
@@ -369,18 +436,20 @@ def write_initial_plan(target, args, dry_run=False):
     profile = manifest.get("profiles", {}).get(args.profile, {})
     selected = set(profile.get("modules", []))
     modules = [m for m in manifest.get("modules", []) if m.get("id") in selected]
+    dashboard_entrypoint = f"http://localhost:{args.dashboard_port}" if args.disable_https else f"https://localhost:{args.https_port}"
     plan = {
         "profile": args.profile,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "proxy_mode": args.proxy_mode,
         "ai_base_url": agent_base_url(args),
         "operator_proxy_url": operator_proxy_url(args, detect_host_ip()),
+        "operator_dashboard_url": dashboard_entrypoint,
         "harness": selected_harness(args),
         "provider": args.provider,
         "model": args.model,
         "spawn_setup_agent": bool(args.spawn_setup_agent),
         "operator_next_step": (
-            f"Open http://localhost:{args.dashboard_port}; the setup ticket is the handoff "
+            f"Open {dashboard_entrypoint}; the setup ticket is the handoff "
             "for agentic onboarding, provider integration, approval gates, and smoke tests."
         ),
         "modules": [
@@ -408,26 +477,29 @@ def run(command, cwd, dry_run=False):
     subprocess.run(command, cwd=str(cwd), check=True)
 
 
-def http_json(url, method="GET", payload=None, timeout=10):
+def http_json(url, method="GET", payload=None, timeout=10, verify_tls=True, headers=None):
     data = None
-    headers = {}
+    final_headers = dict(headers or {})
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=timeout) as response:
+        final_headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=final_headers, method=method)
+    context = None
+    if url.startswith("https://") and not verify_tls:
+        context = ssl._create_unverified_context()
+    with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
         body = response.read().decode("utf-8", errors="replace")
         return json.loads(body) if body else {}
 
 
-def wait_health(url, name, dry_run=False, attempts=30):
+def wait_health(url, name, dry_run=False, attempts=30, verify_tls=True, headers=None):
     if dry_run:
         print("DRY RUN: health check", name, url)
         return {"status": "dry_run"}
     last_error = ""
     for _ in range(attempts):
         try:
-            result = http_json(url, timeout=5)
+            result = http_json(url, timeout=5, verify_tls=verify_tls, headers=headers)
             if result.get("status") in ("ok", "healthy"):
                 return result
             last_error = json.dumps(result)[:300]
@@ -437,7 +509,17 @@ def wait_health(url, name, dry_run=False, attempts=30):
     raise RuntimeError(f"{name} health check failed at {url}: {last_error}")
 
 
-def create_agentic_setup_ticket(args, host, dry_run=False):
+def service_headers(env_values):
+    token = (env_values or {}).get("DASHBOARD_SERVICE_TOKEN") or os.getenv("DASHBOARD_SERVICE_TOKEN", "")
+    if not token:
+        return {}
+    return {
+        "X-Dashboard-Service-Token": token,
+        "X-Dashboard-Service-User": "installer-bootstrap",
+    }
+
+
+def create_agentic_setup_ticket(args, host, env_values=None, dry_run=False):
     base = f"http://localhost:{args.dashboard_port}"
     payload = {
         "profile": args.profile,
@@ -461,7 +543,13 @@ def create_agentic_setup_ticket(args, host, dry_run=False):
     if dry_run:
         print("DRY RUN: create setup ticket", json.dumps(payload, sort_keys=True))
         return {"status": "dry_run", "payload": payload}
-    return http_json(f"{base}/api/setup/ticket", method="POST", payload=payload, timeout=30)
+    return http_json(
+        f"{base}/api/setup/ticket",
+        method="POST",
+        payload=payload,
+        timeout=30,
+        headers=service_headers(env_values),
+    )
 
 
 def apply_migrations(target, dry_run=False):
@@ -500,9 +588,11 @@ def main():
         target.mkdir(parents=True, exist_ok=True)
     copy_source(source, target, args.dry_run)
     env_status = write_env(target, args, args.dry_run)
+    deployment_env = read_env_file(target) if not args.dry_run else {}
     write_compose_override(target, args, args.dry_run)
     proxy_config = write_proxy_config(target, args, args.dry_run)
     write_agent_models(target, args, args.dry_run)
+    tls_status = ensure_tls_assets(target, args, host, args.dry_run)
     plan = write_initial_plan(target, args, args.dry_run)
 
     if not args.dry_run:
@@ -534,6 +624,8 @@ def main():
             "profile": args.profile,
             "env": env_status,
             "dashboard_port": args.dashboard_port,
+            "dashboard_https_port": args.https_port,
+            "tls": tls_status,
             "db_port": args.db_port,
             "proxy_mode": args.proxy_mode,
             "proxy_url": operator_proxy_url(args, host),
@@ -543,6 +635,7 @@ def main():
 
     setup_ticket = {"status": "skipped", "reason": "no_start"}
     dashboard_health = {"status": "skipped"}
+    dashboard_https_health = {"status": "skipped"}
     proxy_health = {"status": "skipped"}
     proxy_models = {"status": "skipped"}
     if not args.no_start:
@@ -550,18 +643,30 @@ def main():
         migrations = apply_migrations(target, args.dry_run)
         dashboard_url = f"http://localhost:{args.dashboard_port}"
         proxy_url = operator_proxy_url(args, host)
-        dashboard_health = wait_health(f"{dashboard_url}/health", "dashboard", args.dry_run)
+        dashboard_health = wait_health(
+            f"{dashboard_url}/health",
+            "dashboard",
+            args.dry_run,
+            headers=service_headers(deployment_env),
+        )
+        dashboard_https_health = wait_health(
+            f"https://localhost:{args.https_port}/nginx-health",
+            "dashboard-tls-proxy",
+            args.dry_run or args.disable_https,
+            verify_tls=False,
+        )
         proxy_health = wait_health(f"{proxy_url}/health", "ai-proxy", args.dry_run)
         if args.dry_run:
             proxy_models = {"status": "dry_run"}
         else:
             proxy_models = http_json(f"{proxy_url}/v1/models", timeout=10)
-        setup_ticket = create_agentic_setup_ticket(args, host, args.dry_run)
+        setup_ticket = create_agentic_setup_ticket(args, host, deployment_env, args.dry_run)
         if not args.dry_run:
             log_event(target, "docker_started", {
                 "profile": args.profile,
                 "migrations": migrations,
                 "dashboard_health": dashboard_health,
+                "dashboard_https_health": dashboard_https_health,
                 "proxy_health": proxy_health,
                 "setup_ticket_id": ((setup_ticket or {}).get("ticket") or {}).get("id"),
                 "setup_agent": (setup_ticket or {}).get("agent"),
@@ -573,11 +678,14 @@ def main():
         "profile": args.profile,
         "proxy_mode": args.proxy_mode,
         "proxy_url": operator_proxy_url(args, host),
+        "dashboard_https_url": None if args.disable_https else f"https://localhost:{args.https_port}",
+        "dashboard_tls": tls_status,
         "harness": selected_harness(args),
         "provider": args.provider,
         "model": args.model,
         "dashboard_url": f"http://localhost:{args.dashboard_port}",
         "dashboard_health": dashboard_health,
+        "dashboard_https_health": dashboard_https_health,
         "proxy_health": proxy_health,
         "proxy_model_count": len((proxy_models or {}).get("data", [])) if isinstance(proxy_models, dict) else 0,
         "setup_ticket_id": ((setup_ticket or {}).get("ticket") or {}).get("id"),

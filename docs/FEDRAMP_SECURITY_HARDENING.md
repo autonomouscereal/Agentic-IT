@@ -9,6 +9,7 @@ deployment posture suitable for regulated demos and production planning.
 
 The live AI Server dashboard is configured with:
 
+- `dashboard-tls-proxy` on `DASHBOARD_HTTPS_PORT=25443`
 - `DASHBOARD_AUTH_MODE=header`
 - `DASHBOARD_AUTH_ENFORCEMENT=enforce`
 - `DASHBOARD_PROTECT_UI=true`
@@ -19,9 +20,11 @@ The live AI Server dashboard is configured with:
 - signed session-cookie secret stored in vault key `dashboard_session_secret`
 - first-party dashboard demo account password stored in vault key
   `demo_account_1`
+- runtime local CA cert `runtime/tls/dashboard-ca.crt` trusted on the demo
+  workstation; CA/server private keys remain on the deployment host only
 
 Unauthenticated API/static/health requests return `403`. Browser HTML requests
-to `/` redirect to `/login?next=/`, where the operator can sign in with a
+to the HTTPS dashboard root redirect to `/login?next=/`, where the operator can sign in with a
 vault-backed dashboard account. Failed UI login attempts redirect back to
 `/login?error=1`; successful login creates a signed, HttpOnly
 `dashboard_session` cookie. API clients that present bad or missing credentials
@@ -35,6 +38,12 @@ frontend never receives or stores the proxy secret, service token, or password.
 
 ## App-Wide Controls
 
+- The operator-facing dashboard is terminated through a TLS reverse proxy with
+  TLS 1.2/1.3 only, HSTS, frame denial, no-sniff, no-referrer, and a locked
+  permissions policy.
+- The reference deployment uses a local runtime CA for bare-bones installs
+  instead of binding to standard port `443`. Enterprises should replace this
+  with managed PKI or ACME during production onboarding.
 - App middleware evaluates every HTTP request before routing.
 - All API route families are mapped to explicit permissions.
 - Unknown `/api/*` routes require `platform:unknown`, so non-admin users fail
@@ -121,6 +130,8 @@ The reference compose now binds databases to localhost:
 - dashboard PostgreSQL: `127.0.0.1:${SOC_DB_PORT:-5433}`
 - agent memory PostgreSQL: `127.0.0.1:${AGENT_MEMORY_DB_PORT:-25490}`
 - AI proxy: `127.0.0.1:${AI_PROXY_PORT:-4001}`
+- direct FastAPI HTTP: `127.0.0.1:${DASHBOARD_PORT:-25480}` by default
+- operator HTTPS: `${DASHBOARD_HTTPS_BIND:-0.0.0.0}:${DASHBOARD_HTTPS_PORT:-25443}`
 
 The live deployment verified LAN access to those ports is refused. Database
 passwords remain required through `SOC_DB_PASSWORD` and
@@ -135,6 +146,7 @@ Run:
 $env:DASHBOARD_TRUSTED_AUTH_SECRET = python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get dashboard_trusted_auth_secret
 $env:DASHBOARD_SERVICE_TOKEN = python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get dashboard_service_token
 python scripts\smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480
+python scripts\smoke_dashboard_https.py https://192.168.50.222:25443
 ```
 
 Also verify the first-party browser login:
@@ -173,6 +185,10 @@ Latest live proof on 2026-05-18:
   good credentials created `dashboard_session`, the sidebar showed
   `demo_account_1`, sign-out returned to `/login?logged_out=1`, and the
   post-login page had zero console errors, failed requests, or 4xx responses.
+- HTTPS edge pass: `https://192.168.50.222:25443/nginx-health` validates from
+  the Windows workstation without `--insecure` after installing
+  `dashboard-ca.crt` into the CurrentUser trusted root store; Chrome reaches
+  `/login?next=/` as a secure context with no certificate bypass.
 - DB/memory/proxy LAN checks: `5433`, `25491`, and `4401` refused external
   TCP connections; dashboard `25480` remained reachable.
 - Broad authenticated API smoke passed: ticket `589`, local mirror ticket

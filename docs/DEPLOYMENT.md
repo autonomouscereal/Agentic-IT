@@ -7,6 +7,9 @@ Last updated: 2026-05-18.
 - Docker and Docker Compose on the target server.
 - PostgreSQL is provided by the compose stack.
 - Docker Compose can build the API and built-in AI proxy images.
+- OpenSSL is available on the target host for first-start local CA and server
+  certificate generation, or pre-created cert/key files are placed in
+  `runtime/tls`.
 - Hermes Agent host auth/mounts or Claude Code credentials are available when agent execution is enabled.
 - A reachable model gateway in `AGENT_LLM_BASE_URL`; built-in installs use `http://ai-proxy:4001` inside Docker.
 - Server credentials stored in the server-manager vault.
@@ -19,7 +22,8 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | --- | --- |
 | Server | AI server |
 | Path | `/home/cereal/SOC_TESTING/soc-dashboard` |
-| URL | `http://192.168.50.222:25480` |
+| URL | `https://192.168.50.222:25443` |
+| Local API | `http://127.0.0.1:25480` |
 | Proxy | `http://192.168.50.222:4001` |
 | Default harness | Hermes Agent |
 | Default model | `deepseek/deepseek-v4-flash` |
@@ -49,7 +53,39 @@ SOC_DB_PASSWORD=<from vault or deployment secret>
 AGENT_LLM_BASE_URL=http://<proxy-host>:4001
 AGENT_HARNESS=hermes
 AGENT_DEFAULT_MODEL=deepseek/deepseek-v4-flash
+DASHBOARD_BIND=127.0.0.1
+DASHBOARD_HTTPS_BIND=0.0.0.0
+DASHBOARD_HTTPS_PORT=25443
+DASHBOARD_TLS_DIR=./runtime/tls
 ```
+
+## HTTPS Edge
+
+The default deployment exposes the operator UI through `dashboard-tls-proxy`
+on `DASHBOARD_HTTPS_PORT` and keeps direct FastAPI HTTP on loopback for local
+containers, scripts, and agents. Do not bind the dashboard to standard `443`
+by default; customer environments often already use it for an enterprise proxy
+or another product. Generate runtime-only local CA and server certs before
+starting compose:
+
+```bash
+python3 scripts/generate_dashboard_tls.py --out-dir runtime/tls
+docker compose up -d --build
+python3 scripts/smoke_dashboard_https.py https://localhost:${DASHBOARD_HTTPS_PORT:-25443}
+```
+
+The generated `runtime/tls/dashboard-ca.crt` can be imported into a demo
+workstation trust store so browsers stop showing a certificate warning. On
+Windows, copy or download the CA cert locally and run:
+
+```powershell
+.\scripts\install_dashboard_ca_windows.ps1 -CertPath .\runtime\trusted-ca\dashboard-ca.crt
+```
+
+`runtime/tls/dashboard.key` and `runtime/tls/dashboard-ca.key` are secret
+runtime material and must never be committed. For production, replace the
+runtime certs with enterprise PKI or ACME-issued certificates and keep
+`DASHBOARD_COOKIE_SECURE=true`.
 
 For iTop deployments:
 
@@ -126,8 +162,9 @@ Expected:
 Security posture for regulated demos, verified 2026-05-18:
 
 - dashboard auth is enforced with trusted header mode
-- unauthenticated browser UI requests redirect to `/login`; direct static,
-  health, and API requests return `403`
+- operator browser UI uses HTTPS through `dashboard-tls-proxy`; unauthenticated
+  browser UI requests redirect to `/login`; direct static, health, and API
+  requests return `403`
 - first-party `/login` uses vault-backed local dashboard users and signs a
   HttpOnly `dashboard_session` cookie for the UI/WebSocket flow
 - dashboard PostgreSQL, agent-memory PostgreSQL, and the AI proxy are bound to
@@ -138,6 +175,10 @@ Security posture for regulated demos, verified 2026-05-18:
 - run `python scripts/smoke_dashboard_login.py http://192.168.50.222:25480 --username demo_account_1 --password-file <temp-vault-password-file>`
   to prove login, bad-credential redirect, signed session cookie, and
   `/api/access/me`
+- run `python scripts/smoke_dashboard_https.py https://192.168.50.222:25443`
+  to prove the TLS edge, secure redirect behavior, and security headers. After
+  trusting `dashboard-ca.crt`, also verify a normal TLS client reaches
+  `https://192.168.50.222:25443/nginx-health` without `--insecure`.
 - run `python scripts/smoke_setup_agent.py http://192.168.50.222:25480 deepseek/deepseek-v4-flash`
   to prove a real Hermes worker can use scoped agent-session auth against
   protected dashboard endpoints. Latest live proof after the login deployment:

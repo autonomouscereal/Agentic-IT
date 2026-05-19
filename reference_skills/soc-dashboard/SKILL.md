@@ -115,9 +115,9 @@ Additional reconstructed context for future Codex sessions lives at:
 
 | Service | URL | Port |
 |---------|-----|------|
-| Dashboard UI | http://192.168.50.222:25480 | 25480 |
-| API (programmatic) | http://192.168.50.222:25480/api | 25480 |
-| Health endpoint | http://192.168.50.222:25480/health | 25480 |
+| Dashboard UI | https://192.168.50.222:25443 | 25443 |
+| Local API (programmatic) | http://127.0.0.1:25480/api | 25480 |
+| HTTPS proxy health | https://192.168.50.222:25443/nginx-health | 25443 |
 | PostgreSQL DB | 127.0.0.1:5433 on the AI Server only | 5433 |
 
 ## Enforced Auth Posture
@@ -125,6 +125,8 @@ Additional reconstructed context for future Codex sessions lives at:
 The live dashboard is in enforced header-auth mode:
 
 - unauthenticated `/`, `/static/*`, `/health`, and `/api/*` return `403`
+- operator traffic uses the `dashboard-tls-proxy` HTTPS edge with runtime
+  local-CA certs from `runtime/tls`; direct FastAPI HTTP is loopback-only
 - trusted proxy headers require `X-Dashboard-Auth-Secret`
 - browser sessions mint a signed HttpOnly `dashboard_session`
 - browser HTML requests to `/` redirect to `/login`; failed local dashboard

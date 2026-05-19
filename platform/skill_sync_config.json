@@ -6,6 +6,7 @@
     "account-access-workflow",
     "cicd-security-pipeline",
     "credential-vault",
+    "dashboard-tls",
     "gitlab-keycloak-integration",
     "gitlab-manager",
     "hermes-harness",

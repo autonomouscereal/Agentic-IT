@@ -52,6 +52,13 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
 - `--profile minimal|soc|full-it`: chooses the initial setup plan.
 - `--target PATH`: installation directory.
 - `--dashboard-port PORT`: host port for the UI/API.
+- `--https-port PORT`: host port for the operator-facing HTTPS UI, default
+  `25443`.
+- `--disable-https`: skip the bundled TLS proxy; intended only for local
+  development behind another trusted reverse proxy.
+- `--tls-common-name NAME`: common name used for the generated local-CA signed
+  certificate.
+- `--tls-days DAYS`: server certificate lifetime, default `825`.
 - `--db-port PORT`: host port for PostgreSQL.
 - `--project-name NAME`: Docker Compose project name. Defaults to a sanitized name from the target directory.
 - `--harness auto|hermes|claude-code`: selected agent harness. `auto` prefers Hermes when a host Hermes install is available, otherwise Claude Code.
@@ -69,6 +76,11 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
 ## Generated Files
 
 - `.env`: local runtime config. The installer generates a random PostgreSQL password at install time. Product credentials must be added through environment management or vault references.
+- `runtime/tls/dashboard-ca.crt`, `runtime/tls/dashboard-ca.key`,
+  `runtime/tls/dashboard.crt`, and `runtime/tls/dashboard.key`: runtime-only
+  local CA and HTTPS assets for the dashboard TLS proxy. Trust
+  `dashboard-ca.crt` on demo workstations; key files must never leave the
+  deployment host.
 - `AGENT_MEMORY_DB_PASSWORD`: generated in `.env` for the shared PostgreSQL/pgvector agent memory service.
 - `docker-compose.override.yml`: reserved for site-specific overrides.
 - `runtime/empty_credentials.json`: empty placeholder so the control plane can start before Claude Code OAuth credentials are configured.
@@ -80,7 +92,9 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
 
 ## Post-Install
 
-1. Open the dashboard URL printed by the installer.
+1. Open the HTTPS dashboard URL printed by the installer. For default local-CA
+   installs, import `runtime/tls/dashboard-ca.crt` into the operator
+   workstation trust store to avoid browser warnings.
 2. Go to Setup.
 3. Mark existing products by capability, for example existing ServiceNow,
    Splunk, Defender, Proofpoint, Okta, GitHub, Entra ID, AWS, Azure, GCP,
@@ -116,8 +130,8 @@ python installer/bootstrap.py --dry-run --profile full-it --harness hermes --pro
 ```
 
 Expected result: JSON status `dry_run`, a generated proxy config summary,
-selected harness/model, proxy URL, dashboard URL, and a dry-run setup ticket
-handoff payload.
+selected harness/model, proxy URL, HTTPS dashboard URL, TLS summary, and a
+dry-run setup ticket handoff payload.
 
 The previous full one-line install proof used:
 
@@ -196,4 +210,6 @@ Latest dry-run proof:
 python installer\bootstrap.py --dry-run --profile full-it --harness hermes --proxy-mode deploy --target C:\Users\cereal\AppData\Local\Temp\soc-platform-dryrun --dashboard-port 25580 --db-port 55433 --model deepseek/deepseek-v4-flash
 ```
 
-Expected result: JSON status `dry_run`, dashboard URL `http://localhost:25580`, and no files or containers created.
+Expected result: JSON status `dry_run`, dashboard URL
+`http://localhost:25580`, HTTPS dashboard URL `https://localhost:25443`, TLS
+summary `dry_run`, and no files or containers created.

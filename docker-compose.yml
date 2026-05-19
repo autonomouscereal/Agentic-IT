@@ -66,7 +66,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-25480}:8000"
+      - "${DASHBOARD_BIND:-127.0.0.1}:${DASHBOARD_PORT:-25480}:8000"
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -171,6 +171,23 @@ services:
       - ${AGENTS_SKILLS_DIR:-./reference_skills}:/root/.agents/skills:ro
       - ${HERMES_HOME_DIR:-./runtime/hermes}:/home/cereal/.hermes:rw
       - ${HERMES_UV_PYTHON_DIR:-./runtime/hermes-uv-python}:/home/cereal/.local/share/uv:ro
+
+  dashboard-tls-proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_HTTPS_BIND:-0.0.0.0}:${DASHBOARD_HTTPS_PORT:-25443}:8443"
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - ./deploy/dashboard-tls-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${DASHBOARD_TLS_DIR:-./runtime/tls}:/etc/nginx/tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:8443/nginx-health | grep -q '\"status\":\"ok\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
 volumes:
   db-data:
