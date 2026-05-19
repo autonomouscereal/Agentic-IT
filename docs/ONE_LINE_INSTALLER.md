@@ -2,9 +2,10 @@
 
 The installer deploys the autonomous enterprise operations control plane,
 plants the built-in AI proxy by default, writes an initial setup plan, and
-creates the first setup ticket. It does not try to finish customer-specific
-integration work in shell. The shell/Python bootstrap plants the seed; the
-platform agent continues onboarding from the setup ticket with approval gates.
+creates the first setup-ticket handoff. It does not try to finish
+customer-specific integration work in shell. The shell/Python bootstrap plants
+the seed; the platform continues onboarding through auditable setup tickets
+with approval gates.
 
 The near-term installer proves the SOC/IT seed domain. The long-term installer
 is the bootstrap for a private agentic operations layer that can connect to an
@@ -107,11 +108,20 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
    installs, import `runtime/tls/dashboard-ca.crt` into the operator
    workstation trust store to avoid browser warnings.
 2. Go to Setup.
-3. Mark existing products by capability, for example existing ServiceNow,
-   Splunk, Defender, Proofpoint, Okta, GitHub, Entra ID, AWS, Azure, GCP,
-   Kubernetes, M365, or network/security tooling.
-4. Leave reference modules enabled only for gaps you want the platform to deploy.
-5. Review the setup ticket/work item created by the installer.
+3. Choose scope for each module:
+   - `Deploy reference` when the organization wants the bundled open-source
+     module installed or managed.
+   - `Integrate existing` when the organization already has an equivalent
+     enterprise tool such as ServiceNow, Splunk, Defender, Proofpoint, Okta,
+     GitHub, Entra ID, AWS, Azure, GCP, Kubernetes, M365, or network/security
+     tooling.
+   - `Off / not in scope` when the organization does not want that capability
+     deployed or integrated in this environment.
+4. Leave reference modules enabled only for gaps you want the platform to
+   deploy. Disabled modules are omitted from setup work, and dependent modules
+   are shown as blocked by disabled dependencies.
+5. Review the parent setup ticket and the scoped module setup tickets created
+   by the installer or Setup page.
 6. Assign or resume the setup agent when model credentials and approval policy
    are ready. If `--spawn-setup-agent` was used, the first agent run is a
    bounded bootstrap verification: it reads the setup ticket, runner health,
@@ -119,7 +129,14 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
    note, and stops with a 100% checkpoint. Follow-on deployment/integration
    work should be spawned from that ticket with explicit approvals.
 
-The setup ticket becomes the auditable deployment record. The onboarding agent must inspect installed modules, verify proxy and harness health, run model and spawn smoke tests, propose missing integrations, request access/credential approvals, and record notes/postmortems/workflows before marking setup complete. Agents must request changes before modifying infrastructure.
+The parent setup ticket becomes the auditable deployment record. Each scoped
+child ticket owns one module or integration so agents can work iTop, Wazuh,
+Mailcow, GitLab, Keycloak, proxy, bridge, email, CI/CD, and optional modules
+without mixing evidence. The onboarding agent must inspect installed modules,
+verify proxy and harness health, run model and spawn smoke tests, propose
+missing integrations, request access/credential approvals, and record
+notes/postmortems/workflows before marking setup complete. Agents must request
+changes before modifying infrastructure.
 
 The installer also deploys `agent-memory-db`, registers **Agent Memory** on the Tools page, and wires spawned dashboard agents to the `agent-memory` skill. Agent prompts, tool calls, session stops, deliberate notes, and smoke-test sentinels are stored in the shared memory service with async PostgreSQL writes, JSONB metadata, full-text search, trigram search, and pgvector retrieval. Running **Tools -> Check All** should report Agent Memory as healthy when the database service is deployed.
 
@@ -147,7 +164,10 @@ python installer/bootstrap.py --dry-run --profile full-it --harness hermes --pro
 
 Expected result: JSON status `dry_run`, a generated proxy config summary,
 selected harness/model, proxy URL, HTTPS dashboard URL, TLS summary, and a
-dry-run setup ticket handoff payload.
+dry-run setup-ticket handoff payload. Runtime setup ticket creation returns a
+`parent_ticket` plus `module_tickets` for actionable deploy/integrate modules;
+steps turned off by `module_actions` are reported in `disabled_modules`, and
+dependent steps are reported as `blocked_disabled_dependency`.
 
 The previous full one-line install proof used:
 

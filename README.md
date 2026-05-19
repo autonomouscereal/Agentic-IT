@@ -83,7 +83,18 @@ instead of changing dashboard route contracts.
 
 ## Platform Setup
 
-The Setup page reads `platform/manifest.json` and builds a deployment plan from capabilities. Operators can mark products as already existing, exclude modules, deploy missing reference modules, or keep planned modules as blueprint work. Creating a setup ticket turns deployment into an auditable task with the same notes, approvals, agent logs, workflows, and postmortems as normal operations.
+The Setup page reads `platform/manifest.json` and builds a deployment plan from
+capabilities. Operators choose scope per module: deploy the reference module,
+integrate an existing enterprise tool, or turn the module off for this
+organization. Disabled modules are omitted from setup work, and dependent
+modules are marked blocked so the operator can see exactly why they are out of
+scope.
+
+Creating setup work now creates one parent setup ticket plus one scoped child
+ticket for every enabled module or integration. The parent ticket is the overall
+deployment record; the child tickets keep iTop, Wazuh, Mailcow, GitLab,
+Keycloak, proxy, bridge, and other module work bounded enough for agents,
+approval gates, evidence, postmortems, and demos to stay readable.
 
 Installer entrypoints:
 
@@ -96,8 +107,9 @@ Installer entrypoints:
 ```
 
 The installer starts the control plane, built-in model gateway, PostgreSQL
-memory service, and setup ticket. Product-specific integration continues from
-the dashboard Setup page as an auditable agentic onboarding workflow.
+memory service, and setup-ticket handoff. Product-specific integration
+continues from the dashboard Setup page as auditable parent-plus-module
+onboarding work.
 
 The default profiles include the `agent-memory` module. The installer deploys a PostgreSQL/pgvector memory service, seeds the global agent-memory dashboard skill, and wires spawned Hermes and Claude Code agents with prompt/tool/session hooks so their work is searchable and auditable across agents.
 

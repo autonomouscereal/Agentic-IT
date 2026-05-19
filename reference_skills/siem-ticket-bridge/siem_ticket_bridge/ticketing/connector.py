@@ -3,7 +3,7 @@
 Abstract ticketing connector base.
 
 Defines the interface all ticketing backends must implement.
-All operations are fault-tolerant — failures return None, never raise.
+All operations are fault-tolerant - failures return None, never raise.
 """
 
 import abc
@@ -19,7 +19,7 @@ logger = logging.getLogger("siem_ticket_bridge.ticketing")
 
 
 class TicketingConnector(abc.ABC):
-    """Abstract ticketing connector — subclass for each platform (iTop, Jira, ServiceNow, etc.)."""
+    """Abstract ticketing connector - subclass for each platform (iTop, Jira, ServiceNow, etc.)."""
 
     def __init__(self, config: Dict[str, Any]):
         self.enabled = config.get("enabled", True)
@@ -61,7 +61,7 @@ class TicketingConnector(abc.ABC):
         return self._connected
 
     def safe_create_ticket(self, alert: Dict[str, Any]) -> Optional[str]:
-        """Create ticket — never raises. Returns ticket ID or None."""
+        """Create ticket - never raises. Returns ticket ID or None."""
         if not self.enabled:
             return None
         try:
@@ -72,7 +72,7 @@ class TicketingConnector(abc.ABC):
 
 
 class NullTicketingConnector(TicketingConnector):
-    """No-op connector — used when no ticketing system is configured."""
+    """No-op connector - used when no ticketing system is configured."""
 
     def _check_connectivity(self) -> bool:
         return False

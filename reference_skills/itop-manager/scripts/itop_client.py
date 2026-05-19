@@ -16,8 +16,8 @@ import urllib.request
 
 
 DEFAULT_ENV_FILES = [
-    "/home/cereal/SOC_TESTING/soc-dashboard/.env",
-    "/home/cereal/SOC_TESTING/itop-deployment/.env",
+    "/opt/agentic-it/SOC_TESTING/soc-dashboard/.env",
+    "/opt/agentic-it/SOC_TESTING/itop-deployment/.env",
 ]
 
 

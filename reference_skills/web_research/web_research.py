@@ -21,7 +21,7 @@ except ImportError as e:
     sys.exit(1)
 
 # Configuration
-DEFAULT_SEARXNG_URL = "http://192.168.50.222:7999"
+DEFAULT_SEARXNG_URL = "http://127.0.0.1:7999"
 
 class WebResearchTool:
     def __init__(self, searxng_url: str):

@@ -98,8 +98,32 @@ Do not put credentials, customer URLs with secrets, tokens, or passwords in the 
 
 - `GET /api/setup/manifest`: full registry.
 - `GET /api/setup/profiles`: setup profiles.
-- `POST /api/setup/plan`: generates an ordered plan from profile, includes, excludes, existing tools, and deploy-missing preference.
-- `POST /api/setup/ticket`: creates an auditable setup ticket and can optionally spawn a setup agent.
+- `POST /api/setup/plan`: generates an ordered plan from profile, includes,
+  excludes, existing tools, deploy-missing preference, and `module_actions`.
+- `POST /api/setup/ticket`: creates an auditable parent setup ticket, creates
+  one scoped child setup ticket for each actionable deploy/integrate module,
+  and can optionally spawn a bounded setup agent against the parent ticket.
+
+`module_actions` is the preferred setup scope contract:
+
+- `deploy`: deploy or manage the bundled reference module when it is deployable.
+- `integrate`: use an existing enterprise product or provider adapter for the
+  same capability.
+- `disabled`: turn the module off for this organization or environment.
+
+Legacy `existing_tools` and `exclude` values are still accepted for backward
+compatibility. Disabled modules are omitted from setup work and listed in
+`summary.disabled_modules`. Modules whose dependencies were disabled are
+included as `blocked_disabled_dependency` so operators can see why they cannot
+be worked until scope changes.
+
+Setup ticket responses keep the original `ticket` field for compatibility and
+also return:
+
+- `parent_ticket`: the overall deployment record.
+- `module_tickets`: child tickets scoped to one module or integration.
+- `skipped_steps`: document-only, disabled, or dependency-blocked plan steps.
+- `plan`: the generated plan used to create the tickets.
 
 ## Current Exclusions
 

@@ -18,7 +18,7 @@ type: skill
 
 # GitLab + Keycloak OIDC Integration
 
-Complete OIDC SSO integration between GitLab CE 17.11.3 and Keycloak 26.6.0 on the same Linux server (192.168.50.222), with an nginx TLS termination proxy, authorization workflows, and comprehensive testing.
+Complete OIDC SSO integration between GitLab CE 17.11.3 and Keycloak 26.6.0 on the same Linux server (127.0.0.1), with an nginx TLS termination proxy, authorization workflows, and comprehensive testing.
 
 ## Architecture
 
@@ -32,7 +32,7 @@ Browser <--HTTPS(8443)--> nginx proxy <----HTTP(8080)----> Keycloak 26.6.0
                                                                      PostgreSQL 16
 ```
 
-**Why nginx proxy?** GitLab 17.x requires HTTPS issuer URLs for OIDC. Keycloak runs on HTTP (port 8080). The nginx proxy provides TLS termination so the demo issuer can be `https://192.168.50.222:8443/realms/gitlab` while Keycloak itself remains on the internal HTTP service.
+**Why nginx proxy?** GitLab 17.x requires HTTPS issuer URLs for OIDC. Keycloak runs on HTTP (port 8080). The nginx proxy provides TLS termination so the demo issuer can be `https://127.0.0.1:8443/realms/gitlab` while Keycloak itself remains on the internal HTTP service.
 
 ### Fail-Safety Design
 
@@ -61,44 +61,44 @@ extra_hosts:
 This keeps the legacy `keycloak.internal` alias available for container-side
 compatibility while the browser-facing demo issuer uses the routable AI server
 URL. New demo deployments should set `KC_HOSTNAME` and `KC_HOSTNAME_ADMIN` to a
-full browser-routable URL such as `https://192.168.50.222:8443`, then configure
+full browser-routable URL such as `https://127.0.0.1:8443`, then configure
 GitLab OmniAuth with the matching realm issuer.
 
 ## File Structure
 
 ```
-/home/cereal/gitlab-keycloak-integration/    # Server deployment directory
-├── docker-compose.yml          # Nginx proxy service definition
-├── nginx/
-│   └── nginx.conf              # Nginx config: HTTPS 8443 -> HTTP 8080
-├── certs/
-│   ├── generate-certs.sh       # Self-signed cert generator with SAN
-│   ├── ca-cert.pem             # CA certificate (generated)
-│   ├── ca-key.pem              # CA private key (generated)
-│   ├── server-cert.pem         # Server certificate with SAN (generated)
-│   └── server-key.pem          # Server private key (generated)
-└── scripts/
-    ├── diagnose.sh             # Full diagnostic tool (13 checks)
-    ├── test_integration.sh     # E2E test suite (27 tests)
-    ├── manage_integration.sh   # Day-to-day management CLI
-    ├── setup-gitlab-auth.py    # GitLab groups, projects, protected branches via API
-    ├── fix-gitlab-oidc.py      # Python helper to write correct gitlab.rb OIDC config
-    ├── setup_oidc.py           # Keycloak realm, client, mappers, groups, roles, users
-    └── backup_restore.sh       # GitLab backup/restore utility
+/opt/agentic-it/gitlab-keycloak-integration/    # Server deployment directory
+|-- docker-compose.yml          # Nginx proxy service definition
+|-- nginx/
+|   `-- nginx.conf              # Nginx config: HTTPS 8443 -> HTTP 8080
+|-- certs/
+|   |-- generate-certs.sh       # Self-signed cert generator with SAN
+|   |-- ca-cert.pem             # CA certificate (generated)
+|   |-- ca-key.pem              # CA private key (generated)
+|   |-- server-cert.pem         # Server certificate with SAN (generated)
+|   `-- server-key.pem          # Server private key (generated)
+`-- scripts/
+    |-- diagnose.sh             # Full diagnostic tool (13 checks)
+    |-- test_integration.sh     # E2E test suite (27 tests)
+    |-- manage_integration.sh   # Day-to-day management CLI
+    |-- setup-gitlab-auth.py    # GitLab groups, projects, protected branches via API
+    |-- fix-gitlab-oidc.py      # Python helper to write correct gitlab.rb OIDC config
+    |-- setup_oidc.py           # Keycloak realm, client, mappers, groups, roles, users
+    `-- backup_restore.sh       # GitLab backup/restore utility
 
-C:/Users/cereal/.agents/skills/gitlab-keycloak-integration/  # Local skill directory
-├── SKILL.md                      # This file
-├── docker-compose.yml            # Template (identical to server copy)
-├── nginx/                        # Nginx config
-├── certs/                        # Cert generation script
-└── scripts/                      # All scripts above
+C:/Users/me/.agents/skills/gitlab-keycloak-integration/  # Local skill directory
+|-- SKILL.md                      # This file
+|-- docker-compose.yml            # Template (identical to server copy)
+|-- nginx/                        # Nginx config
+|-- certs/                        # Cert generation script
+`-- scripts/                      # All scripts above
 ```
 
 ## Prerequisites
 
 - **GitLab CE 17.11.3** running via Docker (managed by `gitlab-manager` skill)
 - **Keycloak 26.6.0** running via Docker (managed by `keycloak-manager` skill)
-- Both services already deployed and healthy on 192.168.50.222
+- Both services already deployed and healthy on 127.0.0.1
 - **server-manager** skill configured with SSH access to the server
 
 ## Integration Steps
@@ -107,14 +107,14 @@ C:/Users/cereal/.agents/skills/gitlab-keycloak-integration/  # Local skill direc
 
 ```bash
 # 1. Generate self-signed TLS certificates with SAN
-cd /home/cereal/gitlab-keycloak-integration
+cd /opt/agentic-it/gitlab-keycloak-integration
 bash certs/generate-certs.sh
 
-# Certificates valid for: keycloak.internal, localhost, 192.168.50.222, 127.0.0.1
+# Certificates valid for: keycloak.internal, localhost, 127.0.0.1, 127.0.0.1
 # SAN includes both DNS names and IP addresses for flexibility
 
 # 2. Deploy nginx proxy container
-cd /home/cereal/gitlab-keycloak-integration
+cd /opt/agentic-it/gitlab-keycloak-integration
 docker compose up -d
 
 # 3. Verify proxy health
@@ -123,7 +123,7 @@ curl -sk https://localhost:8443/realms/gitlab   # Should return 200
 
 # 4. GitLab must trust this CA before OmniAuth discovery succeeds
 docker exec gitlab mkdir -p /etc/gitlab/trusted-certs
-docker cp /home/cereal/gitlab-keycloak-integration/certs/ca-cert.pem gitlab:/etc/gitlab/trusted-certs/keycloak-internal-ca.crt
+docker cp /opt/agentic-it/gitlab-keycloak-integration/certs/ca-cert.pem gitlab:/etc/gitlab/trusted-certs/keycloak-internal-ca.crt
 docker exec gitlab gitlab-ctl reconfigure
 ```
 
@@ -138,17 +138,17 @@ docker exec gitlab gitlab-ctl reconfigure
 
 ```bash
 # Run the OIDC setup script (creates realm, client, mappers, groups, roles, users)
-cd /home/cereal/gitlab-keycloak-integration
+cd /opt/agentic-it/gitlab-keycloak-integration
 python3 scripts/setup_oidc.py
 ```
 
 This configures:
 
 **Realm:** `gitlab`
-- OIDC discovery at `https://192.168.50.222:8443/realms/gitlab/.well-known/openid-configuration`
+- OIDC discovery at `https://127.0.0.1:8443/realms/gitlab/.well-known/openid-configuration`
 
 **Client:** `gitlab` (confidential, standard flow + client credentials)
-- Redirect URI: `http://192.168.50.222/users/auth/openid_connect/callback`
+- Redirect URI: `http://127.0.0.1/users/auth/openid_connect/callback`
 - Client secret stored securely
 
 **Protocol Mappers:**
@@ -185,7 +185,7 @@ curl -s http://localhost/users/sign_in | grep -q "Keycloak" && echo "OK"
 
 # Verify GitLab can reach and trust the Keycloak issuer from inside the container
 docker exec gitlab bash -lc \
-  'curl -sk https://192.168.50.222:8443/realms/gitlab/.well-known/openid-configuration | head -c 200'
+  'curl -sk https://127.0.0.1:8443/realms/gitlab/.well-known/openid-configuration | head -c 200'
 ```
 
 **Critical gitlab.rb config:**
@@ -195,11 +195,11 @@ gitlab_rails["omniauth_providers"] = [
   {
     "name" => "openid_connect",
     "label" => "Keycloak",
-    "issuer" => "https://192.168.50.222:8443/realms/gitlab",
+    "issuer" => "https://127.0.0.1:8443/realms/gitlab",
     "client_options" => {
       "identifier" => "gitlab",
       "secret" => "<client-secret-from-keycloak>",
-      "redirect_uri" => "http://192.168.50.222/users/auth/openid_connect/callback"
+      "redirect_uri" => "http://127.0.0.1/users/auth/openid_connect/callback"
     }
   }
 ]
@@ -214,7 +214,7 @@ gitlab_rails["omniauth_block_auto_created_users"] = true
 
 ```bash
 # Set up GitLab groups, projects, protected branches, and CI/CD pipelines
-cd /home/cereal/gitlab-keycloak-integration
+cd /opt/agentic-it/gitlab-keycloak-integration
 python3 scripts/setup-gitlab-auth.py
 ```
 
@@ -229,10 +229,10 @@ Creates:
 
 ```bash
 # Run diagnostics (13 checks)
-bash /home/cereal/gitlab-keycloak-integration/scripts/diagnose.sh
+bash /opt/agentic-it/gitlab-keycloak-integration/scripts/diagnose.sh
 
 # Run E2E test suite (27 tests)
-bash /home/cereal/gitlab-keycloak-integration/scripts/test_integration.sh
+bash /opt/agentic-it/gitlab-keycloak-integration/scripts/test_integration.sh
 ```
 
 Expected: **13/13 diagnostics pass** and **27/27 tests pass**.
@@ -305,11 +305,11 @@ bash scripts/manage_integration.sh certs-expiry
 
 | Interface | URL |
 |-----------|-----|
-| GitLab Web UI | `http://192.168.50.222` |
-| GitLab API | `http://192.168.50.222/api/v4/...` |
-| Keycloak Admin Console | `https://192.168.50.222:8443/admin/master/console/` |
-| Keycloak via Proxy | `https://192.168.50.222:8443` |
-| OIDC Discovery | `https://192.168.50.222:8443/realms/gitlab/.well-known/openid-configuration` |
+| GitLab Web UI | `http://127.0.0.1` |
+| GitLab API | `http://127.0.0.1/api/v4/...` |
+| Keycloak Admin Console | `https://127.0.0.1:8443/admin/master/console/` |
+| Keycloak via Proxy | `https://127.0.0.1:8443` |
+| OIDC Discovery | `https://127.0.0.1:8443/realms/gitlab/.well-known/openid-configuration` |
 | Nginx Health | `https://localhost:8443/nginx-health` |
 
 ## Troubleshooting
@@ -375,10 +375,10 @@ docker exec gitlab gitlab-ctl reconfigure
 
 ```bash
 # Check cert expiry
-openssl x509 -in /home/cereal/gitlab-keycloak-integration/certs/server-cert.pem -noout -dates
+openssl x509 -in /opt/agentic-it/gitlab-keycloak-integration/certs/server-cert.pem -noout -dates
 
 # Regenerate certs (10-year validity)
-bash /home/cereal/gitlab-keycloak-integration/certs/generate-certs.sh
+bash /opt/agentic-it/gitlab-keycloak-integration/certs/generate-certs.sh
 docker restart keycloak-nginx
 ```
 
@@ -408,7 +408,7 @@ To deploy this integration on a new server:
 
 1. [ ] Deploy GitLab CE 17.x via `gitlab-manager` skill
 2. [ ] Deploy Keycloak 26.x via `keycloak-manager` skill
-3. [ ] Copy `gitlab-keycloak-integration/` to server at `/home/cereal/gitlab-keycloak-integration/`
+3. [ ] Copy `gitlab-keycloak-integration/` to server at `/opt/agentic-it/gitlab-keycloak-integration/`
 4. [ ] Generate TLS certs: `bash certs/generate-certs.sh`
 5. [ ] Start nginx proxy: `docker compose up -d`
 6. [ ] Run Keycloak OIDC setup: `python3 scripts/setup_oidc.py`

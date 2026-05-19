@@ -1,7 +1,7 @@
 # AI Server Notes
 
 ## Basic Information
-- **IP Address:** 192.168.50.222
+- **IP Address:** 127.0.0.1
 - **Username:** cereal
 - **SSH Port:** 22
 - **Password Authentication:** Enabled (stored in encrypted credential vault)
@@ -20,12 +20,12 @@ AI/ML workloads, inference services, and model deployment infrastructure.
 ## Infrastructure Layout
 ```
 /var/
-├── ai-models/        # Machine learning models
-├── inference/        # Inference logs and outputs
-└── data/             # Training and inference datasets
+|-- ai-models/        # Machine learning models
+|-- inference/        # Inference logs and outputs
+`-- data/             # Training and inference datasets
 
 /opt/
-└── ml-services/      # ML service deployments
+`-- ml-services/      # ML service deployments
 ```
 
 ## Common Commands
@@ -33,7 +33,7 @@ AI/ML workloads, inference services, and model deployment infrastructure.
 ### Connection & Monitoring
 ```bash
 # Interactive SSH session
-ssh cereal@192.168.50.222
+ssh cereal@127.0.0.1
 
 # Check GPU utilization
 nvidia-smi

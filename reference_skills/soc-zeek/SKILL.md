@@ -40,11 +40,11 @@ docker exec zeek-soc tail -50 /var/log/zeek/current/*.log 2>/dev/null
 
 ## Wazuh Integration
 
-Zeek JSON logs are forwarded to Wazuh for centralized alerting. Zeek works completely standalone — if Wazuh goes down, Zeek keeps capturing.
+Zeek JSON logs are forwarded to Wazuh for centralized alerting. Zeek works completely standalone - if Wazuh goes down, Zeek keeps capturing.
 
 ### How it Works
 
-1. Zeek produces JSON logs at `/home/cereal/SOC_TESTING/logs/zeek/*.log`
+1. Zeek produces JSON logs at `/opt/agentic-it/SOC_TESTING/logs/zeek/*.log`
 2. Wazuh manager monitors these files via `<localfile>` config (JSON format)
 3. Wazuh's built-in JSON decoder extracts all fields (`conn_state`, `id.orig_h`, etc.)
 4. Custom rules (100900-100999) match on Zeek-specific fields to generate alerts
@@ -65,9 +65,9 @@ Zeek JSON logs are forwarded to Wazuh for centralized alerting. Zeek works compl
 
 - Zeek continues capturing and writing logs normally
 - The log forwarder (if running) buffers and retries with backoff
-- No log loss — Wazuh reads from file positions on reconnect
+- No log loss - Wazuh reads from file positions on reconnect
 
-### Testing Zeek → Wazuh
+### Testing Zeek -> Wazuh
 
 ```bash
 # Test a Zeek log against Wazuh rules (run on AI Server)
@@ -76,5 +76,5 @@ docker exec wazuh_deploy-wazuh.manager-1 bash -c 'echo "{\"ts\":1714156800,\"uid
 # Expected: Rule 100903 fires (level 7, "Rejected connection")
 
 # Run full integration tests
-cd /home/cereal/SOC_TESTING/log_forwarder && python3 test_integration.py
+cd /opt/agentic-it/SOC_TESTING/log_forwarder && python3 test_integration.py
 ```

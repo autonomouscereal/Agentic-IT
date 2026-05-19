@@ -74,6 +74,31 @@ def _with_skill_status(module):
     return module
 
 
+def _normalize_module_actions(module_actions=None):
+    actions = {}
+    if isinstance(module_actions, dict):
+        items = module_actions.items()
+    elif isinstance(module_actions, list):
+        items = []
+        for row in module_actions:
+            if isinstance(row, dict):
+                module_id = row.get("module_id") or row.get("id")
+                action = row.get("action") or row.get("mode")
+                if module_id:
+                    items.append((module_id, action))
+    else:
+        items = []
+    for module_id, action in items:
+        normalized = str(action or "").strip().lower().replace("-", "_")
+        if normalized in ("off", "skip", "skipped", "disable", "disabled", "not_in_scope", "none"):
+            actions[str(module_id)] = "disabled"
+        elif normalized in ("existing", "integrate", "integrate_existing", "use_existing"):
+            actions[str(module_id)] = "integrate"
+        elif normalized in ("deploy", "deploy_reference", "reference", "install"):
+            actions[str(module_id)] = "deploy"
+    return actions
+
+
 def _ordered_modules(profile, include=None, exclude=None):
     manifest = load_manifest()
     profiles = manifest.get("profiles", {})
@@ -93,9 +118,15 @@ def _ordered_modules(profile, include=None, exclude=None):
         module = modules.get(module_id)
         if not module:
             return
+        disabled_dependencies = []
         for dep_id in module.get("depends_on", []):
-            visit(dep_id)
+            if dep_id in excluded:
+                disabled_dependencies.append(dep_id)
+            else:
+                visit(dep_id)
         seen.add(module_id)
+        module = dict(module)
+        module["disabled_dependencies"] = disabled_dependencies
         ordered.append(module)
 
     for module_id in selected:
@@ -103,29 +134,44 @@ def _ordered_modules(profile, include=None, exclude=None):
     return ordered
 
 
-def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=None, deploy_missing=True):
+def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=None, deploy_missing=True, module_actions=None):
+    actions = _normalize_module_actions(module_actions)
     existing = set(existing_tools or [])
+    existing.update(module_id for module_id, action in actions.items() if action == "integrate")
+    disabled = set(exclude or [])
+    disabled.update(module_id for module_id, action in actions.items() if action == "disabled")
+    forced_deploy = {module_id for module_id, action in actions.items() if action == "deploy"}
     steps = []
-    modules = _ordered_modules(profile, include, exclude)
+    modules = _ordered_modules(profile, include, disabled)
 
     for module in modules:
         module_id = module["id"]
         has_existing = module_id in existing
-        status = "integrate_existing" if has_existing else ("deploy" if deploy_missing and module.get("deployable") else "document")
-        if module.get("status") in ("planned", "blueprint") and not has_existing:
+        blocked_dependencies = module.get("disabled_dependencies") or []
+        if blocked_dependencies:
+            status = "blocked_disabled_dependency"
+        elif has_existing:
+            status = "integrate_existing"
+        elif module_id in forced_deploy and module.get("deployable"):
+            status = "deploy"
+        elif module.get("status") in ("planned", "blueprint"):
             status = "blueprint"
-        if module.get("deploy_strategy") == "external" and not has_existing:
+        elif module.get("deploy_strategy") == "external":
             status = "external_optional"
+        else:
+            status = "deploy" if deploy_missing and module.get("deployable") else "document"
 
         steps.append({
             "module_id": module_id,
             "name": module.get("name"),
             "category": module.get("category"),
             "status": status,
+            "module_action": actions.get(module_id) or ("integrate" if has_existing else "deploy"),
             "deploy_strategy": module.get("deploy_strategy"),
             "skill": module.get("skill"),
             "skill_available": module.get("skill_available"),
             "depends_on": module.get("depends_on", []),
+            "disabled_dependencies": blocked_dependencies,
             "required_secrets": module.get("required_secrets", []),
             "health_checks": module.get("health_checks", []),
             "test_commands": module.get("test_commands", []),
@@ -143,6 +189,10 @@ def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=N
             "integrate_existing": len([s for s in steps if s["status"] == "integrate_existing"]),
             "blueprint": len([s for s in steps if s["status"] == "blueprint"]),
             "external_optional": len([s for s in steps if s["status"] == "external_optional"]),
+            "document": len([s for s in steps if s["status"] == "document"]),
+            "blocked": len([s for s in steps if s["status"] == "blocked_disabled_dependency"]),
+            "disabled": len(disabled),
+            "disabled_modules": sorted(disabled),
             "missing_skills": [s["module_id"] for s in steps if s.get("skill") and not s.get("skill_available")],
         },
         "guardrails": [
@@ -193,6 +243,50 @@ def plan_to_ticket_description(plan, ai_base_url=None, model=None, notes=None, r
             lines.append(f"   Required secret inputs: {', '.join(step['required_secrets'])}")
         if step.get("health_checks"):
             lines.append(f"   Health checks: {', '.join(step['health_checks'])}")
+        if step.get("disabled_dependencies"):
+            lines.append(f"   Blocked by disabled module(s): {', '.join(step['disabled_dependencies'])}")
+    disabled = plan.get("summary", {}).get("disabled_modules") or []
+    if disabled:
+        lines.extend(["", "Disabled / not in scope modules:", ", ".join(disabled)])
+    if notes:
+        lines.extend(["", "Operator notes:", notes])
+    return "\n".join(lines)
+
+
+def module_ticket_description(parent_ticket_id, step, runtime=None, notes=None):
+    runtime = runtime or {}
+    lines = [
+        f"Scoped setup work item for module `{step.get('module_id')}`.",
+        "",
+        f"Parent setup ticket: {parent_ticket_id}",
+        f"Module: {step.get('name')}",
+        f"Category: {step.get('category') or '<unknown>'}",
+        f"Action: {step.get('status')}",
+        f"Requested mode: {step.get('module_action')}",
+        f"Deploy strategy: {step.get('deploy_strategy') or '<none>'}",
+        f"Skill: {step.get('skill') or '<none>'} available={step.get('skill_available')}",
+        f"Proxy mode: {runtime.get('proxy_mode') or '<unknown>'}",
+        f"Proxy URL: {runtime.get('proxy_url') or '<not required>'}",
+        f"Agent harness: {runtime.get('harness') or '<auto/configured>'}",
+        f"Provider route: {runtime.get('provider') or '<auto/configured>'}",
+        "",
+        "Scope:",
+        "- Work only this module or integration.",
+        "- Request credentials or access through approval gates before using them.",
+        "- Run listed health checks and smoke tests before marking complete.",
+        "- Add human-readable notes and evidence to this ticket.",
+    ]
+    if step.get("required_secrets"):
+        lines.extend(["", "Required secret inputs:"])
+        lines.extend([f"- {item}" for item in step.get("required_secrets") or []])
+    if step.get("health_checks"):
+        lines.extend(["", "Health checks:"])
+        lines.extend([f"- {item}" for item in step.get("health_checks") or []])
+    if step.get("test_commands"):
+        lines.extend(["", "Suggested tests:"])
+        lines.extend([f"- {item}" for item in step.get("test_commands") or []])
+    if step.get("notes"):
+        lines.extend(["", "Module notes:", step.get("notes")])
     if notes:
         lines.extend(["", "Operator notes:", notes])
     return "\n".join(lines)

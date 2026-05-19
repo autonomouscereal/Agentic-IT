@@ -1,4 +1,4 @@
-"""SIEM connectors — pluggable, fault-tolerant, SIEM-agnostic."""
+"""SIEM connectors - pluggable, fault-tolerant, SIEM-agnostic."""
 
 from .connector import SIEMConnector, NullConnector
 from .wazuh_connector import WazuhConnector
@@ -22,6 +22,6 @@ def register_connector(name: str, cls) -> None:
 
 
 def create_connector(siem_type: str = "wazuh", config: dict = None) -> SIEMConnector:
-    """Factory — returns appropriate connector for the named SIEM."""
+    """Factory - returns appropriate connector for the named SIEM."""
     cls = _connector_map.get(siem_type.lower(), NullConnector)
     return cls(config or {})

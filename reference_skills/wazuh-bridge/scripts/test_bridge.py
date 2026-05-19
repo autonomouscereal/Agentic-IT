@@ -73,7 +73,7 @@ def load_config():
         "keycloak_admin": os.environ.get("KEYCLOAK_ADMIN_USER", "admin"),
         "keycloak_password": os.environ.get("KEYCLOAK_ADMIN_PASSWORD"),
         "bridge_realm": os.environ.get("BRIDGE_REALM", "wazuh"),
-        "wazuh_url": os.environ.get("WAZUH_URL", "https://192.168.50.222:26500").rstrip("/"),
+        "wazuh_url": os.environ.get("WAZUH_URL", "https://127.0.0.1:26500").rstrip("/"),
         "wazuh_username": os.environ.get("WAZUH_USERNAME", "wazuh-wui"),
         "wazuh_password": os.environ.get("WAZUH_PASSWORD"),
     }
@@ -247,7 +247,7 @@ def test_user_sync(config, runner):
     wz_tk = wazuh_auth(wz_url, config["wazuh_username"], config["wazuh_password"])
 
     if not kc_tk or not wz_tk:
-        runner.test("Create user Keycloak → sync → verify Wazuh", False)
+        runner.test("Create user Keycloak -> sync -> verify Wazuh", False)
         runner.test("Group membership maps to role", False)
         runner.test("Deleted user disabled in Wazuh", False)
         return
@@ -275,7 +275,7 @@ def test_user_sync(config, runner):
     user_list = wz_users.get("data", {}).get("affected_items", []) if "data" in wz_users else []
     wz_has_user = any(u.get("username") == test_user for u in user_list)
 
-    runner.test("Create user Keycloak → sync → verify Wazuh", user_created and sync_ok and wz_has_user)
+    runner.test("Create user Keycloak -> sync -> verify Wazuh", user_created and sync_ok and wz_has_user)
 
     # Test: group membership maps to role
     # (verified by checking sync state has the user)
@@ -324,21 +324,21 @@ def test_role_mapping(config, runner):
 
 def test_graceful_degradation(config, runner):
     print("\n=== Graceful Degradation Tests ===")
-    # Test: Keycloak down → Wazuh still works
+    # Test: Keycloak down -> Wazuh still works
     bad_config = dict(config)
     bad_config["keycloak_url"] = "http://10.255.255.1:8080"
     sys.path.insert(0, SCRIPT_DIR)
     from sync_bridge import run_sync_cycle
     results = run_sync_cycle(bad_config)
     kc_down_handled = not results["keycloak_reachable"]
-    runner.test("Keycloak down → Wazuh works", kc_down_handled)
+    runner.test("Keycloak down -> Wazuh works", kc_down_handled)
 
-    # Test: Wazuh down → Keycloak still works
+    # Test: Wazuh down -> Keycloak still works
     bad_config2 = dict(config)
     bad_config2["wazuh_url"] = "https://10.255.255.1:26500"
     results2 = run_sync_cycle(bad_config2)
     wz_down_handled = not results2["wazuh_reachable"]
-    runner.test("Wazuh down → Keycloak works", wz_down_handled)
+    runner.test("Wazuh down -> Keycloak works", wz_down_handled)
 
 
 def test_sync_bridge_cli(config, runner):

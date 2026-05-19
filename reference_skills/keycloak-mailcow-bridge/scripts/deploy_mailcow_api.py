@@ -35,17 +35,17 @@ def read_env_file(path):
     return values
 
 
-# ─── Configuration ──────────────────────────────────────────────────────
+# --- Configuration ------------------------------------------------------
 
-MAILCOW_DOCKERIZED_WEB = "/home/cereal/mailcow-dockerized/data/web"
-NGINX_CONF_DIR = "/home/cereal/Mailcow/deploy/api-nginx"
-MAILCOW_ENV_FILE = os.environ.get("MAILCOW_ENV_FILE", "/home/cereal/Mailcow/deploy/.env")
+MAILCOW_DOCKERIZED_WEB = "/opt/agentic-it/mailcow-dockerized/data/web"
+NGINX_CONF_DIR = "/opt/agentic-it/Mailcow/deploy/api-nginx"
+MAILCOW_ENV_FILE = os.environ.get("MAILCOW_ENV_FILE", "/opt/agentic-it/Mailcow/deploy/.env")
 API_PORT = 8081
 UI_DEMO_PORT = int(os.environ.get("MAILCOW_UI_DEMO_PORT", "2581"))
 ROUNDCUBE_PORT = int(os.environ.get("MAILCOW_ROUNDCUBE_PORT", "2582"))
 PHPFPM_PORT = 9002
 ROUNDCUBE_IMAGE = os.environ.get("ROUNDCUBE_IMAGE", "roundcube/roundcubemail:latest-apache")
-ROUNDCUBE_DIR = os.environ.get("MAILCOW_ROUNDCUBE_DIR", "/home/cereal/Mailcow/deploy/roundcube")
+ROUNDCUBE_DIR = os.environ.get("MAILCOW_ROUNDCUBE_DIR", "/opt/agentic-it/Mailcow/deploy/roundcube")
 REPORT_PHISH_TOKEN_FILE = os.path.join(NGINX_CONF_DIR, ".roundcube_report_token")
 MAILCOW_ENV = read_env_file(MAILCOW_ENV_FILE)
 MYSQL_DATABASE = os.environ.get("MYSQL_DATABASE") or os.environ.get("DBNAME") or MAILCOW_ENV.get("DBNAME") or "mailcow"
@@ -53,7 +53,7 @@ MAILCOW_API_KEY = None  # Will be generated if not found
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-# ─── Helpers ────────────────────────────────────────────────────────────
+# --- Helpers ------------------------------------------------------------
 
 def run(cmd, check=True):
     """Run a shell command and return output."""
@@ -157,7 +157,7 @@ def wait_for_port(host, port, timeout=30):
     return False
 
 
-# ─── Step 1: Fix API table schema ──────────────────────────────────────
+# --- Step 1: Fix API table schema --------------------------------------
 
 def setup_api_table():
     """Create proper API table schema if it doesn't exist."""
@@ -249,7 +249,7 @@ def setup_identity_provider_defaults():
         "realm": os.environ.get("MAILCOW_IAM_REALM") or MAILCOW_ENV.get("MAILCOW_IAM_REALM", "mailcow"),
         "client_id": os.environ.get("MAILCOW_IAM_CLIENT_ID") or MAILCOW_ENV.get("MAILCOW_IAM_CLIENT_ID", "mailcow-oidc"),
         "client_secret": client_secret,
-        "redirect_url": os.environ.get("MAILCOW_IAM_REDIRECT_URL") or MAILCOW_ENV.get("MAILCOW_IAM_REDIRECT_URL", "http://192.168.50.222:2581"),
+        "redirect_url": os.environ.get("MAILCOW_IAM_REDIRECT_URL") or MAILCOW_ENV.get("MAILCOW_IAM_REDIRECT_URL", "http://127.0.0.1:2581"),
         "version": os.environ.get("MAILCOW_IAM_VERSION") or MAILCOW_ENV.get("MAILCOW_IAM_VERSION", "26"),
         "mailpassword_flow": "1",
         "periodic_sync": "1",
@@ -609,7 +609,7 @@ def install_roundcube_plugin():
     print("  Roundcube Report Phish plugin: OK")
 
 
-# ─── Step 2: Deploy php-fpm-mailcow-api ────────────────────────────────
+# --- Step 2: Deploy php-fpm-mailcow-api --------------------------------
 
 def deploy_php_fpm(report_token):
     """Deploy parallel php-fpm container with web code on port 9002."""
@@ -727,7 +727,7 @@ exec php-fpm
         print(f"  [WARN] php-fpm port {PHPFPM_PORT} not ready after 30s")
 
 
-# ─── Step 3: Deploy nginx-mailcow-api ──────────────────────────────────
+# --- Step 3: Deploy nginx-mailcow-api ----------------------------------
 
 def deploy_roundcube(report_token):
     """Deploy a real Roundcube webmail client in front of Mailcow IMAP/SMTP."""
@@ -1030,7 +1030,7 @@ http {{
         print(f"  [WARN] nginx port {API_PORT} not ready after 30s")
 
 
-# ─── Step 4: Test API ──────────────────────────────────────────────────
+# --- Step 4: Test API --------------------------------------------------
 
 def test_api(api_key):
     """Test the API endpoints."""
@@ -1110,7 +1110,7 @@ def test_api(api_key):
     return True
 
 
-# ─── Main ──────────────────────────────────────────────────────────────
+# --- Main --------------------------------------------------------------
 
 def test_ui():
     """Smoke test the optional demo UI without credentials."""

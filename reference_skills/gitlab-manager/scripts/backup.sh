@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-DEPLOY_DIR="${DEPLOY_DIR:-/home/cereal/gitlab}"
+DEPLOY_DIR="${DEPLOY_DIR:-/opt/agentic-it/gitlab}"
 BACKUP_DIR="/var/opt/gitlab/backups"
 
 log_info() { echo "[INFO] $*"; }

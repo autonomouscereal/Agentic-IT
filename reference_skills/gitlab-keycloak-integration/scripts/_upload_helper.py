@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_SERVER_MANAGER = Path("C:/Users/cereal/.agents/skills/server-manager/ssh_client.py")
-DEFAULT_REMOTE_DIR = "/home/cereal/gitlab-keycloak-integration/scripts"
+DEFAULT_SERVER_MANAGER = Path("C:/Users/me/.agents/skills/server-manager/ssh_client.py")
+DEFAULT_REMOTE_DIR = "/opt/agentic-it/gitlab-keycloak-integration/scripts"
 FILES_TO_UPLOAD = [
     "diagnose.sh",
     "test_integration.sh",

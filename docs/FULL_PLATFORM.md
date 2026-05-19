@@ -61,10 +61,15 @@ Email is a good example of the contract boundary. Mailcow is the current referen
 2. Open the Setup page.
 3. Pick a profile: control plane only, SOC baseline, full IT automation, or
    broader enterprise operations as those profiles mature.
-4. Mark which capabilities already exist in the customer environment.
-5. Leave gaps enabled so the system can deploy reference open-source modules where approved.
-6. Create a setup ticket, optionally with an agent.
-7. The setup agent reads the ticket, plans integrations, requests approvals for changes, runs health checks, and documents progress in the ticket.
+4. For each module, choose `Deploy reference`, `Integrate existing`, or
+   `Off / not in scope`.
+5. Leave gaps enabled only when the organization wants the system to deploy
+   reference open-source modules where approved.
+6. Create setup work. The platform creates one parent setup ticket plus scoped
+   child tickets for each enabled module or integration.
+7. The setup agent reads the parent ticket, summarizes the child module tickets,
+   plans integrations, requests approvals for changes, runs health checks, and
+   documents progress without mixing unrelated module evidence.
 8. Operators review completed setup, approve workflows, and then enable ticket or scheduled triggers.
 
 ## Reference Modules

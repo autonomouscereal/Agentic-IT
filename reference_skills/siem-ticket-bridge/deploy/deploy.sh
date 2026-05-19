@@ -1,5 +1,5 @@
 #!/bin/bash
-# SIEM-Ticketing Bridge — One-shot deployment script
+# SIEM-Ticketing Bridge - One-shot deployment script
 # Deploys the bridge as a systemd service on the AI Server.
 #
 # Usage: bash deploy.sh [--test]
@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-DEPLOY_DIR="/home/cereal/SOC_TESTING/siem-ticket-bridge"
+DEPLOY_DIR="/opt/agentic-it/SOC_TESTING/siem-ticket-bridge"
 LOG_DIR="/var/log/siem-ticket-bridge"
 STATE_DIR="/var/lib/siem-ticket-bridge"
 ENV_FILE="${DEPLOY_DIR}/.env"

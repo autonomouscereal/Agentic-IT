@@ -8,8 +8,8 @@ This skill enables seamless interaction with two remote servers:
 
 | Server | IP Address | Purpose |
 |--------|------------|---------|
-| **Media Server** | 192.168.50.250 | Media streaming, storage, content delivery |
-| **AI Server** | 192.168.50.222 | AI/ML workloads, inference services, model deployment |
+| **Media Server** | 127.0.0.1 | Media streaming, storage, content delivery |
+| **AI Server** | 127.0.0.1 | AI/ML workloads, inference services, model deployment |
 
 ## Environment Variables
 
@@ -18,8 +18,8 @@ from environment variables when explicitly configured. Do not store plaintext
 passwords in scripts, docs, or repo files.
 
 ```bash
-python "C:/Users/cereal/.agents/skills/server-manager/credman.py" set ai "<from secure handoff>"
-python "C:/Users/cereal/.agents/skills/server-manager/credman.py" set media "<from secure handoff>"
+python "C:/Users/me/.agents/skills/server-manager/credman.py" set ai "<from secure handoff>"
+python "C:/Users/me/.agents/skills/server-manager/credman.py" set media "<from secure handoff>"
 ```
 
 ## Commands
@@ -84,13 +84,13 @@ server.sh notes ai
 
 ```
 .agents/skills/server-manager/
-├── README.md              # This documentation file
-├── server.sh              # Main entry point script
-├── ssh-servers.sh         # Core SSH management logic
-├── quick-ssh.sh           # Quick connection wrapper
-└── notes/
-    ├── media-server.md    # Media Server documentation
-    └── ai-server.md       # AI Server documentation
+|-- README.md              # This documentation file
+|-- server.sh              # Main entry point script
+|-- ssh-servers.sh         # Core SSH management logic
+|-- quick-ssh.sh           # Quick connection wrapper
+`-- notes/
+    |-- media-server.md    # Media Server documentation
+    `-- ai-server.md       # AI Server documentation
 ```
 
 ## Features

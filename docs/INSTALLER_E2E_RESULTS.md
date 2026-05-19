@@ -4,6 +4,30 @@ Last verified: 2026-05-19
 
 ## HTTPS/Hermes One-Line Regression - 2026-05-19
 
+Setup fan-out source regression on 2026-05-19:
+
+- Setup planning now accepts per-module `module_actions` so each capability can
+  be set to deploy reference, integrate existing, or off/not in scope.
+- Setup ticket creation now returns a parent setup ticket plus scoped child
+  module tickets for actionable deploy/integrate steps. Disabled modules are
+  omitted from setup work, while dependent modules are reported as
+  `blocked_disabled_dependency`.
+- Local source validation passed with `147 passed`, JS syntax checks, and text
+  hygiene. `scripts/smoke_setup_platform.py` now asserts disabled modules,
+  blocked dependencies, and child module ticket creation.
+- Live hardened API smoke passed against `http://127.0.0.1:25480` with service
+  token auth after deployment: setup parent ticket `624` was created with `7`
+  scoped module tickets, disabled module scope, and blocked dependency
+  validation.
+- Authenticated HTTPS Chrome check passed against
+  `https://192.168.50.222:25443`: `demo_account_1` opened Setup, the per-module
+  action selector rendered `Deploy reference`, `Integrate existing`, and
+  `Off / not in scope`, and no console/page/http errors were observed.
+- Post-rebuild live checks passed after the agent runner safety patch:
+  setup-plan smoke returned `28` plan steps, `1` disabled module, and `4`
+  blocked dependency steps; the container curl guard accepted explicit allowed
+  host lists and still emitted the suspicious external URL block rule.
+
 Backup before destructive testing:
 
 - Local server-manager vault backup: `2026-05-19_033810`.
@@ -121,16 +145,18 @@ Related real-agent regression proofs on the restored live stack:
   completed at 100%.
 - Wazuh lease-gated access: ticket `618`, original agent `253`, resumed agent
   `254`, change `177`, Wazuh access granted, ticket resolved.
-- Complex phishing plus EDR proof: ticket `621`, iTop `Incident::401`,
-  agents `256`/`257`/`258`, access request `29`, changes `178` and `179`,
-  postmortem `105`, workflow `4` updated. The run validated requester
-  response wait/resume, dashboard steering, iTop public_log steering, denied
-  Wazuh lease, access approval/resume, containment approval/resume, postmortem
-  review/promotion, and no active processes afterward.
+- Complex phishing plus EDR regression case: ticket `621`, iTop
+  `Incident::401`, agents `256`/`257`/`258`, access request `29`, changes
+  `178` and `179`, postmortem `105`, workflow `4` updated. The run validated
+  requester response wait/resume, dashboard steering, iTop public_log steering,
+  denied Wazuh lease, access approval/resume, containment approval/resume,
+  postmortem review/promotion, and no active processes afterward. It also
+  exposed unsafe direct suspicious URL retrieval behavior, so it has been
+  demoted from lead demo proof and converted into a URL-safety regression case.
 - Authenticated Chrome validation passed against
-  `https://192.168.50.222:25443`: `demo_account_1` logged in, the `Demo
-  Proofs` filter rendered ticket `621` first with iTop/Demo badges, the ticket
-  modal loaded the evidence trail, and no console/page/http errors remained.
+  `https://192.168.50.222:25443`: `demo_account_1` logged in, the curated
+  `Demo Proofs` filter rendered with iTop/Demo badges, the ticket modal loaded
+  the evidence trail, and no console/page/http errors remained.
 - Authenticated Chrome tab sweep passed across Overview, Tickets, Intake,
   Agents, Changes, Workflows, Postmortems, CI/CD, Learning, Tools, Setup,
   Access, and Audit with no console/page/http errors.

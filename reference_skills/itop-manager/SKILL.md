@@ -1,8 +1,8 @@
 ---
 name: itop-manager
-description: Manage the iTop ITSM v3.2.1 instance on AI Server (192.168.50.222) via Docker. Create/update/delete incidents, changes, requests, servers, and CMDB objects through the REST API. Apply workflow stimuli for state transitions including approval chains. Execute the Python client script remotely via SSH.
+description: Manage the iTop ITSM v3.2.1 instance on AI Server (127.0.0.1) via Docker. Create/update/delete incidents, changes, requests, servers, and CMDB objects through the REST API. Apply workflow stimuli for state transitions including approval chains. Execute the Python client script remotely via SSH.
 when_to_use: iTop operations, ITSM ticket management, incident/change/request lifecycle, Docker container management for iTop, REST API calls to iTop, ITIL workflows, approval chains, assignment groups, escalation testing.
-allowed-tools: Bash("C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" "--server" "ai" "--execute" "*"), Read, Edit, Write, Glob, Grep
+allowed-tools: Bash("C:/Users/me/.agents/skills/server-manager/ssh_client.py" "--server" "ai" "--execute" "*"), Read, Edit, Write, Glob, Grep
 ---
 
 # iTop ITSM Manager
@@ -14,7 +14,7 @@ Full deployment blueprint (Docker Compose, all troubleshooting issues, recovery 
 ## Remote Execution
 
 ```bash
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "python3 /home/cereal/SOC_TESTING/itop-deployment/scripts/itop_client.py check"
+python "C:/Users/me/.agents/skills/server-manager/ssh_client.py" --server ai --execute "python3 /opt/agentic-it/SOC_TESTING/itop-deployment/scripts/itop_client.py check"
 ```
 
 ## Quick Operations
@@ -147,13 +147,13 @@ NormalChange approval fields populate progressively through the lifecycle:
 
 ### Escalation Fields
 Available on Ticket subclasses (Incident, UserRequest):
-- `escalation_flag` — set to `"yes"` to flag for escalation
-- `escalation_reason` — free-text reason
-- `tto_escalation_deadline` — time-to-operate escalation deadline
-- `ttr_escalation_deadline` — time-to-respond escalation deadline
-- `pending_reason` — set via `ev_pending` stimulus
-- `last_pending_date` — auto-populated when pending
-- `cumulatedpending` — accumulated pending time
+- `escalation_flag` - set to `"yes"` to flag for escalation
+- `escalation_reason` - free-text reason
+- `tto_escalation_deadline` - time-to-operate escalation deadline
+- `ttr_escalation_deadline` - time-to-respond escalation deadline
+- `pending_reason` - set via `ev_pending` stimulus
+- `last_pending_date` - auto-populated when pending
+- `cumulatedpending` - accumulated pending time
 
 ### Assignment Groups
 - Create `Team` objects with `name` + `org_id`
@@ -182,8 +182,8 @@ All POST to `/webservices/rest.php` with body: `version=1.4&json_output=1&json_d
 
 | Item | Value |
 |------|-------|
-| Host | 192.168.50.222 (Debian, Docker) |
-| Deploy path | `/home/cereal/SOC_TESTING/itop-deployment` |
+| Host | 127.0.0.1 (Debian, Docker) |
+| Deploy path | `/opt/agentic-it/SOC_TESTING/itop-deployment` |
 | Container | `itop-deployment-itop-1` |
 | Port mapping | 25432 -> 80 |
 | DB | MariaDB LTS, user `itop`, password (vault key: `itop_mysql`) |
@@ -224,7 +224,7 @@ If the login page loads but CSS/fonts/images are broken and generated URLs look
 like `http://HOST:25432images/...`, update `app_root_url` so it ends with `/`:
 
 ```bash
-docker exec itop-deployment-itop-1 sh -lc "chmod 0640 /var/www/html/conf/production/config-itop.php && sed -i \"s#'app_root_url' => 'http://192.168.50.222:25432'#'app_root_url' => 'http://192.168.50.222:25432/'#\" /var/www/html/conf/production/config-itop.php && chmod 0440 /var/www/html/conf/production/config-itop.php"
+docker exec itop-deployment-itop-1 sh -lc "chmod 0640 /var/www/html/conf/production/config-itop.php && sed -i \"s#'app_root_url' => 'http://127.0.0.1:25432'#'app_root_url' => 'http://127.0.0.1:25432/'#\" /var/www/html/conf/production/config-itop.php && chmod 0440 /var/www/html/conf/production/config-itop.php"
 ```
 
 Use the environment's real iTop base URL. The lab fix was verified on

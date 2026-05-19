@@ -4,6 +4,86 @@ Last updated: 2026-05-19.
 
 ## Found During 2026-05-19 Agentic Regression Push
 
+### Ticket 621 contained unsafe direct suspicious URL retrieval
+
+Status: fixed in source; live deployment patch/verification in progress.
+
+Demo review found that ticket `621` included agent evidence where a suspicious
+URL was handled with direct retrieval semantics. That is not acceptable for a
+phishing or malware workflow: agents must not browse, curl, wget, screenshot,
+or otherwise fetch suspicious URLs from the runner, dashboard host, user
+workstation, or production network.
+
+Root cause:
+
+- Prompt guidance correctly encouraged dashboard API `curl` usage, but did not
+  explicitly distinguish trusted dashboard/internal URLs from hostile URLs
+  found in tickets, email, SIEM, or EDR evidence.
+- The per-agent curl guard blocked broad dashboard pulls, but did not block
+  arbitrary external URL retrieval.
+- The active phishing RACI/workflow prompt did not encode URL detonation safety
+  as a negative test.
+
+Fix:
+
+- Add a Suspicious URL handling rule to ticket, auto-assignment, postmortem,
+  and workflow prompts.
+- Add per-agent/runtime curl guard host allowlisting. Dashboard/internal URLs
+  and approved reputation/sandbox providers are allowed; arbitrary external
+  URLs are blocked with a clear remediation message.
+- Update the phishing RACI rule and canonical phishing workflow migration so
+  passive evidence, reputation adapters, and approved isolated detonation are
+  the only valid analysis paths.
+- Remove ticket `621` from the curated `Demo Proofs` ordering and document it
+  as a regression case, not the lead demo proof.
+
+Safe alternatives:
+
+- email headers and authentication results
+- mail-gateway, DNS, proxy, firewall, and Wazuh/SIEM evidence
+- URL/domain parsing and known-safe internal allowlists
+- VirusTotal/urlscan/ANY.RUN-style provider adapters when configured
+- approved isolated detonation infrastructure
+
+Important rule: approval to block, quarantine, or contain a URL is not approval
+to fetch that URL.
+
+### Smoke scripts must not shell-source the full live `.env`
+
+Status: fixed in setup smoke flow; use selective env parsing for live checks.
+
+During the setup-ticket fan-out live smoke, sourcing the full live `.env`
+failed because `AGENT_ALLOWED_TOOLS` legitimately contains parentheses and
+wildcards for harness allowlists. The shell stopped before auth variables were
+loaded, and the hardened API correctly returned `403 access_denied`.
+
+Fix:
+
+- Do not `set -a; . ./.env` for smoke scripts against hardened deployments.
+- Load only the needed auth variables, such as `DASHBOARD_SERVICE_TOKEN` and
+  `DASHBOARD_TRUSTED_AUTH_SECRET`, using a parser that treats each line as
+  config data instead of shell code.
+- `scripts/smoke_setup_platform.py` now accepts the standard dashboard service
+  token or trusted proxy headers from environment, matching the hardened auth
+  posture.
+
+### Curl guard path parser rejected explicit list inputs
+
+Status: fixed in source; validation in progress.
+
+The full test suite exposed that `_split_guard_paths` in the agent runner only
+handled comma-separated strings. The curl guard builder also accepts explicit
+lists for tests and internal callers, so a list of allowed hosts raised
+`AttributeError: 'list' object has no attribute 'split'` before the guard could
+be written.
+
+Fix:
+
+- Allow `_split_guard_paths` to normalize lists, tuples, and sets as well as
+  comma-separated strings.
+- Keep empty values filtered and all values string-trimmed before writing guard
+  rules.
+
 ### Hermes/N Nous 503 capacity failure can interrupt a valid in-progress task
 
 Status: fixed in source; live deployment patch/verification in progress.

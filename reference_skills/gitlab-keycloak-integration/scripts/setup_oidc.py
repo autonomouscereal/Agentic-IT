@@ -17,8 +17,8 @@ BASE_URL = os.environ.get("KEYCLOAK_URL", "http://localhost:8080").rstrip("/")
 ADMIN_REALM = "master"
 CLIENT_ID = "admin-cli"
 GITLAB_REALM = "gitlab"
-GITLAB_ISSUER = os.environ.get("GITLAB_ISSUER", "https://192.168.50.222:8443")
-GITLAB_HOST = os.environ.get("GITLAB_HOST", "192.168.50.222")
+GITLAB_ISSUER = os.environ.get("GITLAB_ISSUER", "https://127.0.0.1:8443")
+GITLAB_HOST = os.environ.get("GITLAB_HOST", "127.0.0.1")
 
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
@@ -29,7 +29,7 @@ def load_admin_credentials():
     username = os.environ.get("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
     password = os.environ.get("KC_BOOTSTRAP_ADMIN_PASSWORD")
     if not password:
-        for path in ["/home/cereal/keycloak-manager/.env", os.path.join(os.getcwd(), ".env")]:
+        for path in ["/opt/agentic-it/keycloak-manager/.env", os.path.join(os.getcwd(), ".env")]:
             if os.path.exists(path):
                 parse_env(path)
                 password = os.environ.get("KC_BOOTSTRAP_ADMIN_PASSWORD")

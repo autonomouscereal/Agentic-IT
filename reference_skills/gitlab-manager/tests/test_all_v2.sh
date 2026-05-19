@@ -6,7 +6,7 @@
 
 set -uo pipefail
 
-GITLAB_HOST="192.168.50.222"
+GITLAB_HOST="127.0.0.1"
 GITLAB_URL="http://${GITLAB_HOST}"
 TOKEN="${GITLAB_PAT:?GITLAB_PAT is required; load it from the vault-backed environment}"
 TEST_GROUP="test-suite-$(date +%s)"
@@ -40,19 +40,19 @@ echo "  Target: ${GITLAB_URL}"
 echo "  Started: $(date)"
 echo "============================================="
 
-# ─── 1. Container Health ───────────────────────────────────────────────────
+# --- 1. Container Health ---------------------------------------------------
 hdr "1. Container Health"
 [ "$(docker inspect --format='{{.State.Running}}' gitlab 2>/dev/null)" = "true" ] && pass "GitLab container running" || fail "GitLab container"
 [ "$(docker inspect --format='{{.State.Running}}' gitlab-runner 2>/dev/null)" = "true" ] && pass "Runner container running" || fail "Runner container"
 [ "$(docker inspect --format='{{.State.Health.Status}}' gitlab 2>/dev/null)" = "healthy" ] && pass "GitLab health status" || fail "GitLab health"
 
-# ─── 2. Health Endpoints (inside container) ────────────────────────────────
+# --- 2. Health Endpoints (inside container) --------------------------------
 hdr "2. Health Endpoints (via docker exec)"
 docker exec gitlab curl -sf http://localhost/-/health >/dev/null 2>&1 && pass "Health endpoint" || fail "Health endpoint"
 docker exec gitlab curl -sf http://localhost/-/readiness >/dev/null 2>&1 && pass "Readiness endpoint" || fail "Readiness endpoint"
 docker exec gitlab curl -sf http://localhost/-/liveness >/dev/null 2>&1 && pass "Liveness endpoint" || fail "Liveness endpoint"
 
-# ─── 3. API Auth & Version ────────────────────────────────────────────────
+# --- 3. API Auth & Version ------------------------------------------------
 hdr "3. API Auth & Version"
 USER_INFO=$(api_get "${GITLAB_URL}/api/v4/user" 2>&1)
 echo "$USER_INFO" | grep -q '"username"' && pass "API authenticated as $(echo "$USER_INFO" | grep -o '"username":"[^"]*"' | cut -d'"' -f4)" || fail "API auth"
@@ -61,14 +61,14 @@ VER=$(api_get "${GITLAB_URL}/api/v4/version" 2>&1)
 GL_VER=$(echo "$VER" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
 [ -n "${GL_VER:-}" ] && pass "GitLab version ${GL_VER}" || fail "Version endpoint"
 
-# ─── 4. Group Management ──────────────────────────────────────────────────
+# --- 4. Group Management --------------------------------------------------
 hdr "4. Group Management"
 GRP=$(api_post "${GITLAB_URL}/api/v4/groups" \
     --data "name=${TEST_GROUP}" --data "path=${TEST_GROUP}" --data "visibility=internal" 2>&1)
 GRP_ID=$(echo "$GRP" | grep -o '"id":[0-9]*' | cut -d: -f2)
 [ -n "${GRP_ID:-}" ] && pass "Created group ${TEST_GROUP} (ID: ${GRP_ID})" || { fail "Create group"; echo "  Response: ${GRP:0:200}"; }
 
-# ─── 5. Repository Creation ───────────────────────────────────────────────
+# --- 5. Repository Creation -----------------------------------------------
 hdr "5. Repository Creation"
 if [ -n "${GRP_ID:-}" ]; then
     # GitLab 17.x: POST /api/v4/groups/{id}/projects returns 404.
@@ -83,7 +83,7 @@ else
     exit 1
 fi
 
-# ─── 6. Clone Repository ──────────────────────────────────────────────────
+# --- 6. Clone Repository --------------------------------------------------
 hdr "6. Clone Repository"
 CLONE_DIR="${TEMP_DIR}/repo"
 git clone "http://root:${TOKEN}@${GITLAB_HOST}/${TEST_GROUP}/${TEST_REPO}.git" "${CLONE_DIR}" >/dev/null 2>&1
@@ -94,7 +94,7 @@ else
     exit 1
 fi
 
-# ─── 7. Branch Operations ─────────────────────────────────────────────────
+# --- 7. Branch Operations -------------------------------------------------
 hdr "7. Branch Operations"
 cd "${CLONE_DIR}"
 git config user.email "test@gitlab.local"
@@ -126,7 +126,7 @@ BRANCHES=$(api_get "${GITLAB_URL}/api/v4/projects/${REPO_ID}/repository/branches
 BCOUNT=$(echo "$BRANCHES" | grep -o '"name"' | wc -l)
 [ "$BCOUNT" -ge 2 ] && pass "API lists ${BCOUNT} branches" || fail "Branch listing (got ${BCOUNT:-0})"
 
-# ─── 8. Merge Request ─────────────────────────────────────────────────────
+# --- 8. Merge Request -----------------------------------------------------
 hdr "8. Merge Request"
 git checkout "$DEFAULT_BRANCH" >/dev/null 2>&1
 
@@ -145,7 +145,7 @@ if [ -n "${MR_IID:-}" ]; then
     echo "$MERGE" | grep -q '"merge_commit_sha\|"state"' && pass "Merged MR #${MR_IID}" || pass "MR #${MR_IID} accepted"
 fi
 
-# ─── 9. Tags ──────────────────────────────────────────────────────────────
+# --- 9. Tags --------------------------------------------------------------
 hdr "9. Tags"
 cd "${CLONE_DIR}"
 git checkout "$DEFAULT_BRANCH" >/dev/null 2>&1
@@ -157,7 +157,7 @@ git push origin "v1.0.0" >/dev/null 2>&1
 TAGS=$(api_get "${GITLAB_URL}/api/v4/projects/${REPO_ID}/repository/tags" 2>&1)
 echo "$TAGS" | grep -q '"name"' && pass "Tags visible via API" || fail "Tags API"
 
-# ─── 10. CI/CD Pipeline ──────────────────────────────────────────────────
+# --- 10. CI/CD Pipeline --------------------------------------------------
 hdr "10. CI/CD Pipeline"
 cd "${CLONE_DIR}"
 git checkout "$DEFAULT_BRANCH" >/dev/null 2>&1
@@ -224,7 +224,7 @@ api_post "${GITLAB_URL}/api/v4/projects/${REPO_ID}/merge_requests" \
     --data "remove_source_branch=true" >/dev/null 2>&1
 pass "CI/CD merge request created"
 
-# ─── 11. File API ─────────────────────────────────────────────────────────
+# --- 11. File API ---------------------------------------------------------
 hdr "11. File Operations via API"
 # Create branch via API (GitLab 17.x: use 'branch' param)
 BRANCH_RESP=$(curl -s -X POST "${GITLAB_URL}/api/v4/projects/${REPO_ID}/repository/branches" \
@@ -254,21 +254,21 @@ else
     echo "  Response: ${FILE_RESP:0:300}"
 fi
 
-# ─── 12. Issues ───────────────────────────────────────────────────────────
+# --- 12. Issues -----------------------------------------------------------
 hdr "12. Issues"
 ISSUE=$(api_post "${GITLAB_URL}/api/v4/projects/${REPO_ID}/issues" \
     --data "title=Test issue" --data "description=Automated test" 2>&1)
 ISSUE_IID=$(echo "$ISSUE" | grep -o '"iid":[0-9]*' | cut -d: -f2)
 [ -n "${ISSUE_IID:-}" ] && pass "Created issue #${ISSUE_IID}" || { fail "Create issue"; echo "  Response: ${ISSUE:0:200}"; }
 
-# ─── 13. Runner Status ────────────────────────────────────────────────────
+# --- 13. Runner Status ----------------------------------------------------
 hdr "13. Runner"
 RUNNER_VERIFY=$(docker exec gitlab-runner gitlab-runner verify 2>&1)
 echo "$RUNNER_VERIFY" | grep -qi "alive" && pass "Runner verified alive" || fail "Runner verify"
 RUNNER_VER=$(docker exec gitlab-runner gitlab-runner version 2>&1 | head -1)
 pass "Runner: ${RUNNER_VER}"
 
-# ─── 14. Repo Tree & Commits ──────────────────────────────────────────────
+# --- 14. Repo Tree & Commits ----------------------------------------------
 hdr "14. Repository State"
 TREE=$(api_get "${GITLAB_URL}/api/v4/projects/${REPO_ID}/repository/tree" 2>&1)
 TCOUNT=$(echo "$TREE" | grep -o '"name"' | wc -l)
@@ -278,7 +278,7 @@ COMMITS=$(api_get "${GITLAB_URL}/api/v4/projects/${REPO_ID}/repository/commits" 
 CCOUNT=$(echo "$COMMITS" | grep -o '"id"' | wc -l)
 pass "Repo commits: ${CCOUNT}"
 
-# ─── Summary ──────────────────────────────────────────────────────────────
+# --- Summary --------------------------------------------------------------
 echo ""
 echo "============================================="
 echo "         TEST RESULTS SUMMARY"

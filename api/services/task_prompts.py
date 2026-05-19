@@ -18,6 +18,23 @@ TICKET_CLOSURE_RULE = """Ticket closure rule:
   should change or a human/provider handoff is required.
 """
 
+URL_DETONATION_SAFETY_RULE = """Suspicious URL handling rule:
+- Never directly browse, curl, wget, open, screenshot, or otherwise retrieve a
+  suspicious/phishing/malware URL from an agent runner, dashboard host, user
+  workstation, or production network.
+- Treat URLs from phishing reports, EDR/SIEM alerts, unsolicited email,
+  untrusted ticket text, attachments, and user reports as hostile until proven
+  otherwise.
+- Use passive/sandboxed reputation paths instead: ticket/email headers,
+  mail-gateway logs, DNS/proxy/firewall logs, Wazuh/SIEM evidence, known-safe
+  internal allowlists, URL/domain parsing, VirusTotal/urlscan/ANY.RUN style
+  provider adapters when configured, or an approved isolated detonation service.
+- If no safe reputation/sandbox adapter is configured, record that limitation,
+  preserve the URL as evidence, and request approval/access for a safe analysis
+  path. Do not substitute a direct HTTP request.
+- Approval to block/quarantine/contain a URL is not approval to fetch it.
+"""
+
 
 FAST_TICKET_PROMPT = """Work this ticket end to end as quickly as possible.
 
@@ -31,6 +48,7 @@ Operational rules:
 - Change request body shape is exactly: {"agent_id": <agent_instance_id>, "ticket_id": {ticket_id}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {"auto_complete": false}}. Do not use title/description fields for change requests.
 - The shell guard blocks inline JSON that contains quoted braces. For POST payloads, use the Write tool to create a JSON file, then run a simple Bash curl command with `-d @payload.json`. Do not create JSON payloads with Bash heredocs or inline `-d '{...}'`.
 - When using curl for a URL that contains `?` or `&`, quote the full URL by wrapping it in single quotes so the shell does not split or background query parameters.
+- The previous curl guidance applies only to dashboard/internal API URLs. Do not use curl/wget/browser tools to retrieve suspicious external URLs; follow the Suspicious URL handling rule.
 - After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include compile/test/diff or operational evidence in the result.
 - If you hit a permission wall, access denied response, missing role, missing group membership, or a resource you cannot inspect with current credentials, do not bypass it. POST /api/tickets/{ticket_id}/access-request with agent_id, resource, permission, requester/account_ref when known, reason, assignment_group, and risk_level. Add a note saying exactly what is blocked, update checkpoint.json with status waiting_for_access and progress below 100, then stop. After the access gate is approved, re-read context, verify the grant evidence or lab-safe grant note, complete the access change with evidence, and continue the original task.
 - For Wazuh/SIEM investigations after approval, do not call provider hosts directly or ask for secrets. First POST /api/agents/<agent_id>/vault/lease for {"system":"wazuh","resource_type":"api","resource_id":"wazuh.manager","action":"read"}. If allowed, use the dashboard-gated endpoints GET /api/agents/<agent_id>/wazuh/manager/status, GET /api/agents/<agent_id>/wazuh/rules/<rule_id>, and GET /api/agents/<agent_id>/wazuh/alerts/search?rule_id=<id>&source_ip=<ip>. These endpoints enforce the scoped lease, return no secret values, and write audit events.
@@ -123,6 +141,7 @@ Operational rules:
 - Change request body shape is exactly: {"agent_id": <agent_instance_id>, "ticket_id": {ticket_id}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {"auto_complete": false}}. Do not use title/description fields for change requests.
 - The shell guard blocks inline JSON that contains quoted braces. For POST payloads, use the Write tool to create a JSON file, then run a simple Bash curl command with `-d @payload.json`. Do not create JSON payloads with Bash heredocs or inline `-d '{...}'`.
 - When using curl for a URL that contains `?` or `&`, quote the full URL by wrapping it in single quotes so the shell does not split or background query parameters.
+- The previous curl guidance applies only to dashboard/internal API URLs. Do not use curl/wget/browser tools to retrieve suspicious external URLs; follow the Suspicious URL handling rule.
 - After an approved change is executed and verified, immediately mark it complete with POST /api/changes/{change_id}/complete and include lab-safe operational evidence.
 - If you hit a permission wall, access denied response, missing role, missing group membership, or a resource you cannot inspect with current credentials, do not bypass it. POST /api/tickets/{ticket_id}/access-request with agent_id, resource, permission, requester/account_ref when known, reason, assignment_group, and risk_level. Add a note saying exactly what is blocked, update checkpoint.json with status waiting_for_access and progress below 100, then stop. After the access gate is approved, re-read context, verify the grant evidence or lab-safe grant note, complete the access change with evidence, and continue the original task.
 - For Wazuh/SIEM investigations after approval, do not call provider hosts directly or ask for secrets. First POST /api/agents/<agent_id>/vault/lease for {"system":"wazuh","resource_type":"api","resource_id":"wazuh.manager","action":"read"}. If allowed, use the dashboard-gated endpoints GET /api/agents/<agent_id>/wazuh/manager/status, GET /api/agents/<agent_id>/wazuh/rules/<rule_id>, and GET /api/agents/<agent_id>/wazuh/alerts/search?rule_id=<id>&source_ip=<ip>. These endpoints enforce the scoped lease, return no secret values, and write audit events.
@@ -143,6 +162,7 @@ Operational rules:
 def build_ticket_resolution_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
+        URL_DETONATION_SAFETY_RULE,
         FAST_TICKET_PROMPT,
         TICKET_CLOSURE_RULE,
         "",
@@ -156,6 +176,7 @@ def build_ticket_resolution_prompt(ticket, extra_prompt=None):
 def build_auto_assignment_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
+        URL_DETONATION_SAFETY_RULE,
         AUTO_ASSIGNMENT_PROMPT,
         TICKET_CLOSURE_RULE,
         "",
@@ -169,6 +190,7 @@ def build_auto_assignment_prompt(ticket, extra_prompt=None):
 
 def build_postmortem_prompt(ticket, extra_context=None):
     body = [
+        URL_DETONATION_SAFETY_RULE,
         POSTMORTEM_PROMPT,
         "",
         f"Ticket under review: {ticket.get('title') or ticket.get('id')}",
@@ -180,6 +202,7 @@ def build_postmortem_prompt(ticket, extra_context=None):
 
 def build_workflow_prompt(ticket, extra_context=None):
     body = [
+        URL_DETONATION_SAFETY_RULE,
         WORKFLOW_BUILD_PROMPT,
         "",
         f"Workflow source ticket: {ticket.get('title') or ticket.get('id')}",

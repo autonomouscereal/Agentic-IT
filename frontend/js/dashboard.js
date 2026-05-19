@@ -119,7 +119,7 @@ function openAuditTrail(query, source = "") {
 }
 
 let ticketSort = { by: "updated_at", dir: "desc" };
-const DEMO_TICKET_IDS = [621, 531, 83, 82, 580, 578, 525, 539, 422, 558, 575, 530, 118, 363, 430];
+const DEMO_TICKET_IDS = [531, 83, 82, 580, 578, 525, 539, 422, 558, 575, 530, 118, 363, 430];
 const DEMO_TICKET_ORDER = new Map(DEMO_TICKET_IDS.map((id, idx) => [id, idx]));
 
 function initTicketSorting() {
@@ -1816,8 +1816,8 @@ function renderSetupModules() {
     const modules = setupManifest.modules || [];
     grid.innerHTML = modules.map(m => {
         const inProfile = selected.has(m.id);
-        const disabled = m.status === "optional" || !m.deployable;
         const statusLabel = m.status || "unknown";
+        const defaultAction = inProfile ? "deploy" : "disabled";
         return `
             <div class="module-card ${inProfile ? "selected" : ""}">
                 <div class="module-card-head">
@@ -1829,14 +1829,11 @@ function renderSetupModules() {
                 </div>
                 <div class="module-desc">${escHtml(m.notes || "")}</div>
                 <div class="module-controls">
-                    <label class="setup-check small">
-                        <input type="checkbox" data-setup-include="${escAttr(m.id)}" ${inProfile ? "checked" : ""} ${disabled ? "disabled" : ""} onchange="generateSetupPlan()">
-                        <span>Use</span>
-                    </label>
-                    <label class="setup-check small">
-                        <input type="checkbox" data-setup-existing="${escAttr(m.id)}" onchange="generateSetupPlan()">
-                        <span>Existing product</span>
-                    </label>
+                    <select class="filter-select" data-setup-action="${escAttr(m.id)}" onchange="generateSetupPlan()">
+                        <option value="deploy" ${defaultAction === "deploy" ? "selected" : ""}>Deploy reference</option>
+                        <option value="integrate">Integrate existing</option>
+                        <option value="disabled" ${defaultAction === "disabled" ? "selected" : ""}>Off / not in scope</option>
+                    </select>
                 </div>
                 ${m.skill ? `<div class="module-meta">Skill: ${escHtml(m.skill)} ${m.skill_available ? "" : "(missing in container)"}</div>` : ""}
             </div>
@@ -1850,19 +1847,21 @@ function collectSetupChoices() {
     const include = [];
     const exclude = [];
     const existingTools = [];
-    document.querySelectorAll("[data-setup-include]").forEach(input => {
-        const id = input.dataset.setupInclude;
-        if (input.checked && !profileModules.has(id)) include.push(id);
-        if (!input.checked && profileModules.has(id)) exclude.push(id);
-    });
-    document.querySelectorAll("[data-setup-existing]").forEach(input => {
-        if (input.checked) existingTools.push(input.dataset.setupExisting);
+    const moduleActions = {};
+    document.querySelectorAll("[data-setup-action]").forEach(input => {
+        const id = input.dataset.setupAction;
+        const action = input.value || "disabled";
+        moduleActions[id] = action;
+        if (action !== "disabled" && !profileModules.has(id)) include.push(id);
+        if (action === "disabled" && profileModules.has(id)) exclude.push(id);
+        if (action === "integrate") existingTools.push(id);
     });
     return {
         profile,
         include,
         exclude,
         existing_tools: existingTools,
+        module_actions: moduleActions,
         deploy_missing: !!document.getElementById("setup-deploy-missing")?.checked,
     };
 }
@@ -1889,7 +1888,9 @@ function renderSetupPlan() {
         ${s.total || 0} modules &middot;
         ${s.deploy || 0} deploy &middot;
         ${s.integrate_existing || 0} integrate existing &middot;
-        ${s.blueprint || 0} blueprint
+        ${s.blueprint || 0} blueprint &middot;
+        ${s.disabled || 0} off
+        ${s.blocked ? `<span class="status-badge status-warning">${s.blocked} blocked by disabled dependencies</span>` : ""}
         ${s.missing_skills?.length ? `<span class="status-badge status-warning">${s.missing_skills.length} missing skills in runtime</span>` : ""}
     `;
     const steps = setupPlan.steps || [];
@@ -1904,7 +1905,7 @@ function renderSetupPlan() {
             <td>${escHtml(step.category || "-")}</td>
             <td><span class="status-badge ${statusClass(step.status)}">${escHtml(step.status)}</span></td>
             <td>${step.skill ? `${escHtml(step.skill)} ${step.skill_available ? "" : '<span class="status-badge status-error">missing</span>'}` : "-"}</td>
-            <td>${escHtml((step.health_checks || []).slice(0, 2).join(", "))}</td>
+            <td>${escHtml((step.disabled_dependencies?.length ? [`blocked by ${step.disabled_dependencies.join(", ")}`] : (step.health_checks || []).slice(0, 2)).join(", "))}</td>
         </tr>
     `).join("");
 }
@@ -1925,7 +1926,8 @@ async function createSetupTicket(spawnAgent) {
         sync_provider: false,
     });
     if (result?.ticket?.id) {
-        alert(`Setup ticket ${result.ticket.id} created${result.agent?.agent_id ? ` with agent ${result.agent.agent_id}` : ""}.`);
+        const childCount = result.module_tickets?.length || 0;
+        alert(`Setup parent ticket ${result.ticket.id} created with ${childCount} scoped module tickets${result.agent?.agent_id ? ` and agent ${result.agent.agent_id}` : ""}.`);
         navigateTo(spawnAgent ? "agents" : "tickets");
     } else if (result?.error) {
         alert(result.error);

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Smoke test the platform setup manifest, plan API, setup ticket, and installer dry run."""
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -10,11 +11,30 @@ from pathlib import Path
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:25480"
 ROOT = Path(__file__).resolve().parents[1]
+AUTH_USER = os.environ.get("DASHBOARD_SMOKE_USER", "demo_account_1")
+AUTH_PROVIDER = os.environ.get("DASHBOARD_SMOKE_PROVIDER", "setup-platform-smoke")
+TRUSTED_SECRET = os.environ.get("DASHBOARD_TRUSTED_AUTH_SECRET", "")
+SERVICE_TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
+
+
+def auth_headers():
+    if TRUSTED_SECRET:
+        return {
+            "X-Auth-Request-User": AUTH_USER,
+            "X-Auth-Provider": AUTH_PROVIDER,
+            "X-Dashboard-Auth-Secret": TRUSTED_SECRET,
+        }
+    if SERVICE_TOKEN:
+        return {
+            "X-Dashboard-Service-User": AUTH_PROVIDER,
+            "X-Dashboard-Service-Token": SERVICE_TOKEN,
+        }
+    return {}
 
 
 def request(method, path, body=None):
     data = None
-    headers = {}
+    headers = auth_headers()
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -47,16 +67,19 @@ def main():
         "existing_tools": ["servicenow", "crowdstrike", "splunk", "mail-gateway", "itop"],
         "include": ["gitlab"],
         "exclude": ["mailcow"],
+        "module_actions": {"mailcow": "disabled", "itop": "integrate", "gitlab": "deploy"},
         "deploy_missing": True,
     })
     assert_true(plan["summary"]["total"] > 5, "setup plan too small")
     assert_true(any(step["module_id"] == "itop" and step["status"] == "integrate_existing" for step in plan["steps"]), "existing ITSM integration not reflected")
     assert_true(not any(step["module_id"] == "mailcow" for step in plan["steps"]), "excluded module still present")
+    assert_true(plan["summary"].get("disabled") >= 1, "disabled module scope not reflected")
+    assert_true(any(step["status"] == "blocked_disabled_dependency" for step in plan["steps"]), "disabled dependency blockers not reflected")
 
     ticket = request("POST", "/api/setup/ticket", {
         "profile": "minimal",
-        "existing_tools": ["servicenow"],
-        "deploy_missing": False,
+        "module_actions": {"ai-proxy": "deploy", "searxng": "disabled", "web-research": "disabled"},
+        "deploy_missing": True,
         "ai_base_url": "http://ai-proxy:4001",
         "proxy_mode": "deploy",
         "proxy_url": "http://localhost:4001",
@@ -67,6 +90,9 @@ def main():
         "spawn_agent": False,
     })
     assert_true(ticket.get("ticket", {}).get("id"), "setup ticket was not created")
+    assert_true(ticket.get("parent_ticket", {}).get("id") == ticket["ticket"]["id"], "parent ticket alias missing")
+    assert_true(ticket.get("module_tickets"), "scoped module tickets were not created")
+    assert_true(any(row.get("module_id") == "ai-proxy" for row in ticket["module_tickets"]), "ai-proxy child setup ticket missing")
     assert_true(not ticket["ticket"].get("agent_id"), "setup ticket auto-assigned an agent despite spawn_agent=false")
     assert_true(
         ticket["ticket"].get("auto_assignment", {}).get("status") != "assigned",
@@ -109,6 +135,7 @@ def main():
         "manifest_modules": len(module_ids),
         "plan_steps": plan["summary"]["total"],
         "setup_ticket_id": ticket["ticket"]["id"],
+        "module_tickets": len(ticket.get("module_tickets") or []),
     }, indent=2))
 
 

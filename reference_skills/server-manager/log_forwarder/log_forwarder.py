@@ -3,16 +3,16 @@
 Modular Log Forwarder for SOC Components
 
 Reads JSON logs from Zeek and/or Suricata and forwards them to Wazuh via TCP.
-Fully standalone — does not depend on any component being running.
+Fully standalone - does not depend on any component being running.
 If Wazuh is down, logs are queued in memory and retried with backoff.
 If a log source disappears, the forwarder skips it and keeps running.
 
 Configuration via environment variables (or forwarder_config.env file):
     WAZUH_HOST      - SIEM host (default: 127.0.0.1)
     WAZUH_PORT      - SIEM TCP port (default: 26151)
-    ZEEK_LOG_DIR    - Path to Zeek logs (default: /home/cereal/SOC_TESTING/logs/zeek)
+    ZEEK_LOG_DIR    - Path to Zeek logs (default: /opt/agentic-it/SOC_TESTING/logs/zeek)
     ZEEK_ENABLED    - Enable Zeek forwarding (default: true)
-    SURICATA_LOG    - Path to Suricata eve.json (default: /home/cereal/SOC_TESTING/logs/suricata/eve.json)
+    SURICATA_LOG    - Path to Suricata eve.json (default: /opt/agentic-it/SOC_TESTING/logs/suricata/eve.json)
     SURICATA_ENABLED - Enable Suricata forwarding (default: true)
     POSITION_FILE   - State file for tracking file positions (default: /tmp/forwarder_positions.json)
     POLL_INTERVAL   - Seconds between log polls (default: 1)
@@ -28,15 +28,15 @@ import sys
 import time
 import signal
 
-# ── Configuration ────────────────────────────────────────────────────────────
+# -- Configuration ------------------------------------------------------------
 
 def load_config():
     config = {
         'wazuh_host': os.environ.get('WAZUH_HOST', '127.0.0.1'),
         'wazuh_port': int(os.environ.get('WAZUH_PORT', '26151')),
-        'zeek_log_dir': os.environ.get('ZEEK_LOG_DIR', '/home/cereal/SOC_TESTING/logs/zeek'),
+        'zeek_log_dir': os.environ.get('ZEEK_LOG_DIR', '/opt/agentic-it/SOC_TESTING/logs/zeek'),
         'zeek_enabled': os.environ.get('ZEEK_ENABLED', 'true').lower() == 'true',
-        'suricata_log': os.environ.get('SURICATA_LOG', '/home/cereal/SOC_TESTING/logs/suricata/eve.json'),
+        'suricata_log': os.environ.get('SURICATA_LOG', '/opt/agentic-it/SOC_TESTING/logs/suricata/eve.json'),
         'suricata_enabled': os.environ.get('SURICATA_ENABLED', 'true').lower() == 'true',
         'position_file': os.environ.get('POSITION_FILE', '/tmp/forwarder_positions.json'),
         'poll_interval': float(os.environ.get('POLL_INTERVAL', '1')),
@@ -46,7 +46,7 @@ def load_config():
     return config
 
 
-def load_env_file(path='/home/cereal/SOC_TESTING/log_forwarder/forwarder_config.env'):
+def load_env_file(path='/opt/agentic-it/SOC_TESTING/log_forwarder/forwarder_config.env'):
     """Load environment variables from a .env file if it exists."""
     try:
         with open(path, 'r') as f:
@@ -60,7 +60,7 @@ def load_env_file(path='/home/cereal/SOC_TESTING/log_forwarder/forwarder_config.
         pass
 
 
-# ── Position Tracking ────────────────────────────────────────────────────────
+# -- Position Tracking --------------------------------------------------------
 
 class PositionTracker:
     """Persist file read positions to /tmp so restarts don't re-send old logs."""
@@ -90,7 +90,7 @@ class PositionTracker:
         self.positions[filepath] = pos
 
 
-# ── TCP Sender ───────────────────────────────────────────────────────────────
+# -- TCP Sender ---------------------------------------------------------------
 
 class TCPSender:
     """Maintains a TCP connection to Wazuh with reconnect logic."""
@@ -157,7 +157,7 @@ class TCPSender:
         return False
 
 
-# ── Log Tailers ──────────────────────────────────────────────────────────────
+# -- Log Tailers --------------------------------------------------------------
 
 class LogTail:
     """Tail a single log file, resuming from a saved position."""
@@ -237,7 +237,7 @@ class ZeekTail:
             tailer.close()
 
 
-# ── Main Loop ────────────────────────────────────────────────────────────────
+# -- Main Loop ----------------------------------------------------------------
 
 running = True
 

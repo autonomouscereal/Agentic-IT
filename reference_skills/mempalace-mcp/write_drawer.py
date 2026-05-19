@@ -4,7 +4,7 @@ import os
 import json
 
 # Use the venv's python to ensure we have access to mempalace
-PYTHON_EXE = r"C:\Users\cereal\.claude\skills\mempalace-mcp\venv\Scripts\python.exe"
+PYTHON_EXE = r"C:\Users\me\.claude\skills\mempalace-mcp\venv\Scripts\python.exe"
 
 def main():
     if len(sys.argv) < 4:

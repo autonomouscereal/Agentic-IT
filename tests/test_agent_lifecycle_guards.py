@@ -44,6 +44,16 @@ def load_agent_runner():
     return module
 
 
+def load_task_prompts():
+    spec = importlib.util.spec_from_file_location(
+        "tested_task_prompts",
+        ROOT / "api" / "services" / "task_prompts.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_agents_route():
     fastapi = types.ModuleType("fastapi")
 
@@ -937,6 +947,46 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "x" * 25)
         self.assertIn("stdout truncated from 120 bytes to 25 bytes", result.stderr)
+
+    def test_curl_guard_blocks_untrusted_external_url_fetches(self):
+        module = load_agent_runner()
+        with tempfile.TemporaryDirectory() as tmp:
+            guard = module._write_curl_guard(
+                tmp,
+                real_curl=sys.executable,
+                blocked_paths=[],
+                max_output_bytes=80,
+                allowed_hosts=["localhost", "127.0.0.1", "*.virustotal.com", "urlscan.io"],
+            )
+            blocked = subprocess.run(
+                [sys.executable, guard, "http://training-login.example.invalid/reset"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            allowed = subprocess.run(
+                [sys.executable, guard, "-c", "import sys; print('ok')", "https://www.virustotal.com/api/v3/urls"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+        self.assertEqual(blocked.returncode, 65)
+        self.assertIn("blocked direct retrieval of untrusted external URL", blocked.stderr)
+        self.assertEqual(allowed.returncode, 0)
+        self.assertIn("ok", allowed.stdout)
+
+    def test_ticket_prompts_include_suspicious_url_guardrail(self):
+        module = load_task_prompts()
+        ticket = {"id": 42, "title": "reported phish"}
+        prompt = module.build_ticket_resolution_prompt(ticket)
+        auto_prompt = module.build_auto_assignment_prompt(ticket)
+        postmortem_prompt = module.build_postmortem_prompt(ticket)
+        workflow_prompt = module.build_workflow_prompt(ticket)
+
+        for value in (prompt, auto_prompt, postmortem_prompt, workflow_prompt):
+            self.assertIn("Never directly browse, curl, wget, open, screenshot", value)
+            self.assertIn("Approval to block/quarantine/contain a URL is not approval to fetch it", value)
 
     def test_postmortem_list_fields_accept_scalar_agent_payloads(self):
         module = load_postmortems_route()

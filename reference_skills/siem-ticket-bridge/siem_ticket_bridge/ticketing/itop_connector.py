@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-iTop ITSM connector — implements TicketingConnector for iTop v3.2.1+.
+iTop ITSM connector - implements TicketingConnector for iTop v3.2.1+.
 
 Creates incidents from SIEM alerts with proper severity mapping,
 team assignment, and deduplication.
@@ -126,7 +126,7 @@ class ITOPConnector(TicketingConnector):
 
         title = f"[SIEM] {rule_name} (level {level})"
         description = (
-            f"SIEM Alert — Rule: {rule_name}\n"
+            f"SIEM Alert - Rule: {rule_name}\n"
             f"Rule ID: {alert.get('rule_id', 'N/A')}\n"
             f"Level: {level} ({severity})\n"
             f"Source IP: {source_ip}\n"

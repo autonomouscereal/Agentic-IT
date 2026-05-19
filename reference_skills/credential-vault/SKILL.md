@@ -21,11 +21,11 @@ Vault files are runtime state and must never be committed.
 ## Commands
 
 ```bash
-python "C:/Users/cereal/.agents/skills/server-manager/credman.py" setup
-python "C:/Users/cereal/.agents/skills/server-manager/credman.py" set <key> "<secret>"
-python "C:/Users/cereal/.agents/skills/server-manager/credman.py" get <key>
-python "C:/Users/cereal/.agents/skills/server-manager/credman.py" list
-python "C:/Users/cereal/.agents/skills/server-manager/credman.py" rm <key>
+python "C:/Users/me/.agents/skills/server-manager/credman.py" setup
+python "C:/Users/me/.agents/skills/server-manager/credman.py" set <key> "<secret>"
+python "C:/Users/me/.agents/skills/server-manager/credman.py" get <key>
+python "C:/Users/me/.agents/skills/server-manager/credman.py" list
+python "C:/Users/me/.agents/skills/server-manager/credman.py" rm <key>
 ```
 
 ## Shell Usage

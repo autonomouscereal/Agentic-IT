@@ -1,6 +1,6 @@
 #!/bin/bash
 TOKEN="${GITLAB_PAT:?GITLAB_PAT is required; load it from the vault-backed environment}"
-URL='http://192.168.50.222'
+URL='http://127.0.0.1'
 
 echo "=== Test: Create project at root level ==="
 curl -s -w '\nHTTP_CODE:%{http_code}' -X POST "$URL/api/v4/projects" \

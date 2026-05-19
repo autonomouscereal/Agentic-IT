@@ -61,7 +61,7 @@ Prior fixes from 2026-05-11:
 - Added the iTop REST Services profile (`1024`) so REST authentication is not blocked after login.
 - Switched Wazuh password/user sync to the native Wazuh API first; direct RBAC SQLite is fallback only.
 - Added Wazuh Dashboard internal user sync and securityadmin reload with a temporary `which` shim plus `OPENSEARCH_JAVA_HOME`.
-- Removed hardcoded iTop/Mailcow DB passwords from `/home/cereal/multiplatform_user_manager.py`.
+- Removed hardcoded iTop/Mailcow DB passwords from `/opt/agentic-it/multiplatform_user_manager.py`.
 - Rotated the demo credential after an old failed iTop debug trace logged the test password; scrubbed the iTop error log pattern to `CheckCredentials("<redacted-demo-password>")`.
 
 ## Issue Summary
@@ -90,7 +90,7 @@ gitlab_rails["omniauth_providers"] = [
     { "name" => "openid_connect",
       "label" => "Keycloak",
       "issuer" => "https://keycloak.internal:8443/realms/gitlab",
-      "redirect_uri" => "http://192.168.50.222/users/auth/openid_connect/callback" }
+      "redirect_uri" => "http://127.0.0.1/users/auth/openid_connect/callback" }
 ]
 gitlab_rails["omniauth_enabled"] = true
 gitlab_rails["omniauth_allow_single_sign_on"] = true
@@ -104,14 +104,14 @@ Historical root cause: `keycloak.internal:8443` resolved to the GitLab container
 - Password validated via Rails console: `valid_password?` returns `true`
 - `omniauth_block_auto_created_users = true` means users must pre-exist (they do)
 - Keycloak containers run on host networking; GitLab must use `keycloak.internal:host-gateway` to reach the host-network nginx proxy.
-- GitLab must trust the Keycloak integration CA from `/home/cereal/gitlab-keycloak-integration/certs/ca-cert.pem`.
+- GitLab must trust the Keycloak integration CA from `/opt/agentic-it/gitlab-keycloak-integration/certs/ca-cert.pem`.
 - `demo_account_1` must have a `Namespaces::UserNamespace` personal namespace.
 - The Keycloak GitLab realm must emit `preferred_username`, `email`, `groups`,
   and `realm_roles` as simple OIDC/UserInfo claims. Rerun
   `scripts/setup_oidc.py` if mapper drift is suspected.
 
 ### Fix Required If This Regresses
-1. Ensure `/home/cereal/gitlab/docker-compose.yml` has:
+1. Ensure `/opt/agentic-it/gitlab/docker-compose.yml` has:
    ```yaml
    extra_hosts:
      - 'keycloak.internal:host-gateway'
@@ -120,7 +120,7 @@ Historical root cause: `keycloak.internal:8443` resolved to the GitLab container
 3. Copy the CA into GitLab and reconfigure:
    ```bash
    docker exec gitlab mkdir -p /etc/gitlab/trusted-certs
-   docker cp /home/cereal/gitlab-keycloak-integration/certs/ca-cert.pem gitlab:/etc/gitlab/trusted-certs/keycloak-internal-ca.crt
+   docker cp /opt/agentic-it/gitlab-keycloak-integration/certs/ca-cert.pem gitlab:/etc/gitlab/trusted-certs/keycloak-internal-ca.crt
    docker exec gitlab gitlab-ctl reconfigure
    ```
 4. If local login still returns 422, inspect the user namespace:
@@ -133,7 +133,7 @@ Historical root cause: `keycloak.internal:8443` resolved to the GitLab container
 ## Wazuh Dashboard - OpenSearch Security Missing User
 
 ### Symptom
-"Invalid credentials" when trying to log into the Wazuh dashboard UI at https://192.168.50.222:26443
+"Invalid credentials" when trying to log into the Wazuh dashboard UI at https://127.0.0.1:26443
 
 ### Root Cause
 Wazuh has **TWO separate authentication systems**:
@@ -233,13 +233,13 @@ The Wazuh manager container runs Python 3.9 with OpenSSL 3.x, which blocks `hash
 ## iTop - Hash Correct But Login Fails
 
 ### Symptom
-"Incorrect login/password" when trying to log in at http://192.168.50.222:25432
+"Incorrect login/password" when trying to log in at http://127.0.0.1:25432
 
 ### Root Cause (Under Investigation)
 - Password hash IS correct: 60 characters, `$2b$12$` prefix (bcrypt)
 - iTop uses local form authentication (`allowed_login_types => 'form|external|basic|token'`)
 - Config at `/var/www/html/conf/production/config-itop.php`
-- App root URL: `http://192.168.50.222:25432`
+- App root URL: `http://127.0.0.1:25432`
 
 ### Possible Causes
 1. **iTop application cache** needs clearing (tried clearing lib cache dirs but those were PHP source, not runtime cache)
@@ -273,14 +273,14 @@ Services that need to connect to Keycloak (GitLab OIDC) get "connection refused"
 
 ### Root Cause
 - Historical failures came from services resolving `keycloak.internal` to the wrong network namespace, missing GitLab trust for the Keycloak proxy CA, or stale browser-routable hostname settings.
-- Current demo deployments expose Keycloak through the nginx TLS proxy at `https://192.168.50.222:8443` while retaining `keycloak.internal` as a container-side compatibility alias.
+- Current demo deployments expose Keycloak through the nginx TLS proxy at `https://127.0.0.1:8443` while retaining `keycloak.internal` as a container-side compatibility alias.
 
 ### Keycloak Realms
 All 5 realms configured: `master`, `itop`, `wazuh`, `mailcow`, `gitlab`.
 `demo_account_1` exists in the service realms with passwords set for the demo flows.
 
 ### Fix If This Regresses
-1. Verify `https://192.168.50.222:8443/realms/gitlab/.well-known/openid-configuration` returns the GitLab realm.
+1. Verify `https://127.0.0.1:8443/realms/gitlab/.well-known/openid-configuration` returns the GitLab realm.
 2. Verify GitLab can reach and trust the same issuer from inside the container.
 3. Keep `keycloak.internal:host-gateway` only as the internal compatibility alias.
 4. Rerun the relevant Keycloak setup script so protocol mappers are repaired in place.
@@ -316,7 +316,7 @@ docker exec container bash -c "mysql < /tmp/fix.sql"
 
 ## Temp Scripts on AI Server (Cleanup Needed)
 
-The following temporary scripts are scattered in `/home/cereal/` and should be cleaned up:
+The following temporary scripts are scattered in `/opt/agentic-it/` and should be cleaned up:
 - `fix_wazuh.py`, `fix_wazuh2.py` - Wazuh fix attempts
 - `fix_itop.py`, `fix_itop_final.py` - iTop fix attempts
 - `fix_all.py` - Combined fix script

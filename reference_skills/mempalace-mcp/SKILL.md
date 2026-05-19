@@ -59,4 +59,4 @@ Before starting a new project or session, initialize a palace for it:
 | `mempalace_diary_read` | Read recent agent diary entries |
 | `mempalace_reconnect` | Force cache invalidation/reconnect |
 
-🤖 Generated with [Codex](https://Codex.com/Codex)
+ Generated with [Codex](https://Codex.com/Codex)

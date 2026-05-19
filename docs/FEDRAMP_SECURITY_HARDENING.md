@@ -123,6 +123,26 @@ This lets endpoint-wide auth stay enforced while allowing agents to read their
 assigned ticket, add notes, request approval/access gates, and complete approved
 work without bypassing the RBAC layer.
 
+### Suspicious URL Handling
+
+Phishing, malware, SIEM, and EDR tickets treat URLs from untrusted evidence as
+hostile until proven otherwise. Agent prompts, RACI rules, and the runtime curl
+guard now enforce that agents must not directly browse, curl, wget, screenshot,
+open, or retrieve suspicious URLs from the runner, dashboard host, user
+workstation, or production network.
+
+Allowed analysis paths are passive or isolated:
+
+- email headers and mail-gateway logs
+- DNS, proxy, firewall, and Wazuh/SIEM evidence
+- URL/domain parsing and known-safe internal allowlists
+- configured VirusTotal/urlscan/ANY.RUN-style reputation adapters
+- approved isolated detonation infrastructure
+
+Approval to block, quarantine, or contain a URL is not approval to fetch it.
+`AGENT_CURL_ALLOWED_HOSTS` controls the limited host allowlist for dashboard,
+model-provider, and approved reputation/sandbox endpoints.
+
 ## Database Exposure
 
 The reference compose now binds databases to localhost:

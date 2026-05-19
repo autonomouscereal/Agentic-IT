@@ -45,6 +45,15 @@ AGENT_CURL_BLOCKED_PATHS = os.getenv(
     "AGENT_CURL_BLOCKED_PATHS",
     "/openapi.json,/api/tools,/api/tools/status,/api/tools/check-all,/docs,/redoc",
 ).strip()
+AGENT_CURL_ALLOWED_HOSTS = os.getenv(
+    "AGENT_CURL_ALLOWED_HOSTS",
+    (
+        "localhost,127.0.0.1,::1,host.docker.internal,ai-proxy,"
+        "192.168.50.222,api.openai.com,api.anthropic.com,"
+        "inference-api.nousresearch.com,virustotal.com,*.virustotal.com,"
+        "urlscan.io,*.urlscan.io,hybrid-analysis.com,*.hybrid-analysis.com"
+    ),
+).strip()
 AGENT_NO_OUTPUT_STALL_SECONDS = _env_int(
     "AGENT_NO_OUTPUT_STALL_SECONDS",
     _env_int("AGENT_NO_OUTPUT_TIMEOUT_SECONDS", 3600),
@@ -605,7 +614,11 @@ def _loads(value, default):
 
 
 def _split_guard_paths(value):
-    return [item.strip() for item in (value or "").split(",") if item.strip()]
+    if isinstance(value, (list, tuple, set)):
+        raw_items = value
+    else:
+        raw_items = str(value or "").split(",")
+    return [str(item).strip() for item in raw_items if str(item).strip()]
 
 
 def _ticket_priority_rank(priority, task_type="ticket_resolution"):
@@ -660,9 +673,10 @@ async def _agent_queue_worker():
             _agent_queue.task_done()
 
 
-def _curl_guard_script(real_curl, blocked_paths=None, max_output_bytes=None):
+def _curl_guard_script(real_curl, blocked_paths=None, max_output_bytes=None, allowed_hosts=None):
     paths = blocked_paths if blocked_paths is not None else _split_guard_paths(AGENT_CURL_BLOCKED_PATHS)
     limit = int(max_output_bytes if max_output_bytes is not None else AGENT_CURL_MAX_OUTPUT_BYTES)
+    hosts = _split_guard_paths(allowed_hosts if allowed_hosts is not None else AGENT_CURL_ALLOWED_HOSTS)
     return f"""#!/usr/bin/env python3
 import os
 import subprocess
@@ -672,6 +686,7 @@ from urllib.parse import urlparse
 
 REAL_CURL = {json.dumps(real_curl)}
 BLOCKED_PATHS = {json.dumps(paths)}
+ALLOWED_HOSTS = {json.dumps(hosts)}
 MAX_OUTPUT_BYTES = {limit}
 DASHBOARD_API_BASE = os.getenv("DASHBOARD_API_BASE", "http://localhost:8000").rstrip("/")
 DASHBOARD_AGENT_SESSION_COOKIE = os.getenv("DASHBOARD_AGENT_SESSION_COOKIE", "")
@@ -690,6 +705,31 @@ def is_dashboard_url(value):
         return True
     parsed = urlparse(value)
     return parsed.hostname in ("localhost", "127.0.0.1") and str(parsed.port or "") == "8000"
+
+def host_allowed(hostname):
+    if not hostname:
+        return True
+    host = str(hostname).lower().strip("[]")
+    for pattern in ALLOWED_HOSTS:
+        pattern = str(pattern).lower().strip()
+        if not pattern:
+            continue
+        if pattern.startswith("*.") and host.endswith(pattern[1:]):
+            return True
+        if host == pattern:
+            return True
+    return False
+
+for value in args:
+    if not isinstance(value, str) or not value.startswith(("http://", "https://")):
+        continue
+    if is_dashboard_url(value):
+        continue
+    parsed = urlparse(value)
+    if not host_allowed(parsed.hostname):
+        sys.stderr.write("[curl-guard] blocked direct retrieval of untrusted external URL: " + value + "\\n")
+        sys.stderr.write("[curl-guard] use passive reputation, mail/proxy/SIEM evidence, VirusTotal/urlscan-style adapters, or an approved isolated detonation service instead.\\n")
+        sys.exit(65)
 
 def has_auth_header(values):
     lowered = [str(item).lower() for item in values]
@@ -755,7 +795,7 @@ def _resolve_real_curl():
     return shutil.which("curl") or "/usr/bin/curl"
 
 
-def _write_global_curl_guard(real_curl=None, blocked_paths=None, max_output_bytes=None):
+def _write_global_curl_guard(real_curl=None, blocked_paths=None, max_output_bytes=None, allowed_hosts=None):
     """Install a container-level curl guard for harnesses that reset PATH.
 
     The guard remains inert unless the current working directory belongs to an
@@ -767,14 +807,14 @@ def _write_global_curl_guard(real_curl=None, blocked_paths=None, max_output_byte
     guard_path = "/usr/local/bin/curl"
     try:
         with open(guard_path, "w", encoding="utf-8") as f:
-            f.write(_curl_guard_script(real_curl or _resolve_real_curl(), blocked_paths, max_output_bytes))
+            f.write(_curl_guard_script(real_curl or _resolve_real_curl(), blocked_paths, max_output_bytes, allowed_hosts))
         os.chmod(guard_path, 0o755)
         return guard_path
     except OSError:
         return None
 
 
-def _write_curl_guard(work_dir, real_curl=None, blocked_paths=None, max_output_bytes=None):
+def _write_curl_guard(work_dir, real_curl=None, blocked_paths=None, max_output_bytes=None, allowed_hosts=None):
     """Install a per-agent curl wrapper that blocks broad context pulls."""
     if not AGENT_CURL_GUARD_ENABLED:
         return None
@@ -783,7 +823,7 @@ def _write_curl_guard(work_dir, real_curl=None, blocked_paths=None, max_output_b
     os.makedirs(bin_dir, exist_ok=True)
     guard_path = os.path.join(bin_dir, "curl")
     with open(guard_path, "w", encoding="utf-8") as f:
-        f.write(_curl_guard_script(resolved_curl, blocked_paths, max_output_bytes))
+        f.write(_curl_guard_script(resolved_curl, blocked_paths, max_output_bytes, allowed_hosts))
     os.chmod(guard_path, 0o755)
     return guard_path
 
@@ -1466,6 +1506,19 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Complete approved lab/demo containment when no concrete provider adapter is available: `POST /api/changes/{{change_id}}/complete` with JSON `{{"actor": "agent-<agent_instance_id>", "result": "lab-safe evidence and production adapter note"}}`, then add a ticket note.
 - Persist postmortems: `POST /api/postmortems`
 - Persist workflows: `POST /api/workflows`
+
+## Suspicious URL Safety
+Never directly browse, curl, wget, open, screenshot, or otherwise retrieve a
+suspicious/phishing/malware URL from this runner, the dashboard host, a user
+workstation, or any production network. Treat URLs from phishing reports,
+untrusted ticket text, attachments, SIEM/EDR alerts, and user reports as hostile
+until proven otherwise. Use passive/sandboxed evidence paths instead: ticket and
+email headers, mail-gateway logs, proxy/DNS/firewall logs, Wazuh/SIEM evidence,
+known-safe internal allowlists, URL/domain parsing, configured VirusTotal or
+urlscan-style adapters, or an approved isolated detonation service. If no safe
+adapter exists, record that limitation and request approval/access for a safe
+analysis path. Approval to block/quarantine/contain a URL is not approval to
+fetch it.
 
 ## Live Ticket Note Steering
 Operators and ticketing providers can add notes while you are already running.

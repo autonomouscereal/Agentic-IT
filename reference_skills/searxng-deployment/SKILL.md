@@ -27,7 +27,7 @@ the customer requires local, auditable search routing.
 
 ## Current Lab Instance
 
-- URL: `http://192.168.50.222:7999`
+- URL: `http://127.0.0.1:7999`
 - Used by: `web_research` skill
 
 ## Deployment Pattern

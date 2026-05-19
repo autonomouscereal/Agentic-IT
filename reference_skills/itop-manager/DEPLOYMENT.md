@@ -4,10 +4,10 @@ This document contains the full deployment guide, Docker configuration, all trou
 
 ## Environment
 
-- **Host**: AI Server (192.168.50.222)
+- **Host**: AI Server (127.0.0.1)
 - **OS**: Debian (Docker host)
 - **Docker Compose**: v2
-- **Deploy Directory**: `/home/cereal/SOC_TESTING/itop-deployment`
+- **Deploy Directory**: `/opt/agentic-it/SOC_TESTING/itop-deployment`
 
 ## Docker Compose Configuration
 
@@ -42,37 +42,37 @@ volumes:
 ## Directory Structure
 
 ```
-/home/cereal/SOC_TESTING/itop-deployment/
-├── docker-compose.yml          # Container orchestration
-├── itop/
-│   ├── conf/
-│   │   └── production/
-│   │       └── config-itop.php  # iTop config (volume-mounted)
-│   └── extensions/             # Extensions directory
-└── scripts/
-    └── itop_client.py          # Python REST API CLI, env-driven and dual-auth
+/opt/agentic-it/SOC_TESTING/itop-deployment/
+|-- docker-compose.yml          # Container orchestration
+|-- itop/
+|   |-- conf/
+|   |   `-- production/
+|   |       `-- config-itop.php  # iTop config (volume-mounted)
+|   `-- extensions/             # Extensions directory
+`-- scripts/
+    `-- itop_client.py          # Python REST API CLI, env-driven and dual-auth
 ```
 
 ## Docker Management Commands
 
 ```bash
 # Check status
-cd /home/cereal/SOC_TESTING/itop-deployment && docker compose ps
+cd /opt/agentic-it/SOC_TESTING/itop-deployment && docker compose ps
 
 # Start all
-cd /home/cereal/SOC_TESTING/itop-deployment && docker compose up -d
+cd /opt/agentic-it/SOC_TESTING/itop-deployment && docker compose up -d
 
 # Stop all
-cd /home/cereal/SOC_TESTING/itop-deployment && docker compose down
+cd /opt/agentic-it/SOC_TESTING/itop-deployment && docker compose down
 
 # Restart iTop only
-cd /home/cereal/SOC_TESTING/itop-deployment && docker compose restart itop
+cd /opt/agentic-it/SOC_TESTING/itop-deployment && docker compose restart itop
 
 # View logs
-cd /home/cereal/SOC_TESTING/itop-deployment && docker compose logs --tail=50 itop
+cd /opt/agentic-it/SOC_TESTING/itop-deployment && docker compose logs --tail=50 itop
 
 # Check config syntax
-cd /home/cereal/SOC_TESTING/itop-deployment && docker compose exec itop php -l /var/www/html/conf/production/config-itop.php
+cd /opt/agentic-it/SOC_TESTING/itop-deployment && docker compose exec itop php -l /var/www/html/conf/production/config-itop.php
 ```
 
 ## Critical Configuration
@@ -83,7 +83,7 @@ cd /home/cereal/SOC_TESTING/itop-deployment && docker compose exec itop php -l /
 
 3. **Database**: MariaDB LTS with random root password. iTop connects as user `itop` with password (vault key: `itop_mysql`).
 
-4. **Port mapping**: Container port 80 -> host port 25432. Access externally at `http://192.168.50.222:25432`.
+4. **Port mapping**: Container port 80 -> host port 25432. Access externally at `http://127.0.0.1:25432`.
 
 5. **No bulk list/search**: iTop 3.x REST API only supports CRUD by key. There is no list/search endpoint.
 
@@ -184,7 +184,7 @@ $MySettings$MySettings = array(
 
 **Symptom:** After initial deployment, the `check` command returned `"code": 100, "message": "Error: Missing parameter 'user'"` followed by `"Missing parameter 'password'"`.
 
-**Root cause:** The iTop 3.2.1 REST API v1.4 requires `user` and `password` to be passed inside the `json_data` payload on every request — Basic Auth headers alone are insufficient.
+**Root cause:** The iTop 3.2.1 REST API v1.4 requires `user` and `password` to be passed inside the `json_data` payload on every request - Basic Auth headers alone are insufficient.
 
 **Fix:** Updated the `_post` method in `itop_client.py` to include `"user": self.username` and `"password": self.password` in every payload dict alongside `operation`.
 
@@ -249,7 +249,7 @@ $MySettings$MySettings = array(
 ### If REST API returns authentication errors:
 1. Verify credentials are `admin` / (vault key: `itop_web`)
 2. Check `secure_rest_services` is `false` in config
-3. Test with: `python3 /home/cereal/SOC_TESTING/itop-deployment/scripts/itop_client.py check`
+3. Test with: `python3 /opt/agentic-it/SOC_TESTING/itop-deployment/scripts/itop_client.py check`
 
 ### iTop CLI
 
@@ -258,9 +258,9 @@ $MySettings$MySettings = array(
 Examples:
 
 ```bash
-python3 /home/cereal/SOC_TESTING/itop-deployment/scripts/itop_client.py check
-python3 /home/cereal/SOC_TESTING/itop-deployment/scripts/itop_client.py get Incident 170 --fields 'id,title,status,org_id,caller_id,team_id'
-python3 /home/cereal/SOC_TESTING/itop-deployment/scripts/itop_client.py create UserRequest '{"org_id":1,"caller_id":94,"title":"CLI smoke","description":"Created by iTop CLI"}'
+python3 /opt/agentic-it/SOC_TESTING/itop-deployment/scripts/itop_client.py check
+python3 /opt/agentic-it/SOC_TESTING/itop-deployment/scripts/itop_client.py get Incident 170 --fields 'id,title,status,org_id,caller_id,team_id'
+python3 /opt/agentic-it/SOC_TESTING/itop-deployment/scripts/itop_client.py create UserRequest '{"org_id":1,"caller_id":94,"title":"CLI smoke","description":"Created by iTop CLI"}'
 ```
 
 ### Dashboard Outbound Create Defaults
@@ -278,7 +278,7 @@ Verified on 2026-05-12:
 
 ## Test Results
 
-All operations verified working with 42/42 tests passing (comprehensive suite) and 32/33 passing (approval chain suite — 1 minor script bug in delete helper, all API tests passed).
+All operations verified working with 42/42 tests passing (comprehensive suite) and 32/33 passing (approval chain suite - 1 minor script bug in delete helper, all API tests passed).
 
 | Category | Tests | Status |
 |----------|-------|--------|

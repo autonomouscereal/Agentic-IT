@@ -7,7 +7,7 @@ TOTAL=0; PASS=0; FAIL=0; SKIP=0
 GITLAB_PAT="${GITLAB_PAT:-}"
 GITLAB_URL="http://localhost"
 KC_URL="https://localhost:8443"
-EXPECTED_GITLAB_ISSUER="${EXPECTED_GITLAB_ISSUER:-https://192.168.50.222:8443/realms/gitlab}"
+EXPECTED_GITLAB_ISSUER="${EXPECTED_GITLAB_ISSUER:-https://127.0.0.1:8443/realms/gitlab}"
 
 assert() { local name="$1"; result="$2"; msg="$3";
   TOTAL=$((TOTAL + 1));

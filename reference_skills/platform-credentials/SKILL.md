@@ -19,30 +19,30 @@ All AI Server platform credentials are managed through the **Server Manager v2 e
 ## Credential Vault
 
 ### Location
-- Vault script: `C:/Users/cereal/.agents/skills/server-manager/credman.py`
-- Encrypted store: `C:/Users/cereal/.agents/skills/server-manager/.cred_vault.json`
-- Server config: `C:/Users/cereal/.agents/skills/server-manager/servers.json`
+- Vault script: `C:/Users/me/.agents/skills/server-manager/credman.py`
+- Encrypted store: `C:/Users/me/.agents/skills/server-manager/.cred_vault.json`
+- Server config: `C:/Users/me/.agents/skills/server-manager/servers.json`
 
 ### Usage
 ```bash
 # Store a password
-python "C:/Users/cereal/.agents/skills/server-manager/credman.py" set <server-name> "<password>"
+python "C:/Users/me/.agents/skills/server-manager/credman.py" set <server-name> "<password>"
 
 # List servers
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-servers
+python "C:/Users/me/.agents/skills/server-manager/ssh_client.py" --list-servers
 ```
 
 ## Platform Services & Ports
 
 | Platform | URL | Port | Auth Method | Status |
 |----------|-----|------|-------------|--------|
-| Agentic Operations | http://192.168.50.222:25480 | 25480 | Direct (FastAPI) | Operational |
-| iTop | http://192.168.50.222:25432 | 25432 | Local DB (bcrypt) | Demo REST login verified |
-| Wazuh Dashboard | https://192.168.50.222:26443 | 26443 | OpenSearch Security | Demo UI/backend auth verified |
+| Agentic Operations | http://127.0.0.1:25480 | 25480 | Direct (FastAPI) | Operational |
+| iTop | http://127.0.0.1:25432 | 25432 | Local DB (bcrypt) | Demo REST login verified |
+| Wazuh Dashboard | https://127.0.0.1:26443 | 26443 | OpenSearch Security | Demo UI/backend auth verified |
 | Wazuh API | https://127.0.0.1:26500 | 26500 | Native Wazuh API auth | Demo native API token issuance verified |
-| GitLab | http://192.168.50.222:80 | 80 | Local Rails password + Keycloak OIDC | Demo local login and full Keycloak SSO verified |
+| GitLab | http://127.0.0.1:80 | 80 | Local Rails password + Keycloak OIDC | Demo local login and full Keycloak SSO verified |
 | Keycloak | Internal only | N/A | Master realm admin | Operational |
-| Mailcow | http://192.168.50.222:2581 | 2581 | Local + Keycloak bridge | Demo admin UI, webmail, IMAP/SMTP, and report-phish quarantine verified |
+| Mailcow | http://127.0.0.1:2581 | 2581 | Local + Keycloak bridge | Demo admin UI, webmail, IMAP/SMTP, and report-phish quarantine verified |
 
 ## demo_account_1 Unified Credentials
 
@@ -63,7 +63,7 @@ python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --list-serv
 ## Multi-Platform User Manager
 
 ### Location
-- **Script:** `/home/cereal/multiplatform_user_manager.py` (on AI Server)
+- **Script:** `/opt/agentic-it/multiplatform_user_manager.py` (on AI Server)
 - **Status:** patched 2026-05-11; live auth verified for `demo_account_1`
 
 ### Capabilities
@@ -107,7 +107,7 @@ Unified CLI for managing users across all 5 platforms:
 - **GitLab supports both local login and Keycloak OIDC**: Keep `keycloak.internal:host-gateway` in the GitLab compose service and install the Keycloak proxy CA into `/etc/gitlab/trusted-certs/` before `gitlab-ctl reconfigure`. If Keycloak mappers change, rerun the GitLab Keycloak setup script so existing mappers are updated in place.
 - **Keycloak is internal-only**: No external port mapping. Services reach it via Docker network hostname resolution.
 - **iTop uses local auth**: Form login against MariaDB bcrypt hashes. No SSO configured.
-- **Mailcow demo UI**: Use `http://192.168.50.222:2581` and login as `demo_account_1` with the vault password for admin UI. Use `/webmail` for the Roundcube mailbox client with identity `demo_account_1@mailcow.local`; the `Report Phish` toolbar button creates Mailcow quarantine evidence and syncs an Agentic Operations ticket/iTop incident.
+- **Mailcow demo UI**: Use `http://127.0.0.1:2581` and login as `demo_account_1` with the vault password for admin UI. Use `/webmail` for the Roundcube mailbox client with identity `demo_account_1@mailcow.local`; the `Report Phish` toolbar button creates Mailcow quarantine evidence and syncs an Agentic Operations ticket/iTop incident.
 
 ## Detailed Troubleshooting
 

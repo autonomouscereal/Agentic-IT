@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 
 
-# ─── Environment Loading ───────────────────────────────────────────────
+# --- Environment Loading -----------------------------------------------
 
 def load_env(env_path=None):
     """Load environment variables from .env file."""
@@ -55,7 +55,7 @@ if not TEST_USER_PASSWORD:
 ENABLE_MAILPASSWORD = ENV.get("ENABLE_MAILPASSWORD_FLOW", "true").lower() == "true"
 
 
-# ─── HTTP Client ────────────────────────────────────────────────────────
+# --- HTTP Client --------------------------------------------------------
 
 class KeycloakClient:
     """Pure Python Keycloak Admin API client (zero external deps, no ORM)."""
@@ -410,7 +410,7 @@ class KeycloakClient:
         return True
 
 
-# ─── Main Setup ─────────────────────────────────────────────────────────
+# --- Main Setup ---------------------------------------------------------
 
 def run_setup():
     """Execute complete Keycloak setup."""

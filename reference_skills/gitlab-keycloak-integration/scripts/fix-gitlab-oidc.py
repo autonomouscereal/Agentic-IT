@@ -6,10 +6,10 @@ import sys
 
 CONFIG_PATH = "/etc/gitlab/gitlab.rb"
 q = '"'  # double quote character
-issuer = os.environ.get("GITLAB_OIDC_ISSUER", "https://192.168.50.222:8443/realms/gitlab")
+issuer = os.environ.get("GITLAB_OIDC_ISSUER", "https://127.0.0.1:8443/realms/gitlab")
 redirect_uri = os.environ.get(
     "GITLAB_OIDC_REDIRECT_URI",
-    "http://192.168.50.222/users/auth/openid_connect/callback",
+    "http://127.0.0.1/users/auth/openid_connect/callback",
 )
 client_secret = os.environ.get("GITLAB_OIDC_CLIENT_SECRET")
 

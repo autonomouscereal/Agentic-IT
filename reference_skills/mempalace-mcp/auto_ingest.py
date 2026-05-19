@@ -5,7 +5,7 @@ import subprocess
 import os
 
 # Use the absolute path to the venv's python executable
-PYTHON_EXE = r"C:\Users\cereal\.claude\skills\mempalace-mcp\venv\Scripts\python.exe"
+PYTHON_EXE = r"C:\Users\me\.claude\skills\mempalace-mcp\venv\Scripts\python.exe"
 
 def ingest(event_type, payload):
     """

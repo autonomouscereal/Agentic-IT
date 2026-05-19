@@ -161,7 +161,7 @@ def setup_oidc_client(token, base_url, realm_name, client_id):
         return existing_uuid, None
 
     client_secret = secrets.token_urlsafe(48)
-    wazuh_url = os.environ.get("WAZUH_URL", "https://192.168.50.222:26500").rstrip("/")
+    wazuh_url = os.environ.get("WAZUH_URL", "https://127.0.0.1:26500").rstrip("/")
     client_data = {
         "clientId": client_id,
         "enabled": True,

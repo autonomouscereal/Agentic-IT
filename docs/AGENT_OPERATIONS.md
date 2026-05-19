@@ -646,6 +646,15 @@ AGENT_ALLOWED_TOOLS=Read,Write,Bash(curl *)
 
 This is enough for agents to call dashboard APIs with `curl` while keeping arbitrary destructive shell operations out of the default tool scope.
 
+The `curl` allowance is for dashboard/internal APIs only. Agents must never
+directly browse, curl, wget, screenshot, open, or otherwise retrieve suspicious
+URLs from phishing reports, SIEM/EDR alerts, unsolicited email, attachments, or
+untrusted ticket text. Use passive evidence, URL/domain parsing, configured
+VirusTotal/urlscan/ANY.RUN-style adapters, or approved isolated detonation
+instead. Approval to block, quarantine, or contain a URL is not approval to
+fetch it. The runner curl guard enforces this by blocking arbitrary external
+URL hosts outside the configured `AGENT_CURL_ALLOWED_HOSTS` allowlist.
+
 ## Local Model Smoke Result
 
 Latest verified local-model smoke:

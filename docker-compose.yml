@@ -115,6 +115,7 @@ services:
       AGENT_NO_OUTPUT_STALL_SECONDS: ${AGENT_NO_OUTPUT_STALL_SECONDS:-3600}
       AGENT_TRANSIENT_MODEL_RETRY_MAX: ${AGENT_TRANSIENT_MODEL_RETRY_MAX:-3}
       AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS: ${AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS:-30}
+      AGENT_CURL_ALLOWED_HOSTS: ${AGENT_CURL_ALLOWED_HOSTS:-localhost,127.0.0.1,::1,host.docker.internal,ai-proxy,192.168.50.222,api.openai.com,api.anthropic.com,inference-api.nousresearch.com,virustotal.com,*.virustotal.com,urlscan.io,*.urlscan.io,hybrid-analysis.com,*.hybrid-analysis.com}
       AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE: ${AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE:-1}
       AGENT_AUDITOR_AUTO_RECOVER: ${AGENT_AUDITOR_AUTO_RECOVER:-false}
       AGENT_PERMISSION_MODE: ${AGENT_PERMISSION_MODE:-acceptEdits}

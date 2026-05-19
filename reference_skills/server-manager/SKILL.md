@@ -31,7 +31,7 @@ Encrypted, agnostic SSH management tool. Zero hardcoded secrets. Zero escaping i
 | Component | File | Purpose |
 |---|---|---|
 | SSH Client | `ssh_client.py` | Paramiko-based SSH with command execution, SFTP, script deployment |
-| Credential Vault | `credman.py` | Fernet-encrypted password storage — decrypts at runtime only |
+| Credential Vault | `credman.py` | Fernet-encrypted password storage - decrypts at runtime only |
 | Server Config | `servers.json` | Defines servers by name. References secrets by env-var name, never stores them |
 | Encryption Key | `.cred_key` | Master encryption key (600 permissions, owner-only) |
 | Credential Store | `.cred_vault.json` | Encrypted tokens (base64 Fernet ciphertext, not plaintext) |
@@ -45,7 +45,7 @@ Encrypted, agnostic SSH management tool. Zero hardcoded secrets. Zero escaping i
 For the Windows lab, the stable credential command is:
 
 ```powershell
-python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get <vault-key>
+python "C:\Users\me\.agents\skills\server-manager\credman.py" get <vault-key>
 ```
 
 Use this for application credentials such as `demo_account_1` and
@@ -60,14 +60,14 @@ The skill sync installer preserves local-only excluded files in this directory:
 
 Those files are deliberately not committed to the portable `reference_skills`
 bundle. If a legacy sync ever removes them, restore them from
-`C:\Users\cereal\.claude\skills\server-manager` or the `vault-backup` skill
+`C:\Users\me\.claude\skills\server-manager` or the `vault-backup` skill
 checkpoints before running credential commands again.
 
 ---
 
 ## First-Time Setup (any environment)
 
-Run these steps **once** when planted in a new environment. Set `SERVER_MANAGER_SKILL_DIR` to this skill directory, for example `C:/Users/cereal/.agents/skills/server-manager`.
+Run these steps **once** when planted in a new environment. Set `SERVER_MANAGER_SKILL_DIR` to this skill directory, for example `C:/Users/me/.agents/skills/server-manager`.
 
 ### Step 1: Initialize the encrypted credential vault
 
@@ -145,7 +145,7 @@ That's it. Use `--server my-new-server` from then on.
 |---|---|---|
 | `--test` | Test connection only | Verifying auth/network |
 | `--execute "cmd"` / `-e "cmd"` | Run a single command | Simple commands with NO special characters (no `$`, no nested quotes, no backticks) |
-| `--command-file "/path/to/file"` / `-f` | Read command from a local file | Commands with quotes, `$()`, backticks — anything bash would mangle |
+| `--command-file "/path/to/file"` / `-f` | Read command from a local file | Commands with quotes, `$()`, backticks - anything bash would mangle |
 | `--script "multiline bash"` | Execute via temp-file upload | Complex scripts with loops, conditionals, pipes, subshells |
 | `--upload "LOCAL" "REMOTE"` / `-u` | Upload a single file | One-off file transfer |
 | `--upload-dir "LOCAL_DIR" "REMOTE_DIR"` | Upload directory tree recursively | Deploying multiple files |
@@ -177,7 +177,7 @@ When the command contains `$()`, quotes, backticks, pipes, or any bash special c
 # Step 1: Write command to a file
 python -c "
 with open('/tmp/my_cmd.txt', 'w') as f:
-    f.write('cd /home/cereal && docker compose logs -n 20 zeek | grep ERROR')
+    f.write('cd /opt/agentic-it && docker compose logs -n 20 zeek | grep ERROR')
 "
 
 # Step 2: Execute via command-file
@@ -203,13 +203,13 @@ The `--script` flag uploads the script to a secure temp file on the remote serve
 
 ```bash
 # Upload a single file
-python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --upload "C:/reports/output.csv" "/home/cereal/output.csv"
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --upload "C:/reports/output.csv" "/opt/agentic-it/output.csv"
 
 # Upload a directory tree (handles nested directories)
-python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --upload-dir "C:/project/src" "/home/cereal/project/src"
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --upload-dir "C:/project/src" "/opt/agentic-it/project/src"
 
 # Download a file
-python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --download "/home/cereal/logs/app.log" "C:/Users/cereal/Downloads"
+python "${SERVER_MANAGER_SKILL_DIR}/ssh_client.py" --server ai --download "/opt/agentic-it/logs/app.log" "C:/Users/me/Downloads"
 ```
 
 ### Pattern 5: JSON output for programmatic consumption
@@ -226,7 +226,7 @@ The script normalizes paths automatically. You can use any of these formats for 
 
 | Format | Example | Works? |
 |---|---|---|
-| Windows native | `C:/Users/cereal/file.txt` | Yes |
+| Windows native | `C:/Users/me/file.txt` | Yes |
 | Git Bash | `/c/Users/cereal/file.txt` | Yes |
 | cygwin | `/cygdrive/c/Users/cereal/file.txt` | Yes |
 | Tilde | `~/file.txt` | Yes |
@@ -237,10 +237,10 @@ The script normalizes paths automatically. You can use any of these formats for 
 
 ## Security Model
 
-1. **`servers.json`** — Contains hostnames, ports, usernames. **NO passwords. NO secrets.**
-2. **`.cred_vault.json`** — Contains Fernet-encrypted tokens. Cannot be decrypted without `.cred_key`.
-3. **`.cred_key`** — Master encryption key stored with `0600` permissions. Never transmitted over network.
-4. **`ssh_client.py`** — Calls `credman.py` via subprocess to decrypt password in-memory only.
+1. **`servers.json`** - Contains hostnames, ports, usernames. **NO passwords. NO secrets.**
+2. **`.cred_vault.json`** - Contains Fernet-encrypted tokens. Cannot be decrypted without `.cred_key`.
+3. **`.cred_key`** - Master encryption key stored with `0600` permissions. Never transmitted over network.
+4. **`ssh_client.py`** - Calls `credman.py` via subprocess to decrypt password in-memory only.
 
 ### Auth resolution order
 
@@ -272,9 +272,9 @@ ssh = SSHClient.from_config(server_cfg)
 if ssh.connect():
     code, stdout, stderr = ssh.execute("hostname")
     code, out, err = ssh.execute_script("echo 'User: $(whoami)'")
-    ssh.upload_file("C:/local/file.txt", "/home/cereal/file.txt")
-    results = ssh.upload_directory("C:/local/dir", "/home/cereal/dir")
-    ssh.download_file("/home/cereal/output.csv", "C:/Users/cereal/Downloads")
+    ssh.upload_file("C:/local/file.txt", "/opt/agentic-it/file.txt")
+    results = ssh.upload_directory("C:/local/dir", "/opt/agentic-it/dir")
+    ssh.download_file("/opt/agentic-it/output.csv", "C:/Users/me/Downloads")
     ssh.close()
 ```
 
@@ -305,10 +305,10 @@ if ssh.connect():
 
 ## Release Notes
 
-### v2.1 — End-to-End Testing & Bug Fixes
+### v2.1 - End-to-End Testing & Bug Fixes
 
 **Bugs fixed:**
-- `_ensure_remote_dir()` had a `break` after creating the first parent directory, causing `--upload-dir` to fail on nested paths (e.g., `a/b/c/deep.txt`). Removed the `break` — recursive directory creation now works for arbitrary depth.
+- `_ensure_remote_dir()` had a `break` after creating the first parent directory, causing `--upload-dir` to fail on nested paths (e.g., `a/b/c/deep.txt`). Removed the `break` - recursive directory creation now works for arbitrary depth.
 - `normalize_local_path()` dropped the separator between drive letter and path when converting Git Bash paths (`/c/Users/...` became `C:Users/...`). Fixed to produce `C:/Users/...`.
 - `_print_result()` had no early check for error dicts from `--command-file`, causing confusing `[EXECUTE] exit code -1` output. Added error-first display.
 

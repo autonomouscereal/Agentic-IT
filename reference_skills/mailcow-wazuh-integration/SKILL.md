@@ -1,7 +1,7 @@
 ---
 name: mailcow-wazuh-integration
 description: >
-  Mailcow-Wazuh SIEM integration for real-time alerting and phishing detection on 192.168.50.222.
+  Mailcow-Wazuh SIEM integration for real-time alerting and phishing detection on 127.0.0.1.
   Covers Wazuh syslog configuration, custom detection rules (IDs 100100-100108),
   modular SIEM connector architecture (abstract base + Wazuh impl + NullConnector),
   standalone log forwarder with CEF formatting, dual-path forwarding (API + UDP syslog),
@@ -15,46 +15,46 @@ disable-model-invocation: false
 user-invocable: true
 ---
 
-# Mailcow-Wazuh SIEM Integration — Complete Blueprint
+# Mailcow-Wazuh SIEM Integration - Complete Blueprint
 
 **Version:** 2.0 | **Date:** 2026-04-29
-**Server:** 192.168.50.222 (AI Server) | **Wazuh:** v4.14.4 | **Mailcow:** Docker
+**Server:** 127.0.0.1 (AI Server) | **Wazuh:** v4.14.4 | **Mailcow:** Docker
 
 ---
 
 ## Overview
 
-This integration connects Mailcow email server events to Wazuh SIEM for real-time alerting, logging, and phishing detection. The architecture is **completely fault-tolerant** — if Wazuh is down, Mailcow keeps running, emails deliver, and no services crash.
+This integration connects Mailcow email server events to Wazuh SIEM for real-time alerting, logging, and phishing detection. The architecture is **completely fault-tolerant** - if Wazuh is down, Mailcow keeps running, emails deliver, and no services crash.
 
 ### Design Principles
-- **Modular SIEM connector** — swap Wazuh for Splunk/ELK by changing one config line
-- **Dual-path forwarding** — API + Syslog UDP; if one fails, the other works
-- **Standalone forwarder** — no external dependencies, stdlib Python only
-- **Zero blast radius** — SIEM failures silently ignored, never propagate upstream
+- **Modular SIEM connector** - swap Wazuh for Splunk/ELK by changing one config line
+- **Dual-path forwarding** - API + Syslog UDP; if one fails, the other works
+- **Standalone forwarder** - no external dependencies, stdlib Python only
+- **Zero blast radius** - SIEM failures silently ignored, never propagate upstream
 
 ---
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Mailcow Server                           │
-│                                                                 │
-│  ┌──────────┐    ┌──────────────────┐    ┌──────────────────┐  │
-│  │ Dovecot  │───▶│  Log Forwarder   │───▶│  Wazuh Manager   │  │
-│  │  Logs    │    │  (standalone)     │    │  (syslog UDP)    │  │
-│  └──────────┘    └──────────────────┘    └──────────────────┘  │
-│                            │                       │            │
-│  ┌──────────────────────┐  │    ┌────────────────┐ ▼            │
-│  │   Report-Phish       │  │    │  Wazuh API     │ Alerts       │
-│  │   Backend            │  │    │  (port 26500)  │ stored in    │
-│  │   (internal_email)   │  │    └────────────────┘ Indexer      │
-│  └──────────────────────┘  │              │                     │
-│           │                │    ┌───────── ▼ ┐                  │
-│           ▼                │    │ Wazuh      │                  │
-│    Internal SMTP           │    │ Dashboard  │                  │
-│    (port 25)               │    │ (port 26443)│                  │
-└─────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------+
+|                        Mailcow Server                           |
+|                                                                 |
+|  +----------+    +------------------+    +------------------+  |
+|  | Dovecot  |--->|  Log Forwarder   |--->|  Wazuh Manager   |  |
+|  |  Logs    |    |  (standalone)     |    |  (syslog UDP)    |  |
+|  `----------'    `------------------'    `------------------'  |
+|                            |                       |            |
+|  +----------------------+  |    +----------------+ v            |
+|  |   Report-Phish       |  |    |  Wazuh API     | Alerts       |
+|  |   Backend            |  |    |  (port 26500)  | stored in    |
+|  |   (internal_email)   |  |    `----------------' Indexer      |
+|  `----------------------'  |              |                     |
+|           |                |    +--------- v +                  |
+|           v                |    | Wazuh      |                  |
+|    Internal SMTP           |    | Dashboard  |                  |
+|    (port 25)               |    | (port 26443)|                  |
+`-----------------------------------------------------------------'
 ```
 
 ---
@@ -85,7 +85,7 @@ Wazuh must accept syslog UDP messages. Edit `/var/ossec/etc/ossec.conf` inside t
   <port>514</port>
   <protocol>udp</protocol>
   <allowed-ips>127.0.0.1</allowed-ips>
-  <allowed-ips>192.168.50.0/24</allowed-ips>
+  <allowed-ips><trusted-subnet-cidr></allowed-ips>
   <allowed-ips>172.26.0.0/16</allowed-ips>
   <allowed-ips>172.17.0.0/16</allowed-ips>
 </remote>
@@ -100,9 +100,9 @@ Wazuh must accept syslog UDP messages. Edit `/var/ossec/etc/ossec.conf` inside t
 ```
 
 **CRITICAL NOTES:**
-- Each `<allowed-ips>` entry must contain a SINGLE IP or CIDR — no comma-separated lists
+- Each `<allowed-ips>` entry must contain a SINGLE IP or CIDR - no comma-separated lists
 - Docker network subnets (`172.26.0.0/16`, `172.17.0.0/16`) must be included because host-to-container traffic comes from the Docker bridge IP, not 127.0.0.1
-- `queue_size` is only valid for `secure` connections — do NOT include in syslog block
+- `queue_size` is only valid for `secure` connections - do NOT include in syslog block
 - Restart `wazuh-remoted` after changes:
   ```bash
   docker exec wazuh_deploy-wazuh.manager-1 /var/ossec/bin/wazuh-control restart wazuh-remoted
@@ -116,7 +116,7 @@ docker logs wazuh_deploy-wazuh.manager-1 2>&1 | grep -i 'syslog\|514'
 # Expected output:
 # Started (pid: XXXX). Listening on port 514/UDP (syslog).
 # Remote syslog allowed from: '127.0.0.1'
-# Remote syslog allowed from: '192.168.50.0/24'
+# Remote syslog allowed from: '<trusted-subnet-cidr>'
 ```
 
 ---
@@ -130,7 +130,7 @@ Rules are deployed directly into the container at:
 /var/ossec/etc/rules/local_rules.xml
 ```
 
-**DO NOT** use `<pcre>` or `<pcre2>` elements — they are NOT supported as standalone rule elements in Wazuh 4.14.4. Use `<match>` for string matching instead.
+**DO NOT** use `<pcre>` or `<pcre2>` elements - they are NOT supported as standalone rule elements in Wazuh 4.14.4. Use `<match>` for string matching instead.
 
 ### 2B. Mailcow Rules (IDs 100100-100108)
 
@@ -248,13 +248,13 @@ docker exec wazuh_deploy-wazuh.manager-1 /var/ossec/bin/wazuh-control start
 
 ```
 report_phish/
-├── __init__.py              # Exports: create_connector, SIEMConnector, WazuhConnector
-├── backends/
-│   └── internal_email.py    # Report-phish backend with SIEM integration
-└── siem/
-    ├── __init__.py          # Factory: create_connector(siem_type, config)
-    ├── connector.py         # Abstract SIEMConnector base + NullConnector
-    └── wazuh_connector.py   # Wazuh implementation
+|-- __init__.py              # Exports: create_connector, SIEMConnector, WazuhConnector
+|-- backends/
+|   `-- internal_email.py    # Report-phish backend with SIEM integration
+`-- siem/
+    |-- __init__.py          # Factory: create_connector(siem_type, config)
+    |-- connector.py         # Abstract SIEMConnector base + NullConnector
+    `-- wazuh_connector.py   # Wazuh implementation
 ```
 
 ### 3B. Abstract Connector (connector.py)
@@ -283,7 +283,7 @@ class SIEMConnector(abc.ABC):
     def send_log(self, log_entry: dict) -> bool:
         """Send a log entry to SIEM."""
 
-    # SAFE wrappers — never raise, always return status dict
+    # SAFE wrappers - never raise, always return status dict
     def safe_send_alert(self, alert: dict) -> dict:
         try:
             ok = self.send_alert(alert)
@@ -304,7 +304,7 @@ class SIEMConnector(abc.ABC):
 ```python
 DEFAULT_WAZUH_CONFIG = {
     "enabled": True,
-    "host": "192.168.50.222",
+    "host": "127.0.0.1",
     "api_port": 26500,
     "api_user": "wazuh-wui",
     "api_password": os.environ.get("WAZUH_API_PASSWORD", ""),
@@ -317,8 +317,8 @@ DEFAULT_WAZUH_CONFIG = {
 ```
 
 **Dual-path forwarding:**
-1. **API path** — sends via `POST /security/user/authenticate` for token, then forwards alert
-2. **Syslog path** — sends CEF-formatted UDP packets with PRI headers
+1. **API path** - sends via `POST /security/user/authenticate` for token, then forwards alert
+2. **Syslog path** - sends CEF-formatted UDP packets with PRI headers
 
 ```python
 def send_alert(self, alert: dict) -> bool:
@@ -355,7 +355,7 @@ conn = create_connector("wazuh")
 # No SIEM
 conn = create_connector("null")
 
-# Unknown type → defaults to NullConnector (safe fallback)
+# Unknown type -> defaults to NullConnector (safe fallback)
 conn = create_connector("splunk")  # returns NullConnector
 ```
 
@@ -365,18 +365,18 @@ conn = create_connector("splunk")  # returns NullConnector
 
 ### 4A. Location and Execution
 
-**Server path:** `/home/cereal/Mailcow/siem_log_forwarder.py`
-**Log file:** `/home/cereal/Mailcow/siem_forwarder.log`
+**Server path:** `/opt/agentic-it/Mailcow/siem_log_forwarder.py`
+**Log file:** `/opt/agentic-it/Mailcow/siem_forwarder.log`
 
 ```bash
 # Wazuh mode (default)
-python3 /home/cereal/Mailcow/siem_log_forwarder.py
+python3 /opt/agentic-it/Mailcow/siem_log_forwarder.py
 
 # Null mode (dry run, no SIEM)
-python3 /home/cereal/Mailcow/siem_log_forwarder.py null
+python3 /opt/agentic-it/Mailcow/siem_log_forwarder.py null
 
 # Production (background)
-nohup python3 /home/cereal/Mailcow/siem_log_forwarder.py > /home/cereal/Mailcow/siem_forwarder.log 2>&1 &
+nohup python3 /opt/agentic-it/Mailcow/siem_log_forwarder.py > /opt/agentic-it/Mailcow/siem_forwarder.log 2>&1 &
 ```
 
 ### 4B. What It Monitors
@@ -429,7 +429,7 @@ def _format_cef(self, entry):
 ```python
 from report_phish import InternalEmailBackend
 
-# Default — Wazuh SIEM enabled
+# Default - Wazuh SIEM enabled
 backend = InternalEmailBackend()
 
 # SIEM disabled
@@ -456,7 +456,7 @@ backend = InternalEmailBackend({"siem_config": {"enabled": False}})
   "report_id": "siem-test-001",
   "timestamp": 1777452507.3549285,
   "smtp": {
-    "host": "192.168.50.222",
+    "host": "127.0.0.1",
     "port": 25,
     "dist_group": "security-team@mailcow.local"
   },
@@ -472,7 +472,7 @@ backend = InternalEmailBackend({"siem_config": {"enabled": False}})
 
 ### 6A. Test Suite
 
-**Location:** `C:\Users\cereal\report_phish\test_siem.py`
+**Location:** `C:\Users\me\report_phish\test_siem.py`
 
 Run with: `python test_siem.py`
 
@@ -527,7 +527,7 @@ print('Sent')
 | Cause | Fix |
 |-------|-----|
 | Missing `allowed-ips` for docker subnet | Add `<allowed-ips>172.26.0.0/16</allowed-ips>` |
-| Missing `allowed-ips` for host network | Add `<allowed-ips>192.168.50.0/24</allowed-ips>` |
+| Missing `allowed-ips` for host network | Add `<allowed-ips><trusted-subnet-cidr></allowed-ips>` |
 | Comma-separated IPs in one tag | Split into separate `<allowed-ips>` elements |
 
 ### 7C. Syslog Not Listening
@@ -574,19 +574,19 @@ docker logs wazuh_deploy-wazuh.manager-1 2>&1 | grep '514/UDP'
 ### Local Development (Windows)
 | Path | Purpose |
 |------|---------|
-| `C:\Users\cereal\report_phish\siem\connector.py` | Abstract SIEM connector |
-| `C:\Users\cereal\report_phish\siem\wazuh_connector.py` | Wazuh implementation |
-| `C:\Users\cereal\report_phish\siem\__init__.py` | Factory function |
-| `C:\Users\cereal\report_phish\backends\internal_email.py` | Report-phish backend |
-| `C:\Users\cereal\report_phish\test_siem.py` | Test suite |
+| `C:\Users\me\report_phish\siem\connector.py` | Abstract SIEM connector |
+| `C:\Users\me\report_phish\siem\wazuh_connector.py` | Wazuh implementation |
+| `C:\Users\me\report_phish\siem\__init__.py` | Factory function |
+| `C:\Users\me\report_phish\backends\internal_email.py` | Report-phish backend |
+| `C:\Users\me\report_phish\test_siem.py` | Test suite |
 
-### Server (192.168.50.222)
+### Server (127.0.0.1)
 | Path | Purpose |
 |------|---------|
-| `/home/cereal/Mailcow/siem_log_forwarder.py` | Standalone log forwarder |
-| `/home/cereal/Mailcow/siem_forwarder.log` | Forwarder log output |
-| `/home/cereal/Mailcow/mailcow_wazuh_rules.xml` | Wazuh rules (host copy) |
-| `/home/cereal/Mailcow/deploy/logs/dovecot/dovecot.log` | Dovecot log source |
+| `/opt/agentic-it/Mailcow/siem_log_forwarder.py` | Standalone log forwarder |
+| `/opt/agentic-it/Mailcow/siem_forwarder.log` | Forwarder log output |
+| `/opt/agentic-it/Mailcow/mailcow_wazuh_rules.xml` | Wazuh rules (host copy) |
+| `/opt/agentic-it/Mailcow/deploy/logs/dovecot/dovecot.log` | Dovecot log source |
 
 ### Inside Wazuh Container
 | Path | Purpose |
@@ -601,14 +601,14 @@ docker logs wazuh_deploy-wazuh.manager-1 2>&1 | grep '514/UDP'
 
 - [ ] Wazuh manager running with all core processes
 - [ ] Syslog UDP listener active on port 514 (host: 26514)
-- [ ] `allowed-ips` configured for 127.0.0.1, 192.168.50.0/24, 172.26.0.0/16, 172.17.0.0/16
+- [ ] `allowed-ips` configured for 127.0.0.1, <trusted-subnet-cidr>, 172.26.0.0/16, 172.17.0.0/16
 - [ ] Mailcow rules deployed to `/var/ossec/etc/rules/local_rules.xml`
 - [ ] Rules validated (no XML errors, no pcre/pcre2 elements)
 - [ ] Log forwarder running and tailing Dovecot logs
 - [ ] Report-phish backend configured with Wazuh connector
 - [ ] Test suite passes (7/7 tests)
 - [ ] Mailcow alerts visible in `alerts.json`
-- [ ] Fault tolerance verified (SIEM disabled → email still delivers)
+- [ ] Fault tolerance verified (SIEM disabled -> email still delivers)
 
 ---
 

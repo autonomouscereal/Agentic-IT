@@ -8,8 +8,8 @@ Validates:
 4. Log files exist and are accessible
 5. Log forwarder can connect to Wazuh
 
-Run on the AI Server (192.168.50.222):
-    cd /home/cereal/SOC_TESTING/log_forwarder
+Run on the AI Server (127.0.0.1):
+    cd /opt/agentic-it/SOC_TESTING/log_forwarder
     python test_integration.py -v
 """
 
@@ -22,8 +22,8 @@ import time
 
 
 WAZUH_CONTAINER = "wazuh_deploy-wazuh.manager-1"
-SOC_COMPOSE_DIR = "/home/cereal/SOC_TESTING"
-WAZUH_COMPOSE_DIR = "/home/cereal/SOC_TESTING/wazuh_deploy"
+SOC_COMPOSE_DIR = "/opt/agentic-it/SOC_TESTING"
+WAZUH_COMPOSE_DIR = "/opt/agentic-it/SOC_TESTING/wazuh_deploy"
 WAZUH_HOST = "127.0.0.1"
 WAZUH_PORT = 26151
 
@@ -75,7 +75,7 @@ def run_logtest(log_json, label):
     }
 
 
-# ── Health Tests ──────────────────────────────────────────────────────────────
+# -- Health Tests --------------------------------------------------------------
 
 def test_zeek_container_running():
     """Zeek SOC container is running."""
@@ -132,15 +132,15 @@ def test_wazuh_no_critical_errors():
 
 def test_log_files_exist():
     """Zeek and Suricata log files are accessible."""
-    zeek_dir = "/home/cereal/SOC_TESTING/logs/zeek"
-    suricata_log = "/home/cereal/SOC_TESTING/logs/suricata/eve.json"
+    zeek_dir = "/opt/agentic-it/SOC_TESTING/logs/zeek"
+    suricata_log = "/opt/agentic-it/SOC_TESTING/logs/suricata/eve.json"
 
     assert os.path.isdir(zeek_dir), f"Zeek log dir missing: {zeek_dir}"
     assert os.path.isfile(suricata_log), f"Suricata log missing: {suricata_log}"
     print(f"  PASS: Log files exist and accessible")
 
 
-# ── Zeek Rule Tests ──────────────────────────────────────────────────────────
+# -- Zeek Rule Tests ----------------------------------------------------------
 
 def test_zeek_base_rule():
     """Rule 100900 matches Zeek conn.log baseline."""
@@ -236,7 +236,7 @@ def test_zeek_revoked_cert():
     print(f"  PASS: Zeek revoked cert rule 100910 fired (level {result['rule_level']})")
 
 
-# ── Suricata Rule Tests ──────────────────────────────────────────────────────
+# -- Suricata Rule Tests ------------------------------------------------------
 
 def test_suricata_high_severity():
     """Rule 86710 fires for HIGH severity alerts (severity 4)."""
@@ -308,7 +308,7 @@ def test_suricata_tls_deprecated():
     print(f"  PASS: Suricata TLS 1.0 rule 86750 fired (level {result['rule_level']})")
 
 
-# ── Forwarder Tests ──────────────────────────────────────────────────────────
+# -- Forwarder Tests ----------------------------------------------------------
 
 def test_wazuh_tcp_port_open():
     """Wazuh TCP port 26151 is accepting connections."""
@@ -334,7 +334,7 @@ def test_forwarder_can_connect():
         sock.close()
 
 
-# ── Runner ────────────────────────────────────────────────────────────────────
+# -- Runner --------------------------------------------------------------------
 
 def main():
     tests = [

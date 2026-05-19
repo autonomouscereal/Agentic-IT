@@ -51,7 +51,7 @@ rotation, reinstall `dashboard-ca.crt` on operator workstations.
 Download only the CA cert:
 
 ```powershell
-python "C:\Users\cereal\.agents\skills\server-manager\ssh_client.py" --server ai --download /home/cereal/SOC_TESTING/soc-dashboard/runtime/tls/dashboard-ca.crt "D:\IT AGENT PROJECT\runtime\trusted-ca"
+python "C:\Users\me\.agents\skills\server-manager\ssh_client.py" --server ai --download /opt/agentic-it/SOC_TESTING/soc-dashboard/runtime/tls/dashboard-ca.crt "D:\IT AGENT PROJECT\runtime\trusted-ca"
 .\scripts\install_dashboard_ca_windows.ps1 -CertPath "D:\IT AGENT PROJECT\runtime\trusted-ca\dashboard-ca.crt"
 ```
 
@@ -73,7 +73,7 @@ From the operator workstation, verify normal TLS validation without
 ```powershell
 python - <<'PY'
 import urllib.request
-with urllib.request.urlopen("https://192.168.50.222:25443/nginx-health", timeout=10) as resp:
+with urllib.request.urlopen("https://127.0.0.1:25443/nginx-health", timeout=10) as resp:
     print(resp.status, resp.read().decode())
 PY
 ```
@@ -81,7 +81,7 @@ PY
 Then run the login smoke over HTTPS:
 
 ```powershell
-python scripts\smoke_dashboard_login.py https://192.168.50.222:25443 --username demo_account_1 --password-file <temp-vault-password-file>
+python scripts\smoke_dashboard_login.py https://127.0.0.1:25443 --username demo_account_1 --password-file <temp-vault-password-file>
 ```
 
 Expected browser behavior:

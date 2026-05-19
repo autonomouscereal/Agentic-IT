@@ -226,17 +226,17 @@ python3 scripts/test_bridge.py
 
 ```
 iam-bridge/
-├── SKILL.md               # This file (main skill documentation)
-├── reference.md           # API reference (Keycloak + iTop + Bridge) - loaded on demand
-├── troubleshooting.md     # Common issues and solutions - loaded on demand
-├── .env.example           # Environment template with ALL secrets
-├── .env                   # Actual credentials (git-ignored, 600 permissions)
-└── scripts/
-    ├── bridge_deploy.py   # Deployment orchestrator
-    ├── keycloak_setup.py  # Keycloak realm, clients, groups, roles, mappers
-    ├── itop_setup.py      # iTop teams, users, extension checks
-    ├── sync_bridge.py     # Bidirectional sync engine (CLI + daemon)
-    └── test_bridge.py     # E2E test suite (23 tests)
+|-- SKILL.md               # This file (main skill documentation)
+|-- reference.md           # API reference (Keycloak + iTop + Bridge) - loaded on demand
+|-- troubleshooting.md     # Common issues and solutions - loaded on demand
+|-- .env.example           # Environment template with ALL secrets
+|-- .env                   # Actual credentials (git-ignored, 600 permissions)
+`-- scripts/
+    |-- bridge_deploy.py   # Deployment orchestrator
+    |-- keycloak_setup.py  # Keycloak realm, clients, groups, roles, mappers
+    |-- itop_setup.py      # iTop teams, users, extension checks
+    |-- sync_bridge.py     # Bidirectional sync engine (CLI + daemon)
+    `-- test_bridge.py     # E2E test suite (23 tests)
 ```
 
 ## Additional Resources

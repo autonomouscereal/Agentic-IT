@@ -11,8 +11,8 @@ from pathlib import Path
 
 
 SERVER_MANAGER = Path(__file__).resolve().parent / "ssh_client.py"
-LOCAL_BASE = Path("C:/Users/cereal/SOC_TESTING")
-REMOTE_BASE = "/home/cereal/SOC_TESTING"
+LOCAL_BASE = Path("C:/Users/me/SOC_TESTING")
+REMOTE_BASE = "/opt/agentic-it/SOC_TESTING"
 FILES_TO_UPLOAD = [
     ("docker-compose.yml", f"{REMOTE_BASE}/docker/docker-compose.yml"),
     ("zeek-scripts/local.zeek", f"{REMOTE_BASE}/config/zeek/local.zeek"),

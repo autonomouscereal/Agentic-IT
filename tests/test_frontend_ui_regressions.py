@@ -71,6 +71,16 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn('setText("stat-agent-active", agentOpenCountState);', self.dashboard_js)
         self.assertIn('setText("agent-count", agentOpenCountState);', self.dashboard_js)
 
+    def test_setup_modules_use_explicit_scope_actions(self):
+        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("Choose scope per module", index_html)
+        self.assertIn("data-setup-action", self.dashboard_js)
+        self.assertIn("Deploy reference", self.dashboard_js)
+        self.assertIn("Integrate existing", self.dashboard_js)
+        self.assertIn("Off / not in scope", self.dashboard_js)
+        self.assertIn("module_actions: moduleActions", self.dashboard_js)
+        self.assertIn("scoped module tickets", self.dashboard_js)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,18 +16,18 @@ Usage via CLI:
 
     # Execute complex commands via file (avoids ALL escaping issues)
     # 1. Write your command to a temp file
-    echo 'cd /home/cereal && docker compose ps && echo "done"' > /tmp/cmd.txt
+    echo 'cd /opt/agentic-it && docker compose ps && echo "done"' > /tmp/cmd.txt
     # 2. Pass the file path
     python ssh_client.py --server ai --command-file "/tmp/cmd.txt"
 
     # Upload a file
-    python ssh_client.py --server ai --upload "~/local/file.txt" "/home/cereal/file.txt"
+    python ssh_client.py --server ai --upload "~/local/file.txt" "/opt/agentic-it/file.txt"
 
     # Upload directory recursively
-    python ssh_client.py --server ai --upload-dir "~/local/dir" "/home/cereal/remote"
+    python ssh_client.py --server ai --upload-dir "~/local/dir" "/opt/agentic-it/remote"
 
     # Download a file
-    python ssh_client.py --server ai --download "/home/cereal/file.txt" "~/downloads"
+    python ssh_client.py --server ai --download "/opt/agentic-it/file.txt" "~/downloads"
 
     # List configured servers
     python ssh_client.py --list-servers
@@ -80,9 +80,9 @@ def normalize_local_path(p: str) -> Path:
     Convert any path format to a proper Windows Path object.
 
     Handles:
-      - Git Bash style:  /c/Users/cereal/file.txt  ->  C:/Users/cereal/file.txt
+      - Git Bash style:  /c/Users/cereal/file.txt  ->  C:/Users/me/file.txt
       - cygwin style:    /cygdrive/c/Users/cereal/file.txt
-      - Native Windows:  C:/Users/cereal/file.txt
+      - Native Windows:  C:/Users/me/file.txt
       - Forward slashes: /d/some/path
     """
     if not p:
@@ -584,17 +584,17 @@ Examples:
   python ssh_client.py --server ai --execute "docker compose ps"
 
   # Complex command via file (no escaping issues!)
-  echo 'cd /home/cereal && docker compose logs -n 20 zeek' > /tmp/cmd.txt
+  echo 'cd /opt/agentic-it && docker compose logs -n 20 zeek' > /tmp/cmd.txt
   python ssh_client.py --server ai --command-file "/tmp/cmd.txt"
 
   # Upload file
-  python ssh_client.py --server ai --upload "C:/reports/log.txt" "/home/cereal/log.txt"
+  python ssh_client.py --server ai --upload "C:/reports/log.txt" "/opt/agentic-it/log.txt"
 
   # Upload directory
-  python ssh_client.py --server ai --upload-dir "C:/project" "/home/cereal/project"
+  python ssh_client.py --server ai --upload-dir "C:/project" "/opt/agentic-it/project"
 
   # Download file
-  python ssh_client.py --server ai --download "/home/cereal/output.csv" "C:/Users/cereal/Downloads"
+  python ssh_client.py --server ai --download "/opt/agentic-it/output.csv" "C:/Users/me/Downloads"
 
   # JSON output (machine-parseable)
   python ssh_client.py --server ai --execute "pwd" --json

@@ -82,7 +82,7 @@ case "${1:-help}" in
     ;;
   certs-expiry)
     echo "=== Certificate Expiry ==="
-    openssl x509 -in /home/cereal/gitlab-keycloak-integration/certs/server-cert.pem -noout -dates 2>/dev/null || echo "  Cert not found at expected path"
+    openssl x509 -in /opt/agentic-it/gitlab-keycloak-integration/certs/server-cert.pem -noout -dates 2>/dev/null || echo "  Cert not found at expected path"
     ;;
   help)
     usage

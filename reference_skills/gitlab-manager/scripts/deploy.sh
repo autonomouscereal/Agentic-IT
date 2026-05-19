@@ -6,10 +6,10 @@
 
 set -euo pipefail
 
-DEPLOY_DIR="${DEPLOY_DIR:-/home/cereal/gitlab}"
+DEPLOY_DIR="${DEPLOY_DIR:-/opt/agentic-it/gitlab}"
 GITLAB_VERSION="${GITLAB_VERSION:-17.11.3-ce.0}"
 RUNNER_VERSION="${RUNNER_VERSION:-v17.11.0}"
-GITLAB_HOSTNAME="${GITLAB_HOSTNAME:-192.168.50.222}"
+GITLAB_HOSTNAME="${GITLAB_HOSTNAME:-127.0.0.1}"
 GITLAB_HTTP_PORT="${GITLAB_HTTP_PORT:-80}"
 GITLAB_SSH_PORT="${GITLAB_SSH_PORT:-2222}"
 GITLAB_TIMEZONE="${GITLAB_TIMEZONE:-UTC}"
@@ -223,7 +223,7 @@ ENVEOF
     log_ok "=== GitLab Deployment Complete ==="
 }
 
-# ─── Main ─────────────────────────────────────────────────────────────────────
+# --- Main ---------------------------------------------------------------------
 case "${1:-}" in
     --fresh)         deploy_fresh ;;
     --reconfigure)

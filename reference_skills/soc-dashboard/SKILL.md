@@ -2,7 +2,7 @@
 name: soc-dashboard
 description: >
   Agentic Operations control plane - FastAPI + PostgreSQL + vanilla JS
-  platform for the AI Server (192.168.50.222). The SOC/IT dashboard is the seed proof
+  platform for the AI Server (127.0.0.1). The SOC/IT dashboard is the seed proof
   for a broader one-line installed agentic enterprise operations layer that can route IT,
   SOC/security, DevOps, service desk, IAM, cloud, network, compliance, maintenance,
   and self-repair work to governed agents through Hermes or Claude Code.
@@ -39,7 +39,7 @@ cloud, compliance, maintenance, and internal tooling. SOC is the first proof
 domain because it exercises tickets, alerts, logs, identity, approvals,
 remediation, evidence, and postmortems.
 
-All concrete products are replaceable providers or reference modules. iTop, Wazuh, Zeek, Suricata, Mailcow, Keycloak, GitLab, SearXNG, and the AI proxy are the current lab/reference stack on `192.168.50.222`; ServiceNow, Jira, Splunk, Sentinel, Defender, CrowdStrike, Exchange, Gmail, Proofpoint, Okta, GitHub, Azure DevOps, Jenkins, and similar tools should be integrated through provider adapters without changing the canonical dashboard contract.
+All concrete products are replaceable providers or reference modules. iTop, Wazuh, Zeek, Suricata, Mailcow, Keycloak, GitLab, SearXNG, and the AI proxy are the current lab/reference stack on `127.0.0.1`; ServiceNow, Jira, Splunk, Sentinel, Defender, CrowdStrike, Exchange, Gmail, Proofpoint, Okta, GitHub, Azure DevOps, Jenkins, and similar tools should be integrated through provider adapters without changing the canonical dashboard contract.
 
 Hermes Agent is the preferred current queue harness for long-running work;
 Claude Code remains a supported fallback. Keep harness-specific command
@@ -47,6 +47,26 @@ building isolated in `api/services/agent_harness.py` and preserve the dashboard
 task/checkpoint/API contract for future harnesses.
 
 Default ticket agents should complete assigned work quickly and safely. They should not create reusable workflows unless explicitly asked. Postmortems and workflow-builds are separate learning tasks that convert completed work into reviewed knowledge, skills, tests, guardrails, and draft workflows.
+
+## Setup Scope And Ticket Fan-Out
+
+Setup is intentionally agentic, but it must stay bounded. The installer and
+Setup page should plant the platform seed, then create auditable setup work
+instead of trying to hardcode every environment-specific decision in shell.
+
+Operators choose one action per module:
+
+- `deploy`: deploy or manage the bundled reference module.
+- `integrate`: connect an existing enterprise product or provider adapter.
+- `disabled`: turn the module off for this organization or environment.
+
+Creating setup work must create a parent setup ticket plus one scoped child
+ticket for each actionable deploy/integrate module. Disabled modules are not
+worked, and modules that depend on disabled modules must be reported as
+blocked. Agents should use the parent ticket for overall onboarding status and
+the child tickets for module-specific evidence, approvals, logs, postmortems,
+and demo explanation. Do not collapse all deployment/integration work into a
+single giant ticket.
 
 ## Workflow / Postmortem Reuse Rules
 
@@ -106,18 +126,18 @@ provider-access audit events.
 
 Additional reconstructed context for future Codex sessions lives at:
 
-- `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/AGENTS.md`
-- `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/AGENTIC_IT_REPLACEMENT_CONTEXT.md`
-- `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/REFERENCE_MAP.md`
-- `C:/Users/cereal/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/REMOTE_INVENTORY_2026-05-12.md`
+- `C:/Users/me/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/AGENTS.md`
+- `C:/Users/me/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/AGENTIC_IT_REPLACEMENT_CONTEXT.md`
+- `C:/Users/me/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/REFERENCE_MAP.md`
+- `C:/Users/me/Documents/Codex/2026-05-12/you-don-t-seem-to-properly/docs/REMOTE_INVENTORY_2026-05-12.md`
 
 ## Quick Access
 
 | Service | URL | Port |
 |---------|-----|------|
-| Dashboard UI | https://192.168.50.222:25443 | 25443 |
+| Dashboard UI | https://127.0.0.1:25443 | 25443 |
 | Local API (programmatic) | http://127.0.0.1:25480/api | 25480 |
-| HTTPS proxy health | https://192.168.50.222:25443/nginx-health | 25443 |
+| HTTPS proxy health | https://127.0.0.1:25443/nginx-health | 25443 |
 | PostgreSQL DB | 127.0.0.1:5433 on the AI Server only | 5433 |
 
 ## Enforced Auth Posture
@@ -140,9 +160,9 @@ The live dashboard is in enforced header-auth mode:
 Validation evidence from 2026-05-18:
 
 - `scripts/smoke_dashboard_auth_enforcement.py` passed against
-  `http://192.168.50.222:25480`
+  `http://127.0.0.1:25480`
 - `scripts/smoke_dashboard_login.py` passed against
-  `http://192.168.50.222:25480` for `demo_account_1`; browser validation also
+  `http://127.0.0.1:25480` for `demo_account_1`; browser validation also
   confirmed visible login, bad-credential redirect, signed-in account label,
   logout, and no post-login console/network failures
 - authenticated browser UI test rendered 14 Demo Proof rows and no console or
@@ -157,7 +177,7 @@ Validation evidence from 2026-05-18:
 Validation evidence from 2026-05-19:
 
 - Full live deployment backup was created at
-  `/home/cereal/agentic-it-backups/20260519T033953Z` before destructive
+  `/opt/agentic-it/agentic-it-backups/20260519T033953Z` before destructive
   installer testing.
 - Same-port one-line rebuild installed a fresh stack with Hermes, HTTPS,
   proxy health, `/v1/models`, setup ticket `1`, and setup agent `1`, then the
@@ -183,7 +203,12 @@ Validation evidence from 2026-05-19:
   reachability passed for GitLab, iTop, Keycloak, Mailcow UI, Roundcube route,
   and SearXNG. The AI proxy remains local-only by design.
 - Source regression passed: `142 passed`, JS syntax checks, text hygiene, and
-  HTTPS smoke against `https://192.168.50.222:25443`.
+  HTTPS smoke against `https://127.0.0.1:25443`.
+- Setup fan-out regression passed: source tests `147 passed`; live hardened API
+  smoke created parent setup ticket `624` with `7` scoped child module tickets;
+  authenticated Chrome verified the Setup page per-module actions and no
+  console/page/http errors; post-rebuild setup-plan and curl-guard checks
+  passed inside the live stack.
 
 ## Demo Readiness Catalog
 
@@ -210,8 +235,8 @@ Both containers use `restart: unless-stopped`. The API waits for `db` to be heal
 
 ## Project Location
 
-- **Compose file**: `/home/cereal/SOC_TESTING/soc-dashboard/docker-compose.yml`
-- **Environment**: `/home/cereal/SOC_TESTING/soc-dashboard/.env` (contains DB credentials, iTop credentials, intervals)
+- **Compose file**: `/opt/agentic-it/SOC_TESTING/soc-dashboard/docker-compose.yml`
+- **Environment**: `/opt/agentic-it/SOC_TESTING/soc-dashboard/.env` (contains DB credentials, iTop credentials, intervals)
 - **Source code**: inside `soc-dashboard-api` container at `/app/`
 - **Frontend**: mounted read-only from `./frontend/` to `/frontend/` in container
 - **Data volume**: `db-data` named volume for PostgreSQL persistence
@@ -231,7 +256,7 @@ aiohttp==3.10.0
 
 ## API Endpoints (Verified from Source)
 
-### Tickets — `/api/tickets`
+### Tickets - `/api/tickets`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -242,7 +267,7 @@ aiohttp==3.10.0
 | POST | `/api/tickets/{id}/assign-agent` | Spawn AI agent for ticket (body: `model` string, default `qwen/qwen3.6-27b`) |
 | POST | `/api/tickets/{id}/unassign-agent` | Remove agent from ticket (sets agent status to 'terminated') |
 
-### Agents — `/api/agents`
+### Agents - `/api/agents`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -258,7 +283,7 @@ aiohttp==3.10.0
 | POST | `/api/agents/{id}/update` | Update agent status + error message (body: `status`, `error_message`) |
 | GET | `/api/agents/ws` | WebSocket endpoint for real-time agent events |
 
-### Changes — `/api/changes`
+### Changes - `/api/changes`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -271,7 +296,7 @@ aiohttp==3.10.0
 | POST | `/api/changes/{id}/reject` | Reject change (body: `rejected_by`, `reason`) |
 | POST | `/api/changes/{id}/complete` | Mark change as completed (body: `result`) |
 
-### Dashboard — `/api/dashboard`
+### Dashboard - `/api/dashboard`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -305,7 +330,7 @@ Current hardened posture, verified 2026-05-18:
   `127.0.0.1` in the reference compose; only the authenticated dashboard port
   remains LAN-facing.
 - Verification script:
-  `python scripts/smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480`.
+  `python scripts/smoke_dashboard_auth_enforcement.py http://127.0.0.1:25480`.
 
 See `docs/FEDRAMP_SECURITY_HARDENING.md` for the current hardening contract.
 
@@ -461,7 +486,7 @@ actual postmortem artifact count is shown in the SLA / Tool Snapshot
 95th percentile working time: 95% of completed task runs of that type finished
 at or below that time.
 
-### Tools — `/api/tools`
+### Tools - `/api/tools`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -483,11 +508,11 @@ at or below that time.
 
 Three background tasks start on app startup via the FastAPI lifespan:
 
-1. **iTop Sync Loop** (`itop_sync.sync_loop`) — Runs every 2 seconds (configurable via `ITOP_DISCOVERY_INTERVAL`). Performs fast discovery for new tickets, full sync every 60 seconds. Broadcasts sync events over WebSocket.
+1. **iTop Sync Loop** (`itop_sync.sync_loop`) - Runs every 2 seconds (configurable via `ITOP_DISCOVERY_INTERVAL`). Performs fast discovery for new tickets, full sync every 60 seconds. Broadcasts sync events over WebSocket.
 
-2. **Health Check Loop** (`health_check.health_loop`) — Runs every 60 seconds (configurable via `HEALTH_CHECK_INTERVAL`). Checks all registered tools via port scan or HTTP request. Records results to `tool_checks` table.
+2. **Health Check Loop** (`health_check.health_loop`) - Runs every 60 seconds (configurable via `HEALTH_CHECK_INTERVAL`). Checks all registered tools via port scan or HTTP request. Records results to `tool_checks` table.
 
-3. **Agent Monitor Loop** (`agent_monitor.monitor_loop`) — Runs every 15 seconds (configurable via `AGENT_HEARTBEAT_INTERVAL`). Detects stalled agents (no heartbeat for 120+ seconds), marks them as 'stalled', writes audit entries, broadcasts over WebSocket.
+3. **Agent Monitor Loop** (`agent_monitor.monitor_loop`) - Runs every 15 seconds (configurable via `AGENT_HEARTBEAT_INTERVAL`). Detects stalled agents (no heartbeat for 120+ seconds), marks them as 'stalled', writes audit entries, broadcasts over WebSocket.
 
 ### Local Model Runner Policy
 
@@ -622,7 +647,7 @@ Latest live EDR/Sysmon proof, verified 2026-05-12:
 
 ## Database Schema
 
-Raw PostgreSQL — **NO ORM, NO Pydantic, NO SQLAlchemy**. All queries use parameterized raw SQL via asyncpg.
+Raw PostgreSQL - **NO ORM, NO Pydantic, NO SQLAlchemy**. All queries use parameterized raw SQL via asyncpg.
 
 ### Tables
 
@@ -674,21 +699,21 @@ Six pages accessible via sidebar navigation:
 
 ```
 /frontend/
-├── index.html           # Main SPA with all 6 page sections
-├── css/
-│   └── dashboard.css   # Dark operations theme, all styles
-├── js/
-│   ├── dashboard.js    # Navigation, stats, tickets, changes, tools, audit, ticket modal
-│   ├── charts.js       # Chart.js integration (3 charts: trend, distribution, uptime)
-│   ├── agents.js       # Agent grid, stalled detection UI, wake/restart/stop
-│   └── websocket.js    # WebSocket client with auto-reconnect, notifications
+|-- index.html           # Main SPA with all 6 page sections
+|-- css/
+|   `-- dashboard.css   # Dark operations theme, all styles
+|-- js/
+|   |-- dashboard.js    # Navigation, stats, tickets, changes, tools, audit, ticket modal
+|   |-- charts.js       # Chart.js integration (3 charts: trend, distribution, uptime)
+|   |-- agents.js       # Agent grid, stalled detection UI, wake/restart/stop
+|   `-- websocket.js    # WebSocket client with auto-reconnect, notifications
 ```
 
 ### Charts (Chart.js 4.4.7)
 
-1. **Ticket Volume (7 Days)** — Line chart with cyan fill, shows daily ticket creation
-2. **Agent Status Distribution** — Doughnut chart, color-coded by status
-3. **Tool Uptime** — Horizontal bar chart, green/yellow/red by percentage
+1. **Ticket Volume (7 Days)** - Line chart with cyan fill, shows daily ticket creation
+2. **Agent Status Distribution** - Doughnut chart, color-coded by status
+3. **Tool Uptime** - Horizontal bar chart, green/yellow/red by percentage
 
 ### Real-Time Updates
 
@@ -760,22 +785,22 @@ Verified on 2026-05-13:
 
 ```bash
 # Check container status
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker ps --filter name=soc-dashboard"
+python "C:/Users/me/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker ps --filter name=soc-dashboard"
 
 # View API logs
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker logs soc-dashboard-api-1 --tail 50"
+python "C:/Users/me/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker logs soc-dashboard-api-1 --tail 50"
 
 # Restart API container (no rebuild needed for frontend changes)
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker restart soc-dashboard-api"
+python "C:/Users/me/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker restart soc-dashboard-api"
 
 # Access PostgreSQL using the live container's own env-backed user/database
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc-dashboard && docker compose exec db sh -lc 'psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\"'"
+python "C:/Users/me/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /opt/agentic-it/SOC_TESTING/soc-dashboard && docker compose exec db sh -lc 'psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\"'"
 
 # Rebuild API container (after Python code changes)
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /home/cereal/SOC_TESTING/soc-dashboard && docker compose up -d --build api"
+python "C:/Users/me/.agents/skills/server-manager/ssh_client.py" --server ai --execute "cd /opt/agentic-it/SOC_TESTING/soc-dashboard && docker compose up -d --build api"
 
 # Check sync state
-python "C:/Users/cereal/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker exec soc-dashboard-api cat /app/data/.itop_max_keys.json"
+python "C:/Users/me/.agents/skills/server-manager/ssh_client.py" --server ai --execute "docker exec soc-dashboard-api cat /app/data/.itop_max_keys.json"
 ```
 
 ## Architecture Details

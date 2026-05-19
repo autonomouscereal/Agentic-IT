@@ -5,7 +5,7 @@
 # Usage: bash edr-status.sh
 # ============================================================
 
-WAZUH_DIR="/home/cereal/SOC_TESTING/wazuh_deploy"
+WAZUH_DIR="/opt/agentic-it/SOC_TESTING/wazuh_deploy"
 PASS=0
 FAIL=0
 WARN=0

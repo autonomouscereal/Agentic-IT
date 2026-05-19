@@ -23,7 +23,7 @@ import urllib.error
 import urllib.request
 
 
-# ─── Environment Loading ───────────────────────────────────────────────
+# --- Environment Loading -----------------------------------------------
 
 def load_env(env_path=None):
     """Load environment variables from .env file."""
@@ -61,7 +61,7 @@ KEYCLOAK_URL = ENV.get("KEYCLOAK_URL", "http://localhost:8080")
 REALM = ENV.get("BRIDGE_REALM", "mailcow")
 
 
-# ─── Mailcow MySQL Client ──────────────────────────────────────────────
+# --- Mailcow MySQL Client ----------------------------------------------
 
 class MailcowClient:
     """Pure Python Mailcow client via direct MySQL (zero external deps, no ORM)."""
@@ -249,7 +249,7 @@ class MailcowClient:
         return self._run_sql_raw(sql) is True
 
 
-# ─── Setup Functions ───────────────────────────────────────────────────
+# --- Setup Functions ---------------------------------------------------
 
 def ensure_domain(mc):
     """Ensure the mail domain exists in Mailcow."""
@@ -372,7 +372,7 @@ def verify_config(mc):
         print(f"[INFO] Total aliases: {len(aliases)}")
 
 
-# ─── Main ──────────────────────────────────────────────────────────────
+# --- Main --------------------------------------------------------------
 
 def run_setup():
     """Execute complete Mailcow IDP setup."""
