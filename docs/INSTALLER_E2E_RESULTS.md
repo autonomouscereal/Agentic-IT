@@ -168,10 +168,15 @@ Related real-agent regression proofs on the restored live stack:
 - `/favicon.ico` is now a public no-content route (`204`) so browser asset
   requests do not create noisy auth-denied `403` console warnings while UI/API
   authentication remains enforced.
+- URL safety correction was deployed on 2026-05-19 after review demoted ticket
+  `621`: migration `017_phishing_url_safety_guardrail.sql` updated the
+  phishing RACI/workflow records, the API curl guard now blocks arbitrary
+  external suspicious URL retrieval, ticket `621` received security-review note
+  `2087`, and the curated `Demo Proofs` list now starts with ticket `531`.
 
 Source-level regression:
 
-- `python -m pytest tests -q`: `142 passed`.
+- `python -m pytest tests -q`: `147 passed`.
 - `node --check frontend/js/dashboard.js` and
   `node --check frontend/js/agents.js`: passed.
 - `python scripts/text_hygiene.py`: passed.

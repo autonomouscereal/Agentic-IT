@@ -6,7 +6,7 @@ Last updated: 2026-05-19.
 
 ### Ticket 621 contained unsafe direct suspicious URL retrieval
 
-Status: fixed in source; live deployment patch/verification in progress.
+Status: fixed in source and deployed to the live AI server on 2026-05-19.
 
 Demo review found that ticket `621` included agent evidence where a suspicious
 URL was handled with direct retrieval semantics. That is not acceptable for a
@@ -36,6 +36,19 @@ Fix:
   the only valid analysis paths.
 - Remove ticket `621` from the curated `Demo Proofs` ordering and document it
   as a regression case, not the lead demo proof.
+
+Verification:
+
+- Source regression passed with `147 passed`.
+- Live migration `017_phishing_url_safety_guardrail.sql` updated the phishing
+  RACI rule and canonical phishing workflow records.
+- Live API health, proxy `/v1/models`, runner-health, and agent process checks
+  passed after rebuild.
+- Live API-container curl guard test returned `65` for
+  `http://training-login.example.invalid/reset` and allowed the configured
+  VirusTotal reputation host.
+- Ticket `621` now has internal security-review note `2087` explaining the
+  demotion and the new guardrail.
 
 Safe alternatives:
 
@@ -69,7 +82,7 @@ Fix:
 
 ### Curl guard path parser rejected explicit list inputs
 
-Status: fixed in source; validation in progress.
+Status: fixed in source and covered by regression tests.
 
 The full test suite exposed that `_split_guard_paths` in the agent runner only
 handled comma-separated strings. The curl guard builder also accepts explicit

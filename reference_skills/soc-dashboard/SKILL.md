@@ -191,24 +191,33 @@ Validation evidence from 2026-05-19:
   `AGENT_LLM_BASE_URL=http://ai-proxy:4001`, deployment-host local proxy on
   `localhost:4401`; post-route Hermes smoke completed on ticket `620`, agent
   `255`, task `252`.
-- Complex phishing plus EDR live proof completed on ticket `621`, iTop
+- Complex phishing plus EDR live regression completed on ticket `621`, iTop
   `Incident::401`, agents `256`/`257`/`258`, access request `29`, changes
-  `178`/`179`, postmortem `105`, and workflow `4` updated.
-- Authenticated Chrome validation confirmed `Demo Proofs` renders ticket `621`
-  first, opens the evidence trail modal, and leaves no console/page/http errors;
-  `/favicon.ico` returns `204` without weakening protected UI/API routes.
+  `178`/`179`, postmortem `105`, and workflow `4` updated. Review later found
+  unsafe direct suspicious URL retrieval semantics, so `621` is now a
+  URL-safety regression case instead of a lead demo proof.
+- Authenticated Chrome validation confirmed `Demo Proofs` renders the curated
+  ticket list, opens the evidence trail modal, and leaves no console/page/http
+  errors; `/favicon.ico` returns `204` without weakening protected UI/API
+  routes.
 - Full authenticated Chrome tab sweep passed across all primary dashboard tabs
   with no console/page/http errors.
 - Dashboard tools API showed `15/15` modules healthy; external demo UI
   reachability passed for GitLab, iTop, Keycloak, Mailcow UI, Roundcube route,
   and SearXNG. The AI proxy remains local-only by design.
-- Source regression passed: `142 passed`, JS syntax checks, text hygiene, and
+- Source regression passed: `147 passed`, JS syntax checks, text hygiene, and
   HTTPS smoke against `https://127.0.0.1:25443`.
 - Setup fan-out regression passed: source tests `147 passed`; live hardened API
   smoke created parent setup ticket `624` with `7` scoped child module tickets;
   authenticated Chrome verified the Setup page per-module actions and no
   console/page/http errors; post-rebuild setup-plan and curl-guard checks
   passed inside the live stack.
+- URL safety regression patch passed: live migration
+  `017_phishing_url_safety_guardrail.sql` updated phishing RACI/workflow
+  records; the live API-container curl guard blocks arbitrary external
+  suspicious URL retrieval and allows configured reputation hosts; ticket `621`
+  was demoted from lead demo proof and annotated with security-review note
+  `2087`.
 
 ## Demo Readiness Catalog
 

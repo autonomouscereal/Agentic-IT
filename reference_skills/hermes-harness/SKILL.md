@@ -68,6 +68,12 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
 - Spawned agents use a scoped signed dashboard session plus curl guards for
   protected dashboard API calls; do not pass the trusted proxy secret or global
   service token to the harness.
+- Suspicious URLs from tickets, reports, alerts, or email evidence are hostile
+  until proven otherwise. Hermes agents must not directly browse, curl, wget,
+  screenshot, or fetch those URLs from the runner or production network. Use
+  passive evidence, configured VirusTotal/urlscan/ANY.RUN-style adapters, or an
+  approved isolated detonation service. Approval to block or quarantine a URL
+  is not approval to fetch it.
 - Judge agent health from runner-health, process state, proxy activity,
   output logs, checkpoints, ticket notes, audit records, and memory events, not
   `progress_pct` alone.
@@ -94,6 +100,9 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
   Docker, deployment-host local proxy on `localhost:4401`, post-route smoke
   ticket `620`, agent `255`, task `252`, no active processes after hook
   shutdown.
-- Complex live Hermes proof: ticket `621`, iTop `Incident::401`, agents
-  `256`/`257`/`258`, Wazuh access request `29`, gates `178` and `179`,
-  postmortem `105`, workflow `4` updated, no active processes afterward.
+- Complex live Hermes regression case: ticket `621`, iTop `Incident::401`,
+  agents `256`/`257`/`258`, Wazuh access request `29`, gates `178` and `179`,
+  postmortem `105`, workflow `4` updated, no active processes afterward. This
+  ticket is not a lead demo proof because review found unsafe direct suspicious
+  URL retrieval semantics; use ticket `531` for the phishing/EDR demo story and
+  use `621` only to explain the URL-safety guardrail regression.
