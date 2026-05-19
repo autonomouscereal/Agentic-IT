@@ -183,7 +183,7 @@ ROUTE_REQUIREMENTS = [
     ("POST", "/api/setup*", "setup:write"),
 ]
 
-PUBLIC_PATHS = ()
+PUBLIC_PATHS = ("/favicon.ico",)
 PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_HASH_ITERATIONS = 260000
 

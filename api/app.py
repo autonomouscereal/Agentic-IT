@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
@@ -178,6 +178,10 @@ async def login_page():
     if os.path.exists(login_path):
         return FileResponse(login_path)
     return JSONResponse({"error": "Login page not found"}, status_code=404)
+
+@app.get("/favicon.ico")
+async def favicon():
+    return Response(status_code=204)
 
 @app.get("/health")
 async def health():

@@ -173,6 +173,9 @@ Validation evidence from 2026-05-19:
 - Complex phishing plus EDR live proof completed on ticket `621`, iTop
   `Incident::401`, agents `256`/`257`/`258`, access request `29`, changes
   `178`/`179`, postmortem `105`, and workflow `4` updated.
+- Authenticated Chrome validation confirmed `Demo Proofs` renders ticket `621`
+  first, opens the evidence trail modal, and leaves no console/page/http errors;
+  `/favicon.ico` returns `204` without weakening protected UI/API routes.
 - Source regression passed: `142 passed`, JS syntax checks, text hygiene, and
   HTTPS smoke against `https://192.168.50.222:25443`.
 

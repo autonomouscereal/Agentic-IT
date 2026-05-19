@@ -61,3 +61,6 @@ Current cleanup target state:
   lab agents remain in audit but are hidden from the primary demo view.
 - Prepared examples are accessible through `Demo Proofs`.
 - Historical clutter is retained as closed audit history, not active work.
+- Browser validation on 2026-05-19 confirmed `demo_account_1` login over
+  HTTPS, `Demo Proofs` rendering ticket `621` first, the ticket modal evidence
+  trail loading, and no console/page/http errors.

@@ -126,6 +126,13 @@ Related real-agent regression proofs on the restored live stack:
   response wait/resume, dashboard steering, iTop public_log steering, denied
   Wazuh lease, access approval/resume, containment approval/resume, postmortem
   review/promotion, and no active processes afterward.
+- Authenticated Chrome validation passed against
+  `https://192.168.50.222:25443`: `demo_account_1` logged in, the `Demo
+  Proofs` filter rendered ticket `621` first with iTop/Demo badges, the ticket
+  modal loaded the evidence trail, and no console/page/http errors remained.
+- `/favicon.ico` is now a public no-content route (`204`) so browser asset
+  requests do not create noisy auth-denied `403` console warnings while UI/API
+  authentication remains enforced.
 
 Source-level regression:
 

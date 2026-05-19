@@ -55,6 +55,7 @@ class AccessControlPolicyTests(unittest.TestCase):
         try:
             self.assertEqual(module.required_permission("GET", "/"), "ui:read")
             self.assertIsNone(module.required_permission("GET", "/login"))
+            self.assertIsNone(module.required_permission("GET", "/favicon.ico"))
             self.assertIsNone(module.required_permission("POST", "/api/auth/login"))
             self.assertEqual(module.required_permission("GET", "/static/js/dashboard.js"), "ui:read")
             self.assertEqual(module.required_permission("GET", "/health"), "health:read")
