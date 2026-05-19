@@ -53,8 +53,9 @@ Result:
 - After restore, runtime proxy drift was reconciled: the live dashboard now
   sends spawned agents to the Compose-managed proxy through
   `AGENT_LLM_BASE_URL=http://ai-proxy:4001` from inside Docker. The
-  operator-facing host proxy remains `http://192.168.50.222:4401` because a
-  legacy global proxy still owns host port `4001`.
+  deployment-host local proxy is `http://localhost:4401`; it is intentionally
+  not reachable at `http://192.168.50.222:4401` because the compose proxy is
+  hardened to `127.0.0.1`.
 - Post-route Hermes smoke passed on ticket `620`, agent `255`, task `252`;
   the task completed, wrote its setup note, and `/api/agents/processes` cleared
   after the Hermes memory stop hook finished.
@@ -133,6 +134,11 @@ Related real-agent regression proofs on the restored live stack:
 - Authenticated Chrome tab sweep passed across Overview, Tickets, Intake,
   Agents, Changes, Workflows, Postmortems, CI/CD, Learning, Tools, Setup,
   Access, and Audit with no console/page/http errors.
+- External demo UI reachability passed for GitLab, iTop, Keycloak, Mailcow UI,
+  Roundcube route, SearXNG, and the dashboard tools API showed `15/15` modules
+  healthy. The AI proxy is local-only by design; verify it from the deployment
+  host with `curl http://localhost:4401/health` or through dashboard
+  runner-health instead of from a LAN browser.
 - `/favicon.ico` is now a public no-content route (`204`) so browser asset
   requests do not create noisy auth-denied `403` console warnings while UI/API
   authentication remains enforced.

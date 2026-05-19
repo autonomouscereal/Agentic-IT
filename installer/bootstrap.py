@@ -128,7 +128,9 @@ def agent_base_url(args):
 def operator_proxy_url(args, host):
     if args.proxy_mode == "external" and args.ai_base_url:
         return args.ai_base_url
-    return f"http://{host}:{args.proxy_port}"
+    # The built-in proxy is bound to 127.0.0.1 by default. Keep the printed
+    # operator URL honest and local-only; spawned agents use agent_base_url().
+    return f"http://localhost:{args.proxy_port}"
 
 
 def local_proxy_url(args):
@@ -532,7 +534,7 @@ def create_agentic_setup_ticket(args, host, env_values=None, dry_run=False):
         "profile": args.profile,
         "existing_tools": [],
         "deploy_missing": True,
-        "ai_base_url": operator_proxy_url(args, host),
+        "ai_base_url": agent_base_url(args),
         "model": args.model,
         "spawn_agent": bool(args.spawn_setup_agent),
         "sync_provider": False,

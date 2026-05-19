@@ -72,10 +72,12 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
   HTTPS URL is LAN-facing.
 - `--provider openai|anthropic|nous|lmstudio|custom`: default provider route in the generated proxy config.
 - `--provider-base-url URL`: provider base URL override for custom/external routes.
-- `--ai-base-url URL`: external proxy compatibility endpoint. Built-in proxy mode uses `http://ai-proxy:4001` inside Docker and prints a host-facing proxy URL.
+- `--ai-base-url URL`: external proxy compatibility endpoint. Built-in proxy
+  mode uses `http://ai-proxy:4001` inside Docker and prints a deployment-host
+  local proxy URL such as `http://localhost:4001`.
 - If the host port has to move because another proxy already owns `4001`, keep
   `AGENT_LLM_BASE_URL=http://ai-proxy:4001` for containers and change only the
-  host-facing `--proxy-port` / `AI_PROXY_PORT` value.
+  deployment-host local `--proxy-port` / `AI_PROXY_PORT` value.
 - `--model MODEL_ID`: default agent model recorded in the setup plan.
 - `--spawn-setup-agent`: create the setup ticket and immediately assign the onboarding agent.
 - `--itop-sync-enabled true|false`: defaults to false for product-agnostic fresh installs.
