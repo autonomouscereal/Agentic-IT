@@ -830,7 +830,57 @@ function scannerDisplayName(tool) {
     return ({ semgrep: "Semgrep", trivy: "Trivy", owasp_zap: "OWASP ZAP", nuclei: "Nuclei" })[tool] || tool;
 }
 
-function renderScannerSummary(scannerSummary) {
+function findingLocation(finding) {
+    const path = finding.path || finding.file || finding.url || finding.package || "";
+    const line = finding.start_line || finding.line || finding.line_number || "";
+    return `${path}${line ? `:${line}` : ""}`;
+}
+
+function renderFindingDetail(finding) {
+    const title = finding.title || finding.rule_id || finding.message || "finding";
+    const rule = finding.rule_id || finding.check_id || finding.cve || "";
+    const message = finding.message || finding.description || finding.remediation || "";
+    const location = findingLocation(finding);
+    return `
+        <div class="finding-detail">
+            <div class="finding-row">
+                <span class="status-badge ${statusClass(finding.severity || "info")}">${escHtml(finding.severity || "info")}</span>
+                <strong>${escHtml(title)}</strong>
+            </div>
+            ${rule ? `<div class="learning-meta">Rule: <code>${escHtml(rule)}</code></div>` : ""}
+            ${location ? `<div class="learning-meta">Location: <code>${escHtml(location)}</code></div>` : ""}
+            ${message ? `<pre class="task-output compact-output">${escHtml(message)}</pre>` : ""}
+        </div>
+    `;
+}
+
+function renderReportLinks(links, runId) {
+    if (!links.length) {
+        return '<div class="learning-meta">No report links recorded. Scanner JSON is still stored in the run record below.</div>';
+    }
+    return links.map(link => {
+        const tool = link.tool || "unknown";
+        if (link.internal) {
+            return `
+                <div class="modal-activity-item">
+                    <span>${escHtml(scannerDisplayName(tool))}</span>
+                    <button class="ticket-link" onclick="viewCicdScannerReport(${Number(runId)}, '${escAttr(tool)}')">${escHtml(link.label || "dashboard report")}</button>
+                </div>
+            `;
+        }
+        return `
+            <div class="modal-activity-item">
+                <span>${escHtml(scannerDisplayName(tool))}</span>
+                <span>
+                    <a class="ticket-link" href="${escAttr(link.url)}" target="_blank" rel="noopener">${escHtml(link.label || "provider artifact")}</a>
+                    ${link.requires_external_auth ? '<span class="learning-meta">provider login may be required</span>' : ""}
+                </span>
+            </div>
+        `;
+    }).join("");
+}
+
+function renderScannerSummary(scannerSummary, runId = 0) {
     const entries = Object.entries(scannerSummary || {});
     if (!entries.length) return '<div class="learning-meta">No scanner summary recorded.</div>';
     return entries.map(([tool, summary]) => {
@@ -840,14 +890,17 @@ function renderScannerSummary(scannerSummary) {
             <div class="scanner-card">
                 <div class="scanner-card-head">
                     <strong>${escHtml(scannerDisplayName(tool))}</strong>
-                    <span class="status-badge ${statusClass(status)}">${escHtml(status)}</span>
+                    <span>
+                        <span class="status-badge ${statusClass(status)}">${escHtml(status)}</span>
+                        ${runId && status !== "not_recorded" ? `<button class="inline-link" onclick="viewCicdScannerReport(${Number(runId)}, '${escAttr(tool)}')">open report</button>` : ""}
+                    </span>
                 </div>
                 <div class="learning-meta">${severitySummary(findings)} &middot; ${summary.finding_count || 0} findings</div>
                 ${findings.length ? findings.slice(0, 8).map(f => `
                     <div class="finding-row">
                         <span class="status-badge ${statusClass(f.severity || "info")}">${escHtml(f.severity || "info")}</span>
                         <span>${escHtml(f.title || f.rule_id || f.message || "finding")}</span>
-                        <code>${escHtml(f.path || f.url || f.package || "")}</code>
+                        <code>${escHtml(findingLocation(f))}</code>
                     </div>
                 `).join("") : '<div class="learning-meta">Scanner completed with no recorded findings.</div>'}
             </div>
@@ -875,16 +928,49 @@ async function viewCicdRun(id) {
         </div>
         <div class="modal-section">
             <div class="section-title">Scanner Results</div>
-            ${renderScannerSummary(data.scanner_summary || {})}
+            ${renderScannerSummary(data.scanner_summary || {}, data.id)}
         </div>
         <div class="modal-section">
             <div class="section-title">Reports & Raw Payload</div>
-            ${links.length ? links.map(l => `<div class="modal-activity-item"><span>${escHtml(l.tool)}</span><a class="ticket-link" href="${escAttr(l.url)}" target="_blank" rel="noopener">${escHtml(l.label)}</a></div>`).join("") : '<div class="learning-meta">No report links recorded. Scanner JSON is still stored in the run record below.</div>'}
+            ${renderReportLinks(links, data.id)}
             <pre class="task-output">${escHtml(JSON.stringify({ findings, tool_results: data.tool_results || {} }, null, 2))}</pre>
         </div>
         <div class="modal-section">
             <div class="section-title">Before / After Runs</div>
             ${related.length ? related.map(r => `<div class="modal-activity-item"><span>#${r.id}</span><span>${formatDate(r.created_at)} <span class="status-badge ${statusClass(r.status)}">${escHtml(r.status)}</span> ${severitySummary(r.findings || [])}</span></div>`).join("") : '<div class="learning-meta">No related before/after runs recorded yet.</div>'}
+        </div>
+    `;
+    document.getElementById("ticket-modal").classList.add("active");
+}
+
+async function viewCicdScannerReport(runId, tool) {
+    const data = await apiGet(`/api/cicd/runs/${runId}/reports/${encodeURIComponent(tool)}`);
+    if (!data || data.error) {
+        alert(data?.error || "Unable to load scanner report");
+        return;
+    }
+    const findings = Array.isArray(data.findings) ? data.findings : [];
+    const externalLinks = data.external_links || [];
+    document.getElementById("modal-title").textContent = `${scannerDisplayName(data.tool)} Report for CI/CD Run #${data.run_id}`;
+    document.getElementById("modal-body").innerHTML = `
+        <div class="modal-section">
+            <div class="section-title">Dashboard Scanner Report</div>
+            <div class="detail-row"><span class="detail-label">Scanner:</span><span>${escHtml(scannerDisplayName(data.tool))}</span></div>
+            <div class="detail-row"><span class="detail-label">Status:</span><span class="status-badge ${statusClass(data.status)}">${escHtml(data.status || "unknown")}</span></div>
+            <div class="detail-row"><span class="detail-label">Findings:</span><span>${severitySummary(findings)} &middot; ${data.finding_count || 0} total</span></div>
+            <div class="learning-meta">${escHtml(data.note || "")}</div>
+        </div>
+        <div class="modal-section">
+            <div class="section-title">Findings</div>
+            ${findings.length ? findings.map(renderFindingDetail).join("") : '<div class="learning-meta">No findings recorded for this scanner.</div>'}
+        </div>
+        <div class="modal-section">
+            <div class="section-title">Provider Artifacts</div>
+            ${externalLinks.length ? renderReportLinks(externalLinks, data.run_id) : '<div class="learning-meta">No external provider artifact links recorded for this scanner.</div>'}
+        </div>
+        <div class="modal-section">
+            <div class="section-title">Raw Scanner Result</div>
+            <pre class="task-output">${escHtml(JSON.stringify(data.result || {}, null, 2))}</pre>
         </div>
     `;
     document.getElementById("ticket-modal").classList.add("active");

@@ -142,6 +142,14 @@ combined findings list first. ZAP baseline exit code `2` must remain
 `completed_with_findings`; only real scanner execution failures should be shown
 as errors.
 
+Dashboard scanner report links are the primary readable evidence path. Each run
+can expose `/api/cicd/runs/{run_id}/reports/{tool}` for Semgrep, Trivy, ZAP, and
+Nuclei from the stored canonical run record. External GitLab or CI artifacts may
+still be linked, but those links are marked as provider-authenticated because a
+browser may need a separate CI session or token to open them. Do not make demos
+depend on private artifact URLs when the dashboard report contains the same
+finding evidence.
+
 ## Test
 
 Local safe smoke:
@@ -150,6 +158,10 @@ Local safe smoke:
 python scripts/smoke_cicd_security_pipeline.py http://localhost:25480
 python scripts/smoke_operational_metrics.py http://localhost:25480
 ```
+
+The smoke verifies that a Semgrep finding is readable from the dashboard report
+endpoint even when the stored artifact URL points at a credentialed GitLab
+artifact.
 
 Full local-model proof:
 

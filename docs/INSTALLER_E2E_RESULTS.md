@@ -175,9 +175,10 @@ Related real-agent regression proofs on the restored live stack:
   Access, and Audit with no console/page/http errors.
 - External demo UI reachability passed for GitLab, iTop, Keycloak, Mailcow UI,
   Roundcube route, SearXNG, and the dashboard tools API showed `15/15` modules
-  healthy. The AI proxy is local-only by design; verify it from the deployment
-  host with `curl http://localhost:4401/health` or through dashboard
-  runner-health instead of from a LAN browser.
+  healthy. The later 2026-05-19 proxy cleanup intentionally exposes the
+  managed AI proxy on LAN/host port `4001`; verify it with
+  `curl http://localhost:4001/health`, `POST /api/route`, or dashboard
+  runner-health.
 - `/favicon.ico` is now a public no-content route (`204`) so browser asset
   requests do not create noisy auth-denied `403` console warnings while UI/API
   authentication remains enforced.

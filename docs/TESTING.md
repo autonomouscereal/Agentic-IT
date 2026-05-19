@@ -379,6 +379,8 @@ Covers:
 - Semgrep, Trivy, OWASP ZAP, and Nuclei job definitions
 - local canonical scanner output
 - `/api/cicd/runs` persistence
+- `/api/cicd/runs/{run_id}/reports/semgrep` dashboard-readable Semgrep evidence
+- external CI artifact links marked as provider-authenticated
 - evidence ticket creation
 - production deployment approval gate
 
@@ -425,6 +427,8 @@ Notes from the live run:
 - Recreating the API container while an agent is running kills that harness
   process. Do not rebuild the API during the middle of a live model demo.
 - ZAP exit code `2` is warnings-found, not scanner failure.
+- Dashboard scanner report links are the operator-readable source of truth for
+  demos; GitLab artifact links may require a separate provider login.
 - The Trivy Docker image command should be `fs ...` because the image entrypoint
   is already `trivy`.
 

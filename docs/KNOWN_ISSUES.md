@@ -5102,3 +5102,35 @@ Verification:
 
 - After API rebuild, `/api/agents/active` returned `count: 0` and
   `/api/agents/processes` returned `active_processes: []`.
+
+### CI/CD Semgrep report links required provider credentials
+
+Status: fixed, deployed, and verified on 2026-05-19.
+
+Problem:
+
+- CI/CD run details preserved Semgrep/GitLab artifact URLs, but the dashboard
+  rendered those external links as the main way to read the report.
+- Private GitLab artifacts can require a separate browser session or provider
+  token, so operators could see that Semgrep had findings but could not read the
+  evidence directly from the dashboard.
+
+Fix:
+
+- Added dashboard-authenticated scanner report endpoints at
+  `/api/cicd/runs/{run_id}/reports/{tool}` for `semgrep`, `trivy`,
+  `owasp_zap`, and `nuclei`.
+- CI/CD run detail now includes internal dashboard report links first and marks
+  external provider artifacts as `requires_external_auth`.
+- The CI/CD modal now opens full scanner reports from the stored canonical run
+  record, including severity, rule id, path, line, message, raw scanner result,
+  and optional provider artifact references.
+
+Verification:
+
+- Local suite passed: `163 passed`.
+- Live smoke passed on `http://127.0.0.1:25480` with service-token auth:
+  CI/CD run `41`, ticket `711`, change `187`, Semgrep dashboard report with one
+  stored finding.
+- Operational metrics smoke passed with CI/CD run `42` and verified Semgrep
+  dashboard report access plus provider-authenticated external artifact labels.

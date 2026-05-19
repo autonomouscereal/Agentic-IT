@@ -80,6 +80,7 @@ curl -sS -X POST "$SOC_DASHBOARD_URL/api/cicd/runs" \
 - `GET /api/cicd/gitlab/template`
 - `GET /api/cicd/runs`
 - `GET /api/cicd/runs/{run_id}`
+- `GET /api/cicd/runs/{run_id}/reports/{tool}`
 - `POST /api/cicd/runs`
 
 Posting a run with `create_ticket=true` creates an evidence ticket. Posting with
@@ -92,11 +93,20 @@ Run detail returns:
 - `scanner_summary`: findings grouped by scanner with severity counts and
   scanner status.
 - `report_links`: artifact/report links extracted from scanner result metadata.
+  Dashboard-generated report links are internal and auth-protected. External
+  CI provider artifacts are preserved but marked as requiring provider access.
 - `related_runs`: before/after runs for the same ticket or repository.
 
 The UI shows scanner cards separately so a demo operator can say exactly which
 tool found what, which tools ran cleanly, and which reports prove the before and
 after state.
+
+Use the dashboard scanner report buttons for Semgrep, Trivy, ZAP, and Nuclei
+when presenting findings. Those reports are generated from the stored canonical
+run record and do not require a GitLab browser session or CI artifact token.
+Provider artifact links remain useful for engineers who are already logged into
+the CI system, but they are not required to read the finding evidence from the
+dashboard.
 
 ## GitLab Default
 
@@ -119,11 +129,14 @@ python3 scripts/smoke_operational_metrics.py http://localhost:25480
 
 Expected: the smoke test confirms the GitLab template, runs the local pipeline
 script in artifact mode, records the run, creates a dashboard ticket, and
-creates a pending deployment approval gate.
+creates a pending deployment approval gate. It also verifies that Semgrep
+findings are readable through `/api/cicd/runs/{run_id}/reports/semgrep` even
+when the external artifact link would require provider credentials.
 
 The operational metrics smoke additionally posts a synthetic ZAP code-2 result
 and asserts the dashboard normalizes it to `completed_with_findings` with all
-four scanner summary groups present.
+four scanner summary groups present, internal scanner report links available,
+and external artifacts clearly marked as provider-authenticated.
 
 ## Full Agentic Remediation Demo
 

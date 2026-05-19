@@ -108,11 +108,66 @@ def _report_links(tool_results):
             continue
         for key in ("report_url", "artifact_url", "html_url", "json_url"):
             if result.get(key):
-                links.append({"tool": name, "label": key.replace("_", " "), "url": result[key]})
+                links.append({
+                    "tool": _canonical_tool(name),
+                    "label": key.replace("_", " "),
+                    "url": result[key],
+                    "internal": False,
+                    "requires_external_auth": True,
+                })
         for item in result.get("artifacts") or []:
             if isinstance(item, dict) and item.get("url"):
-                links.append({"tool": name, "label": item.get("label") or item.get("name") or "artifact", "url": item["url"]})
+                links.append({
+                    "tool": _canonical_tool(name),
+                    "label": item.get("label") or item.get("name") or "artifact",
+                    "url": item["url"],
+                    "internal": False,
+                    "requires_external_auth": True,
+                })
     return links
+
+
+def _dashboard_report_links(run_id, scanner_summary):
+    links = []
+    for tool in ("semgrep", "trivy", "owasp_zap", "nuclei"):
+        summary = (scanner_summary or {}).get(tool) or {}
+        status = str(summary.get("status") or "not_recorded")
+        if status == "not_recorded" and not summary.get("finding_count"):
+            continue
+        links.append({
+            "tool": tool,
+            "label": "dashboard report",
+            "url": f"/api/cicd/runs/{run_id}/reports/{tool}",
+            "internal": True,
+            "requires_external_auth": False,
+        })
+    return links
+
+
+def _scanner_report_payload(run_id, tool, findings, tool_results):
+    canonical = _canonical_tool(tool)
+    scanner_summary = _scanner_summary(findings, tool_results)
+    summary = scanner_summary.get(canonical)
+    if not summary:
+        return None
+    external_links = [
+        link for link in _report_links(tool_results)
+        if _canonical_tool(link.get("tool")) == canonical
+    ]
+    return {
+        "run_id": run_id,
+        "tool": canonical,
+        "status": summary.get("status"),
+        "finding_count": summary.get("finding_count", 0),
+        "severity_counts": summary.get("severity_counts") or {},
+        "findings": summary.get("findings") or [],
+        "result": summary.get("result") or {},
+        "external_links": external_links,
+        "note": (
+            "This dashboard report is generated from the stored CI/CD run record. "
+            "External provider artifacts may still require GitLab or CI provider access."
+        ),
+    }
 
 
 @router.get("/runs")
@@ -144,8 +199,11 @@ async def get_run(run_id: int):
     row["findings"] = _loads(row.get("findings"), [])
     row["tool_results"] = _normalize_tool_results(_loads(row.get("tool_results"), {}))
     row["repo_url"] = _repo_url(row.get("provider"), row.get("repo_ref"))
-    row["report_links"] = _report_links(row.get("tool_results"))
     row["scanner_summary"] = _scanner_summary(row["findings"], row["tool_results"])
+    row["report_links"] = (
+        _dashboard_report_links(run_id, row["scanner_summary"])
+        + _report_links(row.get("tool_results"))
+    )
     related = await fetchall("""
         SELECT id, provider, repo_ref, branch, commit_sha, status, summary,
                findings, tool_results, ticket_id, change_id, created_at
@@ -162,10 +220,30 @@ async def get_run(run_id: int):
         item["findings"] = _loads(item.get("findings"), [])
         item["tool_results"] = _normalize_tool_results(_loads(item.get("tool_results"), {}))
         item["repo_url"] = _repo_url(item.get("provider"), item.get("repo_ref"))
-        item["report_links"] = _report_links(item.get("tool_results"))
         item["scanner_summary"] = _scanner_summary(item["findings"], item["tool_results"])
+        item["report_links"] = (
+            _dashboard_report_links(item["id"], item["scanner_summary"])
+            + _report_links(item.get("tool_results"))
+        )
     row["related_runs"] = related
     return row
+
+
+@router.get("/runs/{run_id}/reports/{tool}")
+async def get_run_report(run_id: int, tool: str):
+    row = await fetchrow("""
+        SELECT id, findings, tool_results
+        FROM cicd_security_runs
+        WHERE id = $1
+    """, run_id)
+    if not row:
+        return {"error": "CI/CD security run not found"}
+    findings = _loads(row.get("findings"), [])
+    tool_results = _normalize_tool_results(_loads(row.get("tool_results"), {}))
+    payload = _scanner_report_payload(run_id, tool, findings, tool_results)
+    if not payload:
+        return {"error": "Scanner report not found"}
+    return payload
 
 
 @router.post("/runs")
@@ -276,7 +354,13 @@ async def record_run(body: dict = Body({})):
         "ticket_id": ticket_id,
         "change_id": change_id,
         "repo_url": _repo_url(provider, repo_ref),
-        "report_links": _report_links(tool_results),
+        "report_links": (
+            _dashboard_report_links(
+                run_id,
+                _scanner_summary(findings, tool_results),
+            )
+            + _report_links(tool_results)
+        ),
     }
 
 

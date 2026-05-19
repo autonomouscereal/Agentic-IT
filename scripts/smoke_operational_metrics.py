@@ -10,6 +10,7 @@ Validates:
 """
 
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -17,6 +18,7 @@ import urllib.request
 
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:25480").rstrip("/")
+SERVICE_TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
 
 
 def request(method, path, payload=None):
@@ -25,7 +27,10 @@ def request(method, path, payload=None):
         BASE + path,
         data=data,
         method=method,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            **({"X-Dashboard-Service-Token": SERVICE_TOKEN} if SERVICE_TOKEN else {}),
+        },
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as res:
@@ -101,11 +106,18 @@ def main():
     run = request("GET", f"/api/cicd/runs/{record['id']}")
     tool_results = run.get("tool_results") or {}
     scanner_summary = run.get("scanner_summary") or {}
+    report_links = run.get("report_links") or []
     require(tool_results.get("owasp_zap", {}).get("status") == "completed_with_findings",
             "ZAP baseline exit code 2 was not normalized")
     require(set(scanner_summary.keys()) == {"semgrep", "trivy", "owasp_zap", "nuclei"},
             f"scanner summary keys wrong: {sorted(scanner_summary.keys())}")
     require(scanner_summary["owasp_zap"]["finding_count"] == 1, "ZAP finding count should be grouped under OWASP ZAP")
+    require(any(link.get("internal") and link.get("tool") == "semgrep" for link in report_links),
+            "CI/CD run detail missing dashboard scanner report links")
+    require(any(link.get("requires_external_auth") and link.get("tool") == "owasp_zap" for link in report_links),
+            "external scanner artifacts should be marked as provider-authenticated")
+    semgrep_report = request("GET", f"/api/cicd/runs/{record['id']}/reports/semgrep")
+    require(semgrep_report.get("finding_count") == 1, "Semgrep dashboard report did not expose stored finding")
 
     print(json.dumps({
         "status": "passed",
@@ -120,6 +132,7 @@ def main():
         "workflow_sample": workflows[0].get("review_state"),
         "cicd_run_id": record["id"],
         "zap_status": tool_results["owasp_zap"]["status"],
+        "semgrep_report_findings": semgrep_report.get("finding_count"),
         "setup_modules": len(tools.get("setup_modules", [])),
         "agent_timing_sample": {field: sample_agent.get(field) for field in timing_fields},
     }, indent=2))

@@ -485,7 +485,8 @@ CI/CD security:
 
 - `GET /api/cicd/gitlab/template`
 - `GET /api/cicd/runs`
-- `GET /api/cicd/runs/{run_id}` - includes `repo_url`, report links parsed from `tool_results`, and related before/after runs for the same ticket or repository
+- `GET /api/cicd/runs/{run_id}` - includes `repo_url`, internal dashboard scanner report links, external provider artifact links parsed from `tool_results`, and related before/after runs for the same ticket or repository
+- `GET /api/cicd/runs/{run_id}/reports/{tool}` - returns the auth-protected dashboard report for `semgrep`, `trivy`, `owasp_zap`, or `nuclei` from the stored canonical run record so operators do not need CI provider credentials to read findings
 - `POST /api/cicd/runs`
 
 Knowledge:

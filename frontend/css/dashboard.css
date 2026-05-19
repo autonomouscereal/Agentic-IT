@@ -862,6 +862,11 @@ body {
     white-space: pre-wrap;
 }
 
+.task-output.compact-output {
+    max-height: 120px;
+    font-size: 12px;
+}
+
 .checkpoint-item {
     display: grid;
     grid-template-columns: auto minmax(80px, 160px) minmax(0, 1fr);
@@ -1077,7 +1082,7 @@ body {
 
 .finding-row {
     display: grid;
-    grid-template-columns: minmax(80px, auto) minmax(0, 1fr);
+    grid-template-columns: minmax(80px, auto) minmax(0, 1fr) minmax(0, 180px);
     gap: 8px;
     padding: 7px 0;
     border-top: 1px solid rgba(45, 58, 79, 0.58);
@@ -1091,6 +1096,30 @@ body {
 
 .finding-row span:last-child {
     overflow-wrap: anywhere;
+}
+
+.finding-row code {
+    overflow-wrap: anywhere;
+    color: var(--text-muted);
+}
+
+.finding-detail {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(45, 58, 79, 0.58);
+}
+
+.finding-detail:last-child {
+    border-bottom: none;
+}
+
+@media (max-width: 760px) {
+    .finding-row {
+        grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+    }
+
+    .finding-row code {
+        grid-column: 1 / -1;
+    }
 }
 
 /* Audit Timeline */

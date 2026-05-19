@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Smoke test the GitLab-default CI/CD security pipeline contract."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import urllib.request
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:25480").rstrip("/")
 ROOT = Path(__file__).resolve().parents[1]
+SERVICE_TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
 
 
 def request(method, path, body=None):
@@ -18,7 +20,10 @@ def request(method, path, body=None):
         BASE + path,
         data=data,
         method=method,
-        headers={"Content-Type": "application/json"} if body is not None else {},
+        headers={
+            **({"Content-Type": "application/json"} if body is not None else {}),
+            **({"X-Dashboard-Service-Token": SERVICE_TOKEN} if SERVICE_TOKEN else {}),
+        },
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8"))
@@ -67,6 +72,26 @@ def main():
 
     record = request("POST", "/api/cicd/runs", {
         **pipeline,
+        "findings": [
+            {
+                "tool": "semgrep",
+                "severity": "high",
+                "rule_id": "python.lang.security.audit.demo-hardcoded-secret",
+                "title": "Demo hardcoded secret",
+                "message": "Credential-like value must be moved to the approved vault.",
+                "path": "app.py",
+                "start_line": 1,
+            },
+            *pipeline.get("findings", []),
+        ],
+        "tool_results": {
+            **pipeline.get("tool_results", {}),
+            "semgrep": {
+                **(pipeline.get("tool_results", {}).get("semgrep") or {}),
+                "status": "completed_with_findings",
+                "artifact_url": "https://gitlab.example.invalid/group/project/-/jobs/1/artifacts/file/semgrep.json",
+            },
+        },
         "deployment_target": "production",
         "create_ticket": True,
         "require_change": True,
@@ -77,6 +102,16 @@ def main():
 
     runs = request("GET", "/api/cicd/runs?limit=10")
     require(any(row.get("id") == record.get("id") for row in runs.get("runs", [])), "recorded run missing from list")
+    run = request("GET", f"/api/cicd/runs/{record['id']}")
+    report_links = run.get("report_links") or []
+    require(any(link.get("internal") and link.get("tool") == "semgrep" for link in report_links),
+            "run detail missing dashboard Semgrep report link")
+    require(any(link.get("requires_external_auth") and link.get("tool") == "semgrep" for link in report_links),
+            "run detail should mark external Semgrep artifact as provider-authenticated")
+    semgrep_report = request("GET", f"/api/cicd/runs/{record['id']}/reports/semgrep")
+    require(semgrep_report.get("tool") == "semgrep", "Semgrep dashboard report returned wrong tool")
+    require(semgrep_report.get("finding_count", 0) >= 1, "Semgrep dashboard report missing stored finding")
+    require(semgrep_report.get("external_links"), "Semgrep dashboard report missing external artifact reference")
     context = request("GET", f"/api/tickets/{record['ticket_id']}/context")
     require(context.get("change_requests"), "ticket context missing CI/CD change request")
     print(json.dumps({
@@ -85,6 +120,7 @@ def main():
         "ticket_id": record.get("ticket_id"),
         "change_id": record.get("change_id"),
         "provider": pipeline.get("provider"),
+        "semgrep_dashboard_report": semgrep_report.get("finding_count"),
     }))
 
 
