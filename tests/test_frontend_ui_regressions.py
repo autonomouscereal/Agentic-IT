@@ -101,6 +101,21 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn("## Ticket Note Style", agent_runner)
         self.assertIn("Do not paste raw API responses", agent_runner)
 
+    def test_ticket_modal_renders_chronological_operator_sequence(self):
+        css = (ROOT / "frontend" / "css" / "dashboard.css").read_text(encoding="utf-8")
+        ticket_service = (ROOT / "api" / "services" / "ticket_service.py").read_text(encoding="utf-8")
+        agent_runner = (ROOT / "api" / "services" / "agent_runner.py").read_text(encoding="utf-8")
+        self.assertIn("function buildTicketTimeline(", self.dashboard_js)
+        self.assertIn("function renderTicketTimeline(events)", self.dashboard_js)
+        self.assertIn("Sequence of Events", self.dashboard_js)
+        self.assertIn("contextData?.model_turn_events", self.dashboard_js)
+        self.assertIn("contextData?.steering_events", self.dashboard_js)
+        self.assertIn("Model turn ${turnIndex} started", self.dashboard_js)
+        self.assertIn(".ticket-sequence", css)
+        self.assertIn(".sequence-model", css)
+        self.assertIn('"model_turn_events": model_turn_events', ticket_service)
+        self.assertIn('"ticket_id" not in event_details', agent_runner)
+
 
 if __name__ == "__main__":
     unittest.main()

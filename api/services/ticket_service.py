@@ -412,6 +412,46 @@ async def get_context(ticket_id):
         "SELECT * FROM agent_steering_events WHERE ticket_id = $1 ORDER BY created_at DESC LIMIT 30",
         ticket_id,
     )
+    model_turn_events = await fetchall("""
+        WITH ticket_tasks AS (
+            SELECT id::text AS task_id, ('task_' || id::text) AS task_target
+            FROM agent_tasks
+            WHERE ticket_id = $1
+        ),
+        raw_turns AS (
+            SELECT id, actor, action, target, details, created_at, 'audit' AS source
+            FROM audit_log
+            WHERE action IN ('agent_model_turn_started', 'agent_model_turn_finished')
+            UNION ALL
+            SELECT id, COALESCE(actor, 'system') AS actor, action, target,
+                   details, created_at, 'event' AS source
+            FROM event_log
+            WHERE action IN ('agent_model_turn_started', 'agent_model_turn_finished')
+        )
+        SELECT id, actor, action, target, details, created_at, source
+        FROM (
+            SELECT DISTINCT ON (
+                action,
+                target,
+                COALESCE(details->>'turn_index', details->>'model_turn_index', ''),
+                date_trunc('second', created_at)
+            )
+                   id, actor, action, target, details, created_at, source
+            FROM raw_turns
+            WHERE target IN (SELECT task_target FROM ticket_tasks)
+               OR details->>'task_id' IN (SELECT task_id FROM ticket_tasks)
+               OR details->>'ticket_id' = $1::text
+            ORDER BY
+                action,
+                target,
+                COALESCE(details->>'turn_index', details->>'model_turn_index', ''),
+                date_trunc('second', created_at),
+                CASE source WHEN 'audit' THEN 0 ELSE 1 END,
+                id
+        ) deduped_turns
+        ORDER BY created_at ASC, id ASC
+        LIMIT 120
+    """, ticket_id)
     postmortems = await fetchall(
         "SELECT * FROM postmortems WHERE ticket_id = $1 ORDER BY created_at DESC",
         ticket_id,
@@ -492,6 +532,7 @@ async def get_context(ticket_id):
         "access_requests": access_requests,
         "tasks": tasks,
         "steering_events": steering_events,
+        "model_turn_events": model_turn_events,
         "postmortems": postmortems,
         "related_tickets": related,
         "knowledge_articles": articles,

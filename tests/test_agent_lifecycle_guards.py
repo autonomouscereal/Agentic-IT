@@ -125,6 +125,38 @@ def load_agents_route():
     return module
 
 
+class ModelTurnAuditTests(unittest.TestCase):
+    def test_model_turn_events_include_ticket_id_for_ticket_timeline(self):
+        module = load_agent_runner()
+        event_calls = []
+        execute_calls = []
+
+        async def fetchval(query, *args):
+            self.assertIn("SELECT ticket_id FROM agent_tasks", query)
+            self.assertEqual(args[0], 271)
+            return 695
+
+        async def log_event(category, level, actor, action, target, details):
+            event_calls.append((category, level, actor, action, target, details))
+
+        async def execute(query, *args):
+            execute_calls.append((query, args))
+
+        module.fetchval = fetchval
+        module.log_event = log_event
+        module.execute = execute
+
+        asyncio.run(module._record_model_turn_event(
+            "agent_model_turn_started",
+            271,
+            274,
+            {"turn_index": 1},
+        ))
+
+        self.assertEqual(event_calls[0][5]["ticket_id"], 695)
+        self.assertIn('"ticket_id": 695', execute_calls[0][1][3])
+
+
 class TransientModelRetryTests(unittest.TestCase):
     def test_detects_hermes_provider_capacity_errors(self):
         module = load_agent_runner()

@@ -1418,6 +1418,246 @@ function renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, acc
     `;
 }
 
+function parseDetails(value) {
+    if (!value) return {};
+    if (typeof value === "object") return value;
+    try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function eventMs(value) {
+    const ms = Date.parse(value || "");
+    return Number.isFinite(ms) ? ms : 0;
+}
+
+function eventKey(parts) {
+    return parts.filter(v => v !== undefined && v !== null && v !== "").join(":");
+}
+
+function pushTimelineEvent(events, seen, event) {
+    if (!event?.at) return;
+    const key = event.key || eventKey([event.kind, event.id, event.at, event.title]);
+    if (seen.has(key)) return;
+    seen.add(key);
+    events.push({ ...event, key });
+}
+
+function firstNoteLine(body) {
+    return normalizeNoteBody(body).split("\n").map(line => line.trim()).filter(Boolean)[0] || "Ticket note";
+}
+
+function noteTitleBody(body) {
+    const lines = normalizeNoteBody(body).split("\n").map(line => line.trim()).filter(Boolean);
+    if (!lines.length) return { title: "Ticket note", body: "" };
+    let title = lines[0];
+    const bodyLines = lines.slice(1);
+    const colonIndex = title.indexOf(": ");
+    if (colonIndex > 0 && title.length > 110) {
+        bodyLines.unshift(title.slice(colonIndex + 2).trim());
+        title = title.slice(0, colonIndex).trim();
+    }
+    return {
+        title: shortText(title, 150),
+        body: bodyLines.join("\n"),
+    };
+}
+
+function includeNoteInSequence(note) {
+    const title = noteTitleBody(note.body).title.toLowerCase();
+    if (!title) return false;
+    const repetitive = [
+        "agent started",
+        "agent assigned",
+        "agent waiting",
+        "agent provider retry scheduled",
+        "agent completed with recovered finalization",
+        "approval gate opened",
+        "approval gate completed",
+        "access request opened",
+        "provider close failed",
+    ];
+    if (repetitive.some(prefix => title.startsWith(prefix))) return false;
+    if (/^change \d+ completed/.test(title)) return false;
+    return true;
+}
+
+function includeAuditInSequence(audit) {
+    return false;
+}
+
+function modelTurnSummary(turn) {
+    const details = parseDetails(turn.details);
+    const turnIndex = details.turn_index || details.model_turn_index || "?";
+    if (turn.action === "agent_model_turn_started") {
+        return {
+            title: `Model turn ${turnIndex} started`,
+            body: "The model began generating from the context it had at this moment. Approvals or notes that land after this point may not be reflected until the next tool result, steering event, or continuation.",
+            badge: "model-start",
+        };
+    }
+    const duration = details.duration_seconds ? `${details.duration_seconds}s` : "duration not recorded";
+    const toolUse = details.has_tool_use ? "tool call emitted" : "no tool call";
+    return {
+        title: `Model turn ${turnIndex} finished`,
+        body: `${duration}; ${toolUse}; stop reason ${details.stop_reason || "unknown"}.`,
+        badge: "model-finish",
+    };
+}
+
+function buildTicketTimeline({ ticket, notes, relevant, tasks, changes, postmortems, accessRequests, steeringEvents, modelTurns }) {
+    const events = [];
+    const seen = new Set();
+    if (ticket?.created_at) {
+        pushTimelineEvent(events, seen, {
+            kind: "ticket",
+            at: ticket.created_at,
+            title: `Ticket created`,
+            body: ticket.title || "",
+            badge: ticket.status || "ticket",
+            key: eventKey(["ticket-created", ticket.id]),
+        });
+    }
+    tasks.forEach(task => {
+        pushTimelineEvent(events, seen, {
+            kind: "agent",
+            at: task.started_at || task.created_at,
+            title: `Agent ${task.agent_id || "-"} started ${task.task_type || "task"}`,
+            body: `Task #${task.id}; model work begins from this task context.`,
+            badge: "agent-start",
+            key: eventKey(["task-start", task.id]),
+        });
+        if (task.completed_at) {
+            pushTimelineEvent(events, seen, {
+                kind: "agent",
+                at: task.completed_at,
+                title: `Agent task ${task.id} ${task.status || "completed"}`,
+                body: shortText(task.error_message || task.output || "Task completed.", 340),
+                badge: task.status || "task",
+                key: eventKey(["task-end", task.id, task.status]),
+            });
+        }
+    });
+    modelTurns.forEach(turn => {
+        const summary = modelTurnSummary(turn);
+        const details = parseDetails(turn.details);
+        pushTimelineEvent(events, seen, {
+            kind: "model",
+            at: turn.created_at,
+            title: summary.title,
+            body: summary.body,
+            badge: summary.badge,
+            agentId: details.agent_id,
+            key: eventKey(["model-turn", turn.source, turn.id, turn.action]),
+        });
+    });
+    changes.forEach(change => {
+        pushTimelineEvent(events, seen, {
+            kind: "gate",
+            at: change.requested_at,
+            title: `Approval gate ${change.id} requested`,
+            body: `${change.action || "Change"} on ${change.target || "target"}. ${shortText(change.reason || "", 240)}`,
+            badge: change.risk_level || "gate",
+            key: eventKey(["gate-request", change.id]),
+        });
+        if (change.approved_at) {
+            pushTimelineEvent(events, seen, {
+                kind: "gate",
+                at: change.approved_at,
+                title: `Approval gate ${change.id} ${change.status || "approved"}`,
+                body: `Approved by ${change.approved_by || "unknown"}. ${shortText(change.result || "", 260)}`,
+                badge: change.status || "approved",
+                key: eventKey(["gate-approved", change.id, change.status]),
+            });
+        }
+    });
+    accessRequests.forEach(access => {
+        pushTimelineEvent(events, seen, {
+            kind: "access",
+            at: access.created_at,
+            title: `Access request ${access.id || access.access_ticket_id || ""}`.trim(),
+            body: `${access.permission || "access"} for ${access.resource || access.resource_id || "resource"}. ${shortText(access.reason || "", 240)}`,
+            badge: access.status || access.change_status || "access",
+            key: eventKey(["access", access.id, access.access_ticket_id]),
+        });
+    });
+    steeringEvents.forEach(steer => {
+        pushTimelineEvent(events, seen, {
+            kind: "steering",
+            at: steer.created_at,
+            title: `Agent steering delivered`,
+            body: shortText(steer.message || steer.body || steer.summary || "Updated context was delivered without interrupting the original objective.", 320),
+            badge: steer.source || "steering",
+            key: eventKey(["steering", steer.id]),
+        });
+    });
+    notes.filter(includeNoteInSequence).forEach(note => {
+        const noteParts = noteTitleBody(note.body);
+        pushTimelineEvent(events, seen, {
+            kind: "note",
+            at: note.created_at,
+            title: noteParts.title,
+            body: noteParts.body,
+            badge: note.source || "note",
+            author: note.author,
+            key: eventKey(["note", note.id]),
+        });
+    });
+    postmortems.forEach(postmortem => {
+        pushTimelineEvent(events, seen, {
+            kind: "learning",
+            at: postmortem.created_at,
+            title: `Postmortem ${postmortem.id} created`,
+            body: shortText(postmortem.summary || postmortem.improvements || "Learning artifact recorded.", 320),
+            badge: postmortem.status || "postmortem",
+            key: eventKey(["postmortem", postmortem.id]),
+        });
+    });
+    relevant
+        .filter(a => a.source !== "note")
+        .filter(includeAuditInSequence)
+        .forEach(audit => {
+            const action = audit.action || "";
+            if (action === "agent_model_turn_started" || action === "agent_model_turn_finished") return;
+            pushTimelineEvent(events, seen, {
+                kind: audit.source || "audit",
+                at: audit.created_at,
+                title: audit.summary || `${audit.actor || "system"} ${action.replace(/_/g, " ")}`,
+                body: "",
+                badge: audit.source || "audit",
+                agentId: audit.agent_id,
+                key: eventKey(["audit", audit.source, audit.id, action]),
+            });
+        });
+    return events.sort((a, b) => eventMs(a.at) - eventMs(b.at) || String(a.key).localeCompare(String(b.key)));
+}
+
+function renderTicketTimeline(events) {
+    if (!events.length) return '<div class="learning-meta">No sequence evidence recorded yet.</div>';
+    return `
+        <div class="ticket-sequence">
+            ${events.map((event, index) => `
+                <div class="sequence-row sequence-${escAttr(event.kind || "event")}">
+                    <div class="sequence-index">${index + 1}</div>
+                    <div class="sequence-content">
+                        <div class="sequence-head">
+                            <span>${formatTime(event.at)}</span>
+                            <strong>${escHtml(event.title || "Event")}</strong>
+                            <span class="source-badge local">${escHtml(event.badge || event.kind || "event")}</span>
+                            ${event.agentId ? `<button class="inline-link" onclick="openAuditTrail('agent_${escAttr(event.agentId)}')">agent trail</button>` : ""}
+                        </div>
+                        ${event.author ? `<div class="sequence-meta">${escHtml(event.author)}</div>` : ""}
+                        ${event.body ? `<div class="sequence-body">${renderNoteBody(event.body)}</div>` : ""}
+                    </div>
+                </div>
+            `).join("")}
+        </div>
+    `;
+}
+
 function renderTaskTrace(tasks) {
     if (!tasks.length) return '<div class="learning-meta">No agent task records linked yet.</div>';
     return tasks.slice(0, 8).map(t => `
@@ -1574,6 +1814,19 @@ async function loadTicketActivity(ticketId) {
         const changes = contextData?.change_requests || [];
         const postmortems = contextData?.postmortems || [];
         const accessRequests = contextData?.access_requests || [];
+        const steeringEvents = contextData?.steering_events || [];
+        const modelTurns = contextData?.model_turn_events || [];
+        const sequence = buildTicketTimeline({
+            ticket: contextData?.ticket || {},
+            notes,
+            relevant,
+            tasks,
+            changes,
+            postmortems,
+            accessRequests,
+            steeringEvents,
+            modelTurns,
+        });
 
         const modalBody = document.getElementById("modal-body");
         if (!modalBody) return;
@@ -1589,9 +1842,11 @@ async function loadTicketActivity(ticketId) {
                     <button class="inline-link" onclick="openAuditTrail('ticket_${ticketId}')">open full trail</button>
                 </div>
                 <div class="timeline-summary">
-                    Canonical ticket evidence, approval gates, agent work, postmortems, and audit entries linked to this ticket.
+                    Chronological operator sequence across ticket notes, agent tasks, model turns, approvals, steering, postmortems, and audit.
                 </div>
                 ${renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, accessRequests })}
+                <div class="trace-subsection">Sequence of Events</div>
+                ${renderTicketTimeline(sequence)}
                 <div class="trace-subsection">Agent Work</div>
                 ${renderTaskTrace(tasks)}
                 <div class="trace-subsection">Approval Gates</div>
@@ -1599,7 +1854,7 @@ async function loadTicketActivity(ticketId) {
                 ${renderAccessTrace(accessRequests)}
                 <div class="trace-subsection">Postmortems & Learning</div>
                 ${renderPostmortemTrace(postmortems)}
-                <div class="trace-subsection">Human Notes & Audit</div>
+                <div class="trace-subsection">Recent Notes & Audit Detail</div>
                 ${notes.length === 0 ? '<div style="color:var(--text-muted);font-size:12px">No notes recorded yet</div>' : ""}
                 ${notes.slice(-8).reverse().map(n => `
                     <div class="modal-activity-item note-item">

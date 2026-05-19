@@ -4,6 +4,36 @@ Last updated: 2026-05-19.
 
 ## Found During 2026-05-19 Agentic Regression Push
 
+### Ticket evidence sequence was technically complete but hard to follow
+
+Status: fixed in source and live deployment.
+
+The ticket modal had all of the right primitives: notes, tasks, gates,
+postmortems, and audit rows. But the audience-facing view grouped them by
+object type and showed recent notes/audit in reverse order. On complex tickets
+such as `695`, that made the work look out of order and made provider recovery
+notes feel wacky even when the underlying timestamps were correct.
+
+Fix:
+
+- Add `model_turn_events` to ticket context by following the ticket's agent
+  task IDs, so model turns tied to `task_###` show up on the ticket.
+- Include `ticket_id` in new model-turn audit/event details for future runs.
+- Render a chronological `Sequence of Events` in the ticket modal before the
+  raw detail sections.
+- Deduplicate audit/event model-turn pairs and keep broad raw audit rows out
+  of the main human narrative.
+- Split long marker notes into a short title plus readable body text.
+- Shorten future terminal-evidence recovery notes while preserving full audit
+  evidence.
+
+Verification:
+
+- Live ticket `695` context returns notes, tasks, gates, steering events,
+  postmortem evidence, and deduped model-turn events.
+- Playwright opened ticket `695` in the live dashboard and confirmed
+  `Sequence of Events`, model-turn rows, and final resolution evidence render.
+
 ### Setup page needed incremental per-module work controls
 
 Status: fixed in source and live deployment.

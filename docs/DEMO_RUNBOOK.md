@@ -38,21 +38,31 @@ The deeper story is:
 
 ## Activity Trail For Demos
 
-Ticket details show a timeline instead of only raw event rows:
+Ticket details show an audience-facing **Sequence of Events** before the raw
+detail sections. Use that first; it is sorted oldest-to-newest and stitches
+together:
 
-- agent assignment note
-- agent started note
-- agent-authored notes
-- checkpoint notes
-- change completion notes
-- agent completion/failure notes
-- audit/event rows for the same ticket
+- ticket creation
+- agent task starts/completions
+- model turn start/finish markers
+- requester/user-response notes
+- non-interrupting steering notes
+- approval gate requests and approvals
+- access requests
+- containment/remediation evidence
+- postmortems and final resolution
 
 In the ticket detail modal, use **Full Audit Trail** to jump to the Audit page
 filtered to that ticket. Audit rows expose quick links for ticket, agent, and
 target trails when those identifiers are present. Use the Notes source filter
 on the Audit page when you want the human-readable narrative without the lower
 level system events.
+
+Model turn markers are important for live demos: if an approval or user note
+lands while the model is already generating, the sequence shows when that turn
+started so it is clear the agent did not ignore the update. The next tool
+result, steering event, or continuation agent is where the new information is
+picked up.
 
 Approval gates are also deliberately visible for the demo. When the lab
 auto-approves a gate, the ticket timeline shows:

@@ -5,8 +5,10 @@ Last updated: 2026-05-19.
 Use the dashboard at `https://192.168.50.222:25443`. On the Tickets page, choose
 the `Demo Proofs` filter to show the curated prepared examples in the order
 below. Open each ticket and use the `Evidence Trail` section for the human
-story: notes, agent work, approval gates, access requests, postmortems, and
-audit links.
+story. Start with `Sequence of Events`: it is chronological and shows notes,
+agent work, model-turn starts, approval gates, access requests, postmortems,
+and resolution in the order an operator would explain them. Use the raw notes
+and `Full Audit Trail` only when you need lower-level proof.
 
 The demo account password is still stored only in vault key `demo_account_1`.
 
@@ -51,7 +53,8 @@ The demo account password is still stored only in vault key `demo_account_1`.
    quarantine evidence.
 7. Use ticket `525` or `539` to explain least-privilege credential leases.
 8. Use the ticket modal's `Full Audit Trail` button when you need raw evidence;
-   otherwise the `Evidence Trail` section is the best audience-facing view.
+   otherwise `Evidence Trail -> Sequence of Events` is the best
+   audience-facing view.
 
 ## Cleanup Performed
 
@@ -77,6 +80,10 @@ Current cleanup target state:
 - A full authenticated Chrome tab sweep also passed across Overview, Tickets,
   Intake, Agents, Changes, Workflows, Postmortems, CI/CD, Learning, Tools,
   Setup, Access, and Audit with no console/page/http errors.
+- Playwright validation on 2026-05-19 confirmed ticket `695` renders
+  `Sequence of Events`, includes model-turn start markers, includes final
+  resolution evidence, and trims duplicate audit/event rows from the main
+  human narrative.
 
 ## Regression Cases Not For Lead Demo
 

@@ -292,10 +292,18 @@ async def _schedule_transient_model_fallback(agent_id, task_id, task_meta, work_
 
 async def _record_model_turn_event(action, task_id, agent_id, details=None):
     """Record model turn timing in both operator-facing logs."""
+    event_details = dict(details or {})
+    if task_id and "ticket_id" not in event_details:
+        try:
+            ticket_id = await fetchval("SELECT ticket_id FROM agent_tasks WHERE id = $1", task_id)
+            if ticket_id:
+                event_details["ticket_id"] = ticket_id
+        except Exception:
+            pass
     payload = {
         "task_id": task_id,
         "agent_id": agent_id,
-        **(details or {}),
+        **event_details,
     }
     try:
         await log_event(
@@ -1052,10 +1060,11 @@ async def _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, notes):
 async def _resolve_ticket_from_terminal_evidence(ticket_id, agent_id, task_id, evidence, reason):
     """Resolve local/provider ticket state after persisted terminal evidence."""
     summary = (
-        f"Agent `{agent_id}` completed all approval gates, wrote final completion evidence, "
-        "and created postmortem evidence, but the harness did not reach the explicit final "
-        "ticket status call. The supervisor resolved the ticket from persisted evidence and "
-        "attempted provider closure so dashboard and ITSM state stay aligned."
+        "Verified terminal evidence and synchronized ticket state. "
+        f"Agent {agent_id}, task {task_id}; completed gates: "
+        f"{int((evidence or {}).get('completed_changes') or 0)}; "
+        f"final notes: {int((evidence or {}).get('final_notes') or 0)}; "
+        f"postmortems: {int((evidence or {}).get('postmortems') or 0)}."
     )
     provider_result = await _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, summary)
     if not provider_result.get("error"):
@@ -1079,9 +1088,9 @@ async def _resolve_ticket_from_terminal_evidence(ticket_id, agent_id, task_id, e
         if not provider_result.get("error")
         else "Ticket terminal evidence needs provider close review",
         (
-            summary
+            f"{summary}\n\nProvider close: synchronized successfully."
             if not provider_result.get("error")
-            else f"{summary}\n\nProvider close did not complete automatically: {provider_result.get('error')}"
+            else f"{summary}\n\nProvider close needs review: {_provider_error_operator_summary(provider_result.get('error'))}"
         ),
         "agent-supervisor",
     )

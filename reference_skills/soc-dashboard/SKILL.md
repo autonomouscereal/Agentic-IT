@@ -110,6 +110,14 @@ Approval gates may be approved while a local model is already generating. Use
 to explain whether stale "waiting" text came from a model turn that began before
 the approval landed.
 
+Ticket context must expose model-turn rows through `model_turn_events`, even
+when the raw audit target is `task_<id>` instead of `ticket_<id>`. The ticket
+modal's `Evidence Trail -> Sequence of Events` is the audience-facing narrative
+and should be sorted oldest-to-newest across notes, tasks, model turns,
+steering, access requests, approval gates, postmortems, and resolution notes.
+Keep broad/raw audit rows in the detail section or Full Audit Trail, not in the
+main sequence.
+
 When approval lands for an already-running task, `/api/changes/{id}/approve`
 delivers a non-interrupting dashboard steering update into the agent workspace.
 If the agent still writes a stale durable wait checkpoint after the gate is
