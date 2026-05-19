@@ -4,6 +4,30 @@ Last updated: 2026-05-19.
 
 ## Found During 2026-05-19 Agentic Regression Push
 
+### Proxy source default was lab-external instead of local/on-prem first
+
+Status: fixed in source.
+
+The live lab needed Nous/OpenRouter for speed during demo preparation, but the
+source installer and proxy examples started to read as if external providers
+were the product default. That is the wrong posture for most production,
+government, and private deployments, where model routing should stay local or
+on-prem unless an external route is explicitly approved.
+
+Fix:
+
+- Add `AI_MODEL_ROUTE` / `AI_PROXY_MODEL_ROUTE` profiles with local as the
+  default.
+- Keep `AI_PROXY_EXTERNAL_ENABLED=false` by default.
+- Default `AGENT_DEFAULT_MODEL` to `local/agent-default` and
+  `HERMES_DEFAULT_PROVIDER` to `dashboard-proxy`.
+- Generate `runtime/proxy_config.json` with explicit local and external
+  profiles.
+- Add `scripts/switch_model_route.py --route local|external` as the demo-safe
+  route toggle.
+- Document external Nous/OpenRouter as lab/demo routes only, with all provider
+  secrets supplied by runtime vault/environment.
+
 ### Ticket evidence sequence was technically complete but hard to follow
 
 Status: fixed in source and live deployment.

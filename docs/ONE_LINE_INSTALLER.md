@@ -18,13 +18,13 @@ compliance, and maintenance work to governed agents.
 From a checked-out release:
 
 ```bash
-./install.sh --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
+./install.sh --profile soc --proxy-mode deploy --harness auto --model-route local
 ```
 
-Default proxy-first install:
+External lab/provider install:
 
 ```bash
-./install.sh --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
+./install.sh --profile soc --proxy-mode deploy --harness auto --model-route external --provider nous --model deepseek/deepseek-v4-flash
 ```
 
 Dry run:
@@ -37,7 +37,7 @@ Dry run:
 ## Local Windows Install
 
 ```powershell
-.\install.ps1 --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
+.\install.ps1 --profile soc --proxy-mode deploy --harness auto --model-route local
 ```
 
 ## Remote Curl Form
@@ -45,7 +45,7 @@ Dry run:
 When this repo is published behind an internal release URL:
 
 ```bash
-curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
+curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profile soc --proxy-mode deploy --harness auto --model-route local
 ```
 
 ## Important Flags
@@ -71,7 +71,13 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
   Hardened installs bind the proxy to `127.0.0.1`; the installer checks
   `http://localhost:<port>` from the deployment host even when the dashboard
   HTTPS URL is LAN-facing.
-- `--provider openai|anthropic|nous|lmstudio|custom`: default provider route in the generated proxy config.
+- `--model-route local|external`: deployment posture for the generated proxy
+  config. `local` is the product default and routes generic aliases through
+  the local/on-prem gateway. `external` enables the configured cloud/lab route
+  and its fallbacks.
+- `--provider openai|anthropic|nous|lmstudio|custom`: provider for the active
+  route. Defaults to `lmstudio` when `--model-route local`; use `nous`,
+  `openai`, `anthropic`, or `custom` only when external routing is allowed.
 - `--provider-base-url URL`: provider base URL override for custom/external routes.
 - `--ai-base-url URL`: external proxy compatibility endpoint. Built-in proxy
   mode uses `http://ai-proxy:4001` inside Docker and prints a deployment-host
@@ -79,7 +85,9 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
 - If the host port has to move because another proxy already owns `4001`, keep
   `AGENT_LLM_BASE_URL=http://ai-proxy:4001` for containers and change only the
   deployment-host local `--proxy-port` / `AI_PROXY_PORT` value.
-- `--model MODEL_ID`: default agent model recorded in the setup plan.
+- `--model MODEL_ID`: default agent model recorded in the setup plan. The
+  local default is `local/agent-default`; the lab external example is
+  `deepseek/deepseek-v4-flash`.
 - `--spawn-setup-agent`: create the setup ticket and immediately assign the onboarding agent.
 - `--itop-sync-enabled true|false`: defaults to false for product-agnostic fresh installs.
 - `--no-start`: prepare files without starting Docker.
@@ -101,6 +109,36 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
 - Hermes auth state is mounted from the operator/host runtime when Hermes is selected; the installer does not write Nous Portal tokens into source-controlled files.
 - `install_state/install-log.jsonl`: installer events.
 - `install_state/last-plan.json`: initial profile plan.
+
+## Model Routing Posture
+
+Fresh product installs are local/on-prem first:
+
+```ini
+AI_MODEL_ROUTE=local
+AI_PROXY_MODEL_ROUTE=local
+AI_PROXY_EXTERNAL_ENABLED=false
+AGENT_DEFAULT_MODEL=local/agent-default
+HERMES_DEFAULT_PROVIDER=dashboard-proxy
+```
+
+That posture keeps generic aliases such as `local/agent-default`,
+`default`, and the current lab model aliases on the local gateway unless an
+operator explicitly enables external routing. For lab demos where external
+providers are approved, flip the route:
+
+```bash
+python scripts/switch_model_route.py --route external --restart
+python scripts/switch_model_route.py --route local --restart
+```
+
+The switch updates `.env`, `runtime/proxy_config.json`, and
+`agent_models.json`; it does not write or rotate provider secrets. External
+routes can use Nous/OpenRouter/OpenAI/Anthropic/custom providers when runtime
+vault/environment credentials are present. Local/on-prem deployments can point
+`LM_STUDIO_BASE` or the generated provider base URL at LM Studio, vLLM, Ollama
+with an OpenAI-compatible shim, Azure OpenAI on a private endpoint, or another
+customer-managed gateway.
 
 ## Post-Install
 
@@ -191,8 +229,9 @@ cd /home/cereal/SOC_TESTING/soc-dashboard
   --proxy-mode deploy \
   --proxy-port 4001 \
   --harness hermes \
-  --provider nous \
-  --model deepseek/deepseek-v4-flash \
+  --model-route local \
+  --provider lmstudio \
+  --model local/agent-default \
   --itop-sync-enabled false \
   --non-interactive
 ```
@@ -212,8 +251,8 @@ python3 scripts/smoke_cicd_security_pipeline.py "$BASE"
 python3 scripts/smoke_agent_auditor.py "$BASE"
 docker compose cp scripts/smoke_change_auto_completion.py api:/app/smoke_change_auto_completion.py
 docker compose exec -T api python /app/smoke_change_auto_completion.py
-python3 scripts/smoke_local_model_agent.py "$BASE" deepseek/deepseek-v4-flash
-python3 scripts/smoke_setup_agent.py "$BASE" deepseek/deepseek-v4-flash
+python3 scripts/smoke_local_model_agent.py "$BASE" local/agent-default
+python3 scripts/smoke_setup_agent.py "$BASE" local/agent-default
 docker compose exec -T api python /root/.claude/skills/agent-memory/scripts/agent_memory.py --json status
 ```
 
@@ -251,7 +290,7 @@ The shim blueprint is documented in `docs/MAILCOW_API_SHIM.md`. It covers endpoi
 Latest dry-run proof:
 
 ```powershell
-python installer\bootstrap.py --dry-run --profile full-it --harness hermes --proxy-mode deploy --target C:\Users\cereal\AppData\Local\Temp\soc-platform-dryrun --dashboard-port 25580 --db-port 55433 --model deepseek/deepseek-v4-flash
+python installer\bootstrap.py --dry-run --profile full-it --harness hermes --proxy-mode deploy --model-route local --target C:\Users\cereal\AppData\Local\Temp\soc-platform-dryrun --dashboard-port 25580 --db-port 55433 --model local/agent-default
 ```
 
 Expected result: JSON status `dry_run`, dashboard URL

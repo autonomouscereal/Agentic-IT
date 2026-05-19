@@ -51,7 +51,7 @@ class HermesHarness:
         env["HERMES_ACCEPT_HOOKS"] = "1"
         env.setdefault("HERMES_AGENT_SOURCE", "soc-dashboard")
         env.setdefault("HERMES_TOOLSETS", "terminal,file")
-        env.setdefault("HERMES_DEFAULT_PROVIDER", "nous")
+        env.setdefault("HERMES_DEFAULT_PROVIDER", "dashboard-proxy")
         env.setdefault("HERMES_LOCAL_PROVIDER", "dashboard-proxy")
         run_home = env.get("HERMES_RUN_HOME", "/home/cereal")
         run_user = env.get("HERMES_RUN_USER", "cereal")
@@ -76,10 +76,12 @@ class HermesHarness:
         override = os.getenv("HERMES_PROVIDER", "").strip()
         if override:
             return override
+        active_route = os.getenv("AI_MODEL_ROUTE", os.getenv("AI_PROXY_MODEL_ROUTE", "local")).strip().lower()
+        default_provider = "nous" if active_route.startswith("external") else "dashboard-proxy"
         model_name = (model or "").lower()
         if model_name.startswith(("qwen/", "lmstudio/", "local/")):
             return os.getenv("HERMES_LOCAL_PROVIDER", "dashboard-proxy")
-        return os.getenv("HERMES_DEFAULT_PROVIDER", "nous")
+        return os.getenv("HERMES_DEFAULT_PROVIDER", default_provider)
 
     def build_command(self, prompt, settings_path, model, permission_mode, allowed_tools=None):
         hermes_bin = os.getenv("HERMES_BIN") or shutil.which("hermes") or "hermes"

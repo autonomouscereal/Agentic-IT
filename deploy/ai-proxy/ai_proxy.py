@@ -40,11 +40,19 @@ CUSTOM_PROVIDER_BASE = os.getenv("CUSTOM_PROVIDER_BASE", "").rstrip("/")
 CUSTOM_PROVIDER_API_KEY = os.getenv("CUSTOM_PROVIDER_API_KEY", "")
 CREDENTIALS_PATH = os.path.expanduser(os.getenv("CREDENTIALS_PATH", "~/.claude_credentials.json"))
 TRANSIENT_PROVIDER_STATUSES = {401, 403, 429, 500, 502, 503, 504}
+PROVIDER_PREFIXES = {"anthropic", "lmstudio", "local", "openai", "custom", "openrouter", "nous"}
 
 
 def _split_env(name, default=""):
     value = os.getenv(name, default)
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 def _default_config():
@@ -57,41 +65,70 @@ def _default_config():
     )
     openai = _split_env("OPENAI_MODEL_ALIASES", "")
     custom = _split_env("CUSTOM_MODEL_ALIASES", "")
+    local_model = os.getenv("AI_PROXY_LOCAL_MODEL", local[0] if local else "qwen/qwen3.6-27b")
+    external_provider = os.getenv("AI_PROXY_EXTERNAL_PROVIDER", "nous").strip() or "nous"
+    external_model = os.getenv("AI_PROXY_EXTERNAL_MODEL", nous[0] if nous else "deepseek/deepseek-v4-flash")
+    active_route = os.getenv("AI_PROXY_MODEL_ROUTE", os.getenv("AI_MODEL_ROUTE", "local")).strip().lower() or "local"
     return {
+        "routing": {
+            "active": active_route,
+            "external_enabled": _env_bool("AI_PROXY_EXTERNAL_ENABLED", False),
+            "profiles": {
+                "local": {
+                    "provider": "lmstudio",
+                    "model": local_model,
+                    "aliases": _split_env(
+                        "AI_PROXY_LOCAL_ALIASES",
+                        "default,agent-default,local/agent-default,deepseek/deepseek-v4-flash,deepseek-v4-flash",
+                    ),
+                    "fallbacks": _split_env("LMSTUDIO_FALLBACK_PROVIDERS", ""),
+                },
+                "external": {
+                    "provider": external_provider,
+                    "model": external_model,
+                    "aliases": _split_env("AI_PROXY_EXTERNAL_ALIASES", "external/agent-default"),
+                    "fallbacks": _split_env("AI_PROXY_EXTERNAL_FALLBACK_PROVIDERS", "openrouter,lmstudio"),
+                },
+            },
+        },
         "local_models": [{"id": model, "weight": 1} for model in local],
         "providers": {
             "lmstudio": {
                 "base_url": LM_STUDIO_BASE,
                 "token_env": "LM_STUDIO_TOKEN",
                 "models": local,
+                "fallbacks": _split_env("LMSTUDIO_FALLBACK_PROVIDERS", ""),
             },
             "nous": {
                 "base_url": NOUS_BASE,
                 "token_env": "NOUS_API_KEY",
                 "models": nous,
-                "fallbacks": ["openrouter", "lmstudio"],
+                "fallbacks": _split_env("NOUS_FALLBACK_PROVIDERS", "openrouter,lmstudio"),
             },
             "openrouter": {
                 "base_url": OPENROUTER_BASE,
                 "token_env": "OPENROUTER_API_KEY",
                 "models": openrouter,
                 "fallback_model": "openrouter/free",
-                "fallbacks": ["lmstudio"],
+                "fallbacks": _split_env("OPENROUTER_FALLBACK_PROVIDERS", "lmstudio"),
             },
             "anthropic": {
                 "base_url": ANTHROPIC_BASE,
                 "token_env": "ANTHROPIC_API_KEY",
                 "models": anthropic,
+                "fallbacks": _split_env("ANTHROPIC_FALLBACK_PROVIDERS", ""),
             },
             "openai": {
                 "base_url": OPENAI_BASE,
                 "token_env": "OPENAI_API_KEY",
                 "models": openai,
+                "fallbacks": _split_env("OPENAI_FALLBACK_PROVIDERS", ""),
             },
             "custom": {
                 "base_url": CUSTOM_PROVIDER_BASE,
                 "token_env": "CUSTOM_PROVIDER_API_KEY",
                 "models": custom,
+                "fallbacks": _split_env("CUSTOM_FALLBACK_PROVIDERS", ""),
             },
         },
     }
@@ -118,6 +155,10 @@ ANTHROPIC_MODELS = (PROVIDERS.get("anthropic") or {}).get("models") or []
 OPENAI_MODELS = (PROVIDERS.get("openai") or {}).get("models") or []
 OPENROUTER_MODELS = (PROVIDERS.get("openrouter") or {}).get("models") or []
 CUSTOM_MODELS = (PROVIDERS.get("custom") or {}).get("models") or []
+ROUTING = CONFIG.get("routing") or {}
+ROUTE_PROFILES = ROUTING.get("profiles") or {}
+ACTIVE_ROUTE = os.getenv("AI_PROXY_MODEL_ROUTE", os.getenv("AI_MODEL_ROUTE", ROUTING.get("active", "local"))).strip().lower() or "local"
+EXTERNAL_ENABLED = _env_bool("AI_PROXY_EXTERNAL_ENABLED", bool(ROUTING.get("external_enabled")))
 
 
 class Lb:
@@ -182,16 +223,79 @@ def is_anthropic_model(model):
 
 
 def provider_for_chat_model(model):
-    value = (model or "").lower()
-    if is_local_model(model):
-        return "lmstudio"
-    if value.startswith("openrouter/") or any(value == m.lower() for m in OPENROUTER_MODELS):
-        return "openrouter"
-    if value.startswith("openai/") or any(value == m.lower() for m in OPENAI_MODELS):
-        return "openai"
-    if value.startswith("custom/") or any(value == m.lower() for m in CUSTOM_MODELS):
-        return "custom"
-    return "nous"
+    return route_for_chat_model(model)[0]
+
+
+def profile_route(name):
+    profiles = ROUTE_PROFILES or {}
+    if name in profiles:
+        return profiles[name] or {}
+    if name.startswith("external"):
+        return profiles.get("external") or {}
+    return profiles.get("local") or {}
+
+
+def _explicit_provider(model):
+    value = (model or "").strip()
+    if "/" not in value:
+        return "", value
+    prefix, rest = value.split("/", 1)
+    prefix = prefix.lower()
+    if prefix in PROVIDER_PREFIXES:
+        return prefix, rest
+    return "", value
+
+
+def _profile_aliases(profile):
+    return {str(item).lower() for item in (profile.get("aliases") or [])}
+
+
+def _provider_models(provider):
+    return [str(item).lower() for item in ((PROVIDERS.get(provider) or {}).get("models") or [])]
+
+
+def route_for_chat_model(model):
+    """Return provider plus model after applying the active route profile.
+
+    The route profile is the deployment policy. In government/on-prem
+    environments it should normally be `local`, which maps generic/default
+    aliases and lab external model names to the local model gateway. Explicit
+    provider prefixes still work for controlled tests and migrations.
+    """
+    requested = (model or "").strip()
+    value = requested.lower()
+    explicit_provider, explicit_model = _explicit_provider(requested)
+    if explicit_provider in ("local", "lmstudio"):
+        local_profile = profile_route("local")
+        aliases = _profile_aliases(local_profile)
+        if value in aliases or explicit_model.lower() in {"default", "agent-default"}:
+            return "lmstudio", local_profile.get("model") or lb.next()
+        return "lmstudio", explicit_model or local_profile.get("model") or lb.next()
+    if explicit_provider and explicit_provider in PROVIDERS:
+        if explicit_provider == "openrouter" and requested.lower() in _provider_models("openrouter"):
+            return "openrouter", requested
+        return explicit_provider, explicit_model or requested
+
+    local_profile = profile_route("local")
+    external_profile = profile_route("external")
+    if is_local_model(requested):
+        return "lmstudio", strip_provider_prefix(requested)
+    if ACTIVE_ROUTE.startswith("local"):
+        if value in _profile_aliases(local_profile) or value in _provider_models("nous") or value in _provider_models("openrouter"):
+            return "lmstudio", local_profile.get("model") or lb.next()
+        if not EXTERNAL_ENABLED:
+            return "lmstudio", local_profile.get("model") or lb.next()
+    if value.startswith("openrouter/") or value in _provider_models("openrouter"):
+        return "openrouter", requested
+    if value.startswith("openai/") or value in _provider_models("openai"):
+        return "openai", strip_provider_prefix(requested)
+    if value.startswith("custom/") or value in _provider_models("custom"):
+        return "custom", strip_provider_prefix(requested)
+    if value in _provider_models("nous"):
+        return "nous", requested
+    if ACTIVE_ROUTE.startswith("external") and EXTERNAL_ENABLED:
+        return external_profile.get("provider") or "nous", external_profile.get("model") or requested
+    return "lmstudio", local_profile.get("model") or lb.next()
 
 
 def is_local_model(model):
@@ -202,7 +306,7 @@ def is_local_model(model):
 def strip_provider_prefix(model):
     if "/" in model:
         provider, rest = model.split("/", 1)
-        if provider.lower() in ("anthropic", "lmstudio", "local", "openai", "custom"):
+        if provider.lower() in ("anthropic", "lmstudio", "local", "openai", "custom", "nous"):
             return rest
     return model
 
@@ -333,7 +437,9 @@ def provider_fallback_model(provider, requested_model):
 
 def fallback_chain(primary):
     chain = [primary]
-    for provider in (PROVIDERS.get(primary) or {}).get("fallbacks") or []:
+    profile = profile_route("external" if ACTIVE_ROUTE.startswith("external") else "local")
+    configured_fallbacks = profile.get("fallbacks") if primary == profile.get("provider") else None
+    for provider in configured_fallbacks or (PROVIDERS.get(primary) or {}).get("fallbacks") or []:
         if provider not in chain:
             chain.append(provider)
     return chain
@@ -469,6 +575,13 @@ async def handler(request):
             "status": "ok",
             "port": LISTEN_PORT,
             "config_path": PROXY_CONFIG_PATH,
+            "routing": {
+                "active": ACTIVE_ROUTE,
+                "external_enabled": EXTERNAL_ENABLED,
+                "local_model": (profile_route("local") or {}).get("model"),
+                "external_provider": (profile_route("external") or {}).get("provider"),
+                "external_model": (profile_route("external") or {}).get("model"),
+            },
             "providers": sorted([name for name, provider in PROVIDERS.items() if provider.get("models")]),
         })
     models = []
@@ -502,6 +615,19 @@ async def handler(request):
             body = {}
         model_id = body.get("model") or body.get("name") or ""
         return web.json_response({"model": model_id, "details": {}, "capabilities": ["completion", "tools"]})
+    if path == "api/route" and request.method == "POST":
+        body = await request.json()
+        provider, routed_model = route_for_chat_model(body.get("model") or "")
+        return web.json_response({
+            "requested_model": body.get("model") or "",
+            "provider": provider,
+            "model": routed_model,
+            "routing": {
+                "active": ACTIVE_ROUTE,
+                "external_enabled": EXTERNAL_ENABLED,
+            },
+            "fallback_chain": fallback_chain(provider),
+        })
     if path.startswith("v1/messages") and request.method == "POST":
         body = await request.json()
         model = body.get("model", "")
@@ -523,7 +649,8 @@ async def handler(request):
         model = body.get("model", "")
         token = get_client_auth(request)
         log.info("chat -> model=%s auth=%s ua=%s", model, auth_preview(token), request.headers.get("user-agent", ""))
-        provider = provider_for_chat_model(model)
+        provider, routed_model = route_for_chat_model(model)
+        body["model"] = routed_model
         if token == LM_STUDIO_TOKEN or provider == "lmstudio":
             return await proxy_lmstudio_chat(request, body, token)
         if provider in ("nous", "openrouter"):

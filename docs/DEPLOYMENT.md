@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-Last updated: 2026-05-18.
+Last updated: 2026-05-19.
 
 ## Requirements
 
@@ -26,7 +26,8 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | Local API | `http://127.0.0.1:25480` |
 | Proxy | `http://192.168.50.222:4001` |
 | Default harness | Hermes Agent |
-| Default model | `deepseek/deepseek-v4-flash` |
+| Product default model | `local/agent-default` |
+| Lab external model | `deepseek/deepseek-v4-flash` |
 
 ## Upload
 
@@ -52,12 +53,28 @@ SOC_DB_USER=<from vault or deployment secret>
 SOC_DB_PASSWORD=<from vault or deployment secret>
 AGENT_LLM_BASE_URL=http://<proxy-host>:4001
 AGENT_HARNESS=hermes
-AGENT_DEFAULT_MODEL=deepseek/deepseek-v4-flash
+AI_MODEL_ROUTE=local
+AI_PROXY_MODEL_ROUTE=local
+AI_PROXY_EXTERNAL_ENABLED=false
+AGENT_DEFAULT_MODEL=local/agent-default
+HERMES_DEFAULT_PROVIDER=dashboard-proxy
 DASHBOARD_BIND=127.0.0.1
 DASHBOARD_HTTPS_BIND=0.0.0.0
 DASHBOARD_HTTPS_PORT=25443
 DASHBOARD_TLS_DIR=./runtime/tls
 ```
+
+Keep production and regulated deployments local/on-prem first unless an
+external model route is explicitly approved. The demo/lab route can be toggled
+without editing secrets:
+
+```bash
+python scripts/switch_model_route.py --route external --restart
+python scripts/switch_model_route.py --route local --restart
+```
+
+The switch updates `.env`, `runtime/proxy_config.json`, and
+`agent_models.json`. Provider keys remain in the vault/runtime environment.
 
 ## HTTPS Edge
 
@@ -179,7 +196,7 @@ Security posture for regulated demos, verified 2026-05-18:
   to prove the TLS edge, secure redirect behavior, and security headers. After
   trusting `dashboard-ca.crt`, also verify a normal TLS client reaches
   `https://192.168.50.222:25443/nginx-health` without `--insecure`.
-- run `python scripts/smoke_setup_agent.py http://192.168.50.222:25480 deepseek/deepseek-v4-flash`
+- run `python scripts/smoke_setup_agent.py http://192.168.50.222:25480 local/agent-default`
   to prove a real Hermes worker can use scoped agent-session auth against
   protected dashboard endpoints. Latest live proof after the login deployment:
   ticket `611`, agent `246`, task `243`, completed with the expected agent

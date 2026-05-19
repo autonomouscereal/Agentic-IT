@@ -23,7 +23,7 @@ approved reference modules when those capabilities are missing.
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
 - Containers: `soc-dashboard-api`, `soc-dashboard-db`, `ai-proxy`, `agent-memory-db`, `dashboard-tls-proxy`
 - Database: PostgreSQL 16 only, accessed through `asyncpg` with parameterized raw SQL
-- Default harness/model: Hermes Agent with `deepseek/deepseek-v4-flash`; Claude Code remains available as a fallback harness.
+- Default harness/model: Hermes Agent through the model gateway with local/on-prem routing (`local/agent-default`) by default; Claude Code remains available as a fallback harness.
 
 The shared demo user is `demo_account_1`; its password is stored only in the
 local server-manager vault key `demo_account_1`. The dashboard itself now has
@@ -106,11 +106,11 @@ already healthy or built into the control plane show as active and default to
 Installer entrypoints:
 
 ```bash
-./install.sh --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
+./install.sh --profile soc --proxy-mode deploy --harness auto --model-route local
 ```
 
 ```powershell
-.\install.ps1 --profile soc --proxy-mode deploy --harness auto --provider nous --model deepseek/deepseek-v4-flash
+.\install.ps1 --profile soc --proxy-mode deploy --harness auto --model-route local
 ```
 
 The installer starts the control plane, built-in model gateway, PostgreSQL
@@ -131,7 +131,7 @@ python scripts/sync_reference_skills.py check
 
 This is the bridge toward Git-managed skills and prevents `.agents`, `.claude`, and the dashboard bundle from silently drifting.
 
-The dashboard supports both Hermes Agent and Claude Code from the API container. Hermes is the preferred default for long-running queue work in the current lab (`AGENT_HARNESS=hermes`, default model `deepseek/deepseek-v4-flash`), while Claude Code remains available through `AGENT_HARNESS=claude-code`. The command/env contract is isolated in `api/services/agent_harness.py`. Model routing is proxy-first: Nous Portal is primary for the DeepSeek route, OpenRouter is the first external fallback, and local LM Studio/qwen is the final/local route.
+The dashboard supports both Hermes Agent and Claude Code from the API container. Hermes is the preferred default for long-running queue work (`AGENT_HARNESS=hermes`), while Claude Code remains available through `AGENT_HARNESS=claude-code`. The command/env contract is isolated in `api/services/agent_harness.py`. Model routing is proxy-first and deployment-policy driven: the product default is local/on-prem first (`AI_MODEL_ROUTE=local`, `AGENT_DEFAULT_MODEL=local/agent-default`), while the lab can deliberately flip to external testing (`AI_MODEL_ROUTE=external`) where Nous/OpenRouter are available.
 
 Each task gets:
 
@@ -167,6 +167,18 @@ credentials stay in Claude Code OAuth files, Hermes Nous Portal auth state,
 OpenRouter runtime/vault environment, or proxy runtime environment, not in source. See `docs/HERMES_HARNESS.md` and
 `docs/ONE_LINE_INSTALLER.md`.
 
+Switch demo routing without editing source:
+
+```bash
+python scripts/switch_model_route.py --route local --restart
+python scripts/switch_model_route.py --route external --restart
+```
+
+Use `local` for customer/government demos unless you are explicitly proving
+external provider fallback. The switch updates `.env`, `runtime/proxy_config.json`,
+`agent_models.json`, Hermes provider defaults, and the API/proxy containers
+when `--restart` is used.
+
 Managed agents run with `acceptEdits` plus the bounded allowlist needed for dashboard/API work and trusted internal UI checks: `Read`, `Write`, guarded `curl`, `node`, `npx`, and Playwright. Suspicious URLs from tickets, alerts, or email are never fetched directly; agents must use passive evidence or approved sandbox/reputation adapters. Claude Code refuses full bypass mode when running as root, and full bypass is not needed because destructive work is guarded by dashboard change requests.
 
 Runner diagnostics are available at:
@@ -195,6 +207,7 @@ Models are configured in `agent_models.json`:
 ```json
 {
   "models": [
+    "local/agent-default",
     "deepseek/deepseek-v4-flash",
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-27b2",
@@ -202,7 +215,7 @@ Models are configured in `agent_models.json`:
     "qwen/qwen3.6-27b4",
     "qwen/qwen3.6-27b5"
   ],
-  "default": "deepseek/deepseek-v4-flash"
+  "default": "local/agent-default"
 }
 ```
 
@@ -285,7 +298,7 @@ sudo chown -R cereal:cereal /home/cereal/SOC_TESTING/soc-dashboard/agent_work
    ```bash
    curl -sS -X POST http://localhost:25480/api/agents/create-from-prompt \
      -H 'Content-Type: application/json' \
-     -d '{"model":"deepseek/deepseek-v4-flash","prompt":"Write checkpoint.json with step=test, status=done, progress_pct=100, and output=agent runner smoke test complete. Then respond with a one-line summary."}'
+     -d '{"model":"local/agent-default","prompt":"Write checkpoint.json with step=test, status=done, progress_pct=100, and output=agent runner smoke test complete. Then respond with a one-line summary."}'
    ```
 7. Poll `/api/agents/tasks` until the task is `completed` or `failed`.
 8. Open the UI and verify the Agents page shows model, task status, progress, checkpoints, stop/restart controls, and output/error detail.
@@ -299,8 +312,8 @@ cd /home/cereal/SOC_TESTING/soc-dashboard
 python3 scripts/smoke_agentic_system.py http://localhost:25480
 python3 scripts/smoke_setup_platform.py http://localhost:25480
 python3 scripts/smoke_phishing_workflow_lifecycle.py http://localhost:25480
-python3 scripts/smoke_local_model_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
-python3 scripts/smoke_setup_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
+python3 scripts/smoke_local_model_agent.py http://localhost:25480 local/agent-default
+python3 scripts/smoke_setup_agent.py http://localhost:25480 local/agent-default
 curl -sS http://localhost:25480/api/agents/processes
 ```
 

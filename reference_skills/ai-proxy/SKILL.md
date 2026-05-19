@@ -33,13 +33,16 @@ instead of deploying this reference module.
 Proxy deployment contract:
 
 - Base URL: set `AGENT_LLM_BASE_URL` to the environment's routed proxy URL.
-- Default Hermes/Nous model: `deepseek/deepseek-v4-flash`
+- Product default route: `AI_MODEL_ROUTE=local`.
+- Product default model: `local/agent-default`, routed through the local/on-prem gateway.
+- External lab route: Nous `deepseek/deepseek-v4-flash`.
 - First external fallback: OpenRouter `openrouter/free`, supplied by
   runtime/vault `OPENROUTER_API_KEY`.
-- Fast local model: `qwen/qwen3.6-27b`
-- Slower local model aliases may exist for older GPUs.
-- Default fallback order for Hermes queue work: Nous Portal -> OpenRouter ->
-  local LM Studio/qwen.
+- Local model examples: `qwen/qwen3.6-27b`, `lmstudio/<model>`, or any
+  OpenAI-compatible on-prem gateway alias.
+- External fallback order for lab work: Nous Portal -> OpenRouter -> local
+  LM Studio/qwen. Production government/customer installs should explicitly
+  approve any external route before enabling it.
 
 ## Deployment Pattern
 
@@ -72,25 +75,37 @@ Set:
 ```ini
 AGENT_LLM_BASE_URL=http://PROXY_HOST:4001
 AGENT_LLM_AUTH_TOKEN=<from vault or environment when required>
-AGENT_DEFAULT_MODEL=deepseek/deepseek-v4-flash
+AI_MODEL_ROUTE=local
+AI_PROXY_MODEL_ROUTE=local
+AI_PROXY_EXTERNAL_ENABLED=false
+AGENT_DEFAULT_MODEL=local/agent-default
 OPENROUTER_API_KEY=<from vault/runtime, never source>
 AGENT_HARNESS=hermes
-HERMES_DEFAULT_PROVIDER=nous
+HERMES_DEFAULT_PROVIDER=dashboard-proxy
 HERMES_LOCAL_PROVIDER=dashboard-proxy
 ```
 
 The dashboard can override the model per agent/task. Use this to keep the
 operator's current model separate from spawned worker agents.
 
+For demos or approved lab testing, flip routes without editing secrets:
+
+```bash
+python scripts/switch_model_route.py --route external --restart
+python scripts/switch_model_route.py --route local --restart
+```
+
 ## Test Expectations
 
-- Model discovery returns configured aliases including local, Nous, and
-  OpenRouter models.
+- Model discovery returns configured aliases for the active profile plus
+  approved provider aliases.
 - A short local model request completes through the proxy using OpenAI chat.
-- A short Nous Portal request completes through the proxy using OpenAI chat.
-- A short OpenRouter request completes through the proxy using OpenAI chat.
-- A simple tool schema sent to `openrouter/free` returns a tool-call response
-  when the upstream free route has capacity.
+- In external lab mode, a short Nous Portal request completes through the proxy
+  using OpenAI chat.
+- In external lab mode, a short OpenRouter request completes through the proxy
+  using OpenAI chat.
+- In external lab mode, a simple tool schema sent to `openrouter/free` returns
+  a tool-call response when the upstream free route has capacity.
 - A short Claude Code request completes through the proxy using Anthropic Messages when Claude Code remains enabled.
 - A missing or invalid auth token fails clearly.
 - Agent spawn logs show the selected model and proxy URL without leaking secrets.

@@ -8,8 +8,10 @@ Code. Use `AGENT_HARNESS=hermes` to make it the default queue worker.
 ## Runtime Contract
 
 - Dashboard runner: `api/services/agent_harness.py`
-- Default model: `deepseek/deepseek-v4-flash`
-- Default provider: `nous`
+- Product default model: `local/agent-default`
+- Product default provider: `dashboard-proxy`
+- External lab model: `deepseek/deepseek-v4-flash`
+- External lab provider: `nous`
 - Local provider: `dashboard-proxy`
 - Workspace context: `AGENTS.md` plus `.claude/CLAUDE.md`
 - Checkpoint: `checkpoint.json` in the agent work directory
@@ -30,7 +32,11 @@ HERMES_BIN=/home/cereal/.hermes/hermes-agent/venv/bin/hermes
 HERMES_HOME=/home/cereal/.hermes
 HERMES_HOME_DIR=/home/cereal/.hermes
 HERMES_UV_PYTHON_DIR=/home/cereal/.local/share/uv
-HERMES_DEFAULT_PROVIDER=nous
+AI_MODEL_ROUTE=local
+AI_PROXY_MODEL_ROUTE=local
+AI_PROXY_EXTERNAL_ENABLED=false
+AGENT_DEFAULT_MODEL=local/agent-default
+HERMES_DEFAULT_PROVIDER=dashboard-proxy
 HERMES_LOCAL_PROVIDER=dashboard-proxy
 HERMES_AGENT_SOURCE=soc-dashboard
 HERMES_TOOLSETS=terminal,file
@@ -45,16 +51,19 @@ LOGNAME=cereal
 XDG_CACHE_HOME=/home/cereal/.cache
 AGENT_TRANSIENT_MODEL_RETRY_MAX=3
 AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS=30
-AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED=true
-AGENT_TRANSIENT_MODEL_FALLBACK_MODEL=qwen/qwen3.6-27b
+AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED=false
+AGENT_TRANSIENT_MODEL_FALLBACK_MODEL=local/agent-default
 ```
 
 For the lab deployment, mount the host Hermes home into the API container at
 the same path. Hermes was installed with uv, so also mount the uv-managed
 Python runtime at `/home/cereal/.local/share/uv`. This preserves the Nous
 Portal OAuth/agent-key state without copying secrets into the repository.
+External providers are optional lab/demo routes; production and government
+deployments should keep `AI_MODEL_ROUTE=local` unless a private endpoint or
+approved external route is explicitly authorized.
 
-## Proxy Providers
+## Proxy Routing Profiles
 
 The reference proxy in `deploy/ai-proxy/ai_proxy.py` supports:
 
@@ -62,13 +71,18 @@ The reference proxy in `deploy/ai-proxy/ai_proxy.py` supports:
 - `POST /v1/messages` for Claude Code / Anthropic-compatible traffic
 - `POST /v1/chat/completions` for Hermes / OpenAI-compatible traffic
 
-Routing policy:
+Routing policy is profile-driven:
 
-- `deepseek/deepseek-v4-flash` goes to Nous Portal through the caller's bearer
-  token, or `NOUS_API_KEY` when provided by deployment vault/runtime.
-- `qwen/*`, `lmstudio/*`, or requests with token `lmstudio` go to LM Studio.
-- `anthropic/claude-*` messages traffic goes to Anthropic unless the local
-  token forces local routing.
+- `AI_MODEL_ROUTE=local` routes generic/default aliases to the local/on-prem
+  gateway. This is the product default.
+- `AI_MODEL_ROUTE=external` enables the configured external provider route and
+  fallbacks. The current lab route is Nous Portal first, OpenRouter second,
+  local LM Studio final.
+- Explicit provider prefixes such as `lmstudio/`, `local/`, `openrouter/`,
+  `nous/`, `openai/`, `anthropic/`, or `custom/` still route directly when
+  allowed by deployment policy.
+- `qwen/*`, `lmstudio/*`, `local/*`, or requests with token `lmstudio` go to
+  the local gateway.
 
 ## Hooks
 
@@ -107,9 +121,16 @@ Minimum validation after deployment:
 ```bash
 curl -sS http://localhost:4001/health
 curl -sS http://localhost:4001/v1/models
+python scripts/switch_model_route.py --route local
+HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m local/agent-default --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_LOCAL_OK."
+python3 scripts/smoke_local_model_agent.py http://localhost:25480 local/agent-default
+```
+
+When an external lab route is intentionally enabled:
+
+```bash
+python scripts/switch_model_route.py --route external --restart
 HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider nous -m deepseek/deepseek-v4-flash --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_EXTERNAL_OK."
-HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-27b --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_LOCAL_OK."
-python3 scripts/smoke_local_model_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
 ```
 
 For queue work, inspect `/api/agents/runner-health`, `/api/agents/processes`,
@@ -135,15 +156,23 @@ If `AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED=true`, exhausting external retries
 updates the same agent's `selected_model` to
 `AGENT_TRANSIENT_MODEL_FALLBACK_MODEL`, writes an explicit ticket note, emits
 `agent_transient_model_fallback_scheduled`, and queues the same task on the
-local/provider route. This keeps the policy clear: Hermes/DeepSeek external
-first, bounded retries second, local qwen fallback only when the external route
-is unavailable.
+local/provider route. Keep this disabled for local-first production installs
+unless a specific external-to-local recovery policy is approved.
 
-## Proxy Fallback Order
+## Proxy Routing Profiles
 
 The built-in proxy is the model gateway for Hermes queue work. The preferred
-external model stays `deepseek/deepseek-v4-flash`, but provider routing is now
-explicit:
+product posture is local/on-prem first. Provider routing is explicit and
+operator-switchable:
+
+Local/on-prem profile:
+
+1. `AI_MODEL_ROUTE=local`.
+2. `AI_PROXY_EXTERNAL_ENABLED=false`.
+3. `AGENT_DEFAULT_MODEL=local/agent-default`.
+4. `HERMES_DEFAULT_PROVIDER=dashboard-proxy`.
+
+External lab profile:
 
 1. Nous Portal for the configured DeepSeek route.
 2. OpenRouter as the first external fallback. The runtime vault/environment
@@ -151,6 +180,13 @@ explicit:
    alias is `openrouter/free`, because `deepseek/deepseek-v4-flash:free`
    advertised tool support but returned upstream rate-limit during validation.
 3. Local LM Studio/qwen through the local proxy route.
+
+Use the switch script for demos:
+
+```bash
+python scripts/switch_model_route.py --route local --restart
+python scripts/switch_model_route.py --route external --restart
+```
 
 Validation on 2026-05-19:
 

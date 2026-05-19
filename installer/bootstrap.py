@@ -44,9 +44,11 @@ def parse_args():
     parser.add_argument("--harness", choices=["auto", "hermes", "claude-code"], default=os.getenv("AGENT_HARNESS", "auto"))
     parser.add_argument("--proxy-mode", choices=["deploy", "external"], default=os.getenv("AI_PROXY_MODE", "deploy"))
     parser.add_argument("--proxy-port", default=os.getenv("AI_PROXY_PORT", "4001"))
-    parser.add_argument("--provider", choices=["openai", "anthropic", "nous", "openrouter", "lmstudio", "custom"], default=os.getenv("AGENT_PROVIDER", "nous"))
+    parser.add_argument("--model-route", choices=["local", "external"], default=os.getenv("AI_MODEL_ROUTE", "local"),
+                        help="Deployment model posture. local is on-prem/local-first; external is lab/demo/testing.")
+    parser.add_argument("--provider", choices=["openai", "anthropic", "nous", "openrouter", "lmstudio", "custom"], default=os.getenv("AGENT_PROVIDER", "lmstudio"))
     parser.add_argument("--provider-base-url", default=os.getenv("PROVIDER_BASE_URL", ""))
-    parser.add_argument("--model", default=os.getenv("AGENT_MODEL", "deepseek/deepseek-v4-flash"))
+    parser.add_argument("--model", default=os.getenv("AGENT_MODEL", os.getenv("AGENT_DEFAULT_MODEL", "local/agent-default")))
     parser.add_argument("--spawn-setup-agent", action="store_true")
     parser.add_argument("--itop-sync-enabled", default=os.getenv("ITOP_SYNC_ENABLED", "false"))
     parser.add_argument("--non-interactive", action="store_true")
@@ -98,6 +100,7 @@ def configure_interactive(args):
         return args
     args.proxy_mode = prompt_default("Proxy mode", args.proxy_mode, ["deploy", "external"])
     args.harness = prompt_default("Agent harness", args.harness, ["auto", "hermes", "claude-code"])
+    args.model_route = prompt_default("Model route posture", args.model_route, ["local", "external"])
     args.provider = prompt_default("Default provider", args.provider, ["openai", "anthropic", "nous", "openrouter", "lmstudio", "custom"])
     args.model = prompt_default("Default model", args.model)
     if args.proxy_mode == "external" and not args.ai_base_url:
@@ -105,6 +108,23 @@ def configure_interactive(args):
     if not args.spawn_setup_agent:
         spawn = prompt_default("Spawn setup agent after install", "no", ["yes", "no"])
         args.spawn_setup_agent = spawn == "yes"
+    return args
+
+
+def normalize_model_route(args):
+    """Keep one-line installs local/on-prem first unless external is explicit."""
+    external_model = os.getenv("AI_PROXY_EXTERNAL_MODEL", "deepseek/deepseek-v4-flash")
+    local_alias = "local/agent-default"
+    if args.model_route == "local":
+        if args.provider == "nous":
+            args.provider = "lmstudio"
+        if args.model in ("", external_model, "deepseek/deepseek-v4-flash", "deepseek-v4-flash"):
+            args.model = local_alias
+    elif args.model_route == "external":
+        if args.provider == "lmstudio":
+            args.provider = os.getenv("AI_PROXY_EXTERNAL_PROVIDER", "nous")
+        if args.model in ("", local_alias, "qwen/qwen3.6-27b"):
+            args.model = external_model
     return args
 
 
@@ -199,6 +219,20 @@ def write_env(target, args, dry_run=False):
         "AI_PROXY_BIND": "127.0.0.1",
         "AI_PROXY_MODE": args.proxy_mode,
         "AI_PROXY_PORT": args.proxy_port,
+        "AI_MODEL_ROUTE": args.model_route,
+        "AI_PROXY_MODEL_ROUTE": args.model_route,
+        "AI_PROXY_EXTERNAL_ENABLED": "true" if args.model_route == "external" else "false",
+        "AI_PROXY_LOCAL_MODEL": os.getenv("AI_PROXY_LOCAL_MODEL", "qwen/qwen3.6-27b"),
+        "AI_PROXY_EXTERNAL_PROVIDER": os.getenv("AI_PROXY_EXTERNAL_PROVIDER", "nous"),
+        "AI_PROXY_EXTERNAL_MODEL": os.getenv("AI_PROXY_EXTERNAL_MODEL", "deepseek/deepseek-v4-flash"),
+        "AI_PROXY_LOCAL_ALIASES": os.getenv("AI_PROXY_LOCAL_ALIASES", "default,agent-default,local/agent-default,deepseek/deepseek-v4-flash,deepseek-v4-flash"),
+        "AI_PROXY_EXTERNAL_ALIASES": os.getenv("AI_PROXY_EXTERNAL_ALIASES", "external/agent-default"),
+        "AI_PROXY_EXTERNAL_FALLBACK_PROVIDERS": os.getenv("AI_PROXY_EXTERNAL_FALLBACK_PROVIDERS", "openrouter,lmstudio"),
+        "LMSTUDIO_FALLBACK_PROVIDERS": os.getenv("LMSTUDIO_FALLBACK_PROVIDERS", ""),
+        "NOUS_FALLBACK_PROVIDERS": os.getenv("NOUS_FALLBACK_PROVIDERS", "openrouter,lmstudio"),
+        "OPENROUTER_FALLBACK_PROVIDERS": os.getenv("OPENROUTER_FALLBACK_PROVIDERS", "lmstudio"),
+        "OPENAI_FALLBACK_PROVIDERS": os.getenv("OPENAI_FALLBACK_PROVIDERS", ""),
+        "CUSTOM_FALLBACK_PROVIDERS": os.getenv("CUSTOM_FALLBACK_PROVIDERS", ""),
         "PROXY_CONFIG_PATH": "./runtime/proxy_config.json",
         "LM_STUDIO_BASE": os.getenv("LM_STUDIO_BASE", "http://host.docker.internal:1234"),
         "LM_STUDIO_TOKEN": os.getenv("LM_STUDIO_TOKEN", "lmstudio"),
@@ -264,7 +298,7 @@ def write_env(target, args, dry_run=False):
         "HERMES_HOME": os.getenv("HERMES_HOME", "/home/cereal/.hermes"),
         "HERMES_HOME_DIR": os.getenv("HERMES_HOME_DIR", "./runtime/hermes"),
         "HERMES_UV_PYTHON_DIR": os.getenv("HERMES_UV_PYTHON_DIR", "./runtime/hermes-uv-python"),
-        "HERMES_DEFAULT_PROVIDER": os.getenv("HERMES_DEFAULT_PROVIDER", "nous"),
+        "HERMES_DEFAULT_PROVIDER": os.getenv("HERMES_DEFAULT_PROVIDER", "nous" if args.model_route == "external" else "dashboard-proxy"),
         "HERMES_LOCAL_PROVIDER": os.getenv("HERMES_LOCAL_PROVIDER", "dashboard-proxy"),
         "HERMES_TOOLSETS": os.getenv("HERMES_TOOLSETS", "terminal,file"),
         "HERMES_RUN_AS_UID": os.getenv("HERMES_RUN_AS_UID", "1000"),
@@ -338,12 +372,33 @@ def provider_base(args, provider):
 
 
 def write_proxy_config(target, args, dry_run=False):
+    local_model = os.getenv("AI_PROXY_LOCAL_MODEL", "qwen/qwen3.6-27b")
+    external_provider = os.getenv("AI_PROXY_EXTERNAL_PROVIDER", "nous")
+    external_model = os.getenv("AI_PROXY_EXTERNAL_MODEL", "deepseek/deepseek-v4-flash")
     config = {
         "version": 1,
-        "default_provider": args.provider,
+        "default_provider": "lmstudio" if args.model_route == "local" else args.provider,
         "default_model": args.model,
+        "routing": {
+            "active": args.model_route,
+            "external_enabled": args.model_route == "external",
+            "profiles": {
+                "local": {
+                    "provider": "lmstudio",
+                    "model": local_model,
+                    "aliases": ["default", "agent-default", "local/agent-default", external_model, "deepseek-v4-flash"],
+                    "fallbacks": [],
+                },
+                "external": {
+                    "provider": external_provider,
+                    "model": external_model,
+                    "aliases": ["external/agent-default"],
+                    "fallbacks": ["openrouter", "lmstudio"],
+                },
+            },
+        },
         "local_models": [
-            {"id": "qwen/qwen3.6-27b", "weight": 3},
+            {"id": local_model, "weight": 3},
             {"id": "qwen/qwen3.6-27b2", "weight": 1},
             {"id": "qwen/qwen3.6-27b3", "weight": 1},
         ],
@@ -351,12 +406,13 @@ def write_proxy_config(target, args, dry_run=False):
             "lmstudio": {
                 "base_url": provider_base(args, "lmstudio"),
                 "token_env": "LM_STUDIO_TOKEN",
-                "models": ["qwen/qwen3.6-27b", "qwen/qwen3.6-27b2", "qwen/qwen3.6-27b3"],
+                "models": [local_model, "qwen/qwen3.6-27b2", "qwen/qwen3.6-27b3"],
+                "fallbacks": [],
             },
             "nous": {
                 "base_url": provider_base(args, "nous"),
                 "token_env": "NOUS_API_KEY",
-                "models": ["deepseek/deepseek-v4-flash", "deepseek-v4-flash"],
+                "models": [external_model, "deepseek-v4-flash"],
                 "fallbacks": ["openrouter", "lmstudio"],
             },
             "openrouter": {
@@ -602,6 +658,7 @@ def apply_migrations(target, dry_run=False):
 def main():
     args = parse_args()
     args = configure_interactive(args)
+    args = normalize_model_route(args)
     source = Path(args.source).resolve()
     target = Path(args.target).resolve()
     host = detect_host_ip()

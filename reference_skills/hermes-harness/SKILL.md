@@ -17,8 +17,11 @@ instead of Claude Code.
 
 - Runner integration: `api/services/agent_harness.py`
 - Primary docs: `docs/HERMES_HARNESS.md`
-- Preferred default model: `deepseek/deepseek-v4-flash`
-- External provider route: `nous`
+- Preferred product default model: `local/agent-default`
+- Preferred product default route: `dashboard-proxy` through
+  `AI_MODEL_ROUTE=local`
+- External lab model: `deepseek/deepseek-v4-flash`
+- External lab provider route: `nous`
 - Local/provider-proxy route: `dashboard-proxy`
 - Model gateway: `AGENT_LLM_BASE_URL`, normally `http://ai-proxy:4001` inside Docker
 - Workspace context: `AGENTS.md` plus `.claude/CLAUDE.md`
@@ -41,15 +44,17 @@ curl -sS -H "X-Dashboard-Service-Token: <vault token>" http://localhost:25480/ap
 Then run a short queue proof through the dashboard:
 
 ```bash
-python3 scripts/smoke_setup_agent.py http://localhost:25480 deepseek/deepseek-v4-flash
+python3 scripts/smoke_setup_agent.py http://localhost:25480 local/agent-default
 ```
 
 For direct harness probes, use the operator's mounted Hermes auth state and
 keep secrets out of command lines:
 
 ```bash
+HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m local/agent-default --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_LOCAL_OK."
+python scripts/switch_model_route.py --route external --restart
 HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider nous -m deepseek/deepseek-v4-flash --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_EXTERNAL_OK."
-HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-27b --toolsets terminal,file --max-turns 8 --source operator-smoke --query "Reply exactly HERMES_LOCAL_OK."
+python scripts/switch_model_route.py --route local --restart
 ```
 
 ## Guardrails
@@ -82,7 +87,7 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
 - Judge agent health from runner-health, process state, proxy activity,
   output logs, checkpoints, ticket notes, audit records, and memory events, not
   `progress_pct` alone.
-- Hermes/N Nous or OpenRouter may return transient HTTP 429/503 capacity
+- Hermes/Nous or OpenRouter may return transient HTTP 429/503 capacity
   failures. The dashboard runner should preserve the workspace and requeue the
   same task using
   `AGENT_TRANSIENT_MODEL_RETRY_MAX` and
@@ -91,9 +96,9 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
   exhausted and `AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED=true`, the runner
   switches the same task to `AGENT_TRANSIENT_MODEL_FALLBACK_MODEL` with an
   explicit ticket note and `agent_transient_model_fallback_scheduled` audit
-  event. Default policy is Hermes/DeepSeek via Nous first, OpenRouter
-  (`openrouter/free`) as the first external proxy fallback, and local qwen only
-  as explicit override or final fallback.
+  event. Product default policy is local/on-prem first. The lab external route
+  is Hermes/DeepSeek via Nous first, OpenRouter (`openrouter/free`) as the
+  first external proxy fallback, and local qwen only as final fallback.
 
 ## Latest Proofs
 

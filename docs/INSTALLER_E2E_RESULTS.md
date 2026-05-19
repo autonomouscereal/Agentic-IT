@@ -432,6 +432,39 @@ Live source/runtime reconciliation verified after the setup-module work:
 - Approval audit entries for changes `181` and `182` now show the approver
   (`demo_account_1`) in summary and in `approved_by` / `approval_actor`.
 
+## 2026-05-19 Local-First Proxy Routing Addendum
+
+Source defaults were updated so clean installs are local/on-prem first instead
+of lab-external first:
+
+- `.env.example`, `docker-compose.yml`, `installer/bootstrap.py`, and
+  `agent_models.json` now default to `AI_MODEL_ROUTE=local`,
+  `AI_PROXY_MODEL_ROUTE=local`, `AI_PROXY_EXTERNAL_ENABLED=false`,
+  `AGENT_DEFAULT_MODEL=local/agent-default`, and
+  `HERMES_DEFAULT_PROVIDER=dashboard-proxy`.
+- `installer/bootstrap.py --model-route local|external` controls the generated
+  proxy routing profile. Local routes use the local gateway; external routes
+  enable the configured provider and fallback chain.
+- `runtime/proxy_config.json` now has an explicit `routing` section with local
+  and external profiles instead of embedding a single provider assumption.
+- `deploy/ai-proxy/ai_proxy.py` exposes `/api/route` for operator/debug
+  visibility into provider/model/fallback resolution without exposing secrets.
+- `scripts/switch_model_route.py --route local|external --restart` is the demo
+  switch. It edits `.env`, `runtime/proxy_config.json`, and
+  `agent_models.json`, then can rebuild/restart `ai-proxy` and `api`.
+- External lab fallback order remains configurable. The lab default is Nous
+  Portal -> OpenRouter -> local LM Studio, but production/government installs
+  should keep external providers disabled unless explicitly approved.
+
+Validated source checks:
+
+```bash
+python -m py_compile deploy/ai-proxy/ai_proxy.py installer/bootstrap.py api/services/agent_harness.py scripts/switch_model_route.py
+python installer/bootstrap.py --dry-run --profile minimal --model-route local
+python installer/bootstrap.py --dry-run --profile full-it --harness hermes --proxy-mode deploy --model-route external --provider nous --model deepseek/deepseek-v4-flash
+python -m pytest tests/test_agentic_self_repair_marker.py -q
+```
+
 ## Remaining Notes
 
 The scratch E2E install is intentionally still running on `25481/5434` for inspection. It can be removed with:

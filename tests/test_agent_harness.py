@@ -24,8 +24,11 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertLess(cmd.index("--allowedTools"), cmd.index("-p"))
         self.assertEqual(cmd[-1], "resolve ticket")
 
-    def test_hermes_external_model_uses_nous_provider_and_oneshot(self):
-        with mock.patch.dict(os.environ, {"HERMES_BIN": "/opt/hermes/bin/hermes"}, clear=False):
+    def test_hermes_external_route_uses_nous_provider_and_oneshot(self):
+        with mock.patch.dict(os.environ, {
+            "AI_MODEL_ROUTE": "external",
+            "HERMES_BIN": "/opt/hermes/bin/hermes",
+        }, clear=False):
             cmd = HermesHarness().build_command(
                 "resolve ticket",
                 "/work/.claude/settings.json",
@@ -47,6 +50,21 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertIn("--query", cmd)
         self.assertNotIn("-z", cmd)
         self.assertEqual(cmd[-1], "resolve ticket")
+
+    def test_hermes_default_route_uses_dashboard_proxy_for_lab_alias(self):
+        with mock.patch.dict(os.environ, {
+            "AI_MODEL_ROUTE": "local",
+            "HERMES_BIN": "/opt/hermes/bin/hermes",
+        }, clear=False):
+            cmd = HermesHarness().build_command(
+                "resolve ticket",
+                "/work/.claude/settings.json",
+                "deepseek/deepseek-v4-flash",
+                "acceptEdits",
+                None,
+            )
+
+        self.assertEqual(cmd[cmd.index("--provider") + 1], "dashboard-proxy")
 
     def test_hermes_local_model_uses_dashboard_proxy_provider(self):
         with mock.patch.dict(os.environ, {
