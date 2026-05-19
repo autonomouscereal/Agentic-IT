@@ -19,6 +19,9 @@ approved reference modules when those capabilities are missing.
 - HTTPS proxy health: `https://192.168.50.222:25443/nginx-health`
 - Model gateway/proxy: `http://ai-proxy:4001` inside Docker; live lab
   deployment-host port is `http://127.0.0.1:4401` on the AI server.
+- Legacy standalone proxy: `http://192.168.50.222:4001` is an older
+  standalone container kept temporarily for scratch E2E stacks; do not use it
+  to verify the live dashboard route.
 - Reference modules: iTop `http://192.168.50.222:25432`, Wazuh Dashboard `https://192.168.50.222:26443`, Keycloak `https://192.168.50.222:8443/admin/master/console/`, GitLab `http://192.168.50.222`, Mailcow/Roundcube `http://192.168.50.222:2581`
 - Current Windows working copy: `D:\IT AGENT PROJECT`
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`

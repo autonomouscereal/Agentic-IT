@@ -101,6 +101,9 @@ Current live lab route switch:
 - Deployment directory: `/home/cereal/SOC_TESTING/soc-dashboard`
 - Container proxy URL: `http://ai-proxy:4001`
 - Deployment-host proxy URL: `http://127.0.0.1:4401`
+- Legacy standalone proxy: `http://192.168.50.222:4001` / container
+  `ai-proxy`; older, not the live dashboard Compose proxy, and does not expose
+  `/api/route`.
 
 When the user asks to switch or restart model routing for the live demo, use
 the `server-manager` skill and run the switch from the deployment directory:
@@ -124,6 +127,9 @@ curl -sS -X POST http://127.0.0.1:4401/api/route \
 Do not run `--restart` from a source checkout without the deployment `.env`.
 The script now checks for required runtime env values before editing/restarting,
 but agents should still use the installed deployment path for live changes.
+Do not verify live route state against host port `4001`; that is currently a
+legacy standalone proxy kept only for old scratch E2E stacks. Verify the live
+managed proxy on the AI server host at `127.0.0.1:4401`.
 
 ## Test Expectations
 

@@ -4,6 +4,44 @@ Last updated: 2026-05-19.
 
 ## Found During 2026-05-19 Agentic Regression Push
 
+### AI server has legacy standalone proxy on 4001 plus managed compose proxy on 4401
+
+Status: documented; cleanup pending approval because older scratch E2E stacks
+still reference the legacy endpoint.
+
+The live AI server currently has two different proxy services:
+
+- Current managed dashboard proxy:
+  `soc-dashboard-ai-proxy-1`, Compose project `soc-dashboard`,
+  host `127.0.0.1:4401 -> container :4001`, source
+  `/home/cereal/SOC_TESTING/soc-dashboard/deploy/ai-proxy/ai_proxy.py`.
+  This is the proxy used by the live dashboard/API containers through
+  `AGENT_LLM_BASE_URL=http://ai-proxy:4001`.
+- Legacy standalone proxy:
+  container `ai-proxy`, image `python:3.12-slim`, bind mount
+  `/home/cereal/ai-proxy`, listening on host `0.0.0.0:4001`. Its `/health`
+  response is only `{"status":"ok","port":4001}` and it does not support
+  `/api/route`, so it is older than the managed proxy.
+
+Verification on 2026-05-19:
+
+- `curl http://127.0.0.1:4401/health` returned routing profile details.
+- `POST http://127.0.0.1:4401/api/route` returned
+  `nous -> openrouter -> lmstudio`.
+- `curl http://127.0.0.1:4001/health` returned the older minimal health body.
+- `POST http://127.0.0.1:4001/api/route` returned `Not found: api/route`.
+
+Impact:
+
+- Current live dashboard work should use the Compose-managed proxy:
+  `http://ai-proxy:4001` inside Docker and `http://127.0.0.1:4401` on the AI
+  server host.
+- Some older scratch E2E installs reference `http://192.168.50.222:4001`; do
+  not remove the legacy standalone proxy until those scratch stacks are either
+  migrated to their own managed proxy or intentionally retired.
+- Demo docs and skills now call out the difference so agents do not verify the
+  wrong proxy.
+
 ### Proxy source default was lab-external instead of local/on-prem first
 
 Status: fixed in source.

@@ -25,6 +25,7 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | URL | `https://192.168.50.222:25443` |
 | Local API | `http://127.0.0.1:25480` |
 | Proxy | `http://ai-proxy:4001` inside Docker; `http://127.0.0.1:4401` on the deployment host |
+| Legacy standalone proxy | `http://192.168.50.222:4001`, older container `ai-proxy`; keep only until old scratch E2E stacks are migrated/retired |
 | Default harness | Hermes Agent |
 | Product default model | `local/agent-default` |
 | Lab external model | `deepseek/deepseek-v4-flash` |
@@ -98,6 +99,12 @@ The proxy host port is intentionally bound to localhost on the deployment
 server. Dashboard/API containers use `http://ai-proxy:4001`; operators and
 agents that need host-side checks should run them through server-manager on
 server `ai`.
+
+Do not confuse the managed proxy above with the legacy standalone `ai-proxy`
+container listening on host `0.0.0.0:4001`. The legacy service has the older
+minimal `/health` response and no `/api/route`. It was not created by the
+current Compose stack; older scratch E2E installs still reference it, so retire
+or migrate those installs before removing the container.
 
 ## HTTPS Edge
 
