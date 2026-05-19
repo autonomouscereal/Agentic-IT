@@ -49,6 +49,11 @@ Verification:
   VirusTotal reputation host.
 - Ticket `621` now has internal security-review note `2087` explaining the
   demotion and the new guardrail.
+- Real Hermes/local-model agent regression passed on ticket `632`, agent
+  `259`, task `256`: the agent attempted the single guarded curl test against
+  the synthetic `.example.invalid` URL, the guard blocked it, the agent wrote a
+  `REGRESSION_URL_GUARD_BLOCKED` note, wrote zero failure notes, completed at
+  `100%`, and left no active processes.
 
 Safe alternatives:
 

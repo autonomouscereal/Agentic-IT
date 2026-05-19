@@ -173,6 +173,9 @@ Related real-agent regression proofs on the restored live stack:
   phishing RACI/workflow records, the API curl guard now blocks arbitrary
   external suspicious URL retrieval, ticket `621` received security-review note
   `2087`, and the curated `Demo Proofs` list now starts with ticket `531`.
+  Real-agent regression ticket `632`, agent `259`, task `256` completed at
+  `100%` after the runtime guard blocked the synthetic suspicious URL and the
+  agent wrote `REGRESSION_URL_GUARD_BLOCKED`.
 
 Source-level regression:
 

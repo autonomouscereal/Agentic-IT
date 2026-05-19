@@ -217,7 +217,9 @@ Validation evidence from 2026-05-19:
   records; the live API-container curl guard blocks arbitrary external
   suspicious URL retrieval and allows configured reputation hosts; ticket `621`
   was demoted from lead demo proof and annotated with security-review note
-  `2087`.
+  `2087`; real-agent regression ticket `632`, agent `259`, task `256`
+  completed at `100%` after the guard blocked the synthetic suspicious URL and
+  the agent wrote `REGRESSION_URL_GUARD_BLOCKED`.
 
 ## Demo Readiness Catalog
 

@@ -106,3 +106,7 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
   ticket is not a lead demo proof because review found unsafe direct suspicious
   URL retrieval semantics; use ticket `531` for the phishing/EDR demo story and
   use `621` only to explain the URL-safety guardrail regression.
+- URL guard real-agent regression: ticket `632`, agent `259`, task `256`,
+  model `qwen/qwen3.6-27b`; the runtime guard blocked the synthetic suspicious
+  URL, the agent wrote `REGRESSION_URL_GUARD_BLOCKED`, and no active processes
+  remained afterward.
