@@ -1,6 +1,44 @@
 ﻿# Known Issues And Fix Log
 
-Last updated: 2026-05-18.
+Last updated: 2026-05-19.
+
+## Found During 2026-05-19 Agentic Regression Push
+
+### Hermes/N Nous 503 capacity failure can interrupt a valid in-progress task
+
+Status: fixed in source; live deployment patch/verification in progress.
+
+During the real note-steering proof, Hermes using
+`deepseek/deepseek-v4-flash` through Nous completed the dashboard steering
+half of the task, wrote valid notes, advanced the checkpoint to 55%, then the
+provider returned:
+
+`HTTP 503: The requested model is temporarily unavailable due to upstream capacity limits.`
+
+Observed evidence:
+
+- Ticket `616`, agent `251`, task `248`.
+- Marker `NOTE_STEERING_1779162432`.
+- The task had already written `STEERING_READY_DASHBOARD` and
+  `STEERING_OBSERVED_DASHBOARD`.
+- The runner marked the task failed immediately instead of scheduling a
+  transient provider retry/resume.
+
+Fix:
+
+- Add transient model-capacity detection in the agent runner for Hermes/proxy
+  provider failures such as HTTP `429`, `500`, `502`, `503`, `504`, upstream
+  capacity, temporarily unavailable, and rate-limit messages.
+- Requeue the same agent task after a configurable delay while preserving the
+  workspace, checkpoint, steering inbox, notes, and task evidence.
+- Limit retries with `AGENT_TRANSIENT_MODEL_RETRY_MAX` and
+  `AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS` so a bad provider cannot loop
+  forever.
+
+Follow-up verification:
+
+- Re-run `scripts/agentic_note_steering_demo.py` after the runner patch is
+  deployed.
 
 ## Fixed During 2026-05-18 Demo Credential Prep
 

@@ -38,6 +38,7 @@ def parse_args():
     parser.add_argument("--tls-common-name", default=os.getenv("DASHBOARD_TLS_COMMON_NAME", "agentic-operations.local"))
     parser.add_argument("--tls-days", default=os.getenv("DASHBOARD_TLS_DAYS", "825"))
     parser.add_argument("--db-port", default="5433")
+    parser.add_argument("--memory-db-port", default=os.getenv("AGENT_MEMORY_DB_PORT", "25490"))
     parser.add_argument("--project-name", default=os.getenv("COMPOSE_PROJECT_NAME", ""))
     parser.add_argument("--ai-base-url", default=os.getenv("AGENT_LLM_BASE_URL", ""))
     parser.add_argument("--harness", choices=["auto", "hermes", "claude-code"], default=os.getenv("AGENT_HARNESS", "auto"))
@@ -130,6 +131,12 @@ def operator_proxy_url(args, host):
     return f"http://{host}:{args.proxy_port}"
 
 
+def local_proxy_url(args):
+    if args.proxy_mode == "external":
+        return args.ai_base_url or os.getenv("AGENT_LLM_BASE_URL", "")
+    return f"http://localhost:{args.proxy_port}"
+
+
 def log_event(target, event, details):
     state_dir = target / "install_state"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -204,7 +211,7 @@ def write_env(target, args, dry_run=False):
         "SOC_DB_USER": "soc_user",
         "SOC_DB_PASSWORD": db_password,
         "AGENT_MEMORY_DB_PASSWORD": agent_memory_db_password,
-        "AGENT_MEMORY_DB_PORT": "25490",
+        "AGENT_MEMORY_DB_PORT": args.memory_db_port,
         "MEMORY_DB_HOST": "agent-memory-db",
         "MEMORY_DB_PORT": "5432",
         "MEMORY_DB_NAME": "agent_memory",
@@ -627,6 +634,7 @@ def main():
             "dashboard_https_port": args.https_port,
             "tls": tls_status,
             "db_port": args.db_port,
+            "memory_db_port": args.memory_db_port,
             "proxy_mode": args.proxy_mode,
             "proxy_url": operator_proxy_url(args, host),
             "harness": selected_harness(args),
@@ -643,6 +651,7 @@ def main():
         migrations = apply_migrations(target, args.dry_run)
         dashboard_url = f"http://localhost:{args.dashboard_port}"
         proxy_url = operator_proxy_url(args, host)
+        proxy_health_url = local_proxy_url(args)
         dashboard_health = wait_health(
             f"{dashboard_url}/health",
             "dashboard",
@@ -655,11 +664,11 @@ def main():
             args.dry_run or args.disable_https,
             verify_tls=False,
         )
-        proxy_health = wait_health(f"{proxy_url}/health", "ai-proxy", args.dry_run)
+        proxy_health = wait_health(f"{proxy_health_url}/health", "ai-proxy", args.dry_run)
         if args.dry_run:
             proxy_models = {"status": "dry_run"}
         else:
-            proxy_models = http_json(f"{proxy_url}/v1/models", timeout=10)
+            proxy_models = http_json(f"{proxy_health_url}/v1/models", timeout=10)
         setup_ticket = create_agentic_setup_ticket(args, host, deployment_env, args.dry_run)
         if not args.dry_run:
             log_event(target, "docker_started", {
@@ -678,12 +687,14 @@ def main():
         "profile": args.profile,
         "proxy_mode": args.proxy_mode,
         "proxy_url": operator_proxy_url(args, host),
+        "proxy_health_url": local_proxy_url(args),
         "dashboard_https_url": None if args.disable_https else f"https://localhost:{args.https_port}",
         "dashboard_tls": tls_status,
         "harness": selected_harness(args),
         "provider": args.provider,
         "model": args.model,
         "dashboard_url": f"http://localhost:{args.dashboard_port}",
+        "memory_db_port": args.memory_db_port,
         "dashboard_health": dashboard_health,
         "dashboard_https_health": dashboard_https_health,
         "proxy_health": proxy_health,

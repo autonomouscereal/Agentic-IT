@@ -154,6 +154,22 @@ Validation evidence from 2026-05-18:
 - permission/provider matrix passed with marker
   `PERMISSION_PROVIDER_MATRIX_1779148832` and left no active agents
 
+Validation evidence from 2026-05-19:
+
+- Full live deployment backup was created at
+  `/home/cereal/agentic-it-backups/20260519T033953Z` before destructive
+  installer testing.
+- Same-port one-line rebuild installed a fresh stack with Hermes, HTTPS,
+  proxy health, `/v1/models`, setup ticket `1`, and setup agent `1`, then the
+  original live stack was restored.
+- Alternate-port one-line proof completed setup agent `1` with
+  `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE` and no active processes afterward.
+- Hermes setup smoke passed on ticket `613`; approval/access resume passed on
+  ticket `614`; note steering passed on ticket `617`; Wazuh lease-gated access
+  passed on ticket `618`.
+- Source regression passed: `142 passed`, JS syntax checks, text hygiene, and
+  HTTPS smoke against `https://192.168.50.222:25443`.
+
 ## Demo Readiness Catalog
 
 The prepared demo examples are tracked in

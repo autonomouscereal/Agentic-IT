@@ -60,10 +60,16 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
   certificate.
 - `--tls-days DAYS`: server certificate lifetime, default `825`.
 - `--db-port PORT`: host port for PostgreSQL.
+- `--memory-db-port PORT`: host port for the bundled PostgreSQL/pgvector agent
+  memory database, default `25490`. Use this when reinstalling on a host that
+  already has a separate memory service or another lab stack bound to `25490`.
 - `--project-name NAME`: Docker Compose project name. Defaults to a sanitized name from the target directory.
 - `--harness auto|hermes|claude-code`: selected agent harness. `auto` prefers Hermes when a host Hermes install is available, otherwise Claude Code.
 - `--proxy-mode deploy|external`: deploy the built-in proxy or point the dashboard at an existing proxy.
 - `--proxy-port PORT`: host port for the built-in proxy, default `4001`.
+  Hardened installs bind the proxy to `127.0.0.1`; the installer checks
+  `http://localhost:<port>` from the deployment host even when the dashboard
+  HTTPS URL is LAN-facing.
 - `--provider openai|anthropic|nous|lmstudio|custom`: default provider route in the generated proxy config.
 - `--provider-base-url URL`: provider base URL override for custom/external routes.
 - `--ai-base-url URL`: external proxy compatibility endpoint. Built-in proxy mode uses `http://ai-proxy:4001` inside Docker and prints a host-facing proxy URL.
@@ -101,7 +107,12 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
    Kubernetes, M365, or network/security tooling.
 4. Leave reference modules enabled only for gaps you want the platform to deploy.
 5. Review the setup ticket/work item created by the installer.
-6. Assign or resume the setup agent when model credentials and approval policy are ready. If `--spawn-setup-agent` was used, the agent starts immediately or records a clear missing-credential/access reason.
+6. Assign or resume the setup agent when model credentials and approval policy
+   are ready. If `--spawn-setup-agent` was used, the first agent run is a
+   bounded bootstrap verification: it reads the setup ticket, runner health,
+   manifest, and profiles, writes a `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE`
+   note, and stops with a 100% checkpoint. Follow-on deployment/integration
+   work should be spawned from that ticket with explicit approvals.
 
 The setup ticket becomes the auditable deployment record. The onboarding agent must inspect installed modules, verify proxy and harness health, run model and spawn smoke tests, propose missing integrations, request access/credential approvals, and record notes/postmortems/workflows before marking setup complete. Agents must request changes before modifying infrastructure.
 
@@ -143,6 +154,7 @@ cd /home/cereal/SOC_TESTING/soc-dashboard
   --target /home/cereal/SOC_TESTING/soc-dashboard-install-e2e-20260512 \
   --dashboard-port 25482 \
   --db-port 5435 \
+  --memory-db-port 25492 \
   --project-name soc-dashboard-e2e-20260512 \
   --proxy-mode deploy \
   --proxy-port 4001 \

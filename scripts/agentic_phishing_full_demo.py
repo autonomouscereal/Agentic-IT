@@ -23,6 +23,9 @@ import time
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from dashboard_auth import dashboard_auth_headers
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASE = os.getenv("SOC_DASHBOARD_URL", "http://localhost:25480").rstrip("/")
@@ -31,10 +34,12 @@ DEFAULT_MODEL = os.getenv("AGENT_MODEL", "qwen/qwen3.6-27b")
 
 def request(method: str, base: str, path: str, payload=None, timeout: int = 60):
     data = None
-    headers = {}
+    headers = dashboard_auth_headers(
+        provider="phishing-full-proof",
+        content_type=payload is not None,
+    )
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
     req = urllib.request.Request(base + path, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:

@@ -49,6 +49,8 @@ AGENT_NO_OUTPUT_STALL_SECONDS = _env_int(
     "AGENT_NO_OUTPUT_STALL_SECONDS",
     _env_int("AGENT_NO_OUTPUT_TIMEOUT_SECONDS", 3600),
 )
+AGENT_TRANSIENT_MODEL_RETRY_MAX = _env_int("AGENT_TRANSIENT_MODEL_RETRY_MAX", 3)
+AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS = _env_int("AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS", 30)
 
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_AGENTS)
 _agent_queue = asyncio.PriorityQueue()
@@ -56,6 +58,124 @@ _queue_counter = itertools.count()
 _queue_workers = set()
 _active_processes = {}
 _model_config = None
+
+
+def _is_transient_model_capacity_error(text):
+    """Return true for upstream/provider failures that should be retried."""
+    if not text:
+        return False
+    lowered = str(text).lower()
+    patterns = (
+        "http 429",
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+        "status 429",
+        "status 500",
+        "status 502",
+        "status 503",
+        "status 504",
+        "temporarily unavailable",
+        "upstream capacity",
+        "capacity limits",
+        "rate limit",
+        "rate-limit",
+        "overloaded",
+        "provider overloaded",
+        "model is temporarily unavailable",
+    )
+    return any(pattern in lowered for pattern in patterns)
+
+
+async def _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds):
+    """Put the same task back on the runner queue after a provider backoff."""
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
+    task_meta = await fetchrow("""
+        SELECT at.status AS task_status, a.status AS agent_status
+        FROM agent_tasks at
+        JOIN agents a ON a.id = at.agent_id
+        WHERE at.id = $1 AND at.agent_id = $2
+    """, task_id, agent_id)
+    if not task_meta:
+        return
+    if task_meta.get("task_status") != "queued" or task_meta.get("agent_status") in ("stopped", "terminated", "failed", "finished"):
+        return
+    sequence = next(_queue_counter)
+    await _agent_queue.put((priority_rank, sequence, work_dir, prompt, task_id, agent_id))
+    await log_event("agent", "info", f"agent_{agent_id}", "agent_transient_model_retry_enqueued",
+                    f"task_{task_id}", {
+                        "priority_rank": priority_rank,
+                        "sequence": sequence,
+                        "delay_seconds": delay_seconds,
+                    })
+
+
+async def _schedule_transient_model_retry(agent_id, task_id, task_meta, work_dir, prompt, result, error):
+    """Schedule a retry/resume for provider-capacity errors."""
+    if AGENT_TRANSIENT_MODEL_RETRY_MAX <= 0 or not _is_transient_model_capacity_error(error):
+        return None
+    attempts = await fetchval(
+        "UPDATE agents SET attempts = COALESCE(attempts, 0) + 1, "
+        "status = 'running', heartbeat = NOW(), error_message = $1 WHERE id = $2 "
+        "RETURNING attempts",
+        f"Transient model/provider capacity error; retry scheduled for task {task_id}"[:500],
+        agent_id,
+    )
+    attempts = int(attempts or 0)
+    if attempts > AGENT_TRANSIENT_MODEL_RETRY_MAX:
+        await log_event("agent", "error", f"agent_{agent_id}", "agent_transient_model_retry_exhausted",
+                        f"task_{task_id}", {
+                            "attempts": attempts,
+                            "retry_max": AGENT_TRANSIENT_MODEL_RETRY_MAX,
+                            "error": error[:500],
+                        })
+        return None
+
+    ticket_id = (task_meta or {}).get("ticket_id")
+    priority = None
+    if ticket_id:
+        ticket = await fetchrow("SELECT priority FROM tickets WHERE id = $1", ticket_id)
+        priority = ticket.get("priority") if ticket else None
+    priority_rank = _ticket_priority_rank(priority, (task_meta or {}).get("task_type"))
+    delay_seconds = max(0, AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS)
+    await execute(
+        "UPDATE agent_tasks SET status = 'queued', output = $1, error_message = $2, "
+        "pid = NULL, completed_at = NULL WHERE id = $3",
+        _tail_text(result.get("stdout", "")),
+        (
+            f"Transient model/provider capacity error; retry {attempts}/"
+            f"{AGENT_TRANSIENT_MODEL_RETRY_MAX} scheduled after {delay_seconds}s. "
+            f"{error[:1200]}"
+        ),
+        task_id,
+    )
+    if ticket_id:
+        await _add_agent_note(
+            ticket_id,
+            agent_id,
+            task_id,
+            "Agent provider retry scheduled",
+            (
+                f"Agent `{agent_id}` hit a transient model/provider capacity error on task `{task_id}`. "
+                f"The runner preserved workspace progress and queued retry `{attempts}` of "
+                f"`{AGENT_TRANSIENT_MODEL_RETRY_MAX}` after `{delay_seconds}` seconds."
+            ),
+            "agent-control-plane",
+        )
+    await log_event("agent", "warning", f"agent_{agent_id}", "agent_transient_model_retry_scheduled",
+                    f"task_{task_id}", {
+                        "attempts": attempts,
+                        "retry_max": AGENT_TRANSIENT_MODEL_RETRY_MAX,
+                        "delay_seconds": delay_seconds,
+                        "priority_rank": priority_rank,
+                        "error": error[:500],
+                    })
+    asyncio.create_task(
+        _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds)
+    )
+    return {"status": "scheduled", "attempts": attempts, "delay_seconds": delay_seconds}
 
 
 async def _record_model_turn_event(action, task_id, agent_id, details=None):
@@ -2169,6 +2289,18 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 return
             raw_error = result.get("stderr") or result.get("stdout") or f"Agent exited with code {result['exit_code']}"
             error = raw_error[:2000]
+            transient_retry = await _schedule_transient_model_retry(
+                agent_id,
+                task_id,
+                task_meta,
+                work_dir,
+                prompt,
+                result,
+                error,
+            )
+            if transient_retry:
+                _active_processes.pop(task_id, None)
+                return
             await execute(
                 "UPDATE agent_tasks SET status = 'failed', output = $1, error_message = $2, "
                 "completed_at = NOW() WHERE id = $3",

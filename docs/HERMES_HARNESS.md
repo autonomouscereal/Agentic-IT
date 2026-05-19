@@ -1,6 +1,6 @@
 # Hermes Harness Integration
 
-Last updated: 2026-05-18.
+Last updated: 2026-05-19.
 
 Hermes Agent is supported as a first-class dashboard harness alongside Claude
 Code. Use `AGENT_HARNESS=hermes` to make it the default queue worker.
@@ -43,6 +43,8 @@ HOME=/home/cereal
 USER=cereal
 LOGNAME=cereal
 XDG_CACHE_HOME=/home/cereal/.cache
+AGENT_TRANSIENT_MODEL_RETRY_MAX=3
+AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS=30
 ```
 
 For the lab deployment, mount the host Hermes home into the API container at
@@ -112,6 +114,20 @@ For queue work, inspect `/api/agents/runner-health`, `/api/agents/processes`,
 agent `output.log`, `checkpoint.json`, ticket notes, and memory search evidence.
 Do not judge task health from `progress_pct` alone.
 
+## Transient Provider Capacity Handling
+
+Hermes/N Nous can return temporary upstream capacity failures such as HTTP
+`503` for `deepseek/deepseek-v4-flash`. The dashboard runner now treats HTTP
+`429`, `500`, `502`, `503`, `504`, rate-limit, overloaded, temporarily
+unavailable, and upstream-capacity messages as transient provider failures.
+
+When this happens, the runner preserves the same agent workspace, checkpoint,
+steering inbox, and ticket evidence, marks the task back to `queued`, writes an
+operator note, and requeues the same task after
+`AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS` until
+`AGENT_TRANSIENT_MODEL_RETRY_MAX` is exhausted. Non-provider failures such as
+permission denials still fail or gate normally.
+
 ## Dashboard API Auth For Agents
 
 In enforced dashboard auth mode, spawned agents do not receive the global
@@ -132,6 +148,19 @@ inert unless it can find `dashboard_auth.json` in the current directory tree
 and the target URL is the dashboard API.
 
 ## Live Validation
+
+2026-05-19 lab validation:
+
+- Hermes setup smoke passed on ticket `613`, agent `248`, task `245`.
+- Access-wall approval/resume passed on ticket `614`, original agent `249`,
+  resumed agent `250`, change `176`.
+- Note steering passed on ticket `617`, iTop `UserRequest::398`, agent `252`,
+  task `249`, with two steering events and no active processes afterward.
+- Wazuh lease-gated access passed on ticket `618`, original agent `253`,
+  resumed agent `254`, change `177`.
+- One-line installer alternate-port proof created setup ticket `1`, setup
+  agent `1`, and completed the bounded
+  `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE` onboarding check at 100%.
 
 2026-05-18 lab validation:
 

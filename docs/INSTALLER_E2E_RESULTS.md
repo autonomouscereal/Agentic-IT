@@ -1,6 +1,124 @@
 # Installer E2E Results
 
-Last verified: 2026-05-16
+Last verified: 2026-05-19
+
+## HTTPS/Hermes One-Line Regression - 2026-05-19
+
+Backup before destructive testing:
+
+- Local server-manager vault backup: `2026-05-19_033810`.
+- AI server deployment backup:
+  `/home/cereal/agentic-it-backups/20260519T033953Z`.
+- Backup contents include `.env`, compose config, dashboard PostgreSQL dump,
+  agent-memory PostgreSQL dump, and a tarball of the deployed dashboard tree
+  including runtime TLS assets. Private keys were not printed or copied into
+  docs.
+
+Destructive same-port rebuild:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+bash ./install.sh \
+  --profile soc \
+  --source /home/cereal/SOC_TESTING/soc-dashboard \
+  --target /home/cereal/SOC_TESTING/soc-dashboard-one-line-rebuild-20260519T040250Z \
+  --dashboard-port 25480 \
+  --https-port 25443 \
+  --db-port 5433 \
+  --memory-db-port 25491 \
+  --proxy-port 4401 \
+  --project-name soc-dashboard-rebuild-20260519T040250Z \
+  --proxy-mode deploy \
+  --harness hermes \
+  --provider nous \
+  --model deepseek/deepseek-v4-flash \
+  --itop-sync-enabled false \
+  --spawn-setup-agent \
+  --non-interactive
+```
+
+Result:
+
+- Fresh stack installed from one command on the same operator ports while the
+  live stack was stopped.
+- HTTPS edge `/nginx-health` and `/` login redirect passed.
+- Built-in proxy health passed using loopback health URL
+  `http://localhost:4401`; `/v1/models` returned 10 model aliases.
+- Runner health showed Hermes and Claude Code available, Hermes selected,
+  Nous auth present, and default model `deepseek/deepseek-v4-flash`.
+- Setup ticket `1` and setup agent `1` were created in the fresh stack.
+- Fresh stack was torn down with `docker compose down -v`, then the original
+  live stack was restored and `scripts/smoke_dashboard_https.py
+  https://localhost:25443` passed.
+
+Non-disruptive alternate-port setup-agent completion proof:
+
+```bash
+bash ./install.sh \
+  --profile soc \
+  --source /home/cereal/SOC_TESTING/soc-dashboard \
+  --target /home/cereal/SOC_TESTING/soc-dashboard-one-line-alt-20260519T041126Z \
+  --dashboard-port 31080 \
+  --https-port 31443 \
+  --db-port 31001 \
+  --memory-db-port 31090 \
+  --proxy-port 31091 \
+  --project-name soc-dashboard-alt-20260519T041126Z \
+  --proxy-mode deploy \
+  --harness hermes \
+  --provider nous \
+  --model deepseek/deepseek-v4-flash \
+  --itop-sync-enabled false \
+  --spawn-setup-agent \
+  --non-interactive
+```
+
+Result:
+
+- Installer reported `status: installed`.
+- HTTPS smoke passed on `https://localhost:31443`.
+- Proxy health passed on `http://localhost:31091`; model count was 10.
+- Setup agent `1`, task `1` ran through Hermes/DeepSeek and completed at
+  100%.
+- Ticket `1` contained the `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE` agent note.
+- `/api/agents/processes` reported no active processes after completion.
+- Disposable stack was removed with `docker compose down -v`.
+
+Issues found and fixed:
+
+- `install.sh` was not executable in the deployed checkout. The source now
+  records executable mode; the live checkout was repaired with `chmod +x`.
+- Same-host reinstall needed a configurable agent-memory host port because
+  the AI server already has another memory service on `25490`. Added
+  `--memory-db-port`.
+- The hardened built-in proxy binds to `127.0.0.1`, but the installer checked
+  the LAN IP. Installer now uses `proxy_health_url=http://localhost:<port>` for
+  built-in proxy health and model checks.
+- The initial spawned setup-agent prompt was too broad for installer E2E and
+  could fail while trying to reason about a full deployment. It is now a
+  bounded bootstrap verification that reads setup context, runner health,
+  manifest, and profiles, writes `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE`, and
+  exits at 100%.
+
+Related real-agent regression proofs on the restored live stack:
+
+- Hermes setup smoke: ticket `613`, agent `248`, task `245`, completed at
+  100%.
+- Access-wall approval/resume: ticket `614`, access child `615`, original
+  agent `249`, resumed agent `250`, change `176`, access granted, ticket
+  resolved.
+- Note steering: ticket `617`, iTop `UserRequest::398`, agent `252`, task
+  `249`, dashboard and iTop steering events consumed, ticket resolved, task
+  completed at 100%.
+- Wazuh lease-gated access: ticket `618`, original agent `253`, resumed agent
+  `254`, change `177`, Wazuh access granted, ticket resolved.
+
+Source-level regression:
+
+- `python -m pytest tests -q`: `142 passed`.
+- `node --check frontend/js/dashboard.js` and
+  `node --check frontend/js/agents.js`: passed.
+- `python scripts/text_hygiene.py`: passed.
 
 ## Source Dry-Run Installer Verification - 2026-05-16
 

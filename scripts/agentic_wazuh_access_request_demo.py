@@ -6,6 +6,10 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from dashboard_auth import dashboard_auth_headers
 
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:25480"
@@ -18,10 +22,12 @@ STOP_ON_TIMEOUT = os.environ.get("WAZUH_ACCESS_AGENT_STOP_ON_TIMEOUT", "").lower
 
 def request(method, path, payload=None, timeout=60, expect=(200,)):
     data = None
-    headers = {}
+    headers = dashboard_auth_headers(
+        provider="wazuh-access-request-proof",
+        content_type=payload is not None,
+    )
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
     req = urllib.request.Request(BASE + path, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:

@@ -19,11 +19,15 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from dashboard_auth import dashboard_auth_headers
 
 
 def request(base, method, path, payload=None, expect=(200,)):
     data = None
-    headers = {"Content-Type": "application/json"}
+    headers = dashboard_auth_headers(provider="complex-phish-edr-proof")
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(base.rstrip("/") + path, data=data, method=method, headers=headers)

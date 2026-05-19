@@ -71,3 +71,22 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
 - Judge agent health from runner-health, process state, proxy activity,
   output logs, checkpoints, ticket notes, audit records, and memory events, not
   `progress_pct` alone.
+- Hermes/N Nous may return transient HTTP 503 capacity failures. The dashboard
+  runner should preserve the workspace and requeue the same task using
+  `AGENT_TRANSIENT_MODEL_RETRY_MAX` and
+  `AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS`; do not treat a single provider
+  capacity error as proof that the agentic flow is broken.
+
+## Latest Proofs
+
+2026-05-19:
+
+- Setup smoke: ticket `613`, agent `248`, task `245`, completed at 100%.
+- Access-wall approval/resume: ticket `614`, access child `615`, original
+  agent `249`, resumed agent `250`, change `176`, access granted.
+- Note steering: ticket `617`, iTop `UserRequest::398`, agent `252`, task
+  `249`, dashboard and iTop steering events consumed, ticket resolved.
+- Wazuh lease-gated access: ticket `618`, original agent `253`, resumed agent
+  `254`, change `177`, Wazuh access granted.
+- One-line installer alternate proof: setup ticket `1`, setup agent `1`,
+  bounded `SETUP_ONBOARDING_BOOTSTRAP_COMPLETE` note, task completed at 100%.

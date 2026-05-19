@@ -108,12 +108,20 @@ async def create_setup_ticket(
     if spawn_agent:
         from services import agent_runner
         prompt = (
-            "You are deploying a modular, product-agnostic agentic IT/SOC platform from a setup ticket. "
-            "Read the ticket context, identify existing products versus gaps, integrate providers where they exist, "
-            "deploy only approved missing modules, create change requests before environment-changing actions, "
-            "run health checks and smoke tests, document every decision as ticket notes, and stop for human review "
-            "before production-impacting changes. Do not assume iTop/Wazuh/Mailcow/GitLab are mandatory; they are "
-            "reference open-source modules behind provider contracts."
+            f"You are performing the bounded first-pass onboarding verification for setup ticket {ticket['id']}. "
+            "Do not deploy modules, do not change infrastructure, and do not call external provider admin APIs. "
+            "Use only the dashboard API at http://localhost:8000 and files in this workspace. "
+            f"Steps: 1. GET /api/tickets/{ticket['id']}/context. "
+            "2. GET /api/agents/runner-health. "
+            "3. GET /api/setup/manifest. "
+            "4. GET /api/setup/profiles. "
+            f"5. POST /api/tickets/{ticket['id']}/notes with author setup-agent, source agent, "
+            "visibility internal, and a body starting exactly "
+            "\"SETUP_ONBOARDING_BOOTSTRAP_COMPLETE\" that summarizes dashboard health, proxy/model visibility, "
+            "selected harness, missing credentials or approvals, and the next operator actions. "
+            "6. Write checkpoint.json with step setup-onboarding-bootstrap, status done, progress_pct 100, "
+            "output SETUP_ONBOARDING_BOOTSTRAP_COMPLETE, and an ISO timestamp. "
+            "7. Reply exactly: SETUP_ONBOARDING_BOOTSTRAP_COMPLETE"
         )
         spawn = await agent_runner.spawn_agent(ticket["id"], model, prompt, "platform_setup")
         result["agent"] = spawn

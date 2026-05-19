@@ -115,6 +115,21 @@ def load_agents_route():
     return module
 
 
+class TransientModelRetryTests(unittest.TestCase):
+    def test_detects_hermes_provider_capacity_errors(self):
+        module = load_agent_runner()
+        self.assertTrue(module._is_transient_model_capacity_error(
+            "API call failed after 3 retries: HTTP 503: The requested model is temporarily unavailable due to upstream capacity limits."
+        ))
+        self.assertTrue(module._is_transient_model_capacity_error("HTTP 429 rate limit exceeded"))
+        self.assertTrue(module._is_transient_model_capacity_error("provider overloaded"))
+
+    def test_does_not_retry_prompt_or_permission_errors(self):
+        module = load_agent_runner()
+        self.assertFalse(module._is_transient_model_capacity_error("curl returned HTTP 403 missing_agent_vault_lease"))
+        self.assertFalse(module._is_transient_model_capacity_error("agent wrote checkpoint waiting_for_access"))
+
+
 def load_tickets_route():
     fastapi = types.ModuleType("fastapi")
 
