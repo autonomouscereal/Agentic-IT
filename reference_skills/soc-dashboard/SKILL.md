@@ -145,7 +145,10 @@ Validation evidence from 2026-05-18:
   logout, and no post-login console/network failures
 - authenticated browser UI test rendered 14 Demo Proof rows and no console or
   network failures
-- Hermes setup-agent E2E passed on ticket `606`, agent `243`, task `240`
+- Hermes setup-agent E2E passed after the login deployment on ticket `611`,
+  agent `246`, task `243`; the agent read protected setup context, wrote the
+  expected note through its scoped session, checkpointed `100%`, and left no
+  active harness processes behind
 - permission/provider matrix passed with marker
   `PERMISSION_PROVIDER_MATRIX_1779148832` and left no active agents
 

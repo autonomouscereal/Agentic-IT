@@ -140,7 +140,9 @@ Security posture for regulated demos, verified 2026-05-18:
   `/api/access/me`
 - run `python scripts/smoke_setup_agent.py http://192.168.50.222:25480 deepseek/deepseek-v4-flash`
   to prove a real Hermes worker can use scoped agent-session auth against
-  protected dashboard endpoints
+  protected dashboard endpoints. Latest live proof after the login deployment:
+  ticket `611`, agent `246`, task `243`, completed with the expected agent
+  note and checkpoint, then ticket `611` was resolved locally.
 - run `python scripts/smoke_permission_provider_matrix.py http://192.168.50.222:25480 --model deepseek/deepseek-v4-flash`
   to prove RBAC, row-level separation, vault lease denial/grant, and access
   request gates

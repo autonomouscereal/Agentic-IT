@@ -177,9 +177,10 @@ Latest live proof on 2026-05-18:
   TCP connections; dashboard `25480` remained reachable.
 - Broad authenticated API smoke passed: ticket `589`, local mirror ticket
   `590`, change `171`, postmortem `104`, workflow `4`, skill `134`.
-- Hermes setup-agent E2E passed after auth hardening: ticket `606`,
-  agent `243`, task `240`, expected protected-API note written through the
-  scoped agent session.
+- Fresh Hermes setup-agent E2E after the first-party login deployment: ticket
+  `611`, agent `246`, task `243`, expected protected-API note written through
+  the scoped agent session, checkpoint reached `100%`, no active harness
+  processes remained, and the smoke ticket was resolved locally.
 - Permission/provider matrix passed with marker
   `PERMISSION_PROVIDER_MATRIX_1779148832`: Dev Y/Dev Z row separation,
   auditor mutation denial, denied GitLab/iTop lease checks, approved
