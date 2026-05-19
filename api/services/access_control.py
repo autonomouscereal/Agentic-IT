@@ -5,6 +5,7 @@ import hmac
 import os
 import json
 import re
+import secrets
 import time
 
 from database import fetchall, fetchrow, execute, json_dumps
@@ -183,6 +184,8 @@ ROUTE_REQUIREMENTS = [
 ]
 
 PUBLIC_PATHS = ()
+PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256"
+PASSWORD_HASH_ITERATIONS = 260000
 
 
 def auth_mode():
@@ -222,6 +225,47 @@ def session_ttl_seconds():
         return max(300, int(os.getenv("DASHBOARD_SESSION_TTL_SECONDS", "3600")))
     except ValueError:
         return 3600
+
+
+def cookie_secure():
+    return os.getenv("DASHBOARD_COOKIE_SECURE", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
+def hash_password(password):
+    if not password:
+        raise ValueError("password is required")
+    salt = secrets.token_urlsafe(24)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        PASSWORD_HASH_ITERATIONS,
+    )
+    return "$".join([
+        PASSWORD_HASH_ALGORITHM,
+        str(PASSWORD_HASH_ITERATIONS),
+        salt,
+        base64.urlsafe_b64encode(digest).decode("ascii").rstrip("="),
+    ])
+
+
+def verify_password(password, stored_hash):
+    if not password or not stored_hash:
+        return False
+    try:
+        algorithm, iterations, salt, encoded_digest = stored_hash.split("$", 3)
+        if algorithm != PASSWORD_HASH_ALGORITHM:
+            return False
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt.encode("utf-8"),
+            int(iterations),
+        )
+        expected = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return hmac.compare_digest(expected, encoded_digest)
 
 
 def _b64url(data):
@@ -447,6 +491,10 @@ def subject_from_request(request):
 def required_permission(method, path):
     upper_method = (method or "GET").upper()
     if upper_method == "OPTIONS":
+        return None
+    if path == "/login" or path.startswith("/login?"):
+        return None
+    if path in ("/api/auth/login", "/api/auth/logout"):
         return None
     if path == "/health":
         return None if public_health() else "health:read"

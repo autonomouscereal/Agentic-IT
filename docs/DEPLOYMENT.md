@@ -126,12 +126,18 @@ Expected:
 Security posture for regulated demos, verified 2026-05-18:
 
 - dashboard auth is enforced with trusted header mode
-- direct unauthenticated UI, static, health, and API requests return `403`
+- unauthenticated browser UI requests redirect to `/login`; direct static,
+  health, and API requests return `403`
+- first-party `/login` uses vault-backed local dashboard users and signs a
+  HttpOnly `dashboard_session` cookie for the UI/WebSocket flow
 - dashboard PostgreSQL, agent-memory PostgreSQL, and the AI proxy are bound to
   localhost on the AI Server
 - run `python scripts/smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480`
   with `DASHBOARD_TRUSTED_AUTH_SECRET` and `DASHBOARD_SERVICE_TOKEN` sourced
   from the credential vault before regulated demos
+- run `python scripts/smoke_dashboard_login.py http://192.168.50.222:25480 --username demo_account_1 --password-file <temp-vault-password-file>`
+  to prove login, bad-credential redirect, signed session cookie, and
+  `/api/access/me`
 - run `python scripts/smoke_setup_agent.py http://192.168.50.222:25480 deepseek/deepseek-v4-flash`
   to prove a real Hermes worker can use scoped agent-session auth against
   protected dashboard endpoints
@@ -148,6 +154,7 @@ Latest live credential smoke on 2026-05-18:
 
 | Module | Check | Result |
 | --- | --- | --- |
+| Agentic Operations | First-party login page and signed session | PASS, `/` redirects to `/login`, bad credentials redirect to `/login?error=1`, `demo_account_1` lands in the dashboard as `platform-admin`, sidebar shows the account, logout returns to login |
 | iTop | REST POST to `webservices/rest.php` as `demo_account_1` | PASS, `code=0`, count `1` |
 | Wazuh Dashboard | Dashboard login endpoint | PASS, HTTP 200 |
 | Wazuh API | Native `/security/user/authenticate?raw=true` | PASS, token issued |

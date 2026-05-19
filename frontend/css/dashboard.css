@@ -130,6 +130,49 @@ body {
     border-top: 1px solid var(--border-color);
 }
 
+.signed-in-user {
+    margin-bottom: 0.85rem;
+    padding: 0.75rem;
+    border: 1px solid rgba(0, 212, 255, 0.18);
+    border-radius: 8px;
+    background: rgba(12, 27, 37, 0.72);
+}
+
+.signed-in-label {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.signed-in-user strong {
+    display: block;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sign-out-btn {
+    width: 100%;
+    margin-top: 0.65rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid rgba(154, 182, 194, 0.32);
+    border-radius: 6px;
+    background: rgba(154, 182, 194, 0.08);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.78rem;
+}
+
+.sign-out-btn:hover {
+    border-color: rgba(0, 212, 255, 0.55);
+    color: var(--text-primary);
+}
+
 .connection-status {
     display: flex;
     align-items: center;

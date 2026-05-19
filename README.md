@@ -25,13 +25,16 @@ approved reference modules when those capabilities are missing.
 - Default harness/model: Hermes Agent with `deepseek/deepseek-v4-flash`; Claude Code remains available as a fallback harness.
 
 The shared demo user is `demo_account_1`; its password is stored only in the
-local server-manager vault key `demo_account_1`. Latest 2026-05-18 login smoke:
-iTop REST PASS, Wazuh API PASS, Wazuh Dashboard browser login PASS, Keycloak
-Admin Console login PASS, GitLab local login PASS, full GitLab Keycloak SSO
-PASS, Mailcow admin UI PASS across dashboard/system/mailbox/queue/quarantine
-pages, Roundcube webmail PASS at `/webmail`, Mailcow IMAP PASS, and the
-Roundcube `Report Phish` path creates Mailcow quarantine plus dashboard/iTop
-evidence.
+local server-manager vault key `demo_account_1`. The dashboard itself now has
+a first-party login page at `/login`; failed UI login attempts redirect back to
+that page, successful logins mint a signed HttpOnly `dashboard_session`, and
+the sidebar shows the signed-in account plus sign-out. Latest 2026-05-18 login
+smoke: Agentic Operations login PASS, iTop REST PASS, Wazuh API PASS, Wazuh
+Dashboard browser login PASS, Keycloak Admin Console login PASS, GitLab local
+login PASS, full GitLab Keycloak SSO PASS, Mailcow admin UI PASS across
+dashboard/system/mailbox/queue/quarantine pages, Roundcube webmail PASS at
+`/webmail`, Mailcow IMAP PASS, and the Roundcube `Report Phish` path creates
+Mailcow quarantine plus dashboard/iTop evidence.
 
 ## Documentation Map
 

@@ -127,6 +127,10 @@ The live dashboard is in enforced header-auth mode:
 - unauthenticated `/`, `/static/*`, `/health`, and `/api/*` return `403`
 - trusted proxy headers require `X-Dashboard-Auth-Secret`
 - browser sessions mint a signed HttpOnly `dashboard_session`
+- browser HTML requests to `/` redirect to `/login`; failed local dashboard
+  credentials redirect back to `/login?error=1`, while `demo_account_1`
+  signs into the dashboard with the vault password and receives
+  `platform-admin`
 - agents receive a scoped signed session in `dashboard_auth.json`, not the
   global trusted proxy secret or service token
 - DB, memory DB, and AI proxy ports are bound to `127.0.0.1` on the server
@@ -135,6 +139,10 @@ Validation evidence from 2026-05-18:
 
 - `scripts/smoke_dashboard_auth_enforcement.py` passed against
   `http://192.168.50.222:25480`
+- `scripts/smoke_dashboard_login.py` passed against
+  `http://192.168.50.222:25480` for `demo_account_1`; browser validation also
+  confirmed visible login, bad-credential redirect, signed-in account label,
+  logout, and no post-login console/network failures
 - authenticated browser UI test rendered 14 Demo Proof rows and no console or
   network failures
 - Hermes setup-agent E2E passed on ticket `606`, agent `243`, task `240`

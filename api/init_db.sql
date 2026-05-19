@@ -266,6 +266,11 @@ CREATE TABLE IF NOT EXISTS dashboard_users (
     provider VARCHAR(100) NOT NULL DEFAULT 'local',
     provider_ref VARCHAR(300),
     enabled BOOLEAN NOT NULL DEFAULT true,
+    password_hash TEXT,
+    password_changed_at TIMESTAMPTZ,
+    failed_login_count INTEGER NOT NULL DEFAULT 0,
+    last_failed_login_at TIMESTAMPTZ,
+    last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -723,6 +728,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_agent_workflows_active_workflow_key
     WHERE workflow_key IS NOT NULL AND status IN ('active', 'approved');
 CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_dashboard_users_provider ON dashboard_users(provider, provider_ref);
+CREATE INDEX IF NOT EXISTS idx_dashboard_users_enabled_login ON dashboard_users(username, enabled) WHERE password_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_dashboard_user_roles_user ON dashboard_user_roles(user_id);
 CREATE INDEX IF NOT EXISTS idx_dashboard_role_permissions_role ON dashboard_role_permissions(role_name);
 CREATE INDEX IF NOT EXISTS idx_dashboard_user_scopes_user ON dashboard_user_scopes(user_id);

@@ -40,6 +40,7 @@ function setAgentOpenCount(count) {
 document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     initTicketSorting();
+    loadCurrentIdentity();
     loadAgentModels();
     applyAuditUrlFilters();
     loadDashboardStats();
@@ -167,52 +168,78 @@ function startAutoRefresh() {
     }, 30000);
 }
 
-async function apiGet(path) {
+function isAuthRedirectReason(payload) {
+    return payload && payload.error === "access_denied" && payload.authenticated === false && [
+        "unauthenticated",
+        "missing_authenticated_user",
+        "invalid_session",
+        "invalid_session_signature",
+        "expired_session",
+        "unknown_or_disabled_user",
+    ].includes(payload.reason);
+}
+
+function redirectToLogin() {
+    const next = encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+    window.location.assign(`/login?next=${next}`);
+}
+
+async function apiRequest(path, options = {}) {
     try {
-        const res = await fetch(`${API}${path}`);
-        return await res.json();
+        const res = await fetch(`${API}${path}`, options);
+        const text = await res.text();
+        let payload = {};
+        if (text) {
+            try {
+                payload = JSON.parse(text);
+            } catch (e) {
+                payload = { raw: text };
+            }
+        }
+        if ((res.status === 401 || res.status === 403) && isAuthRedirectReason(payload)) {
+            redirectToLogin();
+            return null;
+        }
+        return payload;
     } catch (e) {
         console.error(`API error ${path}:`, e);
         return null;
     }
 }
 
+async function apiGet(path) {
+    return apiRequest(path);
+}
+
 async function apiPost(path, body) {
-    try {
-        const res = await fetch(`${API}${path}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: body ? JSON.stringify(body) : undefined,
-        });
-        return await res.json();
-    } catch (e) {
-        console.error(`API POST ${path}:`, e);
-        return null;
-    }
+    return apiRequest(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+    });
 }
 
 async function apiPut(path, body) {
-    try {
-        const res = await fetch(`${API}${path}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: body ? JSON.stringify(body) : undefined,
-        });
-        return await res.json();
-    } catch (e) {
-        console.error(`API PUT ${path}:`, e);
-        return null;
-    }
+    return apiRequest(path, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+    });
 }
 
 async function apiDelete(path) {
-    try {
-        const res = await fetch(`${API}${path}`, { method: "DELETE" });
-        return await res.json();
-    } catch (e) {
-        console.error(`API DELETE ${path}:`, e);
-        return null;
+    return apiRequest(path, { method: "DELETE" });
+}
+
+async function loadCurrentIdentity() {
+    const label = document.getElementById("current-user-label");
+    if (!label) return;
+    const me = await apiGet("/api/access/me");
+    if (!me || !me.identity) {
+        label.textContent = "Unknown";
+        return;
     }
+    label.textContent = me.identity.display_name || me.identity.username || "Unknown";
 }
 
 function formatTime(iso) {

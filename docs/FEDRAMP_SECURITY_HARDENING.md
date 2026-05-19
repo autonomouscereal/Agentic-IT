@@ -17,14 +17,21 @@ The live AI Server dashboard is configured with:
 - trusted-proxy secret stored in vault key `dashboard_trusted_auth_secret`
 - service-to-service token stored in vault key `dashboard_service_token`
 - signed session-cookie secret stored in vault key `dashboard_session_secret`
+- first-party dashboard demo account password stored in vault key
+  `demo_account_1`
 
-Unauthenticated requests to `/`, `/static/*`, `/health`, and every `/api/*`
-route return `403`. The UI is reachable only when a trusted auth proxy or test
-harness supplies the authenticated identity plus `X-Dashboard-Auth-Secret`.
+Unauthenticated API/static/health requests return `403`. Browser HTML requests
+to `/` redirect to `/login?next=/`, where the operator can sign in with a
+vault-backed dashboard account. Failed UI login attempts redirect back to
+`/login?error=1`; successful login creates a signed, HttpOnly
+`dashboard_session` cookie. API clients that present bad or missing credentials
+receive JSON denial instead of an HTML page.
 
-The browser flow mints a signed, HttpOnly `dashboard_session` cookie after a
-trusted proxy authenticates the first page request. WebSockets then authenticate
-with that cookie, so the frontend never receives or stores the proxy secret.
+The trusted proxy/header flow remains the production identity-provider shape.
+The first-party login page is the lab/demo fallback for environments where the
+operator has not yet placed Keycloak, Entra, Okta, or another IdP proxy in
+front of the app. WebSockets authenticate with the same signed cookie, so the
+frontend never receives or stores the proxy secret, service token, or password.
 
 ## App-Wide Controls
 
@@ -71,6 +78,23 @@ X-Dashboard-Service-User: <service name>
 This is for platform-owned service traffic only. Human users should use the
 trusted proxy flow so role and scope checks use their identity.
 
+### Local Dashboard Login Mode
+
+`POST /api/auth/login` accepts form or JSON credentials for users stored in
+`dashboard_users.password_hash`. Passwords are hashed with PBKDF2-SHA256 and
+per-password random salts; no plaintext password is stored or logged. Use:
+
+```powershell
+$env:DASHBOARD_LOGIN_PASSWORD = python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get demo_account_1
+python scripts\set_dashboard_password.py demo_account_1 --display-name "Demo Account 1"
+Remove-Item Env:DASHBOARD_LOGIN_PASSWORD
+```
+
+For live/container deployments where the script is not inside the API image,
+copy a temporary password file into the container, run equivalent raw-SQL
+upsert logic with `services.access_control.hash_password`, and delete the file
+immediately. Do not echo the password during the handoff.
+
 ### Spawned Agent Sessions
 
 Long-running Hermes and Claude Code workers do not receive the global service
@@ -113,6 +137,15 @@ $env:DASHBOARD_SERVICE_TOKEN = python "C:\Users\cereal\.agents\skills\server-man
 python scripts\smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480
 ```
 
+Also verify the first-party browser login:
+
+```powershell
+$tmp = New-TemporaryFile
+python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get demo_account_1 | Set-Content $tmp
+python scripts\smoke_dashboard_login.py http://192.168.50.222:25480 --username demo_account_1 --password-file $tmp
+Remove-Item $tmp
+```
+
 Expected:
 
 - unauthenticated UI/API/health requests denied
@@ -135,6 +168,11 @@ Latest live proof on 2026-05-18:
 - Playwright authenticated UI pass: Demo Proofs rendered 14 rows, Access page
   showed `demo_account_1 / header / platform-admin`, WebSocket status `Live`,
   and no console errors.
+- First-party dashboard login pass: unauthenticated HTML root redirected to
+  `/login?next=/`, bad credentials redirected to `/login?error=1&next=/`,
+  good credentials created `dashboard_session`, the sidebar showed
+  `demo_account_1`, sign-out returned to `/login?logged_out=1`, and the
+  post-login page had zero console errors, failed requests, or 4xx responses.
 - DB/memory/proxy LAN checks: `5433`, `25491`, and `4401` refused external
   TCP connections; dashboard `25480` remained reachable.
 - Broad authenticated API smoke passed: ticket `589`, local mirror ticket

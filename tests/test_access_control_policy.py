@@ -54,6 +54,8 @@ class AccessControlPolicyTests(unittest.TestCase):
         module.protect_ui = lambda: True
         try:
             self.assertEqual(module.required_permission("GET", "/"), "ui:read")
+            self.assertIsNone(module.required_permission("GET", "/login"))
+            self.assertIsNone(module.required_permission("POST", "/api/auth/login"))
             self.assertEqual(module.required_permission("GET", "/static/js/dashboard.js"), "ui:read")
             self.assertEqual(module.required_permission("GET", "/health"), "health:read")
             self.assertEqual(module.required_permission("GET", "/api/providers"), "providers:read")
@@ -75,6 +77,15 @@ class AccessControlPolicyTests(unittest.TestCase):
             module.required_permission("GET", "/api/dashboard/audit?actor=agent"),
             "audit:read",
         )
+
+    def test_local_password_hash_verification(self):
+        module, _ = load_access_control()
+
+        stored = module.hash_password("correct horse")
+
+        self.assertTrue(module.verify_password("correct horse", stored))
+        self.assertFalse(module.verify_password("wrong horse", stored))
+        self.assertFalse(module.verify_password("correct horse", "not-a-real-hash"))
 
     def test_header_auth_requires_trusted_proxy_secret_when_enforced(self):
         module, database = load_access_control()

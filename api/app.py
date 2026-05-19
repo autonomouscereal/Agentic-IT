@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import os
+from urllib.parse import quote
 
 from database import get_pool
 from routes import (
@@ -23,6 +24,7 @@ from routes import (
     intake,
     cicd,
     wazuh,
+    auth,
 )
 from services import itop_sync, health_check, task_tracker, agent_auditor
 from services import access_control
@@ -100,11 +102,18 @@ async def access_control_middleware(request, call_next):
     request.state.access_decision = decision
     if not decision.get("allow"):
         await access_control.audit_decision(decision, request.method, request.url.path, 403)
+        accept = (request.headers.get("accept") or "").lower()
+        if "text/html" in accept and not request.url.path.startswith("/api/"):
+            target = request.url.path
+            if request.url.query:
+                target += "?" + request.url.query
+            return RedirectResponse(f"/login?next={quote(target)}", status_code=303)
         response = JSONResponse(
             {
                 "error": "access_denied",
                 "reason": decision.get("reason"),
                 "required_permission": decision.get("required_permission"),
+                "authenticated": bool((decision.get("identity") or {}).get("authenticated")),
             },
             status_code=403,
         )
@@ -122,7 +131,7 @@ async def access_control_middleware(request, call_next):
             session_cookie,
             max_age=access_control.session_ttl_seconds(),
             httponly=True,
-            secure=os.getenv("DASHBOARD_COOKIE_SECURE", "true").strip().lower() not in ("0", "false", "no", "off"),
+            secure=access_control.cookie_secure(),
             samesite="lax",
         )
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -148,6 +157,7 @@ app.include_router(access.router)
 app.include_router(intake.router)
 app.include_router(cicd.router)
 app.include_router(wazuh.router)
+app.include_router(auth.router)
 
 frontend_dir = "/frontend"
 
@@ -160,6 +170,14 @@ async def root():
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return JSONResponse({"error": "Frontend not found"}, status_code=404)
+
+
+@app.get("/login")
+async def login_page():
+    login_path = os.path.join(frontend_dir, "login.html")
+    if os.path.exists(login_path):
+        return FileResponse(login_path)
+    return JSONResponse({"error": "Login page not found"}, status_code=404)
 
 @app.get("/health")
 async def health():
