@@ -109,7 +109,13 @@ Do not put credentials, customer URLs with secrets, tokens, or passwords in the 
 - `deploy`: deploy or manage the bundled reference module when it is deployable.
 - `integrate`: use an existing enterprise product or provider adapter for the
   same capability.
+- `keep`: verify and keep an already healthy or built-in module without
+  redeploying it.
 - `disabled`: turn the module off for this organization or environment.
+- `undeploy`: create teardown work for a module that should be removed or
+  migrated away.
+- `reinstall`: create replacement/reinstall work for a module that should be
+  torn down and deployed again.
 
 Legacy `existing_tools` and `exclude` values are still accepted for backward
 compatibility. Disabled modules are omitted from setup work and listed in
@@ -124,6 +130,22 @@ also return:
 - `module_tickets`: child tickets scoped to one module or integration.
 - `skipped_steps`: document-only, disabled, or dependency-blocked plan steps.
 - `plan`: the generated plan used to create the tickets.
+
+Additional setup endpoints:
+
+- `GET /api/setup/status`: returns inferred deployment status per module from
+  the tool inventory plus built-in dashboard module knowledge.
+- `POST /api/setup/module-ticket`: creates one scoped ticket for one module.
+  It accepts `module_id`, `action`, `notes`, runtime model/proxy/harness fields,
+  `spawn_agent`, and `sync_provider`. Use this when an operator wants to work
+  one integration at a time without creating a full deployment plan.
+
+Per-module notes from the UI are copied into the scoped ticket description so
+operators can say things like which port to use, which vault key contains the
+credential, which tenant to integrate, or what migration constraint applies.
+Undeploy/reinstall tickets include teardown guardrails: capture state, identify
+dependencies, request approval before destructive action, and verify dependent
+integrations afterward.
 
 ## Current Exclusions
 

@@ -59,6 +59,39 @@ class SetupModuleScopeTests(unittest.TestCase):
         self.assertIn("AI Model Proxy", description)
         self.assertIn("No public model proxy exposure.", description)
 
+    def test_keep_action_does_not_create_redeploy_step(self):
+        manifest = load_platform_manifest()
+
+        plan = manifest.build_setup_plan(
+            profile="minimal",
+            module_actions={"soc-dashboard": "keep", "ai-proxy": "keep"},
+            deploy_missing=True,
+        )
+        ids = {step["module_id"]: step for step in plan["steps"]}
+
+        self.assertEqual(ids["soc-dashboard"]["status"], "already_active")
+        self.assertEqual(ids["ai-proxy"]["status"], "already_active")
+        self.assertEqual(plan["summary"]["already_active"], 2)
+
+    def test_single_module_undeploy_ticket_description_includes_teardown_guardrails(self):
+        manifest = load_platform_manifest()
+        step = manifest.module_step(
+            "mailcow",
+            action="undeploy",
+            deployment_status={"deployment_status": "ready"},
+        )
+        description = manifest.module_ticket_description(
+            None,
+            step,
+            notes="Migrate to existing Exchange tenant before teardown.",
+        )
+
+        self.assertEqual(step["status"], "undeploy")
+        self.assertIn("single-module setup ticket", description)
+        self.assertIn("Current deployment status: ready", description)
+        self.assertIn("Before teardown, capture current config/state", description)
+        self.assertIn("Migrate to existing Exchange tenant before teardown.", description)
+
 
 if __name__ == "__main__":
     unittest.main()

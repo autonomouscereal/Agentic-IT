@@ -1771,10 +1771,13 @@ function escJs(str) {
 let setupManifest = null;
 let setupPlan = null;
 let setupRuntime = null;
+let setupModuleStatuses = {};
 
 async function loadSetup() {
     setupManifest = await apiGet("/api/setup/manifest");
     setupRuntime = await apiGet("/api/agents/runner-health");
+    const setupStatus = await apiGet("/api/setup/status");
+    setupModuleStatuses = setupStatus?.module_statuses || {};
     if (!setupManifest) return;
     renderSetupRuntime();
     renderSetupModules();
@@ -1817,7 +1820,10 @@ function renderSetupModules() {
     grid.innerHTML = modules.map(m => {
         const inProfile = selected.has(m.id);
         const statusLabel = m.status || "unknown";
-        const defaultAction = inProfile ? "deploy" : "disabled";
+        const moduleStatus = setupModuleStatuses[m.id] || {};
+        const deployStatus = moduleStatus.deployment_status || "not_configured";
+        const isReady = ["ready", "built_in", "configured"].includes(deployStatus);
+        const defaultAction = isReady ? "keep" : (inProfile ? "deploy" : "disabled");
         return `
             <div class="module-card ${inProfile ? "selected" : ""}">
                 <div class="module-card-head">
@@ -1827,13 +1833,25 @@ function renderSetupModules() {
                     </div>
                     <span class="status-badge ${statusClass(statusLabel)}">${escHtml(statusLabel)}</span>
                 </div>
+                <div class="module-status-line">
+                    <span class="status-badge ${statusClass(deployStatus)}">${escHtml(deployStatus)}</span>
+                    ${moduleStatus.tool?.name ? `<span class="module-meta">via ${escHtml(moduleStatus.tool.name)} ${moduleStatus.tool.port ? `:${escHtml(moduleStatus.tool.port)}` : ""}</span>` : `<span class="module-meta">${escHtml(moduleStatus.source || "manifest")}</span>`}
+                </div>
                 <div class="module-desc">${escHtml(m.notes || "")}</div>
                 <div class="module-controls">
                     <select class="filter-select" data-setup-action="${escAttr(m.id)}" onchange="generateSetupPlan()">
+                        <option value="keep" ${defaultAction === "keep" ? "selected" : ""}>Keep active</option>
                         <option value="deploy" ${defaultAction === "deploy" ? "selected" : ""}>Deploy reference</option>
                         <option value="integrate">Integrate existing</option>
                         <option value="disabled" ${defaultAction === "disabled" ? "selected" : ""}>Off / not in scope</option>
                     </select>
+                </div>
+                <textarea class="setup-textarea module-note-input" rows="3" data-setup-notes="${escAttr(m.id)}" placeholder="Module notes: port, endpoint, credential vault key, tenant, migration detail..."></textarea>
+                <div class="module-actions-row">
+                    <button class="btn btn-sm" onclick="createModuleSetupTicket('${escJs(m.id)}', null, false)">Ticket</button>
+                    <button class="btn btn-sm btn-warning" onclick="createModuleSetupTicket('${escJs(m.id)}', null, true)">Ticket + Agent</button>
+                    <button class="btn btn-sm btn-danger" onclick="createModuleSetupTicket('${escJs(m.id)}', 'undeploy', false)">Undeploy</button>
+                    <button class="btn btn-sm" onclick="createModuleSetupTicket('${escJs(m.id)}', 'reinstall', false)">Reinstall</button>
                 </div>
                 ${m.skill ? `<div class="module-meta">Skill: ${escHtml(m.skill)} ${m.skill_available ? "" : "(missing in container)"}</div>` : ""}
             </div>
@@ -1848,6 +1866,7 @@ function collectSetupChoices() {
     const exclude = [];
     const existingTools = [];
     const moduleActions = {};
+    const moduleNotes = {};
     document.querySelectorAll("[data-setup-action]").forEach(input => {
         const id = input.dataset.setupAction;
         const action = input.value || "disabled";
@@ -1856,12 +1875,17 @@ function collectSetupChoices() {
         if (action === "disabled" && profileModules.has(id)) exclude.push(id);
         if (action === "integrate") existingTools.push(id);
     });
+    document.querySelectorAll("[data-setup-notes]").forEach(input => {
+        const value = input.value?.trim();
+        if (value) moduleNotes[input.dataset.setupNotes] = value;
+    });
     return {
         profile,
         include,
         exclude,
         existing_tools: existingTools,
         module_actions: moduleActions,
+        module_notes: moduleNotes,
         deploy_missing: !!document.getElementById("setup-deploy-missing")?.checked,
     };
 }
@@ -1888,7 +1912,9 @@ function renderSetupPlan() {
         ${s.total || 0} modules &middot;
         ${s.deploy || 0} deploy &middot;
         ${s.integrate_existing || 0} integrate existing &middot;
+        ${s.already_active || 0} keep active &middot;
         ${s.blueprint || 0} blueprint &middot;
+        ${(s.undeploy || 0) + (s.redeploy || 0) ? `${(s.undeploy || 0) + (s.redeploy || 0)} teardown/reinstall &middot;` : ""}
         ${s.disabled || 0} off
         ${s.blocked ? `<span class="status-badge status-warning">${s.blocked} blocked by disabled dependencies</span>` : ""}
         ${s.missing_skills?.length ? `<span class="status-badge status-warning">${s.missing_skills.length} missing skills in runtime</span>` : ""}
@@ -1931,5 +1957,37 @@ async function createSetupTicket(spawnAgent) {
         navigateTo(spawnAgent ? "agents" : "tickets");
     } else if (result?.error) {
         alert(result.error);
+    }
+}
+
+async function createModuleSetupTicket(moduleId, operation, spawnAgent) {
+    if (!setupManifest) await loadSetup();
+    const actionInput = document.querySelector(`[data-setup-action="${CSS.escape(moduleId)}"]`);
+    const notesInput = document.querySelector(`[data-setup-notes="${CSS.escape(moduleId)}"]`);
+    const action = operation || actionInput?.value || "deploy";
+    if (["undeploy", "reinstall"].includes(action)) {
+        const label = action === "undeploy" ? "tear down" : "reinstall";
+        if (!confirm(`Create a ${label} ticket for ${moduleId}? This will require approval before any infrastructure changes.`)) {
+            return;
+        }
+    }
+    const result = await apiPost("/api/setup/module-ticket", {
+        module_id: moduleId,
+        action,
+        ai_base_url: document.getElementById("setup-ai-base-url")?.value || null,
+        model: document.getElementById("setup-model")?.value || document.getElementById("agent-model-select")?.value || "deepseek/deepseek-v4-flash",
+        proxy_mode: document.getElementById("setup-proxy-mode")?.value || "deploy",
+        proxy_url: document.getElementById("setup-ai-base-url")?.value || null,
+        harness: document.getElementById("setup-harness")?.value || setupRuntime?.harness || "auto",
+        provider: (document.getElementById("setup-model")?.value || "").startsWith("qwen/") ? "lmstudio" : "nous",
+        notes: notesInput?.value || "",
+        spawn_agent: spawnAgent,
+        sync_provider: false,
+    });
+    if (result?.ticket?.id) {
+        alert(`Module ticket ${result.ticket.id} created for ${moduleId}${result.agent?.agent_id ? ` with agent ${result.agent.agent_id}` : ""}.`);
+        navigateTo(spawnAgent ? "agents" : "tickets");
+    } else {
+        alert(result?.error || "Could not create module ticket.");
     }
 }

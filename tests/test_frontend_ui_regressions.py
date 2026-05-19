@@ -78,7 +78,15 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn("Deploy reference", self.dashboard_js)
         self.assertIn("Integrate existing", self.dashboard_js)
         self.assertIn("Off / not in scope", self.dashboard_js)
+        self.assertIn("Keep active", self.dashboard_js)
+        self.assertIn("data-setup-notes", self.dashboard_js)
+        self.assertIn("createModuleSetupTicket", self.dashboard_js)
+        self.assertIn("/api/setup/module-ticket", self.dashboard_js)
+        self.assertIn("/api/setup/status", self.dashboard_js)
+        self.assertIn("Undeploy", self.dashboard_js)
+        self.assertIn("Reinstall", self.dashboard_js)
         self.assertIn("module_actions: moduleActions", self.dashboard_js)
+        self.assertIn("module_notes: moduleNotes", self.dashboard_js)
         self.assertIn("scoped module tickets", self.dashboard_js)
 
 

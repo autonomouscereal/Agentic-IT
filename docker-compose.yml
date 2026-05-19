@@ -119,7 +119,7 @@ services:
       AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE: ${AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE:-1}
       AGENT_AUDITOR_AUTO_RECOVER: ${AGENT_AUDITOR_AUTO_RECOVER:-false}
       AGENT_PERMISSION_MODE: ${AGENT_PERMISSION_MODE:-acceptEdits}
-      AGENT_ALLOWED_TOOLS: ${AGENT_ALLOWED_TOOLS:-Read,Write,Bash(curl *)}
+      AGENT_ALLOWED_TOOLS: ${AGENT_ALLOWED_TOOLS:-Read,Write,Bash(curl *),Bash(node *),Bash(npx *),Bash(playwright *)}
       AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:-http://ai-proxy:4001}
       AGENT_LLM_AUTH_TOKEN: ${AGENT_LLM_AUTH_TOKEN:-}
       HERMES_BIN: ${HERMES_BIN:-/home/cereal/.hermes/hermes-agent/venv/bin/hermes}

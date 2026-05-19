@@ -33,7 +33,10 @@ MAX_CONCURRENT_AGENTS = int(os.getenv("MAX_CONCURRENT_AGENTS", "3"))
 AGENT_TIMEOUT_MINUTES = int(os.getenv("AGENT_TIMEOUT_MINUTES", "0"))
 MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "/app/agent_models.json")
 AGENT_PERMISSION_MODE = os.getenv("AGENT_PERMISSION_MODE", "acceptEdits")
-AGENT_ALLOWED_TOOLS = os.getenv("AGENT_ALLOWED_TOOLS", "Read,Write,Bash(curl *)").strip()
+AGENT_ALLOWED_TOOLS = os.getenv(
+    "AGENT_ALLOWED_TOOLS",
+    "Read,Write,Bash(curl *),Bash(node *),Bash(npx *),Bash(playwright *)",
+).strip()
 AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", "").strip()
 AGENT_LLM_AUTH_TOKEN = os.getenv("AGENT_LLM_AUTH_TOKEN", "").strip()
 DASHBOARD_API_BASE = os.getenv("DASHBOARD_API_BASE", "http://localhost:8000").strip()
@@ -1519,6 +1522,18 @@ urlscan-style adapters, or an approved isolated detonation service. If no safe
 adapter exists, record that limitation and request approval/access for a safe
 analysis path. Approval to block/quarantine/contain a URL is not approval to
 fetch it.
+
+## Browser / Playwright Validation
+The runner image includes Node.js and Playwright Chromium for dashboard or
+internal-tool UI validation. Use it only for trusted internal dashboard,
+ticketing, setup, CI/CD, provider-console, or generated local app checks. A
+simple pattern is to write a small `.js` file in the work directory and run it
+with `node` or `npx playwright test`; `NODE_PATH` is configured so
+`require("playwright")` works from small agent-written scripts.
+
+Do not use Playwright to open suspicious/phishing/malware URLs from tickets,
+emails, SIEM, EDR, or user text. Those URLs must stay on the passive,
+reputation-adapter, or approved isolated-detonation path above.
 
 ## Live Ticket Note Steering
 Operators and ticketing providers can add notes while you are already running.

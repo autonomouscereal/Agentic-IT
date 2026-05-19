@@ -94,8 +94,14 @@ def _normalize_module_actions(module_actions=None):
             actions[str(module_id)] = "disabled"
         elif normalized in ("existing", "integrate", "integrate_existing", "use_existing"):
             actions[str(module_id)] = "integrate"
+        elif normalized in ("keep", "active", "ready", "already_active", "deployed", "connected"):
+            actions[str(module_id)] = "keep"
         elif normalized in ("deploy", "deploy_reference", "reference", "install"):
             actions[str(module_id)] = "deploy"
+        elif normalized in ("undeploy", "uninstall", "tear_down", "teardown", "remove"):
+            actions[str(module_id)] = "undeploy"
+        elif normalized in ("reinstall", "redeploy", "re_deploy"):
+            actions[str(module_id)] = "reinstall"
     return actions
 
 
@@ -148,8 +154,15 @@ def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=N
         module_id = module["id"]
         has_existing = module_id in existing
         blocked_dependencies = module.get("disabled_dependencies") or []
+        requested_action = actions.get(module_id) or ("integrate" if has_existing else "deploy")
         if blocked_dependencies:
             status = "blocked_disabled_dependency"
+        elif requested_action == "keep":
+            status = "already_active"
+        elif requested_action == "undeploy":
+            status = "undeploy"
+        elif requested_action == "reinstall":
+            status = "redeploy"
         elif has_existing:
             status = "integrate_existing"
         elif module_id in forced_deploy and module.get("deployable"):
@@ -166,7 +179,7 @@ def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=N
             "name": module.get("name"),
             "category": module.get("category"),
             "status": status,
-            "module_action": actions.get(module_id) or ("integrate" if has_existing else "deploy"),
+            "module_action": requested_action,
             "deploy_strategy": module.get("deploy_strategy"),
             "skill": module.get("skill"),
             "skill_available": module.get("skill_available"),
@@ -189,6 +202,9 @@ def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=N
             "integrate_existing": len([s for s in steps if s["status"] == "integrate_existing"]),
             "blueprint": len([s for s in steps if s["status"] == "blueprint"]),
             "external_optional": len([s for s in steps if s["status"] == "external_optional"]),
+            "already_active": len([s for s in steps if s["status"] == "already_active"]),
+            "undeploy": len([s for s in steps if s["status"] == "undeploy"]),
+            "redeploy": len([s for s in steps if s["status"] == "redeploy"]),
             "document": len([s for s in steps if s["status"] == "document"]),
             "blocked": len([s for s in steps if s["status"] == "blocked_disabled_dependency"]),
             "disabled": len(disabled),
@@ -203,6 +219,46 @@ def build_setup_plan(profile="soc", include=None, exclude=None, existing_tools=N
             "Run module health checks and smoke tests before marking a deployment complete.",
             "Create a postmortem for meaningful completed tickets and use it to improve skills/workflows.",
         ],
+    }
+
+
+def module_step(module_id, action="deploy", deployment_status=None):
+    modules = module_index()
+    module = modules.get(module_id)
+    if not module:
+        return None
+    module = _with_skill_status(module)
+    normalized = _normalize_module_actions({module_id: action}).get(module_id) or "deploy"
+    if normalized == "keep":
+        status = "already_active"
+    elif normalized == "integrate":
+        status = "integrate_existing"
+    elif normalized == "undeploy":
+        status = "undeploy"
+    elif normalized == "reinstall":
+        status = "redeploy"
+    elif module.get("status") in ("planned", "blueprint") and normalized == "deploy":
+        status = "blueprint"
+    elif module.get("deploy_strategy") == "external" and normalized == "deploy":
+        status = "external_optional"
+    else:
+        status = "deploy" if module.get("deployable") else "document"
+    return {
+        "module_id": module_id,
+        "name": module.get("name"),
+        "category": module.get("category"),
+        "status": status,
+        "module_action": normalized,
+        "deploy_strategy": module.get("deploy_strategy"),
+        "deployment_status": deployment_status or {},
+        "skill": module.get("skill"),
+        "skill_available": module.get("skill_available"),
+        "depends_on": module.get("depends_on", []),
+        "disabled_dependencies": [],
+        "required_secrets": module.get("required_secrets", []),
+        "health_checks": module.get("health_checks", []),
+        "test_commands": module.get("test_commands", []),
+        "notes": module.get("notes", ""),
     }
 
 
@@ -255,14 +311,17 @@ def plan_to_ticket_description(plan, ai_base_url=None, model=None, notes=None, r
 
 def module_ticket_description(parent_ticket_id, step, runtime=None, notes=None):
     runtime = runtime or {}
+    action = step.get("status")
+    parent_label = parent_ticket_id if parent_ticket_id else "single-module setup ticket"
     lines = [
         f"Scoped setup work item for module `{step.get('module_id')}`.",
         "",
-        f"Parent setup ticket: {parent_ticket_id}",
+        f"Parent setup ticket: {parent_label}",
         f"Module: {step.get('name')}",
         f"Category: {step.get('category') or '<unknown>'}",
-        f"Action: {step.get('status')}",
+        f"Action: {action}",
         f"Requested mode: {step.get('module_action')}",
+        f"Current deployment status: {(step.get('deployment_status') or {}).get('deployment_status') or '<unknown>'}",
         f"Deploy strategy: {step.get('deploy_strategy') or '<none>'}",
         f"Skill: {step.get('skill') or '<none>'} available={step.get('skill_available')}",
         f"Proxy mode: {runtime.get('proxy_mode') or '<unknown>'}",
@@ -276,6 +335,14 @@ def module_ticket_description(parent_ticket_id, step, runtime=None, notes=None):
         "- Run listed health checks and smoke tests before marking complete.",
         "- Add human-readable notes and evidence to this ticket.",
     ]
+    if action in ("undeploy", "redeploy"):
+        lines.extend([
+            "- Before teardown, capture current config/state, dependencies, rollback notes, and data ownership.",
+            "- Use a change approval gate before stopping, deleting, replacing, or migrating any service.",
+            "- After teardown/reinstall, verify dependent integrations and document migration impact.",
+        ])
+    elif action == "already_active":
+        lines.append("- Verify and document that the existing deployment/integration is healthy; do not redeploy it.")
     if step.get("required_secrets"):
         lines.extend(["", "Required secret inputs:"])
         lines.extend([f"- {item}" for item in step.get("required_secrets") or []])

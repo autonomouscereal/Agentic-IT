@@ -4,6 +4,70 @@ Last updated: 2026-05-19.
 
 ## Found During 2026-05-19 Agentic Regression Push
 
+### Setup page needed incremental per-module work controls
+
+Status: fixed in source; live deployment verification in progress.
+
+The setup flow could create a parent setup ticket and child tickets for a full
+profile, but operators still had to manipulate the whole on/off plan when they
+only wanted to work one module, add a module-specific note, or tear down a
+deployed reference module.
+
+Fix:
+
+- Add inferred per-module deployment status from tool inventory and built-in
+  dashboard module knowledge.
+- Add `Keep active` planning state so healthy/built-in modules do not get
+  redeployed by default.
+- Add per-module notes fields in the Setup UI.
+- Add one-module ticket creation through `POST /api/setup/module-ticket`.
+- Add undeploy/reinstall ticket actions with teardown guardrails and approval
+  requirements.
+
+### API/agent runtime had Playwright CLI but no browser binaries
+
+Status: fixed in source; live deployment verification in progress.
+
+While preparing the URL-safe 621/531 hybrid real-agent proof, the live API
+container showed `npx playwright --version` working, but launching Chromium
+failed because the browser binary was missing from `/root/.cache/ms-playwright`.
+That means agents could appear to have browser automation capability while
+failing at the first real UI validation.
+
+After installing Playwright, live verification exposed a second runtime issue:
+the global npm package was installed, but `node -e "require('playwright')"`
+could not resolve it because `NODE_PATH` did not include the global npm module
+directory.
+
+Fix:
+
+- Install a pinned Playwright CLI/package and Chromium browser dependencies in
+  the API image.
+- Set `NODE_PATH=/usr/local/lib/node_modules` so small agent-written Node
+  scripts can `require('playwright')` without local npm initialization.
+- Add stable agent context that explains when browser validation is appropriate
+  and keeps suspicious URL analysis on sandbox/reputation paths, not direct
+  browsing.
+- Expand default agent tool allowlists for local browser validation commands
+  while keeping secrets and unsafe target retrieval guarded.
+
+### Compose rebuild can leave duplicate API container names after interrupted deploys
+
+Status: discovered during Playwright runtime deployment; live cleanup in
+progress.
+
+While rebuilding the API image with Playwright support, Docker built the image
+successfully but failed to recreate the API container because a duplicate
+Compose-generated API container name was already reserved by another container.
+
+Fix:
+
+- Inspect `docker ps -a` for the exact conflicting API containers before taking
+  action.
+- Remove only stopped/stale duplicate API containers that belong to the
+  dashboard Compose project.
+- Re-run `docker compose up -d api` and verify health before continuing.
+
 ### Ticket 621 contained unsafe direct suspicious URL retrieval
 
 Status: fixed in source and deployed to the live AI server on 2026-05-19.

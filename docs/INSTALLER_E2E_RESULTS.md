@@ -27,6 +27,12 @@ Setup fan-out source regression on 2026-05-19:
   setup-plan smoke returned `28` plan steps, `1` disabled module, and `4`
   blocked dependency steps; the container curl guard accepted explicit allowed
   host lists and still emitted the suspicious external URL block rule.
+- Incremental setup module controls passed live after deployment: hardened smoke
+  created parent setup ticket `670` with `7` child tickets and single-module
+  reinstall ticket `678`; `/api/setup/status` correctly reports
+  `soc-dashboard` as `built_in` and Wazuh from tool inventory; authenticated
+  Chrome verified `41` module note fields, per-module ticket controls,
+  `Undeploy`, `Reinstall`, `Keep active`, and no console/page/http errors.
 
 Backup before destructive testing:
 

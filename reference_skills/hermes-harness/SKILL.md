@@ -68,12 +68,17 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
 - Spawned agents use a scoped signed dashboard session plus curl guards for
   protected dashboard API calls; do not pass the trusted proxy secret or global
   service token to the harness.
+- The API/agent image includes Node.js plus Playwright Chromium for trusted
+  internal UI validation. Agents may use `node`, `npx playwright`, or
+  `playwright` for dashboard, setup, CI/CD, provider-console, or generated
+  local app checks. `NODE_PATH` is set so `require("playwright")` works from
+  small agent-written scripts.
 - Suspicious URLs from tickets, reports, alerts, or email evidence are hostile
   until proven otherwise. Hermes agents must not directly browse, curl, wget,
-  screenshot, or fetch those URLs from the runner or production network. Use
-  passive evidence, configured VirusTotal/urlscan/ANY.RUN-style adapters, or an
-  approved isolated detonation service. Approval to block or quarantine a URL
-  is not approval to fetch it.
+  screenshot, Playwright-open, or fetch those URLs from the runner or
+  production network. Use passive evidence, configured
+  VirusTotal/urlscan/ANY.RUN-style adapters, or an approved isolated detonation
+  service. Approval to block or quarantine a URL is not approval to fetch it.
 - Judge agent health from runner-health, process state, proxy activity,
   output logs, checkpoints, ticket notes, audit records, and memory events, not
   `progress_pct` alone.

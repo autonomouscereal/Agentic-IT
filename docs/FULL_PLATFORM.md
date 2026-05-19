@@ -70,7 +70,13 @@ Email is a good example of the contract boundary. Mailcow is the current referen
 7. The setup agent reads the parent ticket, summarizes the child module tickets,
    plans integrations, requests approvals for changes, runs health checks, and
    documents progress without mixing unrelated module evidence.
-8. Operators review completed setup, approve workflows, and then enable ticket or scheduled triggers.
+8. For incremental changes, create one module ticket directly from that module
+   card, including module-specific notes such as ports, vault keys, tenant
+   details, or migration constraints.
+9. When a module is being replaced or removed, create an undeploy/reinstall
+   ticket so teardown, dependency review, rollback, and migration evidence are
+   approval-gated and auditable.
+10. Operators review completed setup, approve workflows, and then enable ticket or scheduled triggers.
 
 ## Reference Modules
 

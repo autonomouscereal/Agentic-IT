@@ -655,6 +655,14 @@ instead. Approval to block, quarantine, or contain a URL is not approval to
 fetch it. The runner curl guard enforces this by blocking arbitrary external
 URL hosts outside the configured `AGENT_CURL_ALLOWED_HOSTS` allowlist.
 
+The API/agent image also carries Node.js plus Playwright Chromium for trusted
+internal UI validation. Agents may use `node`, `npx playwright`, or
+`playwright` for dashboard, setup, CI/CD, provider-console, or generated local
+app checks. `NODE_PATH` is set so `require("playwright")` works from small
+agent-written scripts. They must not use browser automation to open suspicious
+URLs from tickets, email, SIEM/EDR alerts, attachments, or user text; those
+stay on the passive/reputation/isolated-detonation path.
+
 ## Local Model Smoke Result
 
 Latest verified local-model smoke:

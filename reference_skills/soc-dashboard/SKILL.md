@@ -58,7 +58,12 @@ Operators choose one action per module:
 
 - `deploy`: deploy or manage the bundled reference module.
 - `integrate`: connect an existing enterprise product or provider adapter.
+- `keep`: leave an already healthy or built-in module active without
+  redeploying it.
 - `disabled`: turn the module off for this organization or environment.
+- `undeploy`: tear down or migrate away from a module with approval gates.
+- `reinstall`: replace or reinstall a module after capturing state and
+  dependencies.
 
 Creating setup work must create a parent setup ticket plus one scoped child
 ticket for each actionable deploy/integrate module. Disabled modules are not
@@ -67,6 +72,14 @@ blocked. Agents should use the parent ticket for overall onboarding status and
 the child tickets for module-specific evidence, approvals, logs, postmortems,
 and demo explanation. Do not collapse all deployment/integration work into a
 single giant ticket.
+
+The Setup UI also supports incremental one-module work. Each module card should
+show inferred deployment status, a module-specific notes box, and buttons to
+create a scoped ticket, create and assign an agent, undeploy, or reinstall.
+Use this for port changes, credential/vault mapping notes, tenant-specific
+integration work, and migration from a reference module to an existing
+enterprise product. Teardown/reinstall tickets must capture state,
+dependencies, rollback, and approval evidence before changing infrastructure.
 
 ## Workflow / Postmortem Reuse Rules
 
@@ -212,6 +225,12 @@ Validation evidence from 2026-05-19:
   authenticated Chrome verified the Setup page per-module actions and no
   console/page/http errors; post-rebuild setup-plan and curl-guard checks
   passed inside the live stack.
+- Incremental setup module controls passed: hardened smoke created parent setup
+  ticket `670` with `7` child tickets and single-module reinstall ticket `678`;
+  `/api/setup/status` maps `soc-dashboard` to `built_in` and Wazuh to the tool
+  inventory; authenticated Chrome verified module notes, ticket controls,
+  undeploy/reinstall buttons, keep-active defaults, and no console/page/http
+  errors.
 - URL safety regression patch passed: live migration
   `017_phishing_url_safety_guardrail.sql` updated phishing RACI/workflow
   records; the live API-container curl guard blocks arbitrary external

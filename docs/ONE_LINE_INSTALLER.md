@@ -138,6 +138,13 @@ missing integrations, request access/credential approvals, and record
 notes/postmortems/workflows before marking setup complete. Agents must request
 changes before modifying infrastructure.
 
+Operators can also work one module at a time from Setup. Each module card shows
+the inferred deployment status, a module-specific notes box, and buttons to
+create a deploy/integrate ticket, create and assign an agent, undeploy, or
+reinstall. Use this path when a customer wants to integrate just one provider,
+change one port/credential mapping, or migrate from a reference module to an
+existing enterprise product without recreating the whole setup plan.
+
 The installer also deploys `agent-memory-db`, registers **Agent Memory** on the Tools page, and wires spawned dashboard agents to the `agent-memory` skill. Agent prompts, tool calls, session stops, deliberate notes, and smoke-test sentinels are stored in the shared memory service with async PostgreSQL writes, JSONB metadata, full-text search, trigram search, and pgvector retrieval. Running **Tools -> Check All** should report Agent Memory as healthy when the database service is deployed.
 
 Multiple installs can run on the same host when different `--target`, `--dashboard-port`, `--db-port`, and optionally `--project-name` values are used. The compose file does not use fixed container names.

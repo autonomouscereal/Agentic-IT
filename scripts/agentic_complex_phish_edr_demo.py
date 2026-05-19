@@ -7,6 +7,8 @@ drives a real dashboard agent through:
 - requester information wait + user-response resume/steering while active
 - dashboard note steering while active
 - iTop public_log steering through provider sync
+- URL safety analysis through sandbox/reputation-style evidence without direct
+  suspicious URL retrieval
 - denied per-agent Wazuh/SIEM vault lease
 - access-request approval and resumed agent completion
 - approval-gated lab-safe containment
@@ -100,6 +102,47 @@ def wait_for_note(base, ticket_id, marker, timeout=900, allow_blocked=False):
         print(json.dumps({"waiting_for_note": marker, "last": last}), flush=True)
         time.sleep(10)
     raise TimeoutError(f"note not observed: {marker}; last={last}")
+
+
+def wait_for_url_sandbox_evidence(base, ticket_id, marker, timeout=1800):
+    start = time.time()
+    last = None
+    while time.time() - start < timeout:
+        context = request(base, "GET", f"/api/tickets/{ticket_id}/context")
+        notes = note_bodies(context)
+        attachments = context.get("attachments") or []
+        sandbox_attachment = next(
+            (
+                row for row in attachments
+                if marker in str(row.get("metadata") or "")
+                or marker in str(row.get("storage_ref") or "")
+                or marker in str(row.get("filename") or "")
+            ),
+            None,
+        )
+        if f"COMPLEX_URL_SANDBOX_COMPLETE {marker}" in notes and sandbox_attachment:
+            metadata = sandbox_attachment.get("metadata") or {}
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata)
+                except json.JSONDecodeError:
+                    metadata = {}
+            if metadata.get("direct_fetch_performed") is False and metadata.get("sandbox_adapter"):
+                return context, sandbox_attachment
+        ticket = context.get("ticket") or {}
+        task = latest_task(base, ticket.get("agent_id"))
+        if task.get("status") in {"failed", "stopped", "terminated"}:
+            raise RuntimeError(f"agent ended before URL sandbox evidence: {task}")
+        last = {
+            "ticket_status": ticket.get("status"),
+            "task_status": task.get("status"),
+            "task_progress": task.get("progress_pct"),
+            "attachment_count": len(attachments),
+            "note_tail": notes[-500:],
+        }
+        print(json.dumps({"waiting_for_url_sandbox_evidence": marker, "last": last}), flush=True)
+        time.sleep(12)
+    raise TimeoutError(f"URL sandbox evidence not observed for {marker}: {last}")
 
 
 def wait_for_access_request(base, ticket_id, marker, timeout=1800):
@@ -272,10 +315,13 @@ First active-agent path:
 9. Add a note exactly containing: COMPLEX_READY_ITOP_STEER {marker}.
 10. Poll `agent_steering_inbox.json` until it contains `ITOP_COMPLEX_STEER {marker}`.
 11. Add a note exactly containing: COMPLEX_ITOP_STEER_OBSERVED {marker}.
-12. POST /api/agents/<agent_id>/vault/lease for {{"system":"wazuh","resource_type":"alert_index","resource_id":"finance-edr-restricted","action":"read"}}. It must return HTTP 403/access_denied because no per-agent lease exists yet.
-13. Add a note exactly containing: COMPLEX_PERMISSION_WALL {marker}: Wazuh alert_index finance-edr-restricted read denied by missing_agent_vault_lease; access request required.
-14. POST /api/tickets/{ticket_id}/access-request with agent_id, resource `Wazuh alert index finance-edr-restricted`, permission `read`, account_ref `agent-<agent_id>`, assignment_group `Security Operations`, risk_level `medium`, sync_provider true, reason `COMPLEX_PERMISSION_WALL {marker}: Wazuh alert index read required for phishing plus EDR correlation.`, and lease_request {{"system":"wazuh","resource_type":"alert_index","resource_id":"finance-edr-restricted","action":"read","credential_ref":"<vault:wazuh_finance_edr_read_after_approval>"}}.
-15. Write checkpoint.json with step `waiting-for-wazuh-access-{marker}`, status `waiting_for_access`, progress_pct 45, output `COMPLEX_PERMISSION_WALL {marker}`, and an ISO timestamp. Reply exactly: waiting for wazuh access {marker}
+12. Perform URL safety analysis without direct target retrieval. Do not curl, wget, browse, screenshot, Python-request, or otherwise fetch `http://training-login.example.invalid/reset`. Treat it as hostile evidence. Use this approved lab sandbox/reputation fixture instead: sandbox_adapter `urlscan-compatible-lab-sandbox`, isolated_network true, direct_fetch_performed false, verdict `suspicious_credential_harvest`, indicators `training-login.example.invalid`, `/reset`, finance-themed credential harvest, recommendation `approval-gated URL watchlist/block plus mailbox quarantine review`.
+13. POST /api/tickets/{ticket_id}/attachments with filename `url-sandbox-{marker}.json`, content_type `application/json`, storage_ref `sandbox://urlscan-compatible-lab/{marker}`, sha256 `lab-sandbox-{marker}`, size_bytes 0, and metadata containing marker `{marker}`, sandbox_adapter, direct_fetch_performed false, isolated_network true, original_url, defanged_url, verdict, indicators, and recommendation.
+14. Add a note exactly containing: COMPLEX_URL_SANDBOX_COMPLETE {marker}: sandbox_adapter urlscan-compatible-lab-sandbox; direct_fetch_performed false; verdict suspicious_credential_harvest; recommendation approval-gated URL watchlist/block and mailbox quarantine review.
+15. POST /api/agents/<agent_id>/vault/lease for {{"system":"wazuh","resource_type":"alert_index","resource_id":"finance-edr-restricted","action":"read"}}. It must return HTTP 403/access_denied because no per-agent lease exists yet.
+16. Add a note exactly containing: COMPLEX_PERMISSION_WALL {marker}: Wazuh alert_index finance-edr-restricted read denied by missing_agent_vault_lease; access request required.
+17. POST /api/tickets/{ticket_id}/access-request with agent_id, resource `Wazuh alert index finance-edr-restricted`, permission `read`, account_ref `agent-<agent_id>`, assignment_group `Security Operations`, risk_level `medium`, sync_provider true, reason `COMPLEX_PERMISSION_WALL {marker}: Wazuh alert index read required for phishing plus EDR correlation.`, and lease_request {{"system":"wazuh","resource_type":"alert_index","resource_id":"finance-edr-restricted","action":"read","credential_ref":"<vault:wazuh_finance_edr_read_after_approval>"}}.
+18. Write checkpoint.json with step `waiting-for-wazuh-access-{marker}`, status `waiting_for_access`, progress_pct 45, output `COMPLEX_PERMISSION_WALL {marker}`, and an ISO timestamp. Reply exactly: waiting for wazuh access {marker}
 
 Resume path after Wazuh access approval:
 1. GET /api/tickets/{ticket_id}/context and find the approved/granted access request and change_id.
@@ -289,8 +335,8 @@ Resume path after Wazuh access approval:
 Final resume path after containment approval:
 1. GET /api/tickets/{ticket_id}/context and find the approved containment change.
 2. POST /api/changes/<containment_change_id>/complete with completed_by `agent_<agent_id>` and result `COMPLEX_CONTAINMENT_COMPLETE {marker}: lab-safe URL watchlist entry, mailbox quarantine review, endpoint evidence review, and no blanket EDR suppression.`
-3. Add a note exactly containing: COMPLEX_CONTAINMENT_COMPLETE {marker}: clicked URL, no credential entry, host FIN-LT-042 reviewed, no blanket suppression, precise future rule tuning requires separate approval.
-4. POST /api/postmortems with ticket_id, agent_id, task_id if known, status `ready_for_review`, summary mentioning `COMPLEX_INCIDENT_COMPLETE {marker}`, went_well, improvements, workflow_proposal for a combined phishing+EDR+access+user-response workflow, two skill_proposals, three test_cases, guardrails, documentation.
+3. Add a note exactly containing: COMPLEX_CONTAINMENT_COMPLETE {marker}: clicked URL was analyzed through sandbox/reputation evidence without direct target retrieval, no credential entry, host FIN-LT-042 reviewed, no blanket suppression, precise future rule tuning requires separate approval.
+4. POST /api/postmortems with ticket_id, agent_id, task_id if known, status `ready_for_review`, summary mentioning `COMPLEX_INCIDENT_COMPLETE {marker}`, went_well including user-response, access gate, containment gate, and URL sandbox evidence, improvements, workflow_proposal for a combined phishing+EDR+access+user-response+URL-safety workflow, two skill_proposals, three test_cases, guardrails including no direct suspicious URL retrieval, documentation.
 5. POST /api/postmortems/<id>/review with reviewed_by `complex-demo-reviewer`, approved true, review_notes `Approved lab proof {marker}`.
 6. POST /api/postmortems/<id>/promote with create_knowledge true, create_workflow true, create_skills true, workflow_status `draft`, created_by `complex-demo-agent`, mark_promoted true.
 7. POST /api/tickets/{ticket_id}/status with status `resolved`, actor `agent_<agent_id>`, reason `COMPLEX_INCIDENT_COMPLETE {marker}: phishing plus EDR incident completed with user response, steering, access gate, containment gate, postmortem, and workflow assets.`, close_provider false.
@@ -374,6 +420,13 @@ def main():
     sync = request(args.base, "POST", f"/api/tickets/{ticket_id}/sync")
     print(json.dumps({"sync": sync}), flush=True)
     wait_for_note(args.base, ticket_id, f"COMPLEX_ITOP_STEER_OBSERVED {marker}", timeout=args.timeout)
+    url_context, url_attachment = wait_for_url_sandbox_evidence(args.base, ticket_id, marker, timeout=args.timeout)
+    print(json.dumps({"url_sandbox_attachment": {
+        "id": url_attachment.get("id"),
+        "filename": url_attachment.get("filename"),
+        "storage_ref": url_attachment.get("storage_ref"),
+        "metadata": url_attachment.get("metadata"),
+    }}), flush=True)
 
     _access_context, access = wait_for_access_request(args.base, ticket_id, marker, timeout=args.timeout)
     change_id = access.get("change_id")
@@ -411,6 +464,7 @@ def main():
         "access_change_id": change_id,
         "containment_change_id": containment.get("id"),
         "postmortem_id": postmortem.get("id"),
+        "url_sandbox_attachment_id": url_attachment.get("id"),
         "workflow_promoted": workflow_hit,
         "initial_agent_steering_events": steering.get("total"),
         "ticket_status": (post_sync_context.get("ticket") or {}).get("status"),

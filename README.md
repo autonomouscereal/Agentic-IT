@@ -96,6 +96,13 @@ deployment record; the child tickets keep iTop, Wazuh, Mailcow, GitLab,
 Keycloak, proxy, bridge, and other module work bounded enough for agents,
 approval gates, evidence, postmortems, and demos to stay readable.
 
+For incremental onboarding, each module card also has its own notes field and
+ticket actions. Operators can create a single-module deploy/integrate ticket,
+assign an agent to that single module, or create an undeploy/reinstall ticket
+when replacing a reference module with a customer-owned tool. Modules that are
+already healthy or built into the control plane show as active and default to
+`Keep active` so the bulk plan does not redeploy working integrations.
+
 Installer entrypoints:
 
 ```bash

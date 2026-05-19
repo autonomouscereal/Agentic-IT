@@ -62,15 +62,19 @@ def main():
         assert_true(required in module_ids, f"missing module {required}")
     assert_true("comfyui" in {m["id"] for m in manifest.get("excluded_modules", [])}, "comfyui must be excluded")
 
+    statuses = request("GET", "/api/setup/status")
+    assert_true(statuses.get("module_statuses", {}).get("soc-dashboard"), "setup module status missing dashboard")
+
     plan = request("POST", "/api/setup/plan", {
         "profile": "soc",
         "existing_tools": ["servicenow", "crowdstrike", "splunk", "mail-gateway", "itop"],
         "include": ["gitlab"],
         "exclude": ["mailcow"],
-        "module_actions": {"mailcow": "disabled", "itop": "integrate", "gitlab": "deploy"},
+        "module_actions": {"mailcow": "disabled", "itop": "integrate", "gitlab": "deploy", "soc-dashboard": "keep"},
         "deploy_missing": True,
     })
     assert_true(plan["summary"]["total"] > 5, "setup plan too small")
+    assert_true(any(step["module_id"] == "soc-dashboard" and step["status"] == "already_active" for step in plan["steps"]), "keep active status not reflected")
     assert_true(any(step["module_id"] == "itop" and step["status"] == "integrate_existing" for step in plan["steps"]), "existing ITSM integration not reflected")
     assert_true(not any(step["module_id"] == "mailcow" for step in plan["steps"]), "excluded module still present")
     assert_true(plan["summary"].get("disabled") >= 1, "disabled module scope not reflected")
@@ -79,6 +83,7 @@ def main():
     ticket = request("POST", "/api/setup/ticket", {
         "profile": "minimal",
         "module_actions": {"ai-proxy": "deploy", "searxng": "disabled", "web-research": "disabled"},
+        "module_notes": {"ai-proxy": "Use the built-in proxy port from the installer smoke."},
         "deploy_missing": True,
         "ai_base_url": "http://ai-proxy:4001",
         "proxy_mode": "deploy",
@@ -98,6 +103,21 @@ def main():
         ticket["ticket"].get("auto_assignment", {}).get("status") != "assigned",
         "setup ticket incorrectly ran RACI auto-assignment",
     )
+
+    module_ticket = request("POST", "/api/setup/module-ticket", {
+        "module_id": "ai-proxy",
+        "action": "reinstall",
+        "notes": "Smoke test one-module reinstall ticket with teardown guardrails.",
+        "proxy_mode": "deploy",
+        "proxy_url": "http://localhost:4001",
+        "harness": "hermes",
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4-flash",
+        "spawn_agent": False,
+        "sync_provider": False,
+    })
+    assert_true(module_ticket.get("ticket", {}).get("id"), "single module ticket was not created")
+    assert_true(module_ticket.get("module", {}).get("status") == "redeploy", "single module reinstall status not reflected")
 
     dry_run = subprocess.run(
         [sys.executable, str(ROOT / "installer" / "bootstrap.py"), "--dry-run", "--no-start", "--profile", "minimal", "--target", str(ROOT / ".tmp-install-smoke")],
@@ -136,6 +156,7 @@ def main():
         "plan_steps": plan["summary"]["total"],
         "setup_ticket_id": ticket["ticket"]["id"],
         "module_tickets": len(ticket.get("module_tickets") or []),
+        "single_module_ticket_id": module_ticket["ticket"]["id"],
     }, indent=2))
 
 

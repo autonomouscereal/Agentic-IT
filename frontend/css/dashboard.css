@@ -651,6 +651,13 @@ body {
 .status-rejected { background: rgba(255, 71, 87, 0.15); color: #ff4757; }
 .status-completed { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
 .status-healthy { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
+.status-ready,
+.status-built-in,
+.status-already-active { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
+.status-configured { background: rgba(0, 212, 255, 0.15); color: #00d4ff; }
+.status-not-configured { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
+.status-undeploy,
+.status-redeploy { background: rgba(255, 215, 0, 0.15); color: #ffd700; }
 .status-down { background: rgba(255, 71, 87, 0.15); color: #ff4757; }
 
 /* Class Badge - shows ticket type */
@@ -1685,6 +1692,27 @@ body {
     flex-wrap: wrap;
     gap: 12px;
     margin: 10px 0 8px;
+}
+
+.module-status-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0 8px;
+}
+
+.module-note-input {
+    min-height: 74px;
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+.module-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0;
 }
 
 .setup-summary {
