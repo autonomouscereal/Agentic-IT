@@ -64,3 +64,6 @@ Current cleanup target state:
 - Browser validation on 2026-05-19 confirmed `demo_account_1` login over
   HTTPS, `Demo Proofs` rendering ticket `621` first, the ticket modal evidence
   trail loading, and no console/page/http errors.
+- A full authenticated Chrome tab sweep also passed across Overview, Tickets,
+  Intake, Agents, Changes, Workflows, Postmortems, CI/CD, Learning, Tools,
+  Setup, Access, and Audit with no console/page/http errors.

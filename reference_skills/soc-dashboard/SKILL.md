@@ -176,6 +176,8 @@ Validation evidence from 2026-05-19:
 - Authenticated Chrome validation confirmed `Demo Proofs` renders ticket `621`
   first, opens the evidence trail modal, and leaves no console/page/http errors;
   `/favicon.ico` returns `204` without weakening protected UI/API routes.
+- Full authenticated Chrome tab sweep passed across all primary dashboard tabs
+  with no console/page/http errors.
 - Source regression passed: `142 passed`, JS syntax checks, text hygiene, and
   HTTPS smoke against `https://192.168.50.222:25443`.
 

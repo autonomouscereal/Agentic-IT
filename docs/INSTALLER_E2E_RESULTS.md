@@ -130,6 +130,9 @@ Related real-agent regression proofs on the restored live stack:
   `https://192.168.50.222:25443`: `demo_account_1` logged in, the `Demo
   Proofs` filter rendered ticket `621` first with iTop/Demo badges, the ticket
   modal loaded the evidence trail, and no console/page/http errors remained.
+- Authenticated Chrome tab sweep passed across Overview, Tickets, Intake,
+  Agents, Changes, Workflows, Postmortems, CI/CD, Learning, Tools, Setup,
+  Access, and Audit with no console/page/http errors.
 - `/favicon.ico` is now a public no-content route (`204`) so browser asset
   requests do not create noisy auth-denied `403` console warnings while UI/API
   authentication remains enforced.
