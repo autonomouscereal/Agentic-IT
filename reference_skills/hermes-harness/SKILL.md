@@ -57,6 +57,22 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider nous -m deepseek/deepseek-v4-fla
 python scripts/switch_model_route.py --route local --restart
 ```
 
+For the current live lab, switch route profiles on server `ai` from
+`/home/cereal/SOC_TESTING/soc-dashboard` through the `server-manager` skill.
+The live proxy is `http://ai-proxy:4001` inside Docker and
+`http://127.0.0.1:4401` on the deployment host:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/switch_model_route.py --route external --restart
+curl -sS -X POST http://127.0.0.1:4401/api/route \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"deepseek/deepseek-v4-flash"}'
+```
+
+Use `--route local --restart` to return to local/on-prem posture before
+customer or government demos that should not use external providers.
+
 ## Guardrails
 
 - Do not pass Nous, OpenAI, Anthropic, or other provider tokens in source,

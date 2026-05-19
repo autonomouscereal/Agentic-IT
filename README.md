@@ -17,7 +17,8 @@ approved reference modules when those capabilities are missing.
 - UI/API: `https://192.168.50.222:25443` (runtime local-CA certificate)
 - Local service API: `http://127.0.0.1:25480`
 - HTTPS proxy health: `https://192.168.50.222:25443/nginx-health`
-- Model gateway/proxy: `http://192.168.50.222:4001`
+- Model gateway/proxy: `http://ai-proxy:4001` inside Docker; live lab
+  deployment-host port is `http://127.0.0.1:4401` on the AI server.
 - Reference modules: iTop `http://192.168.50.222:25432`, Wazuh Dashboard `https://192.168.50.222:26443`, Keycloak `https://192.168.50.222:8443/admin/master/console/`, GitLab `http://192.168.50.222`, Mailcow/Roundcube `http://192.168.50.222:2581`
 - Current Windows working copy: `D:\IT AGENT PROJECT`
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
@@ -178,6 +179,22 @@ Use `local` for customer/government demos unless you are explicitly proving
 external provider fallback. The switch updates `.env`, `runtime/proxy_config.json`,
 `agent_models.json`, Hermes provider defaults, and the API/proxy containers
 when `--restart` is used.
+
+For the current live lab, run the switch on the AI server from the installed
+deployment directory, not from `D:\IT AGENT PROJECT`:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/switch_model_route.py --route external --restart
+python3 scripts/switch_model_route.py --route local --restart
+curl -sS http://127.0.0.1:4401/api/route \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"deepseek/deepseek-v4-flash"}'
+```
+
+Agents should use the `server-manager` skill to execute that same command on
+server `ai`. Do not run `--restart` from a source checkout that lacks the
+runtime `.env`; the switcher now refuses that case before editing files.
 
 Managed agents run with `acceptEdits` plus the bounded allowlist needed for dashboard/API work and trusted internal UI checks: `Read`, `Write`, guarded `curl`, `node`, `npx`, and Playwright. Suspicious URLs from tickets, alerts, or email are never fetched directly; agents must use passive evidence or approved sandbox/reputation adapters. Claude Code refuses full bypass mode when running as root, and full bypass is not needed because destructive work is guarded by dashboard change requests.
 

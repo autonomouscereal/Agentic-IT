@@ -24,7 +24,7 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | Path | `/home/cereal/SOC_TESTING/soc-dashboard` |
 | URL | `https://192.168.50.222:25443` |
 | Local API | `http://127.0.0.1:25480` |
-| Proxy | `http://192.168.50.222:4001` |
+| Proxy | `http://ai-proxy:4001` inside Docker; `http://127.0.0.1:4401` on the deployment host |
 | Default harness | Hermes Agent |
 | Product default model | `local/agent-default` |
 | Lab external model | `deepseek/deepseek-v4-flash` |
@@ -75,6 +75,29 @@ python scripts/switch_model_route.py --route local --restart
 
 The switch updates `.env`, `runtime/proxy_config.json`, and
 `agent_models.json`. Provider keys remain in the vault/runtime environment.
+
+Current lab route switch, for operators or agents using the `server-manager`
+skill:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/switch_model_route.py --route external --restart
+python3 scripts/switch_model_route.py --route local --restart
+```
+
+Verify the current live route from the AI server:
+
+```bash
+curl -sS http://127.0.0.1:4401/health
+curl -sS -X POST http://127.0.0.1:4401/api/route \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"deepseek/deepseek-v4-flash"}'
+```
+
+The proxy host port is intentionally bound to localhost on the deployment
+server. Dashboard/API containers use `http://ai-proxy:4001`; operators and
+agents that need host-side checks should run them through server-manager on
+server `ai`.
 
 ## HTTPS Edge
 

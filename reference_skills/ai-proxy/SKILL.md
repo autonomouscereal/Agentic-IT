@@ -95,6 +95,36 @@ python scripts/switch_model_route.py --route external --restart
 python scripts/switch_model_route.py --route local --restart
 ```
 
+Current live lab route switch:
+
+- Server-manager server: `ai`
+- Deployment directory: `/home/cereal/SOC_TESTING/soc-dashboard`
+- Container proxy URL: `http://ai-proxy:4001`
+- Deployment-host proxy URL: `http://127.0.0.1:4401`
+
+When the user asks to switch or restart model routing for the live demo, use
+the `server-manager` skill and run the switch from the deployment directory:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/switch_model_route.py --route external --restart
+# or
+python3 scripts/switch_model_route.py --route local --restart
+```
+
+Then verify:
+
+```bash
+curl -sS http://127.0.0.1:4401/health
+curl -sS -X POST http://127.0.0.1:4401/api/route \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"deepseek/deepseek-v4-flash"}'
+```
+
+Do not run `--restart` from a source checkout without the deployment `.env`.
+The script now checks for required runtime env values before editing/restarting,
+but agents should still use the installed deployment path for live changes.
+
 ## Test Expectations
 
 - Model discovery returns configured aliases for the active profile plus

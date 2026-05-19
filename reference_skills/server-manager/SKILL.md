@@ -40,6 +40,32 @@ Encrypted, agnostic SSH management tool. Zero hardcoded secrets. Zero escaping i
 
 **Command flow (no escaping issues):** Script writes command to file -> `--command-file` or `--script` reads it -> passes to remote bash via SFTP upload + execution. Bash shell never parses the command string.
 
+## Live Agentic Operations Route Switch
+
+When the user asks to switch or restart the Agentic Operations model route for
+the live demo, use server `ai` and run the command inside the installed
+deployment directory:
+
+```powershell
+@'
+set -euo pipefail
+cd /home/cereal/SOC_TESTING/soc-dashboard
+python3 scripts/switch_model_route.py --route external --restart
+curl -sS http://127.0.0.1:4401/health
+curl -sS -X POST http://127.0.0.1:4401/api/route \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"deepseek/deepseek-v4-flash"}'
+'@ | Set-Content -Path "$env:TEMP\switch_agentic_ops_route.sh" -Encoding ascii
+python "C:\Users\cereal\.agents\skills\server-manager\ssh_client.py" --server ai --command-file "$env:TEMP\switch_agentic_ops_route.sh"
+```
+
+Use `--route local --restart` to return to local/on-prem routing. Do not run
+the restart from `D:\IT AGENT PROJECT` unless that directory is an installed
+deployment with a complete runtime `.env`; the live deployment is
+`/home/cereal/SOC_TESTING/soc-dashboard`. The live proxy is
+`http://ai-proxy:4001` inside Docker and `http://127.0.0.1:4401` on the AI
+server host.
+
 ## Stable Credential Access After Skill Sync
 
 For the Windows lab, the stable credential command is:
