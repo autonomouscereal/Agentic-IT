@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-ENV NODE_PATH=/usr/local/lib/node_modules
+ENV NODE_PATH=/usr/lib/node_modules
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git gnupg procps \

@@ -228,7 +228,7 @@ async def _spawn_replacement(agent, task, reason):
     from services import agent_runner
     result = await agent_runner.spawn_agent(
         agent["ticket_id"],
-        agent.get("selected_model") or agent.get("model") or "qwen/qwen3.6-27b",
+        agent.get("selected_model") or agent.get("model") or "deepseek/deepseek-v4-flash",
         task.get("prompt") or f"Continue ticket {agent['ticket_id']} and recover from: {reason}",
         task.get("task_type") or "ticket_resolution",
     )

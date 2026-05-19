@@ -400,6 +400,40 @@ Observed outputs:
 
 ## Remaining Notes
 
+## 2026-05-19 Harness And Phishing Regression Addendum
+
+Live source/runtime reconciliation verified after the setup-module work:
+
+- Runner-health reported `harness=hermes`,
+  `default_model=deepseek/deepseek-v4-flash`, and
+  `AGENT_LLM_BASE_URL=http://ai-proxy:4001`.
+- DB/schema/RACI defaults were reconciled by
+  `018_default_hermes_external_model.sql`; auto-assignment defaults now point
+  to `deepseek/deepseek-v4-flash`.
+- Ticket `688` was stopped and annotated because it was launched by an old
+  script path with explicit `qwen/qwen3.6-27b`.
+- Ticket `689` proved the corrected DeepSeek path through URL sandbox evidence
+  but exposed provider-capacity exhaustion before fallback.
+- Ticket `690` passed the full URL-safe phishing/EDR workflow with user
+  response, dashboard and iTop steering, Wazuh access request `31`, gates
+  `181`/`182`, postmortem `106`, workflow `4` update, URL sandbox attachment
+  `92`, and zero active processes after completion.
+- OpenRouter fallback was added to the deployed proxy after Nous and before
+  local LM Studio. Direct `openrouter/free` validation returned a tool call,
+  proxy `/v1/models` advertised the OpenRouter aliases, and proxy chat for
+  `deepseek/deepseek-v4-flash` successfully fell through to OpenRouter when
+  the primary route was unavailable.
+- Ticket `695` passed the fresh URL-safe phishing/EDR hybrid proof with
+  requester/user-response evidence, steering notes, completed gates
+  `185`/`186`, postmortem `107`, no direct suspicious URL fetch, and no active
+  runner processes. It also exposed the terminal-proof/provider-status drift
+  edge; the runner now resolves from terminal evidence and iTop close uses
+  compact provider notes. A forced provider sync kept ticket `695` resolved.
+- Approval audit entries for changes `181` and `182` now show the approver
+  (`demo_account_1`) in summary and in `approved_by` / `approval_actor`.
+
+## Remaining Notes
+
 The scratch E2E install is intentionally still running on `25481/5434` for inspection. It can be removed with:
 
 ```bash

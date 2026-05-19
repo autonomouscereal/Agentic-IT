@@ -6,7 +6,7 @@ Last updated: 2026-05-19.
 
 ### Setup page needed incremental per-module work controls
 
-Status: fixed in source; live deployment verification in progress.
+Status: fixed in source and live deployment.
 
 The setup flow could create a parent setup ticket and child tickets for a full
 profile, but operators still had to manipulate the whole on/off plan when they
@@ -26,7 +26,7 @@ Fix:
 
 ### API/agent runtime had Playwright CLI but no browser binaries
 
-Status: fixed in source; live deployment verification in progress.
+Status: fixed in source and live deployment.
 
 While preparing the URL-safe 621/531 hybrid real-agent proof, the live API
 container showed `npx playwright --version` working, but launching Chromium
@@ -43,13 +43,107 @@ Fix:
 
 - Install a pinned Playwright CLI/package and Chromium browser dependencies in
   the API image.
-- Set `NODE_PATH=/usr/local/lib/node_modules` so small agent-written Node
+- Set `NODE_PATH=/usr/lib/node_modules` so small agent-written Node
   scripts can `require('playwright')` without local npm initialization.
 - Add stable agent context that explains when browser validation is appropriate
   and keeps suspicious URL analysis on sandbox/reputation paths, not direct
   browsing.
 - Expand default agent tool allowlists for local browser validation commands
   while keeping secrets and unsafe target retrieval guarded.
+
+Live verification:
+
+- API image rebuilt on 2026-05-19.
+- Inside the live API/agent container,
+  `node -e "require('playwright')"` launched Chromium and read
+  `PLAYWRIGHT_AGENT_OK`.
+
+### Complex proof script defaulted to local qwen instead of Hermes external model
+
+Status: fixed in source and superseded on live ticket `688`.
+
+The URL-safe 621/531 hybrid proof was launched with an explicit
+`qwen/qwen3.6-27b` argument, which forced Hermes to use the local
+`dashboard-proxy` provider route even though the platform default is Hermes
+plus `deepseek/deepseek-v4-flash` through the external Nous route. Runner
+health showed `AGENT_HARNESS=hermes`, `AGENT_LLM_BASE_URL=http://ai-proxy:4001`,
+and `default_model=deepseek/deepseek-v4-flash`; the local model usage came from
+test/script defaults and older DB seed defaults, not from a hidden runner
+fallback.
+
+Fix:
+
+- Stop only the superseded test-lane agent on ticket `688` and record an
+  internal note explaining the model-routing reason.
+- Change agentic proof/demo script defaults to `deepseek/deepseek-v4-flash`.
+- Change source DB/schema/RACI defaults to `deepseek/deepseek-v4-flash`.
+- Add migration `018_default_hermes_external_model.sql` to reconcile live
+  defaults for fresh and existing deployments while leaving qwen aliases
+  available for explicit local-model tests.
+
+### External DeepSeek 503 exhausted retries without local fallback
+
+Status: fixed in source and live proxy route verified on 2026-05-19.
+
+Fresh ticket `689` proved the corrected Hermes external default model path with
+`deepseek/deepseek-v4-flash` and reached requester response, dashboard
+steering, iTop steering, URL sandbox evidence, and permission-wall notes.
+However, the external provider returned repeated HTTP `503` capacity errors
+after the URL sandbox evidence. The runner retried the same external model, but
+after exhausting retries it failed the task instead of continuing on the
+configured local fallback model.
+
+Fix:
+
+- Add `AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED` and
+  `AGENT_TRANSIENT_MODEL_FALLBACK_MODEL`.
+- Keep the preferred behavior as external model first with bounded transient
+  retries.
+- After retries are exhausted, update the agent `selected_model` to the local
+  fallback, preserve workspace progress, queue the same task, add a ticket note,
+  and emit `agent_transient_model_fallback_scheduled`.
+- Keep local qwen usage visible and explicit in the audit/ticket trail instead
+  of hiding it as an unexplained model switch.
+- Add OpenRouter as the first external proxy fallback after Nous and before
+  local LM Studio. The validated fallback alias is `openrouter/free`; the
+  provider key is runtime/vault-only.
+
+Verification:
+
+- Direct OpenRouter `openrouter/free` returned a tool-call response.
+- Proxy `/v1/models` advertised Nous, OpenRouter, and LM Studio aliases.
+- Proxy chat for `deepseek/deepseek-v4-flash` successfully fell through to
+  OpenRouter when the primary route was unavailable.
+
+### Terminal proof completed but provider ticket stayed open
+
+Status: fixed in source and live-recovered on 2026-05-19.
+
+Ticket `695` completed the URL-safe phishing/EDR hybrid flow with completed
+approval gates and a postmortem, but the external provider ticket remained
+open after the harness missed the final explicit ticket-close call. A first
+supervisor recovery attempt then proved a second issue: iTop rejected the
+provider-close payload because one transition field was limited to 255
+characters.
+
+Fix:
+
+- Allow terminal evidence recovery when there is postmortem evidence even if
+  the postmortem is still `ready_for_review`.
+- Resolve the local dashboard ticket from persisted terminal evidence only
+  when all gates are complete, final notes exist, and no open change gates
+  remain.
+- Close iTop with compact provider notes while preserving full evidence in the
+  dashboard notes and audit log.
+- Replace raw provider traceback-style ticket notes with short operator
+  summaries; raw adapter detail remains in audit/provider error fields.
+
+Verification:
+
+- Ticket `695` was recovered to dashboard status `resolved`.
+- Forced iTop sync kept provider status `resolved`.
+- The cleaned ticket notes now describe the adapter issue and recovery without
+  exposing long raw provider traces in the demo view.
 
 ### Compose rebuild can leave duplicate API container names after interrupted deploys
 

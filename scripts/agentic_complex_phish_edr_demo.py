@@ -295,6 +295,9 @@ You are proving a complex real-world phishing + EDR incident flow for marker {ma
 Use only the dashboard API at http://localhost:8000 and files in this work directory.
 Use `agent_vault.json` to find your agent_id. Use Write to create JSON payload
 files and Bash `curl -d @file`; do not put inline JSON directly in Bash.
+Use the exact endpoints and payloads listed below. Do not inspect `/openapi.json`,
+`/docs`, or `/redoc`, and do not pipe curl output into Python, shell, node, or
+any interpreter.
 Do not use external credentials. Secret values must never be requested or printed.
 Read `agent_steering_inbox.json` before each major action/checkpoint.
 
@@ -348,7 +351,7 @@ Final resume path after containment approval:
 def main():
     parser = argparse.ArgumentParser(description="Run complex phishing + EDR active-agent proof")
     parser.add_argument("base", nargs="?", default="http://127.0.0.1:25480")
-    parser.add_argument("model", nargs="?", default="qwen/qwen3.6-27b")
+    parser.add_argument("model", nargs="?", default="deepseek/deepseek-v4-flash")
     parser.add_argument("--itop-client", default="/home/cereal/SOC_TESTING/itop-deployment/scripts/itop_client.py")
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--marker", default=f"COMPLEX_PHISH_EDR_{int(time.time())}")

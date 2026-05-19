@@ -82,6 +82,52 @@ class ChangeApprovalResumeTests(unittest.TestCase):
 
         self.assertEqual(result, "")
 
+    def test_approval_actor_prefers_authenticated_ui_identity(self):
+        module = load_changes_module()
+
+        request = types.SimpleNamespace(
+            state=types.SimpleNamespace(
+                access_decision={
+                    "identity": {
+                        "username": "demo_account_1",
+                        "auth_mode": "signed-session",
+                    }
+                }
+            )
+        )
+
+        actor = module._approval_actor_from_request(
+            request,
+            {"approved_by": "spoofed-ui-body"},
+            "approved_by",
+            default="dashboard",
+        )
+
+        self.assertEqual(actor, "demo_account_1")
+
+    def test_approval_actor_allows_service_token_named_automation(self):
+        module = load_changes_module()
+
+        request = types.SimpleNamespace(
+            state=types.SimpleNamespace(
+                access_decision={
+                    "identity": {
+                        "username": "complex-proof-runner",
+                        "auth_mode": "service-token",
+                    }
+                }
+            )
+        )
+
+        actor = module._approval_actor_from_request(
+            request,
+            {"approved_by": "complex-access-approver"},
+            "approved_by",
+            default="dashboard",
+        )
+
+        self.assertEqual(actor, "complex-access-approver")
+
     def test_change_completion_returns_access_sync_evidence(self):
         module = load_changes_module()
         sync_calls = []

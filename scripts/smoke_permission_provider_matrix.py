@@ -206,7 +206,7 @@ def main():
     parser.add_argument("base", nargs="?", default="http://127.0.0.1:25480")
     parser.add_argument("--repo", default=".")
     parser.add_argument("--manage-auth", action="store_true")
-    parser.add_argument("--model", default="qwen/qwen3.6-27b")
+    parser.add_argument("--model", default="deepseek/deepseek-v4-flash")
     parser.add_argument("--itop-client", default="/home/cereal/SOC_TESTING/itop-deployment/scripts/itop_client.py")
     args = parser.parse_args()
 

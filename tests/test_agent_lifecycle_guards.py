@@ -131,6 +131,9 @@ class TransientModelRetryTests(unittest.TestCase):
         self.assertTrue(module._is_transient_model_capacity_error(
             "API call failed after 3 retries: HTTP 503: The requested model is temporarily unavailable due to upstream capacity limits."
         ))
+        self.assertTrue(module._is_transient_model_capacity_error(
+            "diff noise " * 300 + "API call failed after 3 retries: HTTP 503: upstream capacity limits."
+        ))
         self.assertTrue(module._is_transient_model_capacity_error("HTTP 429 rate limit exceeded"))
         self.assertTrue(module._is_transient_model_capacity_error("provider overloaded"))
 
@@ -138,6 +141,80 @@ class TransientModelRetryTests(unittest.TestCase):
         module = load_agent_runner()
         self.assertFalse(module._is_transient_model_capacity_error("curl returned HTTP 403 missing_agent_vault_lease"))
         self.assertFalse(module._is_transient_model_capacity_error("agent wrote checkpoint waiting_for_access"))
+
+    def test_transient_provider_summary_hides_raw_transcript(self):
+        module = load_agent_runner()
+        summary = module._transient_model_operator_summary(
+            "diff output " * 100 + "API call failed after 3 retries: HTTP 503 upstream capacity limits"
+        )
+        self.assertIn("capacity", summary.lower())
+        self.assertNotIn("diff output", summary)
+
+    def test_exhausted_external_retry_schedules_local_fallback(self):
+        module = load_agent_runner()
+        module.AGENT_TRANSIENT_MODEL_RETRY_MAX = 2
+        module.AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS = 0
+        module.AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED = True
+        module.AGENT_TRANSIENT_MODEL_FALLBACK_MODEL = "qwen/qwen3.6-27b"
+        updates = []
+        notes = []
+        events = []
+        scheduled = []
+
+        async def fetchrow(query, *args):
+            if "SELECT selected_model, model FROM agents" in query:
+                return {
+                    "selected_model": "deepseek/deepseek-v4-flash",
+                    "model": "deepseek/deepseek-v4-flash",
+                }
+            if "SELECT priority FROM tickets" in query:
+                return {"priority": "P2"}
+            return None
+
+        async def execute(query, *args):
+            updates.append((query, args))
+            return None
+
+        async def add_agent_note(ticket_id, agent_id, task_id, title, body, source="agent-control-plane"):
+            notes.append((ticket_id, agent_id, task_id, title, body, source))
+            return 71
+
+        async def log_event(*args, **kwargs):
+            events.append(args)
+            return None
+
+        original_create_task = module.asyncio.create_task
+
+        def fake_create_task(coro):
+            scheduled.append(coro)
+            coro.close()
+            return None
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module._add_agent_note = add_agent_note
+        module.log_event = log_event
+        module.asyncio.create_task = fake_create_task
+        try:
+            result = asyncio.run(module._schedule_transient_model_fallback(
+                264,
+                261,
+                {"ticket_id": 689, "task_type": "ticket_resolution"},
+                "/app/agent_work/264",
+                "prompt",
+                {"stdout": "partial"},
+                "HTTP 503 temporarily unavailable",
+                3,
+            ))
+        finally:
+            module.asyncio.create_task = original_create_task
+
+        self.assertEqual(result["status"], "fallback_scheduled")
+        self.assertEqual(result["fallback_model"], "qwen/qwen3.6-27b")
+        self.assertTrue(any("selected_model = $1" in query and args[0] == "qwen/qwen3.6-27b" for query, args in updates))
+        self.assertEqual(notes[0][3], "Agent provider fallback scheduled")
+        self.assertTrue(any(event[3] == "agent_transient_model_fallback_scheduled" for event in events))
+        self.assertEqual(len(scheduled), 1)
 
 
 def load_tickets_route():
@@ -1417,6 +1494,68 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertTrue(any(call[3] == "ticket_status_recovered_from_terminal_evidence" for call in event_calls))
         self.assertEqual(note_calls[0][0], 531)
         self.assertIn("terminal evidence recovery", note_calls[-1][3].lower())
+
+    def test_terminal_evidence_recovery_allows_ready_postmortem_and_closes_provider(self):
+        module = load_agent_runner()
+        execute_calls = []
+        close_calls = []
+        note_calls = []
+
+        async def fetchrow(query, *args):
+            if "SELECT id, agent_id, ticket_id, task_type, status, pid, output" in query:
+                return {
+                    "id": 271,
+                    "agent_id": 274,
+                    "ticket_id": 695,
+                    "task_type": "ticket_resolution",
+                    "status": "running",
+                    "pid": None,
+                    "output": "",
+                }
+            if "FROM agent_tasks" in query:
+                return {
+                    "id": 271,
+                    "agent_id": 274,
+                    "ticket_id": 695,
+                    "task_type": "ticket_resolution",
+                    "started_at": "2026-05-19T16:40:00",
+                    "created_at": "2026-05-19T16:40:00",
+                }
+            return {
+                "ticket_status": "in_progress",
+                "completed_changes": 2,
+                "open_changes": 0,
+                "final_notes": 1,
+                "postmortems": 1,
+                "promoted_postmortems": 0,
+            }
+
+        async def execute(query, *args):
+            execute_calls.append((query, args))
+
+        async def log_event(*args):
+            pass
+
+        async def add_note(*args):
+            note_calls.append(args)
+
+        async def close_provider(ticket_id, agent_id, task_id, notes):
+            close_calls.append((ticket_id, agent_id, task_id, notes))
+            return {"status": "resolved"}
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module.log_event = log_event
+        module._add_agent_note = add_note
+        module._close_provider_ticket_if_needed = close_provider
+
+        result = asyncio.run(module.recover_completed_ticket_resolution(274, 271))
+
+        self.assertEqual(result["status"], "recovered")
+        self.assertTrue(result["evidence"]["auto_resolved"])
+        self.assertEqual(close_calls[0][0], 695)
+        self.assertTrue(any("provider_sync_status = 'synced'" in call[0] for call in execute_calls))
+        self.assertIn("terminal evidence recovery", note_calls[0][3].lower())
 
 
 if __name__ == "__main__":

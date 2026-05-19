@@ -13,7 +13,7 @@ from dashboard_auth import dashboard_auth_headers
 
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:25480"
-MODEL = sys.argv[2] if len(sys.argv) > 2 else "qwen/qwen3.6-27b"
+MODEL = sys.argv[2] if len(sys.argv) > 2 else "deepseek/deepseek-v4-flash"
 WAIT_SECONDS = int(os.environ.get("WAZUH_ACCESS_AGENT_WAIT_SECONDS", "3600"))
 IDLE_WAIT_SECONDS = int(os.environ.get("WAZUH_ACCESS_AGENT_IDLE_WAIT_SECONDS", "3600"))
 POLL_SECONDS = int(os.environ.get("WAZUH_ACCESS_AGENT_POLL_SECONDS", "15"))

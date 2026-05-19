@@ -3,12 +3,12 @@
 
 ALTER TABLE service_raci_rules
     ADD COLUMN IF NOT EXISTS auto_assign_agent BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN IF NOT EXISTS auto_agent_model VARCHAR(200) DEFAULT 'qwen/qwen3.6-27b',
+    ADD COLUMN IF NOT EXISTS auto_agent_model VARCHAR(200) DEFAULT 'deepseek/deepseek-v4-flash',
     ADD COLUMN IF NOT EXISTS auto_agent_prompt TEXT;
 
 UPDATE service_raci_rules
 SET auto_assign_agent = true,
-    auto_agent_model = COALESCE(auto_agent_model, 'qwen/qwen3.6-27b'),
+    auto_agent_model = COALESCE(auto_agent_model, 'deepseek/deepseek-v4-flash'),
     auto_agent_prompt = COALESCE(
         auto_agent_prompt,
         'Auto-work Security Operations phishing tickets end to end. Read all canonical context and provider evidence, create approval gates for remediation actions, complete approved lab-safe actions with evidence, and recommend postmortem/workflow improvements.'

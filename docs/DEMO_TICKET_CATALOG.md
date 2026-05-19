@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-19.
 
-Use the dashboard at `http://192.168.50.222:25480`. On the Tickets page, choose
+Use the dashboard at `https://192.168.50.222:25443`. On the Tickets page, choose
 the `Demo Proofs` filter to show the curated prepared examples in the order
 below. Open each ticket and use the `Evidence Trail` section for the human
 story: notes, agent work, approval gates, access requests, postmortems, and
@@ -14,6 +14,8 @@ The demo account password is still stored only in vault key `demo_account_1`.
 
 | Story | Dashboard Ticket | Provider | Evidence |
 | --- | --- | --- | --- |
+| Fresh URL-safe phishing plus EDR hybrid with requester response, note steering, access/containment gates, postmortem, and provider-status recovery | `695` | iTop `475` | agents `273`/`274`, gates `185`/`186` completed, postmortem `107`, URL sandbox evidence, iTop sync verified resolved after compact-close adapter fix |
+| URL-safe complex phishing plus EDR with user response, dashboard/iTop steering, Wazuh access gate, containment gate, postmortem, and workflow update | `690` | iTop `470` | agents `265`/`266`/`267`, gates `181`/`182` completed by `demo_account_1`, access request `31`, URL sandbox attachment `92`, postmortem `106` promoted, workflow `4` updated |
 | Complex phishing plus EDR with user response, permission wall, access approval, containment gate, and promoted learning | `531` | iTop `308` | 37 notes, agents `194`/`195`/`196`, gates `155` and `156` completed, postmortem `82` promoted |
 | GitLab Runner CI/CD remediation with real failed pipeline, agent fix branch, MR, final passing pipeline, and deployment gate | `83` | iTop `349` | CI/CD runs `11` failed and `12` passed, gates `39`/`40` completed, postmortem `21` ready for review |
 | Local CI/CD remediation plus scanner wrapper and Sysmon/EDR infrastructure repair | `82` | iTop `350` | CI/CD runs `8`/`9` needs-review and `10` passed, gates `34`/`36`/`37`/`38` completed, postmortem `20` ready for review |
@@ -32,14 +34,23 @@ The demo account password is still stored only in vault key `demo_account_1`.
 ## Live Demo Path
 
 1. Open Tickets and select `Demo Proofs`.
-2. Start with ticket `531` for the full enterprise story: user clarification,
+2. Start with ticket `695` for the newest URL-safe 621/531 hybrid proof:
+   requester response, dashboard/iTop steering, safe sandbox/reputation
+   handling with no direct suspicious URL fetch, Wazuh-style access wall,
+   approval gates, containment, postmortem, and the recovered provider close.
+3. Use ticket `690` for the cleaner promoted-workflow version of the same
+   story:
+   user clarification, dashboard/iTop steering, sandbox evidence with
+   `direct_fetch_performed=false`, Wazuh access wall, approval gates,
+   containment, postmortem, and workflow learning.
+4. Use ticket `531` as the older full enterprise story: user clarification,
    access wall, approval gate, scoped lease, containment, and promoted learning.
-3. Use ticket `83` to show real GitLab/CI/CD proof: failed scanner gate,
+5. Use ticket `83` to show real GitLab/CI/CD proof: failed scanner gate,
    agent remediation, MR, final passing pipeline, and deployment approval.
-4. Use ticket `580` with Mailcow/Roundcube open beside it to show email
+6. Use ticket `580` with Mailcow/Roundcube open beside it to show email
    quarantine evidence.
-5. Use ticket `525` or `539` to explain least-privilege credential leases.
-6. Use the ticket modal's `Full Audit Trail` button when you need raw evidence;
+7. Use ticket `525` or `539` to explain least-privilege credential leases.
+8. Use the ticket modal's `Full Audit Trail` button when you need raw evidence;
    otherwise the `Evidence Trail` section is the best audience-facing view.
 
 ## Cleanup Performed
@@ -71,4 +82,6 @@ Current cleanup target state:
 
 | Ticket | Reason | Current Disposition |
 | --- | --- | --- |
+| `688` | Superseded proof launched by an old script default with explicit local qwen instead of the preferred Hermes/DeepSeek route. | Internal routing-regression evidence only. |
+| `689` | Correctly used Hermes/DeepSeek and proved URL sandbox/user/steering steps, but external provider capacity exhausted before the fallback patch was deployed. | Use only to explain why fallback was added; ticket `690` is the successful replacement. |
 | `621` | The flow exposed unsafe direct suspicious URL retrieval behavior. A phishing/EDR agent must use passive evidence, reputation/sandbox adapters, or approved isolated detonation rather than curling or browsing a potentially malicious URL. | Demoted from `Demo Proofs`; use as a guardrail regression/evidence-hardening story only after the URL safety patch is deployed and verified. |

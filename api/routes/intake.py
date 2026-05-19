@@ -258,7 +258,7 @@ async def create_rule(body: dict = Body({})):
         (body or {}).get("risk_level") or "low",
         json_dumps(_as_list((body or {}).get("knowledge_tags"))),
         bool((body or {}).get("auto_assign_agent", False)),
-        (body or {}).get("auto_agent_model") or "qwen/qwen3.6-27b",
+        (body or {}).get("auto_agent_model") or "deepseek/deepseek-v4-flash",
         (body or {}).get("auto_agent_prompt"),
         (body or {}).get("enabled", True))
     await log_event("intake", "info", "dashboard", "raci_rule_saved", f"rule_{rule_id}", {"name": name})

@@ -63,6 +63,11 @@ AGENT_NO_OUTPUT_STALL_SECONDS = _env_int(
 )
 AGENT_TRANSIENT_MODEL_RETRY_MAX = _env_int("AGENT_TRANSIENT_MODEL_RETRY_MAX", 3)
 AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS = _env_int("AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS", 30)
+AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED = _env_bool("AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED", True)
+AGENT_TRANSIENT_MODEL_FALLBACK_MODEL = os.getenv(
+    "AGENT_TRANSIENT_MODEL_FALLBACK_MODEL",
+    "qwen/qwen3.6-27b",
+).strip()
 
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_AGENTS)
 _agent_queue = asyncio.PriorityQueue()
@@ -98,6 +103,16 @@ def _is_transient_model_capacity_error(text):
         "model is temporarily unavailable",
     )
     return any(pattern in lowered for pattern in patterns)
+
+
+def _transient_model_operator_summary(error):
+    """Return a concise operator-facing summary for noisy provider failures."""
+    lowered = str(error or "").lower()
+    if "429" in lowered or "rate limit" in lowered or "rate-limit" in lowered:
+        return "Model provider rate limit reached. The runner preserved progress and will retry or fall back according to provider policy."
+    if "503" in lowered or "temporarily unavailable" in lowered or "capacity" in lowered or "overloaded" in lowered:
+        return "Model provider capacity is temporarily unavailable. The runner preserved progress and will retry or fall back according to provider policy."
+    return "Model provider returned a transient error. The runner preserved progress and will retry or fall back according to provider policy."
 
 
 async def _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds):
@@ -137,6 +152,18 @@ async def _schedule_transient_model_retry(agent_id, task_id, task_meta, work_dir
     )
     attempts = int(attempts or 0)
     if attempts > AGENT_TRANSIENT_MODEL_RETRY_MAX:
+        fallback = await _schedule_transient_model_fallback(
+            agent_id,
+            task_id,
+            task_meta,
+            work_dir,
+            prompt,
+            result,
+            error,
+            attempts,
+        )
+        if fallback:
+            return fallback
         await log_event("agent", "error", f"agent_{agent_id}", "agent_transient_model_retry_exhausted",
                         f"task_{task_id}", {
                             "attempts": attempts,
@@ -155,11 +182,11 @@ async def _schedule_transient_model_retry(agent_id, task_id, task_meta, work_dir
     await execute(
         "UPDATE agent_tasks SET status = 'queued', output = $1, error_message = $2, "
         "pid = NULL, completed_at = NULL WHERE id = $3",
-        _tail_text(result.get("stdout", "")),
+        _transient_model_operator_summary(error),
         (
             f"Transient model/provider capacity error; retry {attempts}/"
             f"{AGENT_TRANSIENT_MODEL_RETRY_MAX} scheduled after {delay_seconds}s. "
-            f"{error[:1200]}"
+            f"{_transient_model_operator_summary(error)}"
         ),
         task_id,
     )
@@ -188,6 +215,79 @@ async def _schedule_transient_model_retry(agent_id, task_id, task_meta, work_dir
         _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds)
     )
     return {"status": "scheduled", "attempts": attempts, "delay_seconds": delay_seconds}
+
+
+async def _schedule_transient_model_fallback(agent_id, task_id, task_meta, work_dir, prompt, result, error, attempts):
+    """After external retries are exhausted, optionally continue on local model."""
+    fallback_model = AGENT_TRANSIENT_MODEL_FALLBACK_MODEL
+    if not AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED or not fallback_model:
+        return None
+    agent = await fetchrow("SELECT selected_model, model FROM agents WHERE id = $1", agent_id)
+    current_model = ((agent or {}).get("selected_model") or (agent or {}).get("model") or "").strip()
+    if current_model == fallback_model:
+        return None
+
+    ticket_id = (task_meta or {}).get("ticket_id")
+    priority = None
+    if ticket_id:
+        ticket = await fetchrow("SELECT priority FROM tickets WHERE id = $1", ticket_id)
+        priority = ticket.get("priority") if ticket else None
+    priority_rank = _ticket_priority_rank(priority, (task_meta or {}).get("task_type"))
+    delay_seconds = max(0, AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS)
+    await execute(
+        "UPDATE agents SET selected_model = $1, status = 'running', heartbeat = NOW(), error_message = $2 WHERE id = $3",
+        fallback_model,
+        (
+            f"External model {current_model or 'unknown'} exhausted transient retries; "
+            f"falling back to {fallback_model} for task {task_id}"
+        )[:500],
+        agent_id,
+    )
+    await execute(
+        "UPDATE agent_tasks SET status = 'queued', output = $1, error_message = $2, "
+        "pid = NULL, completed_at = NULL WHERE id = $3",
+        _transient_model_operator_summary(error),
+        (
+            f"Transient model/provider capacity exhausted after {attempts - 1}/"
+            f"{AGENT_TRANSIENT_MODEL_RETRY_MAX} retries on {current_model or 'unknown'}; "
+            f"queued fallback model {fallback_model} after {delay_seconds}s. "
+            f"{_transient_model_operator_summary(error)}"
+        ),
+        task_id,
+    )
+    if ticket_id:
+        await _add_agent_note(
+            ticket_id,
+            agent_id,
+            task_id,
+            "Agent provider fallback scheduled",
+            (
+                f"Agent `{agent_id}` exhausted `{AGENT_TRANSIENT_MODEL_RETRY_MAX}` transient "
+                f"model/provider retries on `{current_model or 'unknown'}` for task `{task_id}`. "
+                f"The runner preserved workspace progress and queued fallback model "
+                f"`{fallback_model}` after `{delay_seconds}` seconds."
+            ),
+            "agent-control-plane",
+        )
+    await log_event("agent", "warning", f"agent_{agent_id}", "agent_transient_model_fallback_scheduled",
+                    f"task_{task_id}", {
+                        "attempts": attempts,
+                        "retry_max": AGENT_TRANSIENT_MODEL_RETRY_MAX,
+                        "delay_seconds": delay_seconds,
+                        "priority_rank": priority_rank,
+                        "from_model": current_model,
+                        "fallback_model": fallback_model,
+                        "error": error[:500],
+                    })
+    asyncio.create_task(
+        _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds)
+    )
+    return {
+        "status": "fallback_scheduled",
+        "attempts": attempts,
+        "delay_seconds": delay_seconds,
+        "fallback_model": fallback_model,
+    }
 
 
 async def _record_model_turn_event(action, task_id, agent_id, details=None):
@@ -896,6 +996,19 @@ async def _add_agent_note(ticket_id, agent_id, task_id, title, body, source="age
     return note_id
 
 
+def _provider_error_operator_summary(error):
+    """Turn provider adapter noise into a short operator-facing note."""
+    text = " ".join(str(error or "provider close failed").split())
+    if "String too long" in text and "userinfo" in text:
+        return (
+            "Provider rejected the close note because one iTop transition field was too small. "
+            "The dashboard kept the full evidence and the provider adapter will retry with a compact close note."
+        )
+    if len(text) > 360:
+        return text[:357].rstrip() + "..."
+    return text
+
+
 async def _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, notes):
     """Best-effort provider close for explicit agent/operator close actions."""
     if not ticket_id:
@@ -911,14 +1024,15 @@ async def _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, notes):
         return {"status": "skipped", "reason": f"provider_{provider or 'local'}"}
     try:
         from services.itop_sync import iTopProvider
-        result = await iTopProvider().close_ticket(ticket_id, notes or "Resolved by SOC agent.")
+        result = await iTopProvider().close_ticket(ticket_id, notes or "Resolved by Agentic Operations agent.")
         if result.get("error") and "Invalid stimulus" in str(result.get("error")):
             await asyncio.sleep(2)
-            result = await iTopProvider().close_ticket(ticket_id, notes or "Resolved by SOC agent.")
+            result = await iTopProvider().close_ticket(ticket_id, notes or "Resolved by Agentic Operations agent.")
     except Exception as exc:
         result = {"error": str(exc)}
 
     if result.get("error"):
+        operator_error = _provider_error_operator_summary(result.get("error"))
         await log_event("sync", "warning", f"agent_{agent_id}", "provider_close_failed",
                         f"ticket_{ticket_id}", {"task_id": task_id, "error": result.get("error")})
         await _add_agent_note(
@@ -926,13 +1040,62 @@ async def _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, notes):
             agent_id,
             task_id,
             "Provider close failed",
-            f"The explicit ticket close was recorded locally, but provider close failed: {result.get('error')}",
+            f"The explicit ticket close was recorded locally, but provider close failed: {operator_error}",
             source="agent-control-plane",
         )
     else:
         await log_event("sync", "info", f"agent_{agent_id}", "provider_close_complete",
                         f"ticket_{ticket_id}", {"task_id": task_id, "provider": provider, "result": result})
     return result
+
+
+async def _resolve_ticket_from_terminal_evidence(ticket_id, agent_id, task_id, evidence, reason):
+    """Resolve local/provider ticket state after persisted terminal evidence."""
+    summary = (
+        f"Agent `{agent_id}` completed all approval gates, wrote final completion evidence, "
+        "and created postmortem evidence, but the harness did not reach the explicit final "
+        "ticket status call. The supervisor resolved the ticket from persisted evidence and "
+        "attempted provider closure so dashboard and ITSM state stay aligned."
+    )
+    provider_result = await _close_provider_ticket_if_needed(ticket_id, agent_id, task_id, summary)
+    if not provider_result.get("error"):
+        await execute(
+            "UPDATE tickets SET status = 'resolved', provider_sync_status = 'synced', "
+            "provider_last_error = NULL, synced_at = NOW(), updated_at = NOW() WHERE id = $1",
+            ticket_id,
+        )
+    else:
+        await execute(
+            "UPDATE tickets SET provider_sync_status = 'close_failed', provider_last_error = $1, "
+            "updated_at = NOW() WHERE id = $2",
+            provider_result.get("error"),
+            ticket_id,
+        )
+    await _add_agent_note(
+        ticket_id,
+        agent_id,
+        task_id,
+        "Ticket resolved by terminal evidence recovery"
+        if not provider_result.get("error")
+        else "Ticket terminal evidence needs provider close review",
+        (
+            summary
+            if not provider_result.get("error")
+            else f"{summary}\n\nProvider close did not complete automatically: {provider_result.get('error')}"
+        ),
+        "agent-supervisor",
+    )
+    await log_event("ticket", "warning", f"agent_{agent_id}",
+                    "ticket_status_recovered_from_terminal_evidence",
+                    f"ticket_{ticket_id}", {
+                        "task_id": task_id,
+                        "previous_status": (evidence or {}).get("ticket_status"),
+                        "new_status": "resolved" if not provider_result.get("error") else (evidence or {}).get("ticket_status"),
+                        "reason": reason,
+                        "provider_result": provider_result,
+                        "evidence": evidence,
+                    })
+    return provider_result
 
 
 def _auto_complete_allowed(change):
@@ -1152,7 +1315,7 @@ def _can_autoresolve_from_terminal_evidence(evidence):
         and int(evidence.get("open_changes") or 0) == 0
         and int(evidence.get("completed_changes") or 0) > 0
         and int(evidence.get("final_notes") or 0) > 0
-        and int(evidence.get("promoted_postmortems") or 0) > 0
+        and int(evidence.get("postmortems") or 0) > 0
     )
 
 
@@ -1345,34 +1508,16 @@ async def recover_completed_ticket_resolution(agent_id, task_id, reason="termina
                 "reason": "ticket_not_closed",
                 "evidence": evidence,
             }
-        await execute(
-            "UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1",
-            evidence["ticket_id"],
-        )
-        await _add_agent_note(
+        provider_result = await _resolve_ticket_from_terminal_evidence(
             evidence["ticket_id"],
             agent_id,
             task_id,
-            "Ticket resolved by terminal evidence recovery",
-            (
-                f"Agent `{agent_id}` completed all approval gates, wrote final completion evidence, "
-                "and promoted the postmortem/workflow assets, but the harness did not reach the "
-                "explicit final ticket status call. The supervisor marked the ticket resolved from "
-                "that persisted evidence without exposing secrets or expanding permissions."
-            ),
-            "agent-supervisor",
+            evidence,
+            reason,
         )
-        await log_event("ticket", "warning", f"agent_{agent_id}",
-                        "ticket_status_recovered_from_terminal_evidence",
-                        f"ticket_{evidence['ticket_id']}", {
-                            "task_id": task_id,
-                            "previous_status": evidence.get("ticket_status"),
-                            "new_status": "resolved",
-                            "reason": reason,
-                            "evidence": evidence,
-                        })
         evidence["ticket_status"] = "resolved"
         evidence["auto_resolved"] = True
+        evidence["provider_result"] = provider_result
 
     summary = (
         "Recovered terminal completion from dashboard evidence: "
@@ -1509,6 +1654,18 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Complete approved lab/demo containment when no concrete provider adapter is available: `POST /api/changes/{{change_id}}/complete` with JSON `{{"actor": "agent-<agent_instance_id>", "result": "lab-safe evidence and production adapter note"}}`, then add a ticket note.
 - Persist postmortems: `POST /api/postmortems`
 - Persist workflows: `POST /api/workflows`
+
+## Ticket Note Style
+Write ticket notes for a human operator who is watching the demo or auditing
+the work later. Prefer short plain-language notes with:
+- the current outcome or blocker in the first sentence
+- the evidence source used
+- the next action or approval needed
+
+Do not paste raw API responses, stack traces, or full JSON objects into ticket
+notes unless the JSON itself is the evidence being attached. When a script asks
+for an exact proof marker, include the marker exactly, then explain the meaning
+in normal words.
 
 ## Suspicious URL Safety
 Never directly browse, curl, wget, open, screenshot, or otherwise retrieve a
@@ -2312,6 +2469,21 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
         else:
             recovered_completion = await _detect_completed_ticket_resolution(task_id, agent_id)
             if recovered_completion:
+                if (
+                    recovered_completion.get("ticket_status") not in ("closed", "resolved")
+                    and _can_autoresolve_from_terminal_evidence(recovered_completion)
+                ):
+                    provider_result = await _resolve_ticket_from_terminal_evidence(
+                        recovered_completion["ticket_id"],
+                        agent_id,
+                        task_id,
+                        recovered_completion,
+                        "agent_runner_recovered_completion",
+                    )
+                    if not provider_result.get("error"):
+                        recovered_completion["ticket_status"] = "resolved"
+                        recovered_completion["auto_resolved"] = True
+                    recovered_completion["provider_result"] = provider_result
                 summary = (
                     "Recovered completion: ticket has final resolution evidence, "
                     f"{recovered_completion['completed_changes']} completed change gates, "
@@ -2356,7 +2528,6 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 _active_processes.pop(task_id, None)
                 return
             raw_error = result.get("stderr") or result.get("stdout") or f"Agent exited with code {result['exit_code']}"
-            error = raw_error[:2000]
             transient_retry = await _schedule_transient_model_retry(
                 agent_id,
                 task_id,
@@ -2364,11 +2535,16 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 work_dir,
                 prompt,
                 result,
-                error,
+                raw_error,
             )
             if transient_retry:
                 _active_processes.pop(task_id, None)
                 return
+            error = (
+                _transient_model_operator_summary(raw_error)
+                if _is_transient_model_capacity_error(raw_error)
+                else raw_error[:2000]
+            )
             await execute(
                 "UPDATE agent_tasks SET status = 'failed', output = $1, error_message = $2, "
                 "completed_at = NOW() WHERE id = $3",

@@ -95,7 +95,7 @@ def wait_for_idle_agent_lane(base, wait_seconds, poll_seconds):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("base", nargs="?", default="http://localhost:25480")
-    parser.add_argument("--model", default="qwen/qwen3.6-27b")
+    parser.add_argument("--model", default="deepseek/deepseek-v4-flash")
     parser.add_argument("--timeout-seconds", type=int, default=int(os.environ.get("AGENT_SMOKE_WAIT_SECONDS", "3600")))
     parser.add_argument("--idle-wait-seconds", type=int, default=int(os.environ.get("AGENT_SMOKE_IDLE_WAIT_SECONDS", "3600")))
     parser.add_argument("--poll-seconds", type=int, default=int(os.environ.get("AGENT_SMOKE_POLL_SECONDS", "15")))

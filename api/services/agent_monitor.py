@@ -14,7 +14,7 @@ def set_broadcast(fn):
     global broadcast_fn
     broadcast_fn = fn
 
-async def spawn_agent(ticket_id: int, model: str = "qwen/qwen3.6-27b"):
+async def spawn_agent(ticket_id: int, model: str = "deepseek/deepseek-v4-flash"):
     """Create a new agent record for a ticket. Creates a placeholder ticket if needed."""
     # Ensure ticket exists
     ticket = await fetchrow("SELECT id, title FROM tickets WHERE id = $1", ticket_id)

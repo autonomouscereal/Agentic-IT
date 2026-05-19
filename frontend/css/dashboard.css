@@ -1435,9 +1435,82 @@ body {
 .activity-note-body {
     margin-top: 4px;
     color: var(--text-secondary);
-    white-space: pre-wrap;
     overflow-wrap: anywhere;
     line-height: 1.5;
+}
+
+.note-line {
+    margin: 2px 0;
+}
+
+.note-bullet {
+    position: relative;
+    padding-left: 14px;
+}
+
+.note-bullet::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 0.72em;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+}
+
+.note-step {
+    color: var(--text-primary);
+}
+
+.note-gap {
+    height: 6px;
+}
+
+.note-marker {
+    display: inline-block;
+    margin: 0 2px;
+    padding: 1px 5px;
+    border: 1px solid rgba(0, 212, 255, 0.24);
+    border-radius: 6px;
+    background: rgba(0, 212, 255, 0.08);
+    color: var(--text-primary);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.note-json-summary {
+    border: 1px solid rgba(45, 58, 79, 0.72);
+    border-radius: 8px;
+    background: rgba(8, 13, 24, 0.4);
+    padding: 8px;
+}
+
+.note-json-row {
+    display: grid;
+    grid-template-columns: minmax(72px, 120px) minmax(0, 1fr);
+    gap: 8px;
+    margin: 4px 0;
+}
+
+.note-json-row span {
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+}
+
+.note-json-row strong {
+    color: var(--text-secondary);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+
+.note-json-summary summary {
+    margin-top: 6px;
+    color: var(--accent-primary);
+    cursor: pointer;
+    font-size: 11px;
 }
 
 .timeline-summary {

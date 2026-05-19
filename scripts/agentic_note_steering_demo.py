@@ -177,7 +177,7 @@ Steps:
 def main():
     parser = argparse.ArgumentParser(description="Run real active-agent note steering proof")
     parser.add_argument("base", help="Dashboard API base URL, e.g. http://127.0.0.1:25480")
-    parser.add_argument("model", nargs="?", default="qwen/qwen3.6-27b")
+    parser.add_argument("model", nargs="?", default="deepseek/deepseek-v4-flash")
     parser.add_argument("--itop-client", default="/home/cereal/SOC_TESTING/itop-deployment/scripts/itop_client.py")
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--marker", default=f"NOTE_STEERING_{int(time.time())}")

@@ -6,7 +6,7 @@ ALTER TABLE tickets DROP CONSTRAINT IF EXISTS tickets_itop_ref_class_unique;
 ALTER TABLE tickets
     ADD CONSTRAINT tickets_itop_ref_class_unique UNIQUE (itop_ref, itop_class);
 
-ALTER TABLE agents ADD COLUMN IF NOT EXISTS selected_model VARCHAR(200) DEFAULT 'qwen/qwen3.6-27b';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS selected_model VARCHAR(200) DEFAULT 'deepseek/deepseek-v4-flash';
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS last_task_id INTEGER;
 
 ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS work_dir VARCHAR(500);

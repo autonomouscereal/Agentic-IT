@@ -47,6 +47,9 @@ class AgentRuntimeImageTest(unittest.TestCase):
         self.assertIn('path == "v1/chat/completions"', proxy)
         self.assertIn("deepseek/deepseek-v4-flash", proxy)
         self.assertIn("proxy_nous_chat", proxy)
+        self.assertIn("OPENROUTER_API_KEY", proxy)
+        self.assertIn('"fallbacks": ["openrouter", "lmstudio"]', proxy)
+        self.assertIn("proxy_chat_with_fallbacks", proxy)
         self.assertIn("PROXY_CONFIG_PATH", proxy)
 
     def test_compose_deploys_first_class_ai_proxy(self):

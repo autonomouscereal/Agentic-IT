@@ -48,6 +48,11 @@ services:
       ANTHROPIC_BASE: ${ANTHROPIC_BASE:-https://api.anthropic.com}
       NOUS_BASE: ${NOUS_BASE:-https://inference-api.nousresearch.com/v1}
       NOUS_API_KEY: ${NOUS_API_KEY:-}
+      OPENROUTER_BASE: ${OPENROUTER_BASE:-https://openrouter.ai/api/v1}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL_ALIASES: ${OPENROUTER_MODEL_ALIASES:-openrouter/free,deepseek/deepseek-v4-flash:free}
+      OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-http://agentic-operations.local}
+      OPENROUTER_APP_TITLE: ${OPENROUTER_APP_TITLE:-Agentic Operations}
       CREDENTIALS_PATH: /runtime/claude_credentials.json
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -115,6 +120,8 @@ services:
       AGENT_NO_OUTPUT_STALL_SECONDS: ${AGENT_NO_OUTPUT_STALL_SECONDS:-3600}
       AGENT_TRANSIENT_MODEL_RETRY_MAX: ${AGENT_TRANSIENT_MODEL_RETRY_MAX:-3}
       AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS: ${AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS:-30}
+      AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED: ${AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED:-true}
+      AGENT_TRANSIENT_MODEL_FALLBACK_MODEL: ${AGENT_TRANSIENT_MODEL_FALLBACK_MODEL:-qwen/qwen3.6-27b}
       AGENT_CURL_ALLOWED_HOSTS: ${AGENT_CURL_ALLOWED_HOSTS:-localhost,127.0.0.1,::1,host.docker.internal,ai-proxy,192.168.50.222,api.openai.com,api.anthropic.com,inference-api.nousresearch.com,virustotal.com,*.virustotal.com,urlscan.io,*.urlscan.io,hybrid-analysis.com,*.hybrid-analysis.com}
       AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE: ${AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE:-1}
       AGENT_AUDITOR_AUTO_RECOVER: ${AGENT_AUDITOR_AUTO_RECOVER:-false}

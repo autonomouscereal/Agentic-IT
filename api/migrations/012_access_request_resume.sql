@@ -51,7 +51,7 @@ INSERT INTO service_raci_rules (
         'medium',
         '["iam", "gitlab", "least-privilege", "devsecops"]',
         false,
-        'qwen/qwen3.6-27b',
+        'deepseek/deepseek-v4-flash',
         NULL,
         true
     ),
@@ -71,7 +71,7 @@ INSERT INTO service_raci_rules (
         'medium',
         '["iam", "siem", "wazuh", "least-privilege"]',
         false,
-        'qwen/qwen3.6-27b',
+        'deepseek/deepseek-v4-flash',
         NULL,
         true
     )

@@ -334,7 +334,7 @@ async def review_workflow(
 async def rerun_workflow(
     workflow_id: int,
     ticket_id: int = Body(...),
-    model: str = Body("qwen/qwen3.6-27b"),
+    model: str = Body("deepseek/deepseek-v4-flash"),
     created_by: str = Body("dashboard"),
 ):
     workflow = await fetchrow("SELECT * FROM agent_workflows WHERE id = $1", workflow_id)

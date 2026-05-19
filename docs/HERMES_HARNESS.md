@@ -45,6 +45,8 @@ LOGNAME=cereal
 XDG_CACHE_HOME=/home/cereal/.cache
 AGENT_TRANSIENT_MODEL_RETRY_MAX=3
 AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS=30
+AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED=true
+AGENT_TRANSIENT_MODEL_FALLBACK_MODEL=qwen/qwen3.6-27b
 ```
 
 For the lab deployment, mount the host Hermes home into the API container at
@@ -116,10 +118,11 @@ Do not judge task health from `progress_pct` alone.
 
 ## Transient Provider Capacity Handling
 
-Hermes/N Nous can return temporary upstream capacity failures such as HTTP
-`503` for `deepseek/deepseek-v4-flash`. The dashboard runner now treats HTTP
-`429`, `500`, `502`, `503`, `504`, rate-limit, overloaded, temporarily
-unavailable, and upstream-capacity messages as transient provider failures.
+Hermes/N Nous and OpenRouter can return temporary upstream capacity failures
+such as HTTP `429` or `503` for free/external routes. The dashboard runner now
+treats HTTP `429`, `500`, `502`, `503`, `504`, rate-limit, overloaded,
+temporarily unavailable, upstream-capacity, and daily-limit messages as
+transient provider failures.
 
 When this happens, the runner preserves the same agent workspace, checkpoint,
 steering inbox, and ticket evidence, marks the task back to `queued`, writes an
@@ -127,6 +130,37 @@ operator note, and requeues the same task after
 `AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS` until
 `AGENT_TRANSIENT_MODEL_RETRY_MAX` is exhausted. Non-provider failures such as
 permission denials still fail or gate normally.
+
+If `AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED=true`, exhausting external retries
+updates the same agent's `selected_model` to
+`AGENT_TRANSIENT_MODEL_FALLBACK_MODEL`, writes an explicit ticket note, emits
+`agent_transient_model_fallback_scheduled`, and queues the same task on the
+local/provider route. This keeps the policy clear: Hermes/DeepSeek external
+first, bounded retries second, local qwen fallback only when the external route
+is unavailable.
+
+## Proxy Fallback Order
+
+The built-in proxy is the model gateway for Hermes queue work. The preferred
+external model stays `deepseek/deepseek-v4-flash`, but provider routing is now
+explicit:
+
+1. Nous Portal for the configured DeepSeek route.
+2. OpenRouter as the first external fallback. The runtime vault/environment
+   supplies `OPENROUTER_API_KEY`; no token is committed. The demo-safe fallback
+   alias is `openrouter/free`, because `deepseek/deepseek-v4-flash:free`
+   advertised tool support but returned upstream rate-limit during validation.
+3. Local LM Studio/qwen through the local proxy route.
+
+Validation on 2026-05-19:
+
+- Direct OpenRouter `openrouter/free` chat/completions with a simple tool
+  schema returned one tool call.
+- Proxy `/v1/models` advertised Nous, OpenRouter, and LM Studio aliases.
+- Proxy chat for `deepseek/deepseek-v4-flash` fell through from unavailable
+  Nous auth/capacity to OpenRouter and returned a successful completion without
+  exposing provider secrets in logs.
+- Proxy chat for `openrouter/free` returned a successful tool-call response.
 
 ## Dashboard API Auth For Agents
 
@@ -166,6 +200,25 @@ and the target URL is the dashboard API.
   the deployment-host local proxy on `http://localhost:4401`; Hermes setup
   smoke passed afterward on ticket `620`, agent `255`, task `252`, and no
   active processes remained.
+- URL-safe complex phishing plus EDR proof passed on ticket `690`, iTop
+  `Incident::470`, initial agent `265`, continuation agents `266`/`267`,
+  Wazuh access request `31`, gates `181` and `182`, postmortem `106`, URL
+  sandbox attachment `92`, workflow `4` updated, ticket resolved, and no
+  active processes remained. The run started on Hermes with
+  `deepseek/deepseek-v4-flash`; transient provider retries were visible in
+  ticket notes and audit, and DeepSeek recovered before local fallback was
+  required.
+- Fresh URL-safe phishing/EDR hybrid proof on ticket `695`, iTop
+  `Incident::475`, agents `273`/`274`, gates `185`/`186`, postmortem `107`,
+  requester/steering evidence, URL sandbox evidence, and no direct suspicious
+  URL fetch. This run exposed and fixed a provider-status drift edge: terminal
+  dashboard evidence existed, but iTop remained open when the harness missed
+  the final close call. The supervisor now resolves from terminal evidence,
+  sends a compact iTop close note, and keeps the full evidence in dashboard
+  notes. Forced provider sync kept ticket `695` resolved.
+- Approval audit now names the approver explicitly: changes `181` and `182`
+  show `demo_account_1 approved change 181/182` in `/api/dashboard/audit`,
+  with `approved_by` and `approval_actor` in audit and event details.
 
 2026-05-18 lab validation:
 

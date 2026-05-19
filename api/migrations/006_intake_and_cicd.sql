@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS service_raci_rules (
     risk_level VARCHAR(40) DEFAULT 'low',
     knowledge_tags JSONB NOT NULL DEFAULT '[]',
     auto_assign_agent BOOLEAN NOT NULL DEFAULT false,
-    auto_agent_model VARCHAR(200) DEFAULT 'qwen/qwen3.6-27b',
+    auto_agent_model VARCHAR(200) DEFAULT 'deepseek/deepseek-v4-flash',
     auto_agent_prompt TEXT,
     enabled BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

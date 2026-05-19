@@ -82,11 +82,18 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
 - Judge agent health from runner-health, process state, proxy activity,
   output logs, checkpoints, ticket notes, audit records, and memory events, not
   `progress_pct` alone.
-- Hermes/N Nous may return transient HTTP 503 capacity failures. The dashboard
-  runner should preserve the workspace and requeue the same task using
+- Hermes/N Nous or OpenRouter may return transient HTTP 429/503 capacity
+  failures. The dashboard runner should preserve the workspace and requeue the
+  same task using
   `AGENT_TRANSIENT_MODEL_RETRY_MAX` and
   `AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS`; do not treat a single provider
-  capacity error as proof that the agentic flow is broken.
+  capacity error as proof that the agentic flow is broken. If retries are
+  exhausted and `AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED=true`, the runner
+  switches the same task to `AGENT_TRANSIENT_MODEL_FALLBACK_MODEL` with an
+  explicit ticket note and `agent_transient_model_fallback_scheduled` audit
+  event. Default policy is Hermes/DeepSeek via Nous first, OpenRouter
+  (`openrouter/free`) as the first external proxy fallback, and local qwen only
+  as explicit override or final fallback.
 
 ## Latest Proofs
 
@@ -115,3 +122,21 @@ HERMES_ACCEPT_HOOKS=1 hermes chat -Q --provider dashboard-proxy -m qwen/qwen3.6-
   model `qwen/qwen3.6-27b`; the runtime guard blocked the synthetic suspicious
   URL, the agent wrote `REGRESSION_URL_GUARD_BLOCKED`, and no active processes
   remained afterward.
+- URL-safe complex phishing/EDR proof: ticket `690`, iTop `Incident::470`,
+  agents `265`/`266`/`267`, Wazuh access request `31`, gates `181` and `182`,
+  postmortem `106`, URL sandbox attachment `92`, workflow `4` updated, ticket
+  resolved, and no active processes remained. The run started on
+  `deepseek/deepseek-v4-flash`, showed provider retries in notes/audit, did
+  not fetch the suspicious URL directly, and DeepSeek recovered before local
+  fallback was required.
+- OpenRouter fallback proof: direct `openrouter/free` returned a tool call,
+  proxy `/v1/models` advertised OpenRouter aliases, and proxy chat for
+  `deepseek/deepseek-v4-flash` successfully fell through to OpenRouter when
+  Nous auth/capacity was unavailable.
+- Fresh URL-safe phishing/EDR hybrid proof: ticket `695`, iTop
+  `Incident::475`, agents `273`/`274`, gates `185`/`186`, postmortem `107`.
+  It preserved requester/user-response and approval evidence, avoided direct
+  suspicious URL retrieval, then exposed and fixed ticket/provider status drift
+  by resolving from terminal evidence with compact iTop close notes.
+- Approval audit proof: changes `181` and `182` show `demo_account_1` as
+  `approved_by` / `approval_actor` in audit and event details.

@@ -46,7 +46,7 @@ from agentic_cicd_full_demo import (  # noqa: E402
 DEFAULT_DASHBOARD = os.getenv("SOC_DASHBOARD_URL", "http://localhost:25480").rstrip("/")
 DEFAULT_RUNNER_DASHBOARD = os.getenv("SOC_RUNNER_DASHBOARD_URL", "http://192.168.50.222:25480").rstrip("/")
 DEFAULT_GITLAB = os.getenv("GITLAB_URL", "http://localhost").rstrip("/")
-DEFAULT_MODEL = os.getenv("AGENT_MODEL", "qwen/qwen3.6-27b")
+DEFAULT_MODEL = os.getenv("AGENT_MODEL", "deepseek/deepseek-v4-flash")
 DEFAULT_TOKEN_FILE = "/home/cereal/gitlab/.gitlab-token"
 
 

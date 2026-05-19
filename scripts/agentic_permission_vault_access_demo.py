@@ -351,7 +351,7 @@ Resume path after approval:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("base", nargs="?", default="http://127.0.0.1:25480")
-    parser.add_argument("model", nargs="?", default="qwen/qwen3.6-27b")
+    parser.add_argument("model", nargs="?", default="deepseek/deepseek-v4-flash")
     parser.add_argument("--manage-auth", action="store_true")
     parser.add_argument("--repo", default=".")
     parser.add_argument("--timeout", type=int, default=3600)

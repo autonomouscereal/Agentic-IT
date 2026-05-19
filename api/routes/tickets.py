@@ -573,7 +573,7 @@ async def sync_all(body=Body(None)):
 @router.post("/{ticket_id}/assign-agent")
 async def assign_agent(
     ticket_id: int,
-    model: str = Body("qwen/qwen3.6-27b"),
+    model: str = Body("deepseek/deepseek-v4-flash"),
     prompt: str = Body(None),
     requested_permissions: list = Body(None),
     request: Request = None,
@@ -617,7 +617,7 @@ async def assign_agent(
 @router.post("/{ticket_id}/postmortem")
 async def start_postmortem(
     ticket_id: int,
-    model: str = Body("qwen/qwen3.6-27b"),
+    model: str = Body("deepseek/deepseek-v4-flash"),
     context: str = Body(None),
     request: Request = None,
 ):
@@ -664,7 +664,7 @@ async def start_postmortem(
 @router.post("/{ticket_id}/workflow")
 async def start_workflow_build(
     ticket_id: int,
-    model: str = Body("qwen/qwen3.6-27b"),
+    model: str = Body("deepseek/deepseek-v4-flash"),
     context: str = Body(None),
     request: Request = None,
 ):
@@ -816,7 +816,7 @@ async def record_user_response(
             ])
             resume = await agent_runner.spawn_agent(
                 ticket_id,
-                (agent or {}).get("selected_model") or (agent or {}).get("model") or "qwen/qwen3.6-27b",
+                (agent or {}).get("selected_model") or (agent or {}).get("model") or "deepseek/deepseek-v4-flash",
                 resume_prompt,
                 "ticket_resolution",
                 actor_context=await access_control.load_agent_subject(ticket["agent_id"]),

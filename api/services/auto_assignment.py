@@ -7,7 +7,7 @@ from services.event_logger import log_event
 from services.task_prompts import build_auto_assignment_prompt
 
 
-DEFAULT_MODEL = "qwen/qwen3.6-27b"
+DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
 DEFAULT_MAX_ACTIVE_PER_RULE = int(os.getenv("AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE", "1") or "1")
 
 

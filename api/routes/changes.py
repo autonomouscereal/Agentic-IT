@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Query, Body
+try:
+    from fastapi import APIRouter, Query, Body, Request
+except ImportError:  # unit-test stubs may not expose Request
+    from fastapi import APIRouter, Query, Body
+    class Request:
+        pass
 from datetime import datetime, timedelta
 import json
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
@@ -44,6 +49,31 @@ def _completion_actor_from_body(body):
     if agent_id:
         return f"agent_{agent_id}"
     return "dashboard"
+
+
+def _approval_actor_from_request(request, body, *body_keys, default="dashboard"):
+    """Prefer authenticated browser/proxy identity over spoofable UI body fields.
+
+    Service-token automation may still pass a named approver in the body so
+    scripted demo gates remain human-readable in audit trails.
+    """
+    body = body or {}
+    try:
+        decision = getattr(getattr(request, "state", None), "access_decision", None) or {}
+        identity = decision.get("identity") or {}
+    except Exception:
+        identity = {}
+    username = (identity.get("username") or "").strip()
+    auth_mode = (identity.get("auth_mode") or "").strip()
+    if username and username.lower() not in {"anonymous", "unknown"} and auth_mode != "service-token":
+        return username
+    for key in body_keys:
+        value = body.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    if username:
+        return username
+    return default
 
 
 def _loads_json(value, default=None):
@@ -436,7 +466,7 @@ async def _resume_agent_after_approval(change, approved_by):
     from services import agent_runner
     result = await agent_runner.spawn_agent(
         ticket_id,
-        agent.get("selected_model") or agent.get("model") or "qwen/qwen3.6-27b",
+        agent.get("selected_model") or agent.get("model") or "deepseek/deepseek-v4-flash",
         (latest_task.get("prompt") or "") + continuation,
         latest_task.get("task_type") or "ticket_resolution",
         actor_context=await access_control.load_agent_subject(agent_id),
@@ -596,8 +626,14 @@ async def change_status(change_id: int):
     return change
 
 @router.post("/{change_id}/approve")
-async def approve_change(change_id: int, body: dict = Body({})):
-    approved_by = (body or {}).get("approved_by", "dashboard")
+async def approve_change(change_id: int, body: dict = Body({}), request: Request = None):
+    approved_by = _approval_actor_from_request(
+        request,
+        body,
+        "approved_by",
+        "actor",
+        default="dashboard",
+    )
     approval_reason = (body or {}).get("reason") or (body or {}).get("approval_reason") or ""
     change = await fetchrow("SELECT * FROM change_requests WHERE id = $1", change_id)
     if not change:
@@ -625,6 +661,8 @@ async def approve_change(change_id: int, body: dict = Body({})):
         VALUES ($1, $2, $3, $4)
     """, approved_by, "change_approved", f"change_{change_id}", json_dumps({
         "change_id": change_id,
+        "approved_by": approved_by,
+        "approval_actor": approved_by,
         "action": change["action"],
         "target": change["target"],
         "agent_id": change["agent_id"],
@@ -639,7 +677,12 @@ async def approve_change(change_id: int, body: dict = Body({})):
                     f"change_{change_id}", {
                         "ticket_id": change["ticket_id"],
                         "agent_id": change["agent_id"],
+                        "change_id": change_id,
+                        "action": change["action"],
+                        "target": change["target"],
                         "risk_level": change["risk_level"],
+                        "approved_by": approved_by,
+                        "approval_actor": approved_by,
                         "approval_gate": True,
                         "approval_mode": approval_mode,
                         "auto_approved": auto_approved,
@@ -669,8 +712,15 @@ async def approve_change(change_id: int, body: dict = Body({})):
 async def reject_change(
     change_id: int,
     body: dict = Body({}),
+    request: Request = None,
 ):
-    rejected_by = (body or {}).get("rejected_by", "dashboard")
+    rejected_by = _approval_actor_from_request(
+        request,
+        body,
+        "rejected_by",
+        "actor",
+        default="dashboard",
+    )
     reason = (body or {}).get("reason", "Rejected")
     change = await fetchrow("SELECT * FROM change_requests WHERE id = $1", change_id)
     if not change:
@@ -688,12 +738,26 @@ async def reject_change(
         INSERT INTO audit_log (actor, action, target, details)
         VALUES ($1, $2, $3, $4)
     """, rejected_by, "change_rejected", f"change_{change_id}", json_dumps({
-        "change_id": change_id, "reason": reason
+        "change_id": change_id,
+        "rejected_by": rejected_by,
+        "approval_actor": rejected_by,
+        "reason": reason,
+        "action": change["action"],
+        "target": change["target"],
+        "agent_id": change["agent_id"],
+        "ticket_id": change["ticket_id"],
+        "risk_level": change["risk_level"],
+        "approval_gate": True,
     }))
     await log_event("change", "warning", rejected_by, "change_rejected",
                     f"change_{change_id}", {
                         "ticket_id": change["ticket_id"],
                         "agent_id": change["agent_id"],
+                        "change_id": change_id,
+                        "action": change["action"],
+                        "target": change["target"],
+                        "rejected_by": rejected_by,
+                        "approval_actor": rejected_by,
                         "approval_gate": True,
                         "gate_status": "rejected",
                     })

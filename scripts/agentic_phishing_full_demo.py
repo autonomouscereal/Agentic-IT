@@ -29,7 +29,7 @@ from dashboard_auth import dashboard_auth_headers
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASE = os.getenv("SOC_DASHBOARD_URL", "http://localhost:25480").rstrip("/")
-DEFAULT_MODEL = os.getenv("AGENT_MODEL", "qwen/qwen3.6-27b")
+DEFAULT_MODEL = os.getenv("AGENT_MODEL", "deepseek/deepseek-v4-flash")
 
 
 def request(method: str, base: str, path: str, payload=None, timeout: int = 60):

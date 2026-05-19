@@ -89,6 +89,18 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn("module_notes: moduleNotes", self.dashboard_js)
         self.assertIn("scoped module tickets", self.dashboard_js)
 
+    def test_ticket_notes_are_rendered_for_demo_readability(self):
+        css = (ROOT / "frontend" / "css" / "dashboard.css").read_text(encoding="utf-8")
+        agent_runner = (ROOT / "api" / "services" / "agent_runner.py").read_text(encoding="utf-8")
+        self.assertIn("function renderNoteBody(value)", self.dashboard_js)
+        self.assertIn("function renderNoteJson(value)", self.dashboard_js)
+        self.assertIn("const text = normalizeNoteBody(value);", self.dashboard_js)
+        self.assertIn("${renderNoteBody(n.body)}", self.dashboard_js)
+        self.assertIn(".note-marker", css)
+        self.assertIn(".note-json-summary", css)
+        self.assertIn("## Ticket Note Style", agent_runner)
+        self.assertIn("Do not paste raw API responses", agent_runner)
+
 
 if __name__ == "__main__":
     unittest.main()

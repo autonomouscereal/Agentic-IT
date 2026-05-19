@@ -131,7 +131,7 @@ python scripts/sync_reference_skills.py check
 
 This is the bridge toward Git-managed skills and prevents `.agents`, `.claude`, and the dashboard bundle from silently drifting.
 
-The dashboard supports both Hermes Agent and Claude Code from the API container. Hermes is the preferred default for long-running queue work in the current lab (`AGENT_HARNESS=hermes`, default model `deepseek/deepseek-v4-flash`), while Claude Code remains available through `AGENT_HARNESS=claude-code`. The command/env contract is isolated in `api/services/agent_harness.py`.
+The dashboard supports both Hermes Agent and Claude Code from the API container. Hermes is the preferred default for long-running queue work in the current lab (`AGENT_HARNESS=hermes`, default model `deepseek/deepseek-v4-flash`), while Claude Code remains available through `AGENT_HARNESS=claude-code`. The command/env contract is isolated in `api/services/agent_harness.py`. Model routing is proxy-first: Nous Portal is primary for the DeepSeek route, OpenRouter is the first external fallback, and local LM Studio/qwen is the final/local route.
 
 Each task gets:
 
@@ -163,11 +163,11 @@ generates `runtime/proxy_config.json`, points spawned agents at
 `http://ai-proxy:4001` inside Docker, and creates the first setup ticket for
 agentic onboarding. For local models, `AGENT_LLM_AUTH_TOKEN` can use the
 non-secret `lmstudio` marker expected by the local proxy; external provider
-credentials stay in Claude Code OAuth files, Hermes Nous Portal auth state, or
-proxy runtime environment, not in source. See `docs/HERMES_HARNESS.md` and
+credentials stay in Claude Code OAuth files, Hermes Nous Portal auth state,
+OpenRouter runtime/vault environment, or proxy runtime environment, not in source. See `docs/HERMES_HARNESS.md` and
 `docs/ONE_LINE_INSTALLER.md`.
 
-Managed agents run with `acceptEdits` plus the narrow allowlist `Read,Write,Bash(curl *)`. This permits dashboard API calls without allowing arbitrary shell operations. Claude Code refuses full bypass mode when running as root, and full bypass is not needed because destructive work is guarded by dashboard change requests.
+Managed agents run with `acceptEdits` plus the bounded allowlist needed for dashboard/API work and trusted internal UI checks: `Read`, `Write`, guarded `curl`, `node`, `npx`, and Playwright. Suspicious URLs from tickets, alerts, or email are never fetched directly; agents must use passive evidence or approved sandbox/reputation adapters. Claude Code refuses full bypass mode when running as root, and full bypass is not needed because destructive work is guarded by dashboard change requests.
 
 Runner diagnostics are available at:
 

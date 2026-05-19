@@ -82,9 +82,17 @@ def _normalize_ticket_class(ticket_class):
     return value
 
 
+def _compact_itop_close_note(notes, limit=240):
+    """Keep iTop transition metadata within small varchar fields."""
+    text = " ".join(str(notes or "Resolved by Agentic Operations agent.").split())
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."
+
+
 def _resolution_fields(ticket_class, notes):
     if ticket_class in ("Incident", "UserRequest"):
-        return {"resolution_code": "assistance", "solution": notes}
+        return {"resolution_code": "assistance", "solution": _compact_itop_close_note(notes)}
     return {}
 
 
@@ -664,6 +672,7 @@ class iTopProvider(TicketProvider):
 
     async def close_ticket(self, ticket_id: int, notes: str) -> dict:
         """Close a ticket in iTop via stimulus."""
+        provider_notes = _compact_itop_close_note(notes)
         ticket = await fetchrow(
             """
             SELECT COALESCE(provider_ref, itop_ref) AS itop_ref,
@@ -682,7 +691,7 @@ class iTopProvider(TicketProvider):
             "class": ticket["itop_class"],
             "key": ticket["itop_ref"],
             "stimulus": "ev_resolve",
-            "comment": notes,
+            "comment": provider_notes,
             "fields": fields,
         })
         if (
@@ -695,7 +704,7 @@ class iTopProvider(TicketProvider):
                 "class": ticket["itop_class"],
                 "key": ticket["itop_ref"],
                 "stimulus": "ev_resolve",
-                "comment": notes,
+                "comment": provider_notes,
                 "fields": fields,
             })
 
@@ -732,7 +741,7 @@ class iTopProvider(TicketProvider):
                         "class": ticket["itop_class"],
                         "key": ticket["itop_ref"],
                         "stimulus": "ev_resolve",
-                        "comment": notes,
+                        "comment": provider_notes,
                         "fields": fields,
                     })
                     if (
@@ -745,7 +754,7 @@ class iTopProvider(TicketProvider):
                             "class": ticket["itop_class"],
                             "key": ticket["itop_ref"],
                             "stimulus": "ev_resolve",
-                            "comment": notes,
+                            "comment": provider_notes,
                             "fields": fields,
                         })
 

@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS tickets (
 CREATE TABLE IF NOT EXISTS agents (
     id SERIAL PRIMARY KEY,
     ticket_id INTEGER REFERENCES tickets(id) ON DELETE CASCADE,
-    model VARCHAR(100) NOT NULL DEFAULT 'qwen/qwen3.6-27b',
-    selected_model VARCHAR(200) DEFAULT 'qwen/qwen3.6-27b',
+    model VARCHAR(100) NOT NULL DEFAULT 'deepseek/deepseek-v4-flash',
+    selected_model VARCHAR(200) DEFAULT 'deepseek/deepseek-v4-flash',
     status VARCHAR(30) NOT NULL DEFAULT 'spawned',
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     finished_at TIMESTAMP,
@@ -381,7 +381,7 @@ CREATE TABLE IF NOT EXISTS service_raci_rules (
     risk_level VARCHAR(40) DEFAULT 'low',
     knowledge_tags JSONB NOT NULL DEFAULT '[]',
     auto_assign_agent BOOLEAN NOT NULL DEFAULT false,
-    auto_agent_model VARCHAR(200) DEFAULT 'qwen/qwen3.6-27b',
+    auto_agent_model VARCHAR(200) DEFAULT 'deepseek/deepseek-v4-flash',
     auto_agent_prompt TEXT,
     security_classification VARCHAR(80) NOT NULL DEFAULT 'internal',
     access_scope JSONB NOT NULL DEFAULT '{}',
@@ -505,7 +505,7 @@ INSERT INTO dashboard_settings (key, value) VALUES
     ('theme', '{"mode": "dark", "primary": "#00d4ff", "accent": "#ff6b35"}'),
     ('sync_enabled', '{"itop": true, "interval": 30}'),
     ('health_check_enabled', '{"enabled": true, "interval": 60}'),
-    ('agent_config', '{"model": "qwen/qwen3.6-27b", "max_concurrent": 3, "timeout_minutes": 60}')
+    ('agent_config', '{"model": "deepseek/deepseek-v4-flash", "max_concurrent": 3, "timeout_minutes": 60}')
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO dashboard_roles (name, description) VALUES
@@ -594,14 +594,14 @@ ON CONFLICT (name) DO UPDATE SET
 
 UPDATE service_raci_rules
 SET auto_assign_agent = true,
-    auto_agent_model = COALESCE(auto_agent_model, 'qwen/qwen3.6-27b'),
+    auto_agent_model = COALESCE(auto_agent_model, 'deepseek/deepseek-v4-flash'),
     auto_agent_prompt = 'Auto-work Security Operations phishing tickets end to end using compact evidence first. Required actions: write a triage note listing sender, recipients, URLs, clicked users, exposed credentials if any, endpoints, and provider ticket refs. Never directly browse, curl, wget, screenshot, or otherwise retrieve a suspicious URL from the agent runner or production network. Use passive/sandboxed evidence only: email headers, mail gateway logs, DNS/proxy/firewall logs, Wazuh/SIEM evidence, known-safe internal allowlists, URL/domain parsing, VirusTotal/urlscan-style provider adapters when configured, or approved isolated detonation. If a suspicious URL is present, create an approval-gated URL block change. If a recipient/mailbox is known, create an approval-gated mailbox search/quarantine change. If credential exposure is suspected, create an approval-gated password reset/session revocation review. Poll approvals and complete approved lab-safe actions with evidence. Do not resolve after triage only unless you write a No Containment Justification note explaining why URL block, mailbox quarantine/search, endpoint scan, and account actions are all unnecessary. Write a final resolution note with residual risk and postmortem/workflow recommendations. Do not browse full ticket context unless compact evidence is missing a specific fact.',
     updated_at = NOW()
 WHERE name = 'Phishing report';
 
 UPDATE service_raci_rules
 SET auto_assign_agent = true,
-    auto_agent_model = COALESCE(auto_agent_model, 'qwen/qwen3.6-27b'),
+    auto_agent_model = COALESCE(auto_agent_model, 'deepseek/deepseek-v4-flash'),
     auto_agent_prompt = 'Auto-work Security Operations EDR/SIEM alert tickets end to end using compact evidence first. Required actions: identify alert source, severity, affected host/user/IP, related telemetry, and provider ticket refs; classify incident scope; create approval-gated changes for endpoint scan, containment, account/session action, or network block only when evidence supports them; poll approvals; complete approved lab-safe actions with evidence; write a final resolution note with residual risk and postmortem/workflow recommendations. Do not browse full ticket context unless compact evidence is missing a specific fact.',
     updated_at = NOW()
 WHERE name = 'EDR/SIEM security alert';

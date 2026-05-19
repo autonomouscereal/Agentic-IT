@@ -1325,6 +1325,59 @@ function shortText(value, max = 220) {
     return text.length > max ? `${text.slice(0, max - 1)}...` : text;
 }
 
+function normalizeNoteBody(value) {
+    let text = String(value || "").replace(/\r\n/g, "\n").trim();
+    const fence = text.match(/^```(?:json|text|markdown)?\s*\n([\s\S]*?)\n```$/i);
+    if (fence) text = fence[1].trim();
+    return text.replace(/\n{3,}/g, "\n\n");
+}
+
+function renderNoteJson(value) {
+    const summaryKeys = ["summary", "status", "action", "target", "reason", "result", "error", "output"];
+    const rows = summaryKeys
+        .filter(key => value && Object.prototype.hasOwnProperty.call(value, key) && value[key] !== null && value[key] !== "")
+        .map(key => `
+            <div class="note-json-row">
+                <span>${escHtml(key.replace(/_/g, " "))}</span>
+                <strong>${escHtml(shortText(value[key], 360))}</strong>
+            </div>
+        `)
+        .join("");
+    return `
+        <div class="note-json-summary">
+            ${rows || '<div class="learning-meta">Structured evidence payload</div>'}
+            <details>
+                <summary>raw payload</summary>
+                <pre class="audit-json">${escHtml(JSON.stringify(value, null, 2))}</pre>
+            </details>
+        </div>
+    `;
+}
+
+function renderNoteBody(value) {
+    const text = normalizeNoteBody(value);
+    if (!text) return "";
+    try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === "object") return renderNoteJson(parsed);
+    } catch (_) {
+        // Not JSON; render as readable note text below.
+    }
+    const markerPattern = /\b[A-Z][A-Z0-9_]{5,}(?:_[A-Z0-9]+)*\b/g;
+    return text.split("\n").map(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return '<div class="note-gap"></div>';
+        const safe = escHtml(trimmed).replace(markerPattern, match => `<span class="note-marker">${match}</span>`);
+        if (/^[-*]\s+/.test(trimmed)) {
+            return `<div class="note-line note-bullet">${safe.replace(/^[-*]\s+/, "")}</div>`;
+        }
+        if (/^\d+\.\s+/.test(trimmed)) {
+            return `<div class="note-line note-step">${safe}</div>`;
+        }
+        return `<div class="note-line">${safe}</div>`;
+    }).join("");
+}
+
 function normalizeList(value) {
     if (Array.isArray(value)) return value;
     if (!value) return [];
@@ -1554,7 +1607,7 @@ async function loadTicketActivity(ticketId) {
                         <span>
                             <strong>${escHtml(n.author || "note")}</strong>
                             <span class="source-badge local">${escHtml(n.source || "note")}</span>
-                            <div class="activity-note-body">${escHtml(n.body || "")}</div>
+                            <div class="activity-note-body">${renderNoteBody(n.body)}</div>
                         </span>
                     </div>
                 `).join("")}

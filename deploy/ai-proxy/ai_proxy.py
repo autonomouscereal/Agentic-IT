@@ -32,11 +32,14 @@ LM_STUDIO_TOKEN = os.getenv("LM_STUDIO_TOKEN", "lmstudio")
 ANTHROPIC_BASE = os.getenv("ANTHROPIC_BASE", "https://api.anthropic.com").rstrip("/")
 NOUS_BASE = os.getenv("NOUS_BASE", "https://inference-api.nousresearch.com/v1").rstrip("/")
 NOUS_API_KEY = os.getenv("NOUS_API_KEY", "")
+OPENROUTER_BASE = os.getenv("OPENROUTER_BASE", "https://openrouter.ai/api/v1").rstrip("/")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENAI_BASE = os.getenv("OPENAI_BASE", "https://api.openai.com/v1").rstrip("/")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 CUSTOM_PROVIDER_BASE = os.getenv("CUSTOM_PROVIDER_BASE", "").rstrip("/")
 CUSTOM_PROVIDER_API_KEY = os.getenv("CUSTOM_PROVIDER_API_KEY", "")
 CREDENTIALS_PATH = os.path.expanduser(os.getenv("CREDENTIALS_PATH", "~/.claude_credentials.json"))
+TRANSIENT_PROVIDER_STATUSES = {401, 403, 429, 500, 502, 503, 504}
 
 
 def _split_env(name, default=""):
@@ -47,6 +50,7 @@ def _split_env(name, default=""):
 def _default_config():
     local = _split_env("LOCAL_MODEL_ALIASES", "qwen/qwen3.6-27b")
     nous = _split_env("NOUS_MODEL_ALIASES", "deepseek/deepseek-v4-flash,deepseek-v4-flash")
+    openrouter = _split_env("OPENROUTER_MODEL_ALIASES", "openrouter/free,deepseek/deepseek-v4-flash:free")
     anthropic = _split_env(
         "ANTHROPIC_MODEL_ALIASES",
         "claude-opus-4-7,claude-sonnet-4-6,claude-haiku-4-5-20251001,claude-opus-4-5-20251101",
@@ -65,6 +69,14 @@ def _default_config():
                 "base_url": NOUS_BASE,
                 "token_env": "NOUS_API_KEY",
                 "models": nous,
+                "fallbacks": ["openrouter", "lmstudio"],
+            },
+            "openrouter": {
+                "base_url": OPENROUTER_BASE,
+                "token_env": "OPENROUTER_API_KEY",
+                "models": openrouter,
+                "fallback_model": "openrouter/free",
+                "fallbacks": ["lmstudio"],
             },
             "anthropic": {
                 "base_url": ANTHROPIC_BASE,
@@ -104,6 +116,7 @@ LM_MODELS = CONFIG.get("local_models") or [{"id": "qwen/qwen3.6-27b", "weight": 
 NOUS_MODELS = (PROVIDERS.get("nous") or {}).get("models") or []
 ANTHROPIC_MODELS = (PROVIDERS.get("anthropic") or {}).get("models") or []
 OPENAI_MODELS = (PROVIDERS.get("openai") or {}).get("models") or []
+OPENROUTER_MODELS = (PROVIDERS.get("openrouter") or {}).get("models") or []
 CUSTOM_MODELS = (PROVIDERS.get("custom") or {}).get("models") or []
 
 
@@ -140,6 +153,8 @@ def provider_token(name, request_token=""):
         configured = configured or LM_STUDIO_TOKEN
     if name == "nous":
         configured = configured or NOUS_API_KEY
+    if name == "openrouter":
+        configured = configured or OPENROUTER_API_KEY
     if name == "openai":
         configured = configured or OPENAI_API_KEY
     if name == "custom":
@@ -170,6 +185,8 @@ def provider_for_chat_model(model):
     value = (model or "").lower()
     if is_local_model(model):
         return "lmstudio"
+    if value.startswith("openrouter/") or any(value == m.lower() for m in OPENROUTER_MODELS):
+        return "openrouter"
     if value.startswith("openai/") or any(value == m.lower() for m in OPENAI_MODELS):
         return "openai"
     if value.startswith("custom/") or any(value == m.lower() for m in CUSTOM_MODELS):
@@ -292,6 +309,40 @@ def bearer_headers(token):
     return {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
 
 
+def openrouter_headers(token):
+    headers = bearer_headers(token)
+    headers["HTTP-Referer"] = os.getenv("OPENROUTER_HTTP_REFERER", "http://agentic-operations.local")
+    headers["X-Title"] = os.getenv("OPENROUTER_APP_TITLE", "Agentic Operations")
+    return headers
+
+
+def provider_headers(provider, token):
+    if provider == "openrouter":
+        return openrouter_headers(token)
+    return bearer_headers(token)
+
+
+def provider_fallback_model(provider, requested_model):
+    config = PROVIDERS.get(provider) or {}
+    configured = (config.get("fallback_model") or "").strip()
+    if configured:
+        return configured
+    models = config.get("models") or []
+    return models[0] if models else requested_model
+
+
+def fallback_chain(primary):
+    chain = [primary]
+    for provider in (PROVIDERS.get(primary) or {}).get("fallbacks") or []:
+        if provider not in chain:
+            chain.append(provider)
+    return chain
+
+
+def provider_unavailable(resp):
+    return resp.status_code in TRANSIENT_PROVIDER_STATUSES
+
+
 async def copy_response(resp, request):
     if resp.headers.get("content-type", "").startswith("text/event-stream"):
         sse = web.StreamResponse(
@@ -339,34 +390,76 @@ async def proxy_lmstudio_chat(request, body, token):
         return await copy_response(resp, request)
 
 
-async def proxy_nous_chat(request, body, token):
-    token = provider_token("nous", token)
+async def try_openai_compatible_chat(request, body, token, provider, model_override=None):
+    token = provider_token(provider, token)
     if not token:
-        return web.json_response({"error": "No Nous authorization available"}, status=401)
-    url = f"{provider_base('nous', NOUS_BASE)}/chat/completions"
+        return None, {"provider": provider, "status": 401, "reason": "missing_authorization"}
+    if model_override:
+        body["model"] = model_override
+    elif provider != "openrouter":
+        body["model"] = strip_provider_prefix(body.get("model", ""))
+    base = provider_base(
+        provider,
+        {
+            "nous": NOUS_BASE,
+            "openrouter": OPENROUTER_BASE,
+            "openai": OPENAI_BASE,
+        }.get(provider, CUSTOM_PROVIDER_BASE),
+    )
+    if not base:
+        return None, {"provider": provider, "status": 503, "reason": "missing_base_url"}
+    url = f"{base}/chat/completions"
+    headers = provider_headers(provider, token)
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         if body.get("stream"):
-            async with client.stream("POST", url, json=body, headers=bearer_headers(token)) as resp:
-                return await copy_response(resp, request)
-        resp = await client.post(url, json=body, headers=bearer_headers(token))
-        return await copy_response(resp, request)
+            async with client.stream("POST", url, json=body, headers=headers) as resp:
+                if provider_unavailable(resp):
+                    await resp.aread()
+                    return None, {"provider": provider, "status": resp.status_code, "reason": "provider_unavailable_or_limited"}
+                return await copy_response(resp, request), None
+        resp = await client.post(url, json=body, headers=headers)
+        if provider_unavailable(resp):
+            return None, {"provider": provider, "status": resp.status_code, "reason": "provider_unavailable_or_limited"}
+        return await copy_response(resp, request), None
+
+
+async def proxy_chat_with_fallbacks(request, body, token, primary):
+    attempts = []
+    requested_model = body.get("model", "")
+    for provider in fallback_chain(primary):
+        attempt_body = json.loads(json.dumps(body))
+        if provider == "lmstudio":
+            log.warning("provider fallback -> lmstudio after attempts=%s", attempts)
+            return await proxy_lmstudio_chat(request, attempt_body, LM_STUDIO_TOKEN)
+        model_override = None
+        if provider != primary:
+            model_override = provider_fallback_model(provider, requested_model)
+            log.warning("provider fallback -> %s model=%s after attempts=%s", provider, model_override, attempts)
+        response, error = await try_openai_compatible_chat(
+            request,
+            attempt_body,
+            token if provider == primary else "",
+            provider,
+            model_override=model_override,
+        )
+        if response is not None:
+            return response
+        attempts.append(error)
+    return web.json_response({
+        "error": "All configured model providers are temporarily unavailable",
+        "attempts": attempts,
+    }, status=503)
+
+
+async def proxy_nous_chat(request, body, token):
+    return await proxy_chat_with_fallbacks(request, body, token, "nous")
 
 
 async def proxy_openai_compatible_chat(request, body, token, provider):
-    token = provider_token(provider, token)
-    if not token:
-        return web.json_response({"error": f"No {provider} authorization available"}, status=401)
-    body["model"] = strip_provider_prefix(body.get("model", ""))
-    base = provider_base(provider, OPENAI_BASE if provider == "openai" else CUSTOM_PROVIDER_BASE)
-    if not base:
-        return web.json_response({"error": f"No {provider} base URL configured"}, status=503)
-    url = f"{base}/chat/completions"
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-        if body.get("stream"):
-            async with client.stream("POST", url, json=body, headers=bearer_headers(token)) as resp:
-                return await copy_response(resp, request)
-        resp = await client.post(url, json=body, headers=bearer_headers(token))
-        return await copy_response(resp, request)
+    response, error = await try_openai_compatible_chat(request, body, token, provider)
+    if response is not None:
+        return response
+    return web.json_response({"error": error}, status=error.get("status", 503))
 
 
 async def handler(request):
@@ -387,6 +480,8 @@ async def handler(request):
         models.append({"id": f"anthropic/{model}", "object": "model", "display_name": model})
     for model in OPENAI_MODELS:
         models.append({"id": f"openai/{model}", "object": "model", "display_name": model})
+    for model in OPENROUTER_MODELS:
+        models.append({"id": model, "object": "model", "display_name": model})
     for model in CUSTOM_MODELS:
         models.append({"id": f"custom/{model}", "object": "model", "display_name": model})
     if path in ("v1/models", "api/v1/models") and request.method == "GET":
@@ -431,8 +526,8 @@ async def handler(request):
         provider = provider_for_chat_model(model)
         if token == LM_STUDIO_TOKEN or provider == "lmstudio":
             return await proxy_lmstudio_chat(request, body, token)
-        if provider == "nous":
-            return await proxy_nous_chat(request, body, token)
+        if provider in ("nous", "openrouter"):
+            return await proxy_chat_with_fallbacks(request, body, token, provider)
         return await proxy_openai_compatible_chat(request, body, token, provider)
     return web.json_response({"error": f"Not found: {path}"}, status=404)
 

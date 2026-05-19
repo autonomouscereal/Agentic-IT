@@ -36,6 +36,10 @@ def _audit_summary(row):
     action = (row.get("action") or "").replace("_", " ")
     target = row.get("target") or ""
     details = row.get("details")
+    change_id = _detail_value(details, "change_id")
+    approval_actor = _detail_value(details, "approved_by", "rejected_by", "approval_actor") or actor
+    approval_action = _detail_value(details, "action")
+    approval_target = _detail_value(details, "target")
     ticket_id = _detail_value(details, "ticket_id")
     agent_id = _detail_value(details, "agent_id")
     model = _detail_value(details, "model")
@@ -57,6 +61,27 @@ def _audit_summary(row):
         if body:
             note_summary = f"{note_summary}: {body[:180]}"
         return note_summary
+
+    raw_action = row.get("action") or ""
+    if raw_action == "change_approved":
+        gate = f"change {change_id}" if change_id else (target or "approval gate")
+        summary = f"{approval_actor} approved {gate}"
+        if approval_action or approval_target:
+            summary = f"{summary}: {approval_action or 'change'}"
+            if approval_target:
+                summary = f"{summary} on {approval_target}"
+        return summary
+    if raw_action == "change_rejected":
+        gate = f"change {change_id}" if change_id else (target or "approval gate")
+        reason = _detail_value(details, "reason")
+        summary = f"{approval_actor} rejected {gate}"
+        if approval_action or approval_target:
+            summary = f"{summary}: {approval_action or 'change'}"
+            if approval_target:
+                summary = f"{summary} on {approval_target}"
+        if reason:
+            summary = f"{summary} ({reason[:160]})"
+        return summary
 
     summary = f"{actor} {action}".strip()
     if target:

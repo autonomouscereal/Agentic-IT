@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument("--harness", choices=["auto", "hermes", "claude-code"], default=os.getenv("AGENT_HARNESS", "auto"))
     parser.add_argument("--proxy-mode", choices=["deploy", "external"], default=os.getenv("AI_PROXY_MODE", "deploy"))
     parser.add_argument("--proxy-port", default=os.getenv("AI_PROXY_PORT", "4001"))
-    parser.add_argument("--provider", choices=["openai", "anthropic", "nous", "lmstudio", "custom"], default=os.getenv("AGENT_PROVIDER", "nous"))
+    parser.add_argument("--provider", choices=["openai", "anthropic", "nous", "openrouter", "lmstudio", "custom"], default=os.getenv("AGENT_PROVIDER", "nous"))
     parser.add_argument("--provider-base-url", default=os.getenv("PROVIDER_BASE_URL", ""))
     parser.add_argument("--model", default=os.getenv("AGENT_MODEL", "deepseek/deepseek-v4-flash"))
     parser.add_argument("--spawn-setup-agent", action="store_true")
@@ -98,7 +98,7 @@ def configure_interactive(args):
         return args
     args.proxy_mode = prompt_default("Proxy mode", args.proxy_mode, ["deploy", "external"])
     args.harness = prompt_default("Agent harness", args.harness, ["auto", "hermes", "claude-code"])
-    args.provider = prompt_default("Default provider", args.provider, ["openai", "anthropic", "nous", "lmstudio", "custom"])
+    args.provider = prompt_default("Default provider", args.provider, ["openai", "anthropic", "nous", "openrouter", "lmstudio", "custom"])
     args.model = prompt_default("Default model", args.model)
     if args.proxy_mode == "external" and not args.ai_base_url:
         args.ai_base_url = prompt_default("External proxy base URL", "http://localhost:4001")
@@ -204,9 +204,14 @@ def write_env(target, args, dry_run=False):
         "LM_STUDIO_TOKEN": os.getenv("LM_STUDIO_TOKEN", "lmstudio"),
         "ANTHROPIC_BASE": os.getenv("ANTHROPIC_BASE", "https://api.anthropic.com"),
         "NOUS_BASE": os.getenv("NOUS_BASE", "https://inference-api.nousresearch.com/v1"),
+        "OPENROUTER_BASE": os.getenv("OPENROUTER_BASE", "https://openrouter.ai/api/v1"),
+        "OPENROUTER_MODEL_ALIASES": os.getenv("OPENROUTER_MODEL_ALIASES", "openrouter/free,deepseek/deepseek-v4-flash:free"),
+        "OPENROUTER_HTTP_REFERER": os.getenv("OPENROUTER_HTTP_REFERER", "http://agentic-operations.local"),
+        "OPENROUTER_APP_TITLE": os.getenv("OPENROUTER_APP_TITLE", "Agentic Operations"),
         "OPENAI_BASE": os.getenv("OPENAI_BASE", "https://api.openai.com/v1"),
         "CUSTOM_PROVIDER_BASE": args.provider_base_url if args.provider == "custom" else os.getenv("CUSTOM_PROVIDER_BASE", ""),
         "NOUS_API_KEY": "",
+        "OPENROUTER_API_KEY": "",
         "OPENAI_API_KEY": "",
         "ANTHROPIC_API_KEY": "",
         "CUSTOM_PROVIDER_API_KEY": "",
@@ -324,6 +329,7 @@ def provider_base(args, provider):
     defaults = {
         "lmstudio": os.getenv("LM_STUDIO_BASE", "http://host.docker.internal:1234"),
         "nous": os.getenv("NOUS_BASE", "https://inference-api.nousresearch.com/v1"),
+        "openrouter": os.getenv("OPENROUTER_BASE", "https://openrouter.ai/api/v1"),
         "anthropic": os.getenv("ANTHROPIC_BASE", "https://api.anthropic.com"),
         "openai": os.getenv("OPENAI_BASE", "https://api.openai.com/v1"),
         "custom": os.getenv("CUSTOM_PROVIDER_BASE", ""),
@@ -351,6 +357,14 @@ def write_proxy_config(target, args, dry_run=False):
                 "base_url": provider_base(args, "nous"),
                 "token_env": "NOUS_API_KEY",
                 "models": ["deepseek/deepseek-v4-flash", "deepseek-v4-flash"],
+                "fallbacks": ["openrouter", "lmstudio"],
+            },
+            "openrouter": {
+                "base_url": provider_base(args, "openrouter"),
+                "token_env": "OPENROUTER_API_KEY",
+                "models": ["openrouter/free", "deepseek/deepseek-v4-flash:free"],
+                "fallback_model": "openrouter/free",
+                "fallbacks": ["lmstudio"],
             },
             "anthropic": {
                 "base_url": provider_base(args, "anthropic"),
@@ -374,6 +388,8 @@ def write_proxy_config(target, args, dry_run=False):
         config["providers"]["lmstudio"]["models"].insert(0, args.model)
     if args.provider == "nous" and args.model not in config["providers"]["nous"]["models"]:
         config["providers"]["nous"]["models"].insert(0, args.model)
+    if args.provider == "openrouter" and args.model not in config["providers"]["openrouter"]["models"]:
+        config["providers"]["openrouter"]["models"].insert(0, args.model)
     if args.provider == "openai" and args.model not in config["providers"]["openai"]["models"]:
         config["providers"]["openai"]["models"].insert(0, args.model)
     if args.provider == "anthropic" and args.model not in config["providers"]["anthropic"]["models"]:

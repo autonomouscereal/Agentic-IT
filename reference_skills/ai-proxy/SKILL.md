@@ -34,8 +34,12 @@ Proxy deployment contract:
 
 - Base URL: set `AGENT_LLM_BASE_URL` to the environment's routed proxy URL.
 - Default Hermes/Nous model: `deepseek/deepseek-v4-flash`
+- First external fallback: OpenRouter `openrouter/free`, supplied by
+  runtime/vault `OPENROUTER_API_KEY`.
 - Fast local model: `qwen/qwen3.6-27b`
 - Slower local model aliases may exist for older GPUs.
+- Default fallback order for Hermes queue work: Nous Portal -> OpenRouter ->
+  local LM Studio/qwen.
 
 ## Deployment Pattern
 
@@ -69,6 +73,7 @@ Set:
 AGENT_LLM_BASE_URL=http://PROXY_HOST:4001
 AGENT_LLM_AUTH_TOKEN=<from vault or environment when required>
 AGENT_DEFAULT_MODEL=deepseek/deepseek-v4-flash
+OPENROUTER_API_KEY=<from vault/runtime, never source>
 AGENT_HARNESS=hermes
 HERMES_DEFAULT_PROVIDER=nous
 HERMES_LOCAL_PROVIDER=dashboard-proxy
@@ -79,9 +84,13 @@ operator's current model separate from spawned worker agents.
 
 ## Test Expectations
 
-- Model discovery returns configured aliases including local and Nous models.
+- Model discovery returns configured aliases including local, Nous, and
+  OpenRouter models.
 - A short local model request completes through the proxy using OpenAI chat.
 - A short Nous Portal request completes through the proxy using OpenAI chat.
+- A short OpenRouter request completes through the proxy using OpenAI chat.
+- A simple tool schema sent to `openrouter/free` returns a tool-call response
+  when the upstream free route has capacity.
 - A short Claude Code request completes through the proxy using Anthropic Messages when Claude Code remains enabled.
 - A missing or invalid auth token fails clearly.
 - Agent spawn logs show the selected model and proxy URL without leaking secrets.

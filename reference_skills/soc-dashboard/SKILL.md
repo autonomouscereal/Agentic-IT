@@ -1,4 +1,4 @@
----
+﻿---
 name: soc-dashboard
 description: >
   Agentic Operations control plane - FastAPI + PostgreSQL + vanilla JS
@@ -209,6 +209,12 @@ Validation evidence from 2026-05-19:
   `178`/`179`, postmortem `105`, and workflow `4` updated. Review later found
   unsafe direct suspicious URL retrieval semantics, so `621` is now a
   URL-safety regression case instead of a lead demo proof.
+- URL-safe replacement proof completed on ticket `690`, iTop `Incident::470`,
+  agents `265`/`266`/`267`, Wazuh access request `31`, approval gates
+  `181`/`182`, postmortem `106`, URL sandbox attachment `92`, and workflow `4`
+  updated. The ticket resolved, no active processes remained, approval audit
+  names `demo_account_1`, and the suspicious URL was represented through
+  sandbox metadata with `direct_fetch_performed=false`.
 - Authenticated Chrome validation confirmed `Demo Proofs` renders the curated
   ticket list, opens the evidence trail modal, and leaves no console/page/http
   errors; `/favicon.ico` returns `204` without weakening protected UI/API
@@ -219,7 +225,7 @@ Validation evidence from 2026-05-19:
   reachability passed for GitLab, iTop, Keycloak, Mailcow UI, Roundcube route,
   and SearXNG. The AI proxy remains local-only by design.
 - Source regression passed: `147 passed`, JS syntax checks, text hygiene, and
-  HTTPS smoke against `https://127.0.0.1:25443`.
+  HTTPS smoke against `https://192.168.50.222:25443`.
 - Setup fan-out regression passed: source tests `147 passed`; live hardened API
   smoke created parent setup ticket `624` with `7` scoped child module tickets;
   authenticated Chrome verified the Setup page per-module actions and no
@@ -710,7 +716,7 @@ ComfyUI, torrenting, and media tooling are intentionally excluded from the IT/SO
 - `theme`: dark mode with cyan primary
 - `sync_enabled`: iTop sync enabled, 30s interval
 - `health_check_enabled`: enabled, 60s interval
-- `agent_config`: qwen/qwen3.6-27b model, 15s heartbeat, 120s stalled threshold, 3 max retries
+- `agent_config`: deepseek/deepseek-v4-flash model, Hermes external-first routing, bounded transient retries, local qwen fallback when configured
 
 ## Frontend Pages
 
