@@ -1,6 +1,6 @@
 # Demo Ticket Catalog
 
-Last updated: 2026-05-18.
+Last updated: 2026-05-19.
 
 Use the dashboard at `http://192.168.50.222:25480`. On the Tickets page, choose
 the `Demo Proofs` filter to show the curated prepared examples in the order
@@ -14,6 +14,7 @@ The demo account password is still stored only in vault key `demo_account_1`.
 
 | Story | Dashboard Ticket | Provider | Evidence |
 | --- | --- | --- | --- |
+| Fresh Hermes complex phishing plus EDR proof with user response, dashboard/iTop steering, Wazuh access gate, containment gate, postmortem, and promoted workflow | `621` | iTop `401` | 38 notes, agents `256`/`257`/`258`, access request `29`, gates `178` and `179` completed, postmortem `105`, workflow `4` updated |
 | Complex phishing plus EDR with user response, permission wall, access approval, containment gate, and promoted learning | `531` | iTop `308` | 37 notes, agents `194`/`195`/`196`, gates `155` and `156` completed, postmortem `82` promoted |
 | GitLab Runner CI/CD remediation with real failed pipeline, agent fix branch, MR, final passing pipeline, and deployment gate | `83` | iTop `349` | CI/CD runs `11` failed and `12` passed, gates `39`/`40` completed, postmortem `21` ready for review |
 | Local CI/CD remediation plus scanner wrapper and Sysmon/EDR infrastructure repair | `82` | iTop `350` | CI/CD runs `8`/`9` needs-review and `10` passed, gates `34`/`36`/`37`/`38` completed, postmortem `20` ready for review |
@@ -32,7 +33,7 @@ The demo account password is still stored only in vault key `demo_account_1`.
 ## Live Demo Path
 
 1. Open Tickets and select `Demo Proofs`.
-2. Start with ticket `531` for the full enterprise story: user clarification,
+2. Start with ticket `621` for the freshest full enterprise story: user clarification,
    access wall, approval gate, scoped lease, containment, and promoted learning.
 3. Use ticket `83` to show real GitLab/CI/CD proof: failed scanner gate,
    agent remediation, MR, final passing pipeline, and deployment approval.

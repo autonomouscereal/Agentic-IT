@@ -170,6 +170,9 @@ Validation evidence from 2026-05-19:
 - Live proxy routing reconciled to the Compose-managed proxy internally:
   `AGENT_LLM_BASE_URL=http://ai-proxy:4001`, host-facing proxy on `4401`;
   post-route Hermes smoke completed on ticket `620`, agent `255`, task `252`.
+- Complex phishing plus EDR live proof completed on ticket `621`, iTop
+  `Incident::401`, agents `256`/`257`/`258`, access request `29`, changes
+  `178`/`179`, postmortem `105`, and workflow `4` updated.
 - Source regression passed: `142 passed`, JS syntax checks, text hygiene, and
   HTTPS smoke against `https://192.168.50.222:25443`.
 

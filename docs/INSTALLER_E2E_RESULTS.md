@@ -120,6 +120,12 @@ Related real-agent regression proofs on the restored live stack:
   completed at 100%.
 - Wazuh lease-gated access: ticket `618`, original agent `253`, resumed agent
   `254`, change `177`, Wazuh access granted, ticket resolved.
+- Complex phishing plus EDR proof: ticket `621`, iTop `Incident::401`,
+  agents `256`/`257`/`258`, access request `29`, changes `178` and `179`,
+  postmortem `105`, workflow `4` updated. The run validated requester
+  response wait/resume, dashboard steering, iTop public_log steering, denied
+  Wazuh lease, access approval/resume, containment approval/resume, postmortem
+  review/promotion, and no active processes afterward.
 
 Source-level regression:
 

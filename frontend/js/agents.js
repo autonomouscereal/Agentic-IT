@@ -4,7 +4,7 @@ const activeStatuses = ['spawned', 'running', 'working'];
 const waitingStatuses = ['pending_approval', 'awaiting_access', 'awaiting_user_response', 'blocked'];
 const stalledStatuses = ['stalled'];
 const finishedStatuses = ['finished', 'failed', 'stopped', 'terminated', 'resolved'];
-const AGENT_DEMO_TICKET_IDS = [531, 83, 82, 580, 578, 525, 539, 422, 558, 575, 530, 118, 363, 430];
+const AGENT_DEMO_TICKET_IDS = [621, 531, 83, 82, 580, 578, 525, 539, 422, 558, 575, 530, 118, 363, 430];
 const AGENT_DEMO_TICKET_SET = new Set(AGENT_DEMO_TICKET_IDS);
 
 async function loadAgents() {
