@@ -215,10 +215,28 @@ Latest validated state on 2026-05-20:
 | Real agent account case | marker `ops-chat-scenarios-1779301430`, ticket `1185`, Hermes agent `326`, user-facing login next-step note |
 | Real agent software case | marker `ops-chat-scenarios-1779301734`, ticket `1191`, Hermes agent `327`, minimum-details note |
 | No-spawn broad smoke | marker `ops-chat-scenarios-1779302571`, tickets `1192`-`1196`, general chat, web lookup, cat memory, account, software, VPN, phishing, CI/CD |
+| Browser UI retest | marker `ops-chat-ui-exec-1779283445`, ticket `1197`, iTop ref `616`, outbound Matrix question delivered, chat reply recorded as ticket note |
+| Broad enterprise retest | marker `ops-chat-enterprise-matrix-1779305167`, tickets `1198`-`1248`, 50/50 passed, global search found marker |
+| Real agent prompt guard | marker `ops-chat-scenarios-1779307368`, ticket `1255`, Hermes agent `333`, spawned prompt included canonical-ticket no-duplicate guardrail |
 
 Smoke-owned agents `327` and `328` were stopped after collecting evidence so
 the demo queue was left clean. Final active-agent and process checks were
 empty.
+
+Additional smoke-owned agents `330`, `331`, `332`, and `333` were stopped after
+collecting evidence during the later UI retest. Active agents ended at `0`.
+
+Rerun findings:
+
+- Element may show digital-identity verification/reset prompts on first login.
+  The Playwright smoke now handles the demo-account reset path explicitly with
+  `OPS_CHAT_ALLOW_IDENTITY_RESET=true`, then confirms the real Matrix path.
+- The account-lockout real-agent rerun exposed a duplicate-ticket risk in the
+  ticket-agent prompt. Both chat-agent spawn paths now tell the agent that the
+  existing ticket is canonical and that child work must use explicit
+  access/change/setup/follow-up endpoints only.
+- The VPN real-agent case correctly asked a pre-ticket clarification. That is
+  expected behavior when the missing answer changes route/scope/urgency.
 
 ## Required Smoke Commands
 
@@ -269,6 +287,7 @@ OPS_CHAT_USER=demo_chat_alice \
 OPS_CHAT_PASSWORD=<from vault> \
 OPS_CHAT_SEND_MESSAGE=true \
 PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
+OPS_CHAT_ALLOW_IDENTITY_RESET=true \
 node scripts/smoke_ops_chat_playwright.js
 ```
 

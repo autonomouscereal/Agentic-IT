@@ -201,6 +201,14 @@ Latest Ops Chat routing proof, 2026-05-20:
   `ops-chat-scenarios-1779301734` spawned Hermes agents `326` and `327` for
   account-lockout and software-request cases, then the smoke-owned live agent
   process was stopped after visible evidence to keep the demo queue clean.
+- Browser UI retest marker `ops-chat-ui-exec-1779283445` created ticket `1197`
+  from Element, synced to iTop ref `616`, delivered a ticket question back to
+  Matrix, and recorded the user reply as a ticket note.
+- Broad enterprise retest marker `ops-chat-enterprise-matrix-1779305167`
+  created tickets `1198`-`1248` and passed 50/50 cases.
+- Post-guard real-agent marker `ops-chat-scenarios-1779307368` created ticket
+  `1255` and spawned Hermes agent `333`; the actual process prompt contained
+  the canonical-ticket no-duplicate instruction.
 
 - Broad enterprise matrix marker `ops-chat-enterprise-matrix-1779257312`
   created tickets `846`-`895` and passed 50/50 no-spawn RACI checks across

@@ -87,6 +87,9 @@ browser Element send: marker ops-chat-playwright-1779301274503, ticket 1177
 real agent account-lockout: marker ops-chat-scenarios-1779301430, ticket 1185, agent 326
 real agent software-request: marker ops-chat-scenarios-1779301734, ticket 1191, agent 327
 active agents after cleanup: 0
+browser UI retest: marker ops-chat-ui-exec-1779283445, ticket 1197, outbound chat user-response passed
+50-case enterprise retest: marker ops-chat-enterprise-matrix-1779305167, tickets 1198-1248, 50/50 passed
+post-guard real agent: marker ops-chat-scenarios-1779307368, ticket 1255, agent 333, canonical-ticket no-duplicate prompt verified
 ```
 
 ## Server Health

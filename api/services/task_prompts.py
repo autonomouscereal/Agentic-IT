@@ -40,6 +40,11 @@ FAST_TICKET_PROMPT = """Work this ticket end to end as quickly as possible.
 
 Operational rules:
 - First read the complete canonical ticket context using GET /api/tickets/{ticket_id}/context, then inspect notes, attachments, prior similar tickets, knowledge articles, workflows, postmortems, change requests, and available skills.
+- Treat ticket `{ticket_id}` as the canonical work item. Do not create another
+  normal Incident/UserRequest/Change ticket for the same requester ask. Create
+  child tickets only through explicit platform endpoints for a real access
+  request, change request, setup/module task, or operator-requested follow-up,
+  and link them back to this ticket.
 - If the context contains an active or approved workflow matching this ticket class/use case, follow that workflow first and record any deviation in a ticket note.
 - Keep scanning for user notes or ticket updates while working. If the ticketing provider cannot expose notes yet, state that gap in the checkpoint and continue with available context.
 - Do not read saved harness `tool-results` files from current or prior agent workdirs to recover context. If a curl or evidence response is too large, re-query the bounded dashboard endpoints with fewer log lines or narrower filters.
@@ -133,6 +138,11 @@ Operational rules:
 - Use API base URL http://localhost:8000 inside the runner.
 - First call GET /api/postmortems/evidence/{ticket_id}?task_log_lines=0&max_notes=8&max_articles=1&max_audit=6 and use that compact evidence as the primary source of truth. If using curl, quote the full URL because it contains `&` query parameters. It includes relevant reusable workflows and knowledge articles; if an active/approved/tested workflow matches this ticket, follow it first and document any deviation.
 - Then call GET /api/tickets/{ticket_id} for the current ticket, provider reference, and agent_instance_id.
+- Treat ticket `{ticket_id}` as the canonical work item. Do not create another
+  normal Incident/UserRequest/Change ticket for the same requester ask. Create
+  child tickets only through explicit platform endpoints for a real access
+  request, change request, setup/module task, or operator-requested follow-up,
+  and link them back to this ticket.
 - Do not fetch full /api/tickets/{ticket_id}/context unless the compact evidence is missing a specific fact needed to finish the ticket.
 - Do not read saved harness `tool-results` files from current or prior agent workdirs to recover context. If evidence is too large, re-query compact dashboard endpoints with fewer task log lines or narrower filters.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful triage, blockers, approvals, actions, or resolution evidence.

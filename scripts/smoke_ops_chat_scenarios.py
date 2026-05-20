@@ -18,7 +18,7 @@ import urllib.request
 TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
 
 
-def request(base, method, path, payload=None, timeout=90):
+def request(base, method, path, payload=None, timeout=240):
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     headers = {"Content-Type": "application/json"}
     if TOKEN:
@@ -57,6 +57,7 @@ def progress_note_bodies(context):
 
 
 def run_general_chat(base, marker):
+    print(json.dumps({"progress": "scenario_start", "scenario": "general-chat", "marker": marker}), flush=True)
     result = request(base, "POST", "/api/ops-chat/message", {
         "message": f"What can this operations assistant help with? Marker {marker}.",
         "requester_name": "Demo User",
@@ -105,6 +106,7 @@ def run_general_chat(base, marker):
 
 def run_ticket_scenario(base, marker, name, message, expected_group, expected_intent=None,
                         require_no_intake_gate=False):
+    print(json.dumps({"progress": "scenario_start", "scenario": name, "marker": marker}), flush=True)
     result = request(base, "POST", "/api/ops-chat/message", {
         "message": f"{message} Marker {marker}-{name}.",
         "requester_name": "Demo User",
@@ -217,6 +219,7 @@ REAL_AGENT_CASES = {
 
 
 def run_agent_handoff(base, marker, timeout_seconds, case_name="account-lockout", message=None):
+    print(json.dumps({"progress": "real_agent_start", "case": case_name, "marker": marker}), flush=True)
     message = message or REAL_AGENT_CASES[case_name]
     result = request(base, "POST", "/api/ops-chat/message", {
         "message": f"{message} Marker {marker}-agent-{case_name}.",
@@ -256,6 +259,8 @@ def main():
     parser.add_argument("--all-agent-cases", action="store_true",
                         help="Run every real-agent case sequentially. Use only on live/demo systems with enough provider capacity.")
     parser.add_argument("--agent-timeout", type=int, default=360)
+    parser.add_argument("--agent-only", action="store_true",
+                        help="Skip the broad preflight scenarios and run only requested real-agent handoff cases.")
     args = parser.parse_args()
 
     if not TOKEN:
@@ -267,52 +272,54 @@ def main():
     health = request(base, "GET", "/api/ops-chat/matrix/health")
     require(health.get("client") == "Matrix Synapse + Element", f"unexpected chat health: {health}")
 
-    results = [run_general_chat(base, marker)]
-    results.append(run_ticket_scenario(
-        base,
-        marker,
-        "account-lockout",
-        "I cannot log into my account and I have a customer call in 20 minutes. I can receive SMS MFA codes.",
-        "Identity & Access",
-        "identity-help",
-        False,
-    ))
-    results.append(run_ticket_scenario(
-        base,
-        marker,
-        "software-request",
-        "I need approved screen recording software installed on my workstation for a training session.",
-        "Endpoint Support",
-        "endpoint-support",
-        False,
-    ))
-    results.append(run_ticket_scenario(
-        base,
-        marker,
-        "vpn-connectivity",
-        "My VPN stopped connecting after a reboot and I cannot reach the finance file share that worked yesterday.",
-        "Network Operations",
-        "vpn-connectivity",
-        False,
-    ))
-    results.append(run_ticket_scenario(
-        base,
-        marker,
-        "phishing-report",
-        "A user reported a suspicious email with a bad link from an unknown sender. Nobody should directly browse the URL.",
-        "Security Operations",
-        "phishing",
-        True,
-    ))
-    results.append(run_ticket_scenario(
-        base,
-        marker,
-        "deployment-gate",
-        "The deployment pipeline failed after Semgrep and Trivy findings and I need a delivery gate review.",
-        "DevSecOps",
-        "devsecops",
-        True,
-    ))
+    results = []
+    if not args.agent_only:
+        results = [run_general_chat(base, marker)]
+        results.append(run_ticket_scenario(
+            base,
+            marker,
+            "account-lockout",
+            "I cannot log into my account and I have a customer call in 20 minutes. I can receive SMS MFA codes.",
+            "Identity & Access",
+            "identity-help",
+            False,
+        ))
+        results.append(run_ticket_scenario(
+            base,
+            marker,
+            "software-request",
+            "I need approved screen recording software installed on my workstation for a training session.",
+            "Endpoint Support",
+            "endpoint-support",
+            False,
+        ))
+        results.append(run_ticket_scenario(
+            base,
+            marker,
+            "vpn-connectivity",
+            "My VPN stopped connecting after a reboot and I cannot reach the finance file share that worked yesterday.",
+            "Network Operations",
+            "vpn-connectivity",
+            False,
+        ))
+        results.append(run_ticket_scenario(
+            base,
+            marker,
+            "phishing-report",
+            "A user reported a suspicious email with a bad link from an unknown sender. Nobody should directly browse the URL.",
+            "Security Operations",
+            "phishing",
+            True,
+        ))
+        results.append(run_ticket_scenario(
+            base,
+            marker,
+            "deployment-gate",
+            "The deployment pipeline failed after Semgrep and Trivy findings and I need a delivery gate review.",
+            "DevSecOps",
+            "devsecops",
+            True,
+        ))
     if args.spawn_agent:
         if args.all_agent_cases:
             agent_cases = sorted(REAL_AGENT_CASES.keys())
@@ -323,7 +330,8 @@ def main():
 
     query = urllib.parse.quote(marker)
     search = request(base, "GET", f"/api/search/global?q={query}&limit=20")
-    require(search.get("total", 0) >= 4, f"global search did not find scenario tickets: {search}")
+    min_search_results = 1 if args.agent_only else 4
+    require(search.get("total", 0) >= min_search_results, f"global search did not find scenario tickets: {search}")
 
     print(json.dumps({
         "status": "passed",

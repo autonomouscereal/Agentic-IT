@@ -182,6 +182,7 @@ OPS_CHAT_URL=https://<host>:3303 \
 OPS_CHAT_USER=<keycloak chat user> \
 OPS_CHAT_PASSWORD=<from vault> \
 OPS_CHAT_SEND_MESSAGE=true \
+OPS_CHAT_ALLOW_IDENTITY_RESET=true \
 node scripts/smoke_ops_chat_playwright.js
 ```
 
@@ -241,6 +242,21 @@ queue or tier. It writes a `ticket-assignment` note for auditability.
   `ops-chat-scenarios-1779301734`, spawning Hermes agents `326` and `327` on
   tickets `1185` and `1191`. The account-lockout case wrote user-facing login
   next steps; the software-request case asked for the minimum missing details.
+- Browser UI retest marker `ops-chat-ui-exec-1779283445` created ticket `1197`
+  through Element/Keycloak, synced to iTop ref `616`, delivered a
+  `/request-info` question back into Matrix, and recorded the user's chat reply
+  as a ticket note.
+- Broad enterprise retest marker `ops-chat-enterprise-matrix-1779305167`
+  created tickets `1198`-`1248`, passed 50/50 no-spawn cases, and proved global
+  search visibility.
+- Real-agent prompt-guard marker `ops-chat-scenarios-1779307368` created ticket
+  `1255`, spawned Hermes agent `333`, and verified that the actual process
+  prompt included the canonical-ticket no-duplicate instruction.
+- Smoke-owned agents `330`, `331`, `332`, and `333` were stopped after visible
+  evidence, leaving active agents at `0`.
+- The VPN real-agent case correctly asked a pre-ticket clarification instead of
+  opening a premature ticket. This is expected when the missing answer changes
+  route, scope, urgency, or ticket need.
 
 - Harness-required chat toolbelt proof:
   - Marker `harness-answer-tool-1779286572` used the Hermes chat harness and

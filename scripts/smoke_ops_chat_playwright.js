@@ -25,6 +25,7 @@ const chatMessage = process.env.OPS_CHAT_TEST_MESSAGE || `I cannot log into my K
 const ignoreHttpsErrors = /^(1|true|yes|on)$/i.test(process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS || "");
 const screenshotDir = process.env.PLAYWRIGHT_SCREENSHOT_DIR || "";
 const dashboardServiceToken = process.env.DASHBOARD_SERVICE_TOKEN || "";
+const allowIdentityReset = !/^(0|false|no|off)$/i.test(process.env.OPS_CHAT_ALLOW_IDENTITY_RESET || "true");
 
 function requireSecret(name, value) {
   if (!value) {
@@ -51,6 +52,83 @@ async function dismissIfVisible(page, pattern) {
       await text.click({ force: true }).catch(() => {});
       await page.waitForTimeout(500);
     }
+  }
+}
+
+async function dismissElementIdentityModals(page) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+    if (/Are you sure you want to reset your digital identity/i.test(body)) {
+      if (allowIdentityReset) {
+        const continueButton = page.getByRole("button", { name: /^Continue$/i }).first();
+        if (await continueButton.isVisible().catch(() => false)) {
+          await continueButton.click({ force: true });
+          await page.waitForTimeout(8000);
+          continue;
+        }
+        const resetClicked = await clickVisibleElementText(page, /^Continue$/i, "first");
+        if (resetClicked) {
+          await page.waitForTimeout(8000);
+          continue;
+        }
+      } else {
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(1000);
+        const afterEscape = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+        if (!/Are you sure you want to reset your digital identity/i.test(afterEscape)) {
+          continue;
+        }
+        const cancelClicked = await clickVisibleElementText(page, /^Cancel$/i, "last");
+        if (cancelClicked) {
+          await page.waitForTimeout(1500);
+          continue;
+        }
+      }
+    }
+    if (/Enter your account password|Confirm reset/i.test(body) && allowIdentityReset) {
+      if (await page.locator('input[type="password"]').isVisible().catch(() => false)) {
+        await page.locator('input[type="password"]').fill(opsChatPassword);
+        const confirmClicked = await clickVisibleElementText(page, /^(Continue|Reset|Confirm)$/i, "first");
+        if (confirmClicked) {
+          await page.waitForTimeout(10000);
+          continue;
+        }
+      }
+    }
+    if (/Save your Security Key|Security Key|Recovery Key|Download|Copy/i.test(body) && allowIdentityReset) {
+      const continueClicked = await clickVisibleElementText(page, /^(Continue|Done|Skip)$/i, "last");
+      if (continueClicked) {
+        await page.waitForTimeout(5000);
+        continue;
+      }
+    }
+    if (/Confirm your digital identity/i.test(body)) {
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(1000);
+      const afterEscape = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+      if (!/Confirm your digital identity/i.test(afterEscape)) {
+        continue;
+      }
+      const cantConfirm = page.getByText(/Can't confirm\?|Can.t confirm\?/i).first();
+      if (await cantConfirm.isVisible().catch(() => false)) {
+        await cantConfirm.click({ force: true });
+        await page.waitForTimeout(1500);
+        continue;
+      }
+      const laterClicked = await clickVisibleElementText(page, /^(Skip|Later|Cancel)$/i, "last");
+      if (laterClicked) {
+        await page.waitForTimeout(1500);
+        continue;
+      }
+    }
+    if (/Device verified/i.test(body)) {
+      const doneClicked = await clickVisibleElementText(page, /^Done$/i, "last");
+      if (doneClicked) {
+        await page.waitForTimeout(1500);
+        continue;
+      }
+    }
+    break;
   }
 }
 
@@ -124,12 +202,8 @@ async function settleElementIdentity(page) {
       return;
     }
     if (/Confirm your digital identity|Are you sure you want to reset your digital identity/i.test(body)) {
-      const continueButton = page.getByRole("button", { name: /Continue/i }).last();
-      if (await continueButton.isVisible().catch(() => false)) {
-        await continueButton.click({ force: true });
-        await page.waitForTimeout(5000);
-        continue;
-      }
+      await dismissElementIdentityModals(page);
+      await page.waitForTimeout(1500);
       const cant = page.getByText(/Can't confirm\?|Can.t confirm\?/i).first();
       if (await cant.isVisible().catch(() => false)) {
         await cant.click({ force: true });
@@ -225,12 +299,31 @@ async function clickElementRoleButtonByText(page, pattern, which = "last") {
     return true;
   }, { source: pattern.source, which }).catch(() => false);
 }
+
+async function clickVisibleElementText(page, pattern, which = "last") {
+  return await page.evaluate(({ source, which }) => {
+    const regex = new RegExp(source, "i");
+    const candidates = Array.from(document.querySelectorAll("button,[role='button'],a,span,div"));
+    const visible = candidates.filter((el) => {
+      const text = (el.innerText || el.textContent || "").trim();
+      if (!regex.test(text)) return false;
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+    });
+    const target = which === "first" ? visible[0] : visible[visible.length - 1];
+    if (!target) return false;
+    target.click();
+    return true;
+  }, { source: pattern.source, which }).catch(() => false);
+}
 async function sendOpsChatMessage(page) {
   await dismissIfVisible(page, /Dismiss|Not now|Maybe later/i);
   const botProfileUrl = `${opsChatUrl.replace(/\/$/, "")}/#/user/@agentic-ops:agentic-ops.local`;
   await page.goto(botProfileUrl, { waitUntil: "domcontentloaded" }).catch(() => {});
   await page.waitForTimeout(4000);
   await settleElementIdentity(page);
+  await dismissElementIdentityModals(page);
   await dismissIfVisible(page, /^OK$/i);
   await dismissIfVisible(page, /Dismiss|Not now|Maybe later/i);
   const sendMessage = page.getByRole("button", { name: /Send message|Message/i }).first();
@@ -238,6 +331,7 @@ async function sendOpsChatMessage(page) {
     await sendMessage.click({ force: true });
     await page.waitForTimeout(4000);
   }
+  await dismissElementIdentityModals(page);
   await dismissIfVisible(page, /Dismiss|Not now|Maybe later/i);
   await clickElementRoleButtonByText(page, /^Dismiss$/i, "first");
   await page.waitForTimeout(500);
@@ -246,10 +340,29 @@ async function sendOpsChatMessage(page) {
     await page.waitForTimeout(1000);
   }
   if (await page.getByText(/Start a chat with this new contact/i).first().isVisible().catch(() => false)) {
-    await clickElementRoleButtonByText(page, /^Continue$/i, "last");
+    const continueNewContact = page.getByRole("button", { name: /^Continue$/i }).last();
+    if (await continueNewContact.isVisible().catch(() => false)) {
+      await continueNewContact.click({ force: true });
+    } else {
+      await clickVisibleElementText(page, /^Continue$/i, "last");
+    }
     await page.waitForTimeout(5000);
   }
-  const directComposerReady = await page.locator('textarea[placeholder*="Message"], [aria-label*="Message"], [contenteditable="true"], [role="textbox"], div[aria-label*="Send a message"]').last().isVisible().catch(() => false);
+  await dismissElementIdentityModals(page);
+  let directComposerReady = await page.locator('textarea[placeholder*="Message"], [aria-label*="Message"], [contenteditable="true"], [role="textbox"], div[aria-label*="Send a message"]').last().isVisible().catch(() => false);
+  if (!directComposerReady) {
+    const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+    if (/Are you sure you want to reset your digital identity|Confirm your digital identity/i.test(body)) {
+      await dismissElementIdentityModals(page);
+      const sendAgain = page.getByRole("button", { name: /Send message|Message/i }).first();
+      if (await sendAgain.isVisible().catch(() => false)) {
+        await sendAgain.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(4000);
+      }
+      await dismissElementIdentityModals(page);
+      directComposerReady = await page.locator('textarea[placeholder*="Message"], [aria-label*="Message"], [contenteditable="true"], [role="textbox"], div[aria-label*="Send a message"]').last().isVisible().catch(() => false);
+    }
+  }
   if (directComposerReady) {
     const message = chatMessage.includes(chatMarker) ? chatMessage : `${chatMessage} Marker ${chatMarker}`;
     await sendComposerMessage(page, message);
@@ -287,6 +400,17 @@ async function sendOpsChatMessage(page) {
   }
   if (!addressed) {
     const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 1000);
+    if (/Are you sure you want to reset your digital identity|Confirm your digital identity/i.test(body)) {
+      await dismissElementIdentityModals(page);
+      if (/Are you sure you want to reset your digital identity/i.test(await page.locator("body").innerText().catch(() => "")) && allowIdentityReset) {
+        await page.locator("button").filter({ hasText: /^Continue$/i }).first().click({ force: true }).catch(() => {});
+      }
+      await page.waitForTimeout(3000);
+      const afterDismiss = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 1000);
+      if (!/Are you sure you want to reset your digital identity|Confirm your digital identity/i.test(afterDismiss)) {
+        return await sendOpsChatMessage(page);
+      }
+    }
     throw new Error(`Ops Chat direct-message address field was not found. url=${page.url()} body=${body}`);
   }
   await page.waitForTimeout(1500);

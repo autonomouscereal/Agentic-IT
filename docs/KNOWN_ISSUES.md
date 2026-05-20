@@ -2,6 +2,52 @@
 
 Last updated: 2026-05-20.
 
+## Found During 2026-05-20 Ops Chat UI Retest
+
+### Ops Chat all-agent scenario smoke can timeout during chat-intake provider turn
+
+Status: under investigation; narrow reruns should be used for demo proof until
+the broad real-agent suite has timeout/backoff hardening.
+
+Impact:
+
+- `scripts/smoke_ops_chat_scenarios.py --spawn-agent --all-agent-cases` can hit
+  a Python client timeout while waiting for `/api/ops-chat/message`.
+- This occurs before the ticket-agent phase and appears tied to the chat intake
+  harness/provider turn, not Element or Matrix routing.
+- The narrower browser proof and 50-case no-spawn enterprise matrix passed
+  immediately before this failure.
+
+Required follow-up:
+
+- Add prettier retry/backoff around provider exhaustion or slow chat-intake
+  turns.
+- Make the scenario script print the current case before the blocking request
+  so failures are easier to triage.
+- Prefer one real-agent case at a time for demo validation until the broad
+  all-agent runner is hardened.
+
+### Chat-originated ticket agent created a duplicate work ticket
+
+Status: fixed in source prompt guardrail; live rerun required.
+
+Impact:
+
+- Real-agent smoke marker `ops-chat-scenarios-1779306369` assigned agent `330`
+  to ticket `1251`.
+- While working the already-created account-lockout ticket, the agent wrote a
+  checkpoint claiming it created ticket `1252`.
+- Ticket agents should treat their assigned ticket as the canonical work item.
+  They may create child access/change/setup tickets only through explicit
+  platform endpoints when a real barrier requires it; they must not create a
+  second normal work ticket for the same requester ask.
+
+Fix:
+
+- Strengthen chat-originated ticket prompt instructions to forbid duplicate
+  work-ticket creation and to preserve the existing ticket unless creating a
+  child access request/change/setup ticket is explicitly required.
+
 ## Found During 2026-05-20 Ops Chat And Access RACI Work
 
 ### Ops Chat intake was allowed to create approval gates
