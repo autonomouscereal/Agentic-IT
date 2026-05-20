@@ -247,6 +247,20 @@ async def _create_routed_ticket(message, requester_name, requester_email, channe
     if spawn_agent:
         try:
             agent_result = await _spawn_chat_agent(ticket_id, classification, message, requester_name, channel)
+            agent_id = (agent_result or {}).get("agent_id")
+            if change_id and agent_id:
+                await execute("""
+                    UPDATE change_requests
+                    SET agent_id = $1
+                    WHERE id = $2
+                      AND agent_id IS NULL
+                """, int(agent_id), change_id)
+                await log_event("ops-chat", "info", "ops-chat-agent", "chat_approval_gate_bound_to_agent",
+                                f"change_{change_id}", {
+                                    "ticket_id": ticket_id,
+                                    "agent_id": agent_id,
+                                    "change_id": change_id,
+                                })
         except Exception as exc:
             agent_result = {"status": "error", "error": str(exc)}
             await log_event("agent", "error", "ops-chat-agent", "chat_agent_spawn_failed",

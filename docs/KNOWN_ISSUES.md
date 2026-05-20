@@ -4,6 +4,79 @@ Last updated: 2026-05-20.
 
 ## Found During 2026-05-20 Ops Chat And Access RACI Work
 
+### Chat-created approval gates did not resume waiting agents
+
+Status: fixed and verified.
+
+Ops Chat creates an approval gate during ticket creation when RACI says the
+request may require risky action. That gate was created before the real agent
+was spawned, so the `change_requests.agent_id` field was empty. A waiting agent
+could stop cleanly at the gate, but approving that gate returned
+`not_applicable` instead of spawning a continuation agent.
+
+Fix:
+
+- `api/routes/ops_chat.py` now binds the chat-created change request to the
+  spawned agent id as soon as the handoff succeeds.
+- A new migration `022_ops_chat_agent_gate_and_vpn_routing.sql` records the
+  related RACI/demo routing hardening.
+
+Verification:
+
+- Ticket `784` created from Ops Chat with marker
+  `ops-chat-approval-resume-1779251871`.
+- Change `223` was bound to initial agent `293`.
+- Agent `293` stopped at the approval gate with clean wait evidence.
+- Approval by `ops-chat-agent-gate-regression-approver` spawned continuation
+  agent `294`.
+- Agent `294` completed the approved lab-safe gate, documented that no
+  suspicious URL was fetched, closed the ticket, and left no active agent
+  processes.
+
+### VPN chat intake routed as generic access instead of network connectivity
+
+Status: fixed and verified.
+
+The request "VPN stopped connecting and I need access to the finance file
+share" was classified as an access request because the text included the word
+`access`. The follow-up agent corrected the interpretation, but the initial
+assignment group was too IAM-heavy for a demo.
+
+Fix:
+
+- Added a dedicated `VPN connectivity issue` RACI rule with intent
+  `vpn-connectivity`.
+- The rule routes VPN tunnel/client/connectivity failures to
+  `Network Operations` and does not open a generic entitlement approval gate.
+
+Verification:
+
+- Fresh scenario marker `ops-chat-scenarios-1779251833`.
+- Ticket `781` classified as `vpn-connectivity`.
+- Ticket `781` routed to `Network Operations`.
+- No approval gate was opened for initial triage.
+
+### Hermes agents could write placeholder debug notes
+
+Status: fixed and verified.
+
+During the broader real-agent Ops Chat run, the first phishing/EDR proof ticket
+`771` included a placeholder note body `Test note` before the useful triage
+note. This was not a control-plane failure, but it looked sloppy for a demo and
+could confuse human readers of the ticket timeline.
+
+Fix:
+
+- Ticket and auto-assignment prompts now explicitly forbid placeholder/debug
+  notes such as `test`, `test note`, `checking`, or `ignore this`.
+- Agents are told to include real operational context if they are verifying note
+  writing.
+
+Verification:
+
+- Fresh rerun ticket `778` with agent `290` stopped at `pending_approval` with
+  clean evidence notes and no placeholder/debug note.
+
 ### Ops Chat model route drift made live agent handoff look stalled
 
 Status: fixed and verified.

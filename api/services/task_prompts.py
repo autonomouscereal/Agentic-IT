@@ -58,6 +58,7 @@ Operational rules:
 - If you cannot proceed without requester input, POST /api/tickets/{ticket_id}/request-info with a concise question, recipient/contact method when known, and context. Then update checkpoint.json with status waiting_for_user and stop. When a user response arrives, the dashboard will record it with /api/tickets/{ticket_id}/user-response and may resume the ticket.
 - Prefer non-destructive investigation, documentation, and clear ticket notes.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful progress, blockers, evidence, or resolution details.
+- Never write placeholder/debug notes such as "test", "test note", "checking", or "ignore this". If you need to verify note writing, include the real operational context and why the note matters.
 - When writing ticket notes, include explicit attribution fields such as
   `author: agent-{agent_instance_id}` and `source: agent` once you know the
   assigned agent id, so audit trails show the note came from the agent.
@@ -135,6 +136,7 @@ Operational rules:
 - Do not fetch full /api/tickets/{ticket_id}/context unless the compact evidence is missing a specific fact needed to finish the ticket.
 - Do not read saved harness `tool-results` files from current or prior agent workdirs to recover context. If evidence is too large, re-query compact dashboard endpoints with fewer task log lines or narrower filters.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful triage, blockers, approvals, actions, or resolution evidence.
+- Never write placeholder/debug notes such as "test", "test note", "checking", or "ignore this". If you need to verify note writing, include the real operational context and why the note matters.
 - When writing ticket notes, include explicit attribution fields such as
   `author: agent-{agent_instance_id}` and `source: agent` once you know the
   assigned agent id, so audit trails show the note came from the agent.

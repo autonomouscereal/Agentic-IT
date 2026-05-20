@@ -110,6 +110,26 @@ These are samples, not a hardcoded product boundary. Replace or extend them for
 the customer's organization, ServiceNow groups, Jira components, iTop teams, or
 Keycloak roles.
 
+## Demo Routing Notes
+
+The Ops Chat demo uses RACI as the source of truth for intake routing. Current
+high-signal examples:
+
+- Account lockout or MFA help routes to `Identity & Access`.
+- Software install requests route to `Endpoint Support`.
+- VPN tunnel failures such as "VPN stopped connecting after reboot" route to
+  `Network Operations` through intent `vpn-connectivity`.
+- Repository, pipeline, and delivery-gate requests route to `DevSecOps`.
+- Phishing and EDR/security alerts route to `Security Operations` and open
+  approval gates before mailbox, SIEM, containment, URL block, or endpoint
+  response work.
+
+When a message mixes concepts, prefer the operational blocker. For example,
+"I cannot reach the finance file share because VPN stopped connecting" should
+start as `vpn-connectivity` / `Network Operations`, not as an entitlement
+request, unless the user clarifies that VPN works and the share permission
+itself is missing.
+
 ## Guardrails
 
 - Do not ask the requester to gather logs manually unless policy requires it.
@@ -135,3 +155,13 @@ python scripts/smoke_access_raci_routing.py http://localhost:25480
 Expected result: a phishing intake is classified as an Incident, routed to
 Security Operations, linked to a change approval gate, and visible in ticket
 context with notes and attachment metadata.
+
+Latest Ops Chat routing proof, 2026-05-20:
+
+- Ticket `781`: VPN report classified as `vpn-connectivity` and routed to
+  `Network Operations`.
+- Ticket `772`: software request collected workstation, standard OBS Studio,
+  and training date through a chat follow-up, then continuation agent `291`
+  completed routing to Endpoint Support.
+- Ticket `784`: phishing/EDR request opened approval gate `223`, bound that
+  gate to agent `293`, and approval spawned continuation agent `294`.

@@ -102,6 +102,7 @@ Scenario smoke:
 ```bash
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-timeout 600
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --all-agent-cases --agent-timeout 600
 ```
 
 This covers:
@@ -109,6 +110,7 @@ This covers:
 - harmless general chat without ticket creation
 - account-lockout intake routed to Identity & Access
 - software-install intake routed to Endpoint Support
+- VPN connectivity routed to Network Operations
 - phishing intake routed to Security Operations with an approval gate
 - CI/CD delivery-gate intake routed to DevSecOps with an approval gate
 - follow-up chat recorded as `user-response`
@@ -125,6 +127,19 @@ Latest live proof on 2026-05-20:
 - Ticket `749` proves the follow-up path: the first agent asked for the target
   login system, the user replied via Ops Chat, and continuation agent `283`
   wrote Keycloak/SSO troubleshooting guidance.
+- A broader real-agent run passed with marker `ops-chat-scenarios-1779250846`:
+  account lockout ticket `769`, delivery gate ticket `770`, phishing/EDR ticket
+  `771`, software request ticket `772`, and VPN request ticket `773`. The
+  software and VPN tickets then received requester follow-ups via Ops Chat and
+  spawned continuation agents `291` and `292`.
+- VPN routing was corrected and verified with marker
+  `ops-chat-scenarios-1779251833`: ticket `781` classified as
+  `vpn-connectivity` and routed to `Network Operations`.
+- Chat-created approval gates are now bound to the spawned agent so approval can
+  resume the waiting agent path. Ticket `784` / change `223` proved this:
+  initial agent `293` stopped at the approval gate, approval spawned
+  continuation agent `294`, the change completed with lab-safe evidence, and
+  the ticket closed with no active processes left behind.
 
 The 2026-05-20 hardening pass also fixed three demo-readiness issues:
 
@@ -134,6 +149,12 @@ The 2026-05-20 hardening pass also fixed three demo-readiness issues:
 - The API Compose service now passes `OPS_CHAT_AGENT_MODEL` into the container.
 - Durable wait statuses such as `awaiting_user_response` fit the database
   schema and are rendered as wait states instead of failed agents.
+- Agents are instructed not to write placeholder/debug notes such as
+  "test note"; notes must contain real operational context.
+- Chat approval gates created before agent execution are rebound to the spawned
+  agent id, which allows approval-gate resume to work for chat-originated work.
+- A dedicated `VPN connectivity issue` RACI rule prevents VPN tunnel failures
+  from being treated as generic IAM entitlement requests.
 
 ## Security Notes
 

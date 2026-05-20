@@ -108,11 +108,12 @@ Scenario smoke:
 ```bash
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-timeout 600
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --all-agent-cases --agent-timeout 600
 ```
 
 This proves general chat no-ticket behavior, account lockout, software request,
-phishing approval gate, CI/CD approval gate, follow-up notes, global search
-visibility, and optional real agent handoff.
+VPN connectivity routing, phishing approval gate, CI/CD approval gate,
+follow-up notes, global search visibility, and optional real agent handoff.
 
 ## Demo Prompt
 
@@ -137,6 +138,20 @@ audit trail.
   the user could not access, the user replied through Ops Chat, continuation
   agent `283` wrote Keycloak/SSO troubleshooting guidance, and the ticket
   remained waiting for the requester instead of showing a failed-agent badge.
+- A broader all-agent-cases run passed with marker
+  `ops-chat-scenarios-1779250846`: account lockout ticket `769`, delivery gate
+  ticket `770`, phishing/EDR ticket `771`, software request ticket `772`, and
+  VPN request ticket `773`. Software and VPN follow-ups spawned continuation
+  agents `291` and `292`.
+- VPN routing was corrected and verified on ticket `781`, which classified as
+  `vpn-connectivity` and routed to `Network Operations`.
+- Chat-created approval gates are now rebound to the spawned agent id. Ticket
+  `784` proved the full path: change `223` was bound to agent `293`, approval
+  spawned continuation agent `294`, the change completed with lab-safe
+  evidence, and the ticket closed with no active processes.
+- Agent note-quality guardrails now explicitly forbid placeholder/debug notes
+  such as "test note"; the rerun on ticket `778` proved the complex
+  phishing/EDR path stopped at approval without placeholder notes.
 
 If a live provider is slow, inspect `/api/agents/processes`, the ticket notes,
 and the latest checkpoint rather than relying on a percentage field alone.

@@ -483,6 +483,7 @@ cd /home/cereal/SOC_TESTING/soc-dashboard
 export DASHBOARD_SERVICE_TOKEN=<from runtime secret source>
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-timeout 600
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --all-agent-cases --agent-timeout 600
 ```
 
 Covers a demo-realistic conversation set:
@@ -490,6 +491,7 @@ Covers a demo-realistic conversation set:
 - general chat that does not create a ticket
 - account lockout routed to Identity & Access
 - software request routed to Endpoint Support
+- VPN connectivity routed to Network Operations
 - phishing report routed to Security Operations with an approval gate
 - CI/CD delivery-gate request routed to DevSecOps with an approval gate
 - chat follow-up recorded as a `user-response` note
@@ -516,6 +518,23 @@ ticket 749: first chat agent 282 asked which system the user could not access
 user replied through Ops Chat with Keycloak/SSO details
 continuation agent 283 wrote user-facing Keycloak/SSO troubleshooting guidance
 ticket 749 ended awaiting_user_response with clean agent/task status
+```
+
+Additional live regression on 2026-05-20:
+
+```text
+all-agent-cases marker=ops-chat-scenarios-1779250846: PASS
+account lockout: ticket 769, agent 285, awaiting_user_response
+delivery gate: ticket 770, agent 286, awaiting_user_response
+phishing + EDR: ticket 771, agent 287, blocked at approval
+software request: ticket 772, agent 288 asked for details
+VPN outage: ticket 773, agent 289 asked whether this was VPN or access
+software follow-up: ticket 772, continuation agent 291 completed detail collection/routing
+VPN follow-up: ticket 773, continuation agent 292 completed triage and identified Network/VPN handoff
+placeholder-note guardrail rerun: ticket 778, agent 290, no "test note", stopped at pending_approval
+VPN routing rerun: ticket 781, intent vpn-connectivity, Network Operations
+approval-resume rerun: ticket 784, change 223 bound to agent 293, approval spawned agent 294, change completed, ticket closed
+final state: no active dashboard agents and no active Hermes processes
 ```
 
 ## Wazuh EDR/Sysmon E2E

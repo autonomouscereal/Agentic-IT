@@ -155,17 +155,40 @@ def wait_for_agent_progress(base, agent_id, ticket_id, timeout_seconds):
     return {"status": "timeout", **(last or {})}
 
 
-def run_agent_handoff(base, marker, timeout_seconds):
+REAL_AGENT_CASES = {
+    "account-lockout": (
+        "I cannot log into my account before a customer call. "
+        "Please create the ticket, check context, write a concise user-facing next step, "
+        "and avoid any credential change unless an approval gate is opened."
+    ),
+    "software-request": (
+        "I need approved screen recording software installed on my workstation for a training session. "
+        "Please collect the minimum details, route the request, and explain the next approval or support step."
+    ),
+    "vpn-outage": (
+        "My VPN stopped connecting after a laptop reboot and I need access to the finance file share. "
+        "Please triage the request, ask for one useful clarification if needed, and do not make network changes without approval."
+    ),
+    "phishing-edr": (
+        "A user reported a suspicious email and the endpoint also has a Wazuh-style EDR alert. "
+        "Create the ticket, avoid directly browsing or curling the suspicious URL, request access or approvals if needed, "
+        "and write a clear evidence-focused next step."
+    ),
+    "delivery-gate": (
+        "A release is blocked by Semgrep and Trivy findings in CI/CD. "
+        "Create the ticket, review the delivery-gate context, ask for repository access if needed, "
+        "and do not approve deployment without a policy gate."
+    ),
+}
+
+
+def run_agent_handoff(base, marker, timeout_seconds, case_name="account-lockout", message=None):
+    message = message or REAL_AGENT_CASES[case_name]
     result = request(base, "POST", "/api/ops-chat/message", {
-        "message": (
-            "I cannot log into my account before a customer call. "
-            "Please create the ticket, check context, write a concise user-facing next step, "
-            "and avoid any credential change unless an approval gate is opened."
-            f" Marker {marker}-agent."
-        ),
+        "message": f"{message} Marker {marker}-agent-{case_name}.",
         "requester_name": "Demo User",
         "requester_email": "demo@example.invalid",
-        "external_thread_id": f"{marker}-agent",
+        "external_thread_id": f"{marker}-agent-{case_name}",
         "force_new_ticket": True,
         "spawn_agent": True,
     })
@@ -177,11 +200,11 @@ def run_agent_handoff(base, marker, timeout_seconds):
     progress = wait_for_agent_progress(base, agent_id, ticket_id, timeout_seconds)
     if progress.get("status") == "timeout":
         request(base, "POST", f"/api/agents/{agent_id}/stop", {
-            "reason": f"ops-chat scenario smoke timeout for {marker}; stopping only spawned test agent"
+            "reason": f"ops-chat scenario smoke timeout for {marker}/{case_name}; stopping only spawned test agent"
         }, timeout=30)
         raise AssertionError(f"agent {agent_id} timed out without visible progress: {progress}")
     return {
-        "scenario": "real-agent-handoff",
+        "scenario": f"real-agent-{case_name}",
         "ticket_id": ticket_id,
         "agent_id": agent_id,
         "task_id": agent.get("task_id"),
@@ -194,6 +217,10 @@ def main():
     parser.add_argument("base", nargs="?", default="http://localhost:25480")
     parser.add_argument("--spawn-agent", action="store_true",
                         help="Also spawn one real dashboard agent and wait for visible progress")
+    parser.add_argument("--agent-case", action="append", choices=sorted(REAL_AGENT_CASES.keys()),
+                        help="Real-agent case to run. Can be supplied more than once. Defaults to account-lockout when --spawn-agent is used.")
+    parser.add_argument("--all-agent-cases", action="store_true",
+                        help="Run every real-agent case sequentially. Use only on live/demo systems with enough provider capacity.")
     parser.add_argument("--agent-timeout", type=int, default=360)
     args = parser.parse_args()
 
@@ -228,6 +255,15 @@ def main():
     results.append(run_ticket_scenario(
         base,
         marker,
+        "vpn-connectivity",
+        "My VPN stopped connecting after a reboot and I cannot reach the finance file share that worked yesterday.",
+        "Network Operations",
+        "vpn-connectivity",
+        False,
+    ))
+    results.append(run_ticket_scenario(
+        base,
+        marker,
         "phishing-report",
         "A user reported a suspicious email with a bad link from an unknown sender. Nobody should directly browse the URL.",
         "Security Operations",
@@ -244,7 +280,12 @@ def main():
         True,
     ))
     if args.spawn_agent:
-        results.append(run_agent_handoff(base, marker, args.agent_timeout))
+        if args.all_agent_cases:
+            agent_cases = sorted(REAL_AGENT_CASES.keys())
+        else:
+            agent_cases = args.agent_case or ["account-lockout"]
+        for case_name in agent_cases:
+            results.append(run_agent_handoff(base, marker, args.agent_timeout, case_name=case_name))
 
     query = urllib.parse.quote(marker)
     search = request(base, "GET", f"/api/search/global?q={query}&limit=20")
