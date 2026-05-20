@@ -819,7 +819,7 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    padding: 14px;
+    padding: 12px;
     margin-bottom: 16px;
 }
 
@@ -827,21 +827,27 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     color: var(--text-muted);
     font-size: 12px;
     overflow-wrap: anywhere;
+    min-height: 24px;
+}
+
+.runner-health .btn {
+    margin-left: auto;
+    padding: 5px 9px;
 }
 
 .agent-create-controls {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 118px;
     gap: 12px;
-    align-items: stretch;
+    align-items: start;
 }
 
 .agent-create-controls textarea {
-    min-height: 70px;
+    min-height: 58px;
     resize: vertical;
     background: var(--bg-tertiary);
     color: var(--text-primary);
@@ -850,6 +856,11 @@ body {
     padding: 10px 12px;
     font: inherit;
     font-size: 13px;
+}
+
+.agent-create-controls .btn {
+    min-height: 40px;
+    align-self: start;
 }
 
 .agent-card {
@@ -1881,30 +1892,56 @@ body {
 
 .agent-config-panel {
     display: grid;
-    grid-template-columns: minmax(280px, 0.8fr) minmax(360px, 1.2fr);
-    gap: 12px;
-    margin-top: 12px;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin: 8px 0 10px;
 }
 
 .agent-config-defaults {
     display: grid;
-    grid-template-columns: repeat(2, minmax(130px, 1fr)) auto;
     gap: 8px;
-    align-items: end;
-    padding: 12px;
+    align-items: center;
+    padding: 10px;
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid var(--border-color);
     border-radius: 8px;
 }
 
+.agent-defaults-row {
+    grid-template-columns: max-content minmax(170px, 230px) max-content minmax(260px, 1fr) auto minmax(150px, 0.6fr);
+}
+
+.agent-custom-row {
+    grid-template-columns: max-content minmax(180px, 240px) minmax(150px, 1fr) minmax(150px, 220px) minmax(260px, 1fr) auto auto;
+}
+
 .agent-config-defaults .setup-label {
     margin: 0;
     align-self: center;
+    white-space: nowrap;
 }
 
 .agent-config-defaults input,
 .agent-config-defaults select {
     min-width: 0;
+    width: 100%;
+    height: 32px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+.agent-config-defaults .btn {
+    min-width: 88px;
+    height: 32px;
+    padding: 5px 10px;
+    white-space: nowrap;
+}
+
+.agent-config-defaults .btn-danger {
+    min-width: 72px;
+    background: transparent;
+    border-color: rgba(255, 71, 87, 0.45);
+    color: var(--accent-danger);
 }
 
 .agent-config-status {
@@ -1938,20 +1975,69 @@ body {
 
 .setup-layout {
     display: grid;
-    grid-template-columns: minmax(320px, 420px) 1fr;
+    grid-template-columns: minmax(360px, 0.9fr) minmax(460px, 1.1fr);
     gap: 16px;
     margin-bottom: 16px;
+    align-items: start;
+}
+
+.intake-layout {
+    grid-template-columns: minmax(380px, 520px) minmax(480px, 1fr);
+}
+
+.platform-setup-layout {
+    grid-template-columns: minmax(360px, 480px) minmax(520px, 1fr);
 }
 
 .setup-panel {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    padding: 16px;
+    padding: 14px 16px;
+}
+
+.deployment-shape-panel {
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 8px 12px;
+    align-items: center;
+}
+
+.deployment-shape-panel .setup-section-title,
+.deployment-shape-panel .setup-check,
+.deployment-shape-panel .operator-notes-label,
+.deployment-shape-panel #setup-notes {
+    grid-column: 1 / -1;
+}
+
+.deployment-shape-panel .setup-label {
+    margin: 0;
+}
+
+.runtime-handoff-panel {
+    min-height: 0;
+}
+
+.runtime-handoff-panel .setup-summary {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 0;
+}
+
+.provider-modules-panel {
+    padding-top: 12px;
 }
 
 .setup-panel.full {
     margin-top: 16px;
+}
+
+.platform-setup-layout > .setup-panel.wide {
+    grid-column: 1 / -1;
+}
+
+.intake-layout > .setup-panel.wide {
+    grid-column: auto;
 }
 
 .setup-section-title {
@@ -1961,6 +2047,13 @@ body {
     margin-bottom: 12px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--border-color);
+}
+
+.module-desc {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
 .setup-help,
@@ -1982,13 +2075,23 @@ body {
 .setup-textarea {
     width: 100%;
     resize: vertical;
-    min-height: 110px;
+    min-height: 72px;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     border-radius: 6px;
     padding: 10px;
     font-family: inherit;
+}
+
+#intake-message {
+    min-height: 118px;
+    height: 128px;
+}
+
+#setup-notes {
+    min-height: 84px;
+    height: 106px;
 }
 
 .setup-check {
@@ -2008,18 +2111,19 @@ body {
 
 .module-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 14px;
-    margin-top: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
 }
 
 .module-card {
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    padding: 14px;
+    padding: 12px;
     background: rgba(255, 255, 255, 0.02);
     display: grid;
     gap: 8px;
+    align-content: start;
 }
 
 .module-card.selected {
@@ -2037,8 +2141,8 @@ body {
 .module-controls {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 8px;
-    margin: 4px 0;
+    gap: 6px;
+    margin: 2px 0;
 }
 
 .module-status-line {
@@ -2050,24 +2154,43 @@ body {
 }
 
 .module-note-input {
-    min-height: 74px;
+    min-height: 46px;
+    height: 52px;
     font-size: 12px;
-    margin-top: 8px;
+    margin-top: 4px;
 }
 
 .module-actions-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin: 4px 0;
+    gap: 6px;
+    margin: 2px 0;
+}
+
+.module-actions-row .btn {
+    padding: 5px 8px;
+    min-height: 28px;
 }
 
 .module-toolbar {
-    display: grid;
-    grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) minmax(150px, 200px) repeat(3, auto) auto;
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     align-items: center;
     margin-top: 12px;
+}
+
+.module-toolbar .filter-input {
+    flex: 1 1 260px;
+}
+
+.module-toolbar .filter-select {
+    flex: 0 1 190px;
+}
+
+.module-toolbar .btn {
+    flex: 0 0 auto;
+    padding: 6px 9px;
 }
 
 .setup-summary {
@@ -2076,14 +2199,32 @@ body {
     margin-bottom: 12px;
 }
 
+@media (max-width: 1280px) {
+    .agent-defaults-row,
+    .agent-custom-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .agent-config-defaults .setup-label {
+        align-self: end;
+    }
+}
+
 @media (max-width: 1000px) {
-    .setup-layout {
+    .setup-layout,
+    .intake-layout,
+    .platform-setup-layout {
         grid-template-columns: 1fr;
     }
 
     .agent-config-panel,
-    .agent-config-defaults,
     .module-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .agent-defaults-row,
+    .agent-custom-row,
+    .deployment-shape-panel {
         grid-template-columns: 1fr;
     }
 

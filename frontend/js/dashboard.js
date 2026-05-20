@@ -792,7 +792,8 @@ async function loadIntake() {
     const raciList = document.getElementById("intake-raci-list");
     if (raciList && raci) {
         const rules = raci.rules || [];
-        raciList.innerHTML = rules.slice(0, 20).map(rule => `
+        const visibleRules = rules.slice(0, 5);
+        raciList.innerHTML = visibleRules.map(rule => `
         <div class="learning-item">
             <div><strong>${escHtml(rule.name)}</strong> <span class="source-badge local">${escHtml(rule.ticket_class)}</span></div>
             <div>${escHtml(rule.assignment_group)} &middot; ${rule.approval_required ? "approval required" : "no approval gate"}</div>
@@ -803,6 +804,9 @@ async function loadIntake() {
                 </div>
             </div>
         `).join("");
+        if (rules.length > visibleRules.length) {
+            raciList.innerHTML += `<div class="learning-meta">Showing ${visibleRules.length} of ${rules.length} routing rules. Use search or edit from the RACI API for the full list.</div>`;
+        }
     }
     const tbody = document.getElementById("intake-sessions-tbody");
     if (tbody && sessions) {
@@ -2628,7 +2632,7 @@ function renderSetupModules() {
                         <option value="disabled" ${defaultAction === "disabled" ? "selected" : ""}>Off / not in scope</option>
                     </select>
                 </div>
-                <textarea class="setup-textarea module-note-input" rows="3" data-setup-notes="${escAttr(m.id)}" oninput="setupModuleNotes['${escJs(m.id)}']=this.value" placeholder="Module notes: port, endpoint, credential vault key, tenant, migration detail...">${escHtml(setupModuleNotes[m.id] || "")}</textarea>
+                <textarea class="setup-textarea module-note-input" rows="2" data-setup-notes="${escAttr(m.id)}" oninput="setupModuleNotes['${escJs(m.id)}']=this.value" placeholder="Module notes: port, endpoint, credential vault key, tenant, migration detail...">${escHtml(setupModuleNotes[m.id] || "")}</textarea>
                 <div class="module-actions-row">
                     <button class="btn btn-sm" onclick="createModuleSetupTicket('${escJs(m.id)}', null, false)">Ticket</button>
                     <button class="btn btn-sm btn-warning" onclick="createModuleSetupTicket('${escJs(m.id)}', null, true)">Ticket + Agent</button>

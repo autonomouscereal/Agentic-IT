@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agentic Operations</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260520-ui-pass">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260520-agent-intake-setup-repair">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -286,7 +286,7 @@
                         <button class="btn btn-sm" onclick="runAgentAuditOnce()">Run Audit</button>
                     </div>
                     <div class="agent-config-panel">
-                        <div class="agent-config-defaults">
+                        <div class="agent-config-defaults agent-defaults-row">
                             <label class="setup-label">Default Harness</label>
                             <select id="agent-default-harness" class="filter-select" data-agent-harness-select></select>
                             <label class="setup-label">Default Model</label>
@@ -294,7 +294,7 @@
                             <button class="btn btn-sm" onclick="saveAgentDefaults()">Save Defaults</button>
                             <div class="setup-help agent-config-status" id="agent-config-status"></div>
                         </div>
-                        <div class="agent-config-defaults">
+                        <div class="agent-config-defaults agent-custom-row">
                             <label class="setup-label">Custom Setup</label>
                             <select id="agent-setup-select" class="filter-select" onchange="applyAgentSetupSelection()">
                                 <option value="">Default setup</option>
@@ -303,7 +303,7 @@
                             <select id="agent-setup-harness" class="filter-select" data-agent-harness-select></select>
                             <select id="agent-setup-model" class="filter-select" data-agent-model-select></select>
                             <button class="btn btn-sm" onclick="saveAgentSetup()">Save Setup</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteAgentSetup()">Delete</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteAgentSetup()">Remove</button>
                         </div>
                     </div>
                     <div class="agent-create-controls">
@@ -324,7 +324,7 @@
                         <button class="btn btn-sm" onclick="loadIntake()">Refresh</button>
                     </div>
                 </div>
-                <div class="setup-layout">
+                <div class="setup-layout intake-layout">
                     <div class="setup-panel">
                         <div class="setup-section-title">Requester</div>
                         <label class="setup-label">Name</label>
@@ -334,7 +334,7 @@
                         <label class="setup-label">Short title</label>
                         <input id="intake-title" class="filter-input wide-input" placeholder="Access request, outage, deployment issue, suspicious email...">
                         <label class="setup-label">What do you need?</label>
-                        <textarea id="intake-message" class="setup-textarea" rows="9" placeholder="Paste the user's request, error, screenshot notes, deployment ask, alert, or access need here."></textarea>
+                        <textarea id="intake-message" class="setup-textarea" rows="5" placeholder="Paste the user's request, error, screenshot notes, deployment ask, alert, or access need here."></textarea>
                         <label class="setup-label">Attachment metadata</label>
                         <input id="intake-attachment" class="filter-input wide-input" placeholder="optional filename or evidence reference">
                         <div class="modal-actions-bar inline-actions">
@@ -572,8 +572,8 @@
                         <button class="btn btn-sm btn-warning" onclick="createSetupTicket(true)">Create + Assign Agent</button>
                     </div>
                 </div>
-                <div class="setup-layout">
-                    <div class="setup-panel">
+                <div class="setup-layout platform-setup-layout">
+                    <div class="setup-panel deployment-shape-panel">
                         <div class="setup-section-title">Deployment Shape</div>
                         <label class="setup-label">Profile</label>
                         <select id="setup-profile" class="filter-select" onchange="setupModuleActions={};renderSetupModules();generateSetupPlan()">
@@ -600,14 +600,14 @@
                         </select>
                         <label class="setup-label">Agent Model</label>
                         <select id="setup-model" class="filter-select" data-agent-model-select></select>
-                        <label class="setup-label">Operator Notes</label>
-                        <textarea id="setup-notes" class="setup-textarea" rows="6" placeholder="Existing products, deployment constraints, approval policy, network zones, tenant notes..."></textarea>
+                        <label class="setup-label operator-notes-label">Operator Notes</label>
+                        <textarea id="setup-notes" class="setup-textarea" rows="4" placeholder="Existing products, deployment constraints, approval policy, network zones, tenant notes..."></textarea>
                     </div>
-                    <div class="setup-panel">
+                    <div class="setup-panel runtime-handoff-panel">
                         <div class="setup-section-title">Runtime Handoff</div>
                         <div id="setup-runtime-status" class="setup-summary">Runtime status has not loaded yet.</div>
                     </div>
-                    <div class="setup-panel wide">
+                    <div class="setup-panel wide provider-modules-panel">
                         <div class="setup-section-title">Provider-Agnostic Modules</div>
                         <div class="setup-help">Choose scope per module: deploy the reference module, integrate an existing enterprise tool, or turn the module off for this organization.</div>
                         <div class="module-toolbar">
@@ -724,7 +724,7 @@
         </div>
     </div>
 
-    <script src="/static/js/dashboard.js?v=20260520-ui-pass"></script>
+    <script src="/static/js/dashboard.js?v=20260520-agent-intake-setup-repair"></script>
     <script src="/static/js/charts.js?v=20260519-global-chat"></script>
     <script src="/static/js/agents.js?v=20260520-ui-pass"></script>
     <script src="/static/js/websocket.js"></script>

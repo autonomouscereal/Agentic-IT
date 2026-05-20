@@ -97,3 +97,38 @@ Server-side checks:
 - Avoid recreating the API while `agent_tasks` are `queued` or `running` unless
   the operator explicitly stops or accepts interruption.
 
+## Focused UI Repair After Operator Review
+
+After operator review, Tickets were left alone and the repair scope was narrowed
+to Agents, Intake, and Setup.
+
+Static-only redeploy:
+
+- `frontend/index.html`
+- `frontend/css/dashboard.css`
+- `frontend/js/dashboard.js`
+
+No containers were rebuilt or restarted for this focused repair.
+
+Changes:
+
+- Agents: compacted default harness/model controls, custom setup controls, and
+  spawn prompt layout; changed the destructive custom setup action label to
+  `Remove` and made it visually quieter.
+- Intake: split requester and routing preview into a two-column operator layout,
+  shortened the request textarea, and limited the RACI list preview to the first
+  five rules so the page is scannable.
+- Setup: compacted Deployment Shape into a label/control grid, kept Runtime
+  Handoff from stretching the row, made Provider-Agnostic Modules full width,
+  tightened module cards, reduced module note height, and wrapped toolbar
+  controls cleanly.
+
+Validation evidence:
+
+- Local regression suite: `python -m pytest tests/test_frontend_ui_regressions.py`
+  returned `12 passed`.
+- Authenticated Playwright crawl used `https://192.168.50.222:25443/` with
+  `demo_account_1` from the vault.
+- Screenshots and metrics:
+  `C:\Users\cereal\Documents\Codex\2026-05-20\without-rebuilding-the-environment-i-want\playwright-ui-fix-focused-final`
+- Final Playwright metrics showed `overflows: []` for Agents, Intake, and Setup.
