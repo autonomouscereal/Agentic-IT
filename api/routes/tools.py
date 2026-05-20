@@ -108,7 +108,14 @@ async def sync_manifest_tools(body: dict = None):
          "Optional Mailcow compatibility API and demo admin UI sidecar"),
         ("Roundcube Webmail", "email-ui", "host.docker.internal", 2581,
          "Roundcube webmail client for Mailcow demo/report-phish workflows"),
+        ("Element Ops Chat", "chat-ui", "host.docker.internal", 3301,
+         "Element Web Matrix client connected to the Agentic Operations intake bridge"),
+        ("Matrix Synapse Ops Chat", "chat", "host.docker.internal", 3302,
+         "Matrix Synapse homeserver for real chat intake with Keycloak OIDC"),
+        ("Ops Chat Matrix Bridge", "bridge", "ops-chat-bridge", 29318,
+         "Matrix application-service bridge that creates dashboard tickets and queues real agents"),
     ])
+    await execute("DELETE FROM tools WHERE name = 'Open WebUI Ops Chat'")
     manifest = platform_manifest.load_manifest()
     excluded = [item.get("id") for item in manifest.get("excluded_modules", [])]
     await log_event("health", "info", "dashboard", "tool_manifest_synced",

@@ -80,7 +80,7 @@ Email is a good example of the contract boundary. Mailcow is the current referen
 
 ## Reference Modules
 
-The current reference modules include iTop, Wazuh, Zeek, Suricata, Mailcow, Roundcube webmail, the optional Mailcow HTTP API shim, report-phish, GitLab, Keycloak, bridge services, Sysmon/Wazuh EDR, server-manager, MemPalace, web research, and vault backup. Planned DevSecOps/intelligence modules include MISP and additional provider adapters. Semgrep, Trivy, OWASP ZAP, and Nuclei are already represented as modular CI/CD scanner skills in the current bundle.
+The current reference modules include iTop, Wazuh, Zeek, Suricata, Mailcow, Roundcube webmail, Matrix/Element Ops Chat with Keycloak OIDC, the optional Mailcow HTTP API shim, report-phish, GitLab, Keycloak, bridge services, Sysmon/Wazuh EDR, server-manager, MemPalace, web research, and vault backup. Planned DevSecOps/intelligence modules include MISP and additional provider adapters. Semgrep, Trivy, OWASP ZAP, and Nuclei are already represented as modular CI/CD scanner skills in the current bundle.
 
 ComfyUI, torrenting, media repair, image generation, video generation, and music generation are explicitly excluded from platform setup.
 

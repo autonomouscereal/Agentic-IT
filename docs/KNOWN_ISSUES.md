@@ -1,6 +1,35 @@
 ﻿# Known Issues And Fix Log
 
-Last updated: 2026-05-19.
+Last updated: 2026-05-20.
+
+## Found During 2026-05-20 Ops Chat And Access RACI Work
+
+### Long live Ops Chat agent handoff can stall on the local provider lane
+
+Status: documented and bounded; routing/control-plane fixes completed.
+
+The Matrix/Element Ops Chat smoke created tickets and queued real Hermes agents.
+The no-spawn smoke accidentally allowed a follow-up continuation agent, and the
+real-spawn smoke then queued behind it. After stopping only those test agents,
+the control plane was clean, but the real Hermes/local-model agent showed no
+ticket notes or checkpoint progress after starting.
+
+Fixes completed:
+
+- `scripts/smoke_ops_chat.py` now passes `spawn_agent` on follow-up messages so
+  `OPS_CHAT_SMOKE_SPAWN_AGENT=false` truly stays control-plane only.
+- Account-lockout wording is now seeded into RACI keywords so chat requests like
+  "cannot log into my account" route to Identity & Access instead of the
+  generic Business Applications queue.
+- Live demo guidance now treats long Ops Chat agent runs as provider-sensitive:
+  use completed proof tickets for full workflows and keep live chat requests
+  small until provider/harness reliability is hardened further.
+
+Verification:
+
+- Global search smoke passed on ticket `722`.
+- Ops Chat no-spawn smoke passed on ticket `723`.
+- Ops Chat real-spawn smoke created ticket `724` and spawned agent `279`.
 
 ## Found During 2026-05-19 Agentic Regression Push
 

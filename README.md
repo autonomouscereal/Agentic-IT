@@ -22,6 +22,10 @@ approved reference modules when those capabilities are missing.
   Compose-managed `soc-dashboard-ai-proxy-1`; there should be no `4401` proxy
   listener in this lab.
 - Reference modules: iTop `http://192.168.50.222:25432`, Wazuh Dashboard `https://192.168.50.222:26443`, Keycloak `https://192.168.50.222:8443/admin/master/console/`, GitLab `http://192.168.50.222`, Mailcow/Roundcube `http://192.168.50.222:2581`
+- Ops Chat: Element Web reference client on `http://192.168.50.222:3301` with
+  Matrix Synapse on `http://192.168.50.222:3302`, Keycloak OIDC login, and a
+  dashboard Matrix bridge that creates tickets and queues real agent harness
+  work.
 - Current Windows working copy: `D:\IT AGENT PROJECT`
 - Server path: `/home/cereal/SOC_TESTING/soc-dashboard`
 - Containers: `soc-dashboard-api`, `soc-dashboard-db`, `ai-proxy`, `agent-memory-db`, `dashboard-tls-proxy`
@@ -64,6 +68,7 @@ Mailcow quarantine plus dashboard/iTop evidence.
 - [Demo Runbook](docs/DEMO_RUNBOOK.md)
 - [Demo Ticket Catalog](docs/DEMO_TICKET_CATALOG.md)
 - [FedRAMP-Style Security Hardening](docs/FEDRAMP_SECURITY_HARDENING.md)
+- [Global Search And Ops Chat](docs/GLOBAL_SEARCH_AND_OPS_CHAT.md)
 
 ## Hard Rules
 
@@ -105,6 +110,19 @@ assign an agent to that single module, or create an undeploy/reinstall ticket
 when replacing a reference module with a customer-owned tool. Modules that are
 already healthy or built into the control plane show as active and default to
 `Keep active` so the bulk plan does not redeploy working integrations.
+
+## Search And Chat Intake
+
+The dashboard shell has a global search box above every page. It calls
+`/api/search/global`, respects RBAC and row-level ticket scope, and can jump
+directly into tickets, notes, CI/CD runs, postmortems, workflows, tools, agents,
+changes, and audit records.
+
+The reference chat client is Element Web, deployed as `ops-chat`, backed by
+Matrix Synapse and Keycloak OIDC. A Matrix application-service bridge sends room
+messages to `/api/ops-chat/message`; general harmless chat stays lightweight,
+while operational requests create or continue traceable tickets and queue real
+Hermes/Claude Code agent harness work through the configured AI proxy.
 
 Installer entrypoints:
 

@@ -5,17 +5,17 @@
     "minimal": {
       "name": "Control Plane Only",
       "description": "Dashboard, raw PostgreSQL, local tickets, agent harness, audit logging, approvals, and setup workflow.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "local-ticketing", "service-desk-intake", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "local-ticketing", "service-desk-intake", "ops-chat-client", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research"]
     },
     "soc": {
       "name": "SOC Replacement Baseline",
       "description": "Control plane plus ITSM, SIEM, phishing, network telemetry, IAM, and bridge services.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "roundcube-webmail", "report-phish", "mailcow-wazuh-integration", "soc-bridge"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "local-ticketing", "service-desk-intake", "ops-chat-client", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "roundcube-webmail", "report-phish", "mailcow-wazuh-integration", "soc-bridge"]
     },
     "full-it": {
       "name": "Full IT Automation Platform",
       "description": "SOC baseline plus GitLab/DevSecOps, auth bridges, CI/CD security gates, postmortem learning, and workflow generation.",
-      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "cicd-provider-adapter", "local-ticketing", "service-desk-intake", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "roundcube-webmail", "report-phish", "mailcow-wazuh-integration", "soc-bridge", "gitlab", "gitlab-keycloak-integration", "keycloak-mailcow-bridge", "cicd-security-pipeline", "semgrep", "trivy", "owasp-zap", "nuclei", "misp"]
+      "modules": ["soc-dashboard", "provider-contracts", "ticketing-provider-adapter", "siem-provider-adapter", "edr-provider-adapter", "email-security-provider-adapter", "identity-provider-adapter", "cicd-provider-adapter", "local-ticketing", "service-desk-intake", "ops-chat-client", "itop", "server-manager", "vault-backup", "agent-memory", "ai-proxy", "searxng", "web-research", "keycloak", "iam-bridge", "wazuh", "wazuh-bridge", "wazuh-edr-sysmon", "siem-ticket-bridge", "zeek", "suricata", "mailcow", "roundcube-webmail", "report-phish", "mailcow-wazuh-integration", "soc-bridge", "gitlab", "gitlab-keycloak-integration", "keycloak-mailcow-bridge", "cicd-security-pipeline", "semgrep", "trivy", "owasp-zap", "nuclei", "misp"]
     }
   },
   "modules": [
@@ -66,6 +66,22 @@
       "health_checks": ["/api/intake/raci", "/api/intake/classify"],
       "test_commands": ["python3 scripts/smoke_service_desk_intake.py http://localhost:25480"],
       "notes": "Simple service portal surface that classifies requests/incidents/changes and creates complete routed tickets for agents or humans."
+    },
+    {
+      "id": "ops-chat-client",
+      "name": "Matrix / Element Ops Chat Client",
+      "category": "ticketing",
+      "status": "implemented",
+      "deployable": true,
+      "deploy_strategy": "compose",
+      "skill": "ops-chat-client",
+      "depends_on": ["soc-dashboard", "service-desk-intake", "keycloak"],
+      "provides": ["matrix-chat-intake", "element-web-client", "keycloak-oidc-login", "ticket-creating-user-chat", "real-agent-harness-handoff"],
+      "required_secrets": ["DASHBOARD_SERVICE_TOKEN", "MATRIX_DB_PASSWORD", "MATRIX_REGISTRATION_SHARED_SECRET", "MATRIX_AS_TOKEN", "MATRIX_HS_TOKEN", "MATRIX_OIDC_CLIENT_SECRET"],
+      "ports": ["3301/tcp Element Web by default", "3302/tcp Matrix Synapse by default"],
+      "health_checks": ["/api/ops-chat/matrix/health", "Element Web /", "Matrix Synapse /_matrix/client/versions", "Ops Chat Bridge /health"],
+      "test_commands": ["python3 scripts/smoke_ops_chat.py http://localhost:25480"],
+      "notes": "Element Web is the real user chat client. Matrix Synapse handles rooms and Keycloak/OIDC login. The dashboard Matrix bridge converts messages into traceable Ops Chat sessions; operational messages create tickets and queue Hermes/Claude Code agent harness tasks through the configured AI proxy."
     },
     {
       "id": "provider-contracts",

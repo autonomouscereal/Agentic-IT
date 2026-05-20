@@ -1,0 +1,20 @@
+{
+  "default_server_config": {
+    "m.homeserver": {
+      "base_url": "__MATRIX_PUBLIC_BASEURL__",
+      "server_name": "__MATRIX_SERVER_NAME__"
+    }
+  },
+  "brand": "Agentic Ops Chat",
+  "disable_custom_urls": false,
+  "disable_guests": true,
+  "disable_login_language_selector": false,
+  "features": {
+    "feature_video_rooms": false,
+    "feature_element_call_video_rooms": false
+  },
+  "setting_defaults": {
+    "breadcrumbs": true
+  },
+  "default_theme": "dark"
+}

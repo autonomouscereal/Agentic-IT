@@ -68,6 +68,8 @@ DEFAULT_ROLE_CAPABILITIES = {
         "setup:*",
         "intake:*",
         "cicd:*",
+        "ops-chat:*",
+        "search:read",
         "audit:read",
         "access:*",
     ],
@@ -81,7 +83,9 @@ DEFAULT_ROLE_CAPABILITIES = {
         "changes:request",
         "intake:write",
         "intake:read",
+        "ops-chat:write",
         "agents:assigned",
+        "search:read",
     ],
     "auditor": [
         "ui:read",
@@ -98,6 +102,8 @@ DEFAULT_ROLE_CAPABILITIES = {
         "postmortems:read",
         "knowledge:read",
         "cicd:read",
+        "ops-chat:read",
+        "search:read",
     ],
     "agent-operator": [
         "ui:read",
@@ -115,6 +121,8 @@ DEFAULT_ROLE_CAPABILITIES = {
         "postmortems:read",
         "postmortems:write",
         "knowledge:read",
+        "ops-chat:write",
+        "search:read",
     ],
 }
 
@@ -168,8 +176,11 @@ ROUTE_REQUIREMENTS = [
     ("POST", "/api/intake*", "intake:write"),
     ("PUT", "/api/intake*", "intake:write"),
     ("DELETE", "/api/intake*", "intake:write"),
+    ("GET", "/api/ops-chat*", "ops-chat:read"),
+    ("POST", "/api/ops-chat*", "ops-chat:write"),
     ("GET", "/api/cicd*", "cicd:read"),
     ("POST", "/api/cicd*", "cicd:write"),
+    ("GET", "/api/search*", "search:read"),
     ("GET", "/api/workflows*", "workflows:read"),
     ("POST", "/api/workflows*", "workflows:write"),
     ("PUT", "/api/workflows*", "workflows:write"),
@@ -371,6 +382,11 @@ def _token_matches(actual, expected):
 
 def _service_identity(headers):
     token = _header_value(headers, "x-dashboard-service-token")
+    if not token:
+        authorization = _header_value(headers, "authorization") or ""
+        prefix = "bearer "
+        if authorization.lower().startswith(prefix):
+            token = authorization[len(prefix):].strip()
     expected = service_token()
     if not _token_matches(token, expected):
         return None

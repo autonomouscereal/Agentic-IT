@@ -202,6 +202,13 @@ existing enterprise product without recreating the whole setup plan.
 
 The installer also deploys `agent-memory-db`, registers **Agent Memory** on the Tools page, and wires spawned dashboard agents to the `agent-memory` skill. Agent prompts, tool calls, session stops, deliberate notes, and smoke-test sentinels are stored in the shared memory service with async PostgreSQL writes, JSONB metadata, full-text search, trigram search, and pgvector retrieval. Running **Tools -> Check All** should report Agent Memory as healthy when the database service is deployed.
 
+When `ops-chat-client` is in scope, Compose deploys Element Web, Matrix Synapse,
+and the Ops Chat Matrix bridge. Synapse delegates user login to Keycloak OIDC,
+while the bridge delivers room messages to the dashboard-owned Ops Chat endpoint.
+Operational chat creates traceable tickets and queues real Hermes/Claude Code
+agent harness tasks through the configured AI proxy instead of a separate hidden
+bot workflow.
+
 Multiple installs can run on the same host when different `--target`, `--dashboard-port`, `--db-port`, and optionally `--project-name` values are used. The compose file does not use fixed container names.
 
 ## Post-Install Doctor

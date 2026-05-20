@@ -107,6 +107,87 @@ def _as_list(value):
     return [value]
 
 
+def _json_list(value):
+    loaded = _loads_json(value)
+    if isinstance(loaded, list):
+        return loaded
+    if loaded is None:
+        return []
+    return [loaded]
+
+
+def _score_keyword_rule(rule, text):
+    score = 0
+    for keyword in _json_list(rule.get("keywords")):
+        phrase = str(keyword).lower().strip()
+        if phrase and phrase in text:
+            score += max(1, len(phrase.split()))
+    return score
+
+
+async def infer_access_raci_route(resource, permission, reason="", assignment_group=None):
+    """Infer the owning RACI group for a permission-wall access request."""
+    explicit = (assignment_group or "").strip()
+    if explicit:
+        return {
+            "source": "explicit",
+            "assignment_group": explicit,
+            "responsible": explicit,
+            "accountable": "Data Owner",
+            "consulted": [],
+            "informed": [],
+            "risk_level": None,
+            "rule_name": None,
+            "intent": "access-request",
+        }
+
+    text = " ".join([resource or "", permission or "", reason or ""]).lower()
+    try:
+        rows = await fetchall("""
+            SELECT name, intent, keywords, assignment_group, responsible, accountable,
+                   consulted, informed, risk_level, approval_action
+            FROM service_raci_rules
+            WHERE enabled = true
+              AND (intent LIKE 'access-%' OR name ILIKE '% access%')
+            ORDER BY id ASC
+        """)
+    except Exception:
+        rows = []
+    best = None
+    best_score = 0
+    for row in rows:
+        score = _score_keyword_rule(row, text)
+        if score > best_score:
+            best = row
+            best_score = score
+    if best and best_score > 0:
+        return {
+            "source": "raci-rule",
+            "rule_name": best.get("name"),
+            "intent": best.get("intent"),
+            "assignment_group": best.get("assignment_group") or "Identity & Access",
+            "responsible": best.get("responsible") or best.get("assignment_group") or "Identity & Access",
+            "accountable": best.get("accountable") or "Data Owner",
+            "consulted": _json_list(best.get("consulted")),
+            "informed": _json_list(best.get("informed")),
+            "risk_level": best.get("risk_level") or "medium",
+            "approval_action": best.get("approval_action"),
+            "score": best_score,
+        }
+    return {
+        "source": "fallback",
+        "assignment_group": "Identity & Access",
+        "responsible": "Identity & Access",
+        "accountable": "Data Owner",
+        "consulted": ["Compliance & Audit"],
+        "informed": ["Requester Manager"],
+        "risk_level": "medium",
+        "rule_name": "Generic access request",
+        "intent": "access-request",
+        "score": 0,
+    }
+
+
 def _can_outbound_create(provider, ticket_class):
     return provider != "local"
 
@@ -560,8 +641,8 @@ async def create_access_request(
     agent_id=None,
     requester=None,
     account_ref=None,
-    assignment_group="Identity & Access",
-    risk_level="medium",
+    assignment_group=None,
+    risk_level=None,
     sync_provider=None,
     created_by="agent-access-request",
     lease_request=None,
@@ -579,8 +660,9 @@ async def create_access_request(
         return {"error": "resource and permission are required"}
 
     requester = requester or (f"agent_{agent_id}" if agent_id else created_by)
-    assignment_group = assignment_group or "Identity & Access"
-    risk_level = risk_level or "medium"
+    access_raci = await infer_access_raci_route(resource, permission, reason, assignment_group)
+    assignment_group = access_raci.get("assignment_group") or "Identity & Access"
+    risk_level = risk_level or access_raci.get("risk_level") or "medium"
     title = f"Access request: {permission} for {resource}"
     description = "\n".join([
         f"Parent ticket: {parent_ticket_id} - {parent.get('title')}",
@@ -589,6 +671,11 @@ async def create_access_request(
         f"Resource: {resource}",
         f"Permission needed: {permission}",
         f"Assignment group: {assignment_group}",
+        f"RACI route: {access_raci.get('rule_name') or access_raci.get('source')}",
+        f"Responsible: {access_raci.get('responsible') or assignment_group}",
+        f"Accountable: {access_raci.get('accountable') or 'Data Owner'}",
+        f"Consulted: {', '.join(access_raci.get('consulted') or []) or 'none'}",
+        f"Informed: {', '.join(access_raci.get('informed') or []) or 'none'}",
         "",
         "Reason:",
         reason or "Agent reported a permission blocker while working the parent ticket.",
@@ -619,6 +706,7 @@ async def create_access_request(
         "permission": permission,
         "account_ref": account_ref,
         "assignment_group": assignment_group,
+        "access_raci": access_raci,
         "auto_complete": False,
     }
     inferred_lease_request = None
@@ -671,6 +759,7 @@ async def create_access_request(
         f"- Resource: {resource}",
         f"- Permission: {permission}",
         f"- Assignment group: {assignment_group}",
+        f"- RACI route: {access_raci.get('rule_name') or access_raci.get('source')}",
         f"- Reason: {reason or 'Permission blocker reported.'}",
         "",
         "The original agent must wait here until the access gate is approved.",
@@ -705,6 +794,7 @@ async def create_access_request(
             "resource": resource,
             "permission": permission,
             "assignment_group": assignment_group,
+            "access_raci": access_raci,
             "lease_request": approval_policy.get("lease_request"),
             "lease_request_inferred": bool(inferred_lease_request),
         }))
@@ -715,6 +805,7 @@ async def create_access_request(
                         "agent_id": agent_id,
                         "change_id": change_id,
                         "assignment_group": assignment_group,
+                        "access_raci": access_raci,
                         "lease_request": approval_policy.get("lease_request"),
                         "lease_request_inferred": bool(inferred_lease_request),
                     })
@@ -728,5 +819,6 @@ async def create_access_request(
         "resource": resource,
         "permission": permission,
         "assignment_group": assignment_group,
+        "access_raci": access_raci,
         "access_ticket": access_ticket,
     }

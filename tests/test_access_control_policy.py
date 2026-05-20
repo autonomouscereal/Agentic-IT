@@ -62,6 +62,9 @@ class AccessControlPolicyTests(unittest.TestCase):
             self.assertEqual(module.required_permission("GET", "/api/providers"), "providers:read")
             self.assertEqual(module.required_permission("POST", "/api/skills/4/render"), "skills:write")
             self.assertEqual(module.required_permission("POST", "/api/intake/submit"), "intake:write")
+            self.assertEqual(module.required_permission("GET", "/api/search/global"), "search:read")
+            self.assertEqual(module.required_permission("GET", "/api/ops-chat/openai/v1/models"), "ops-chat:read")
+            self.assertEqual(module.required_permission("POST", "/api/ops-chat/message"), "ops-chat:write")
         finally:
             module.public_health = original_public_health
             module.protect_ui = original_protect_ui

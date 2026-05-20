@@ -71,6 +71,27 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn('setText("stat-agent-active", agentOpenCountState);', self.dashboard_js)
         self.assertIn('setText("agent-count", agentOpenCountState);', self.dashboard_js)
 
+    def test_global_search_is_available_from_dashboard_shell(self):
+        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        css = (ROOT / "frontend" / "css" / "dashboard.css").read_text(encoding="utf-8")
+        self.assertIn("global-search-input", index_html)
+        self.assertIn("/api/search/global", self.dashboard_js)
+        self.assertIn("function runGlobalSearch()", self.dashboard_js)
+        self.assertIn("function openGlobalSearchResult(item)", self.dashboard_js)
+        self.assertIn(".search-result-item", css)
+
+    def test_ops_chat_is_matrix_element_real_agent_handoff(self):
+        compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        ops_chat = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+        manifest = (ROOT / "platform" / "manifest.json").read_text(encoding="utf-8")
+        self.assertIn("ops-chat-synapse", compose)
+        self.assertIn("vectorim/element-web", compose)
+        self.assertIn("ops-chat-bridge", compose)
+        self.assertIn("MATRIX_OIDC_ISSUER", compose)
+        self.assertIn("agent_runner.spawn_agent", ops_chat)
+        self.assertIn("Matrix/Element", ops_chat)
+        self.assertIn("real-agent-harness-handoff", manifest)
+
     def test_setup_modules_use_explicit_scope_actions(self):
         index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
         self.assertIn("Choose scope per module", index_html)

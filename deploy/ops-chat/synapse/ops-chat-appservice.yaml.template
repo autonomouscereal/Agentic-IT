@@ -1,0 +1,13 @@
+id: agentic-ops-chat
+url: "http://ops-chat-bridge:29318"
+as_token: "{{MATRIX_AS_TOKEN}}"
+hs_token: "{{MATRIX_HS_TOKEN}}"
+sender_localpart: "{{MATRIX_BOT_LOCALPART}}"
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@{{MATRIX_BOT_LOCALPART}}:{{MATRIX_SERVER_NAME}}"
+  aliases: []
+  rooms: []
+rate_limited: false
+de.sorunome.msc2409.push_ephemeral: false

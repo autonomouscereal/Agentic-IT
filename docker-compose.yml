@@ -214,6 +214,91 @@ services:
       timeout: 5s
       retries: 12
 
+  ops-chat-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: ${MATRIX_DB_PASSWORD:?MATRIX_DB_PASSWORD must be set}
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    volumes:
+      - ops-chat-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ops-chat-synapse:
+    image: ${MATRIX_SYNAPSE_IMAGE:-matrixdotorg/synapse:latest}
+    restart: unless-stopped
+    user: "0:0"
+    ports:
+      - "${OPS_CHAT_SYNAPSE_BIND:-127.0.0.1}:${OPS_CHAT_SYNAPSE_PORT:-3302}:8008"
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-agentic-ops.local}
+      MATRIX_PUBLIC_BASEURL: ${MATRIX_PUBLIC_BASEURL:-http://localhost:3302}
+      MATRIX_ELEMENT_PUBLIC_URL: ${MATRIX_ELEMENT_PUBLIC_URL:-http://localhost:3301}
+      MATRIX_DB_PASSWORD: ${MATRIX_DB_PASSWORD:?MATRIX_DB_PASSWORD must be set}
+      MATRIX_REGISTRATION_SHARED_SECRET: ${MATRIX_REGISTRATION_SHARED_SECRET:?MATRIX_REGISTRATION_SHARED_SECRET must be set}
+      MATRIX_AS_TOKEN: ${MATRIX_AS_TOKEN:?MATRIX_AS_TOKEN must be set}
+      MATRIX_HS_TOKEN: ${MATRIX_HS_TOKEN:?MATRIX_HS_TOKEN must be set}
+      MATRIX_OIDC_ENABLED: ${MATRIX_OIDC_ENABLED:-true}
+      MATRIX_OIDC_ISSUER: ${MATRIX_OIDC_ISSUER:-http://host.docker.internal:8080/realms/agentic-ops}
+      MATRIX_OIDC_BACKCHANNEL_BASEURL: ${MATRIX_OIDC_BACKCHANNEL_BASEURL:-}
+      MATRIX_OIDC_CLIENT_ID: ${MATRIX_OIDC_CLIENT_ID:-agentic-ops-chat}
+      MATRIX_OIDC_CLIENT_SECRET: ${MATRIX_OIDC_CLIENT_SECRET:-}
+      MATRIX_BOT_LOCALPART: ${MATRIX_BOT_LOCALPART:-agentic-ops}
+      SSL_CERT_FILE: /etc/ssl/certs/ops-chat-oidc-ca.pem
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ops-chat-oidc-ca.pem
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["python /config/render.py && /start.py"]
+    depends_on:
+      ops-chat-db:
+        condition: service_healthy
+      ops-chat-bridge:
+        condition: service_started
+    volumes:
+      - ops-chat-synapse-data:/data
+      - ./deploy/ops-chat/synapse:/config:ro
+      - ${MATRIX_OIDC_CA_CERT_PATH:-./runtime/tls/dashboard-ca.crt}:/etc/ssl/certs/ops-chat-oidc-ca.pem:ro
+
+  ops-chat:
+    build:
+      context: ./deploy/ops-chat/element
+      args:
+        ELEMENT_WEB_IMAGE: ${ELEMENT_WEB_IMAGE:-vectorim/element-web:latest}
+    restart: unless-stopped
+    ports:
+      - "${OPS_CHAT_BIND:-127.0.0.1}:${OPS_CHAT_PORT:-3301}:80"
+    environment:
+      MATRIX_PUBLIC_BASEURL: ${MATRIX_PUBLIC_BASEURL:-http://localhost:3302}
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-agentic-ops.local}
+    depends_on:
+      ops-chat-synapse:
+        condition: service_started
+
+  ops-chat-bridge:
+    build: ./deploy/ops-chat/bridge
+    restart: unless-stopped
+    environment:
+      DASHBOARD_API_BASE: http://api:8000
+      DASHBOARD_SERVICE_TOKEN: ${DASHBOARD_SERVICE_TOKEN:?DASHBOARD_SERVICE_TOKEN must be set}
+      MATRIX_HOMESERVER_URL: http://ops-chat-synapse:8008
+      MATRIX_AS_TOKEN: ${MATRIX_AS_TOKEN:?MATRIX_AS_TOKEN must be set}
+      MATRIX_HS_TOKEN: ${MATRIX_HS_TOKEN:?MATRIX_HS_TOKEN must be set}
+      MATRIX_BOT_LOCALPART: ${MATRIX_BOT_LOCALPART:-agentic-ops}
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-agentic-ops.local}
+      OPS_CHAT_BRIDGE_PORT: 29318
+    depends_on:
+      api:
+        condition: service_started
+    expose:
+      - "29318"
+
 volumes:
   db-data:
   agent-memory-db-data:
+  ops-chat-db-data:
+  ops-chat-synapse-data:

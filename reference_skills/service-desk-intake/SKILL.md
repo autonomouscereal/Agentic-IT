@@ -71,6 +71,13 @@ auto-assignment fields are:
 The dashboard RACI UI exposes these fields so demo/customer routing can choose
 which queues are human-owned and which queues are automatically handled.
 
+Access-request RACI is also rule-driven. Rules whose intent starts with
+`access-` are used when an agent hits a permission wall and omits an explicit
+assignment group. Seeded examples route Mailcow to Email Operations, Wazuh/SIEM
+to Security Operations, GitLab to DevSecOps, Keycloak/IAM to Identity & Access,
+iTop to Business Applications, the Agentic Operations platform to Platform
+Operations, and network controls to Network Operations.
+
 When an agent hits a permission wall while working a different ticket, use the
 access-request path instead of a generic note:
 
@@ -117,6 +124,12 @@ Keycloak roles.
 
 ```bash
 python scripts/smoke_service_desk_intake.py http://localhost:25480
+```
+
+Access routing smoke:
+
+```bash
+python scripts/smoke_access_raci_routing.py http://localhost:25480
 ```
 
 Expected result: a phishing intake is classified as an Incident, routed to

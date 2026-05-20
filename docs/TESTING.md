@@ -28,6 +28,17 @@ Expected result: no matches.
 
 The database cleanup text may intentionally mention ComfyUI in `init_db.sql` only to remove it from inventory.
 
+## Access RACI Routing
+
+```bash
+python scripts/smoke_access_raci_routing.py http://localhost:25480
+```
+
+Expected: Mailcow routes to Email Operations, Wazuh/SIEM to Security
+Operations, GitLab to DevSecOps, Keycloak/IAM to Identity & Access, iTop to
+Business Applications, Agentic Operations platform admin to Platform Operations,
+and network controls to Network Operations.
+
 ## Server Health
 
 ```bash
@@ -431,6 +442,39 @@ Notes from the live run:
   demos; GitLab artifact links may require a separate provider login.
 - The Trivy Docker image command should be `fs ...` because the image entrypoint
   is already `trivy`.
+
+## Global Search Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+export DASHBOARD_SERVICE_TOKEN=<from runtime secret source>
+python3 scripts/smoke_global_search.py http://localhost:25480
+```
+
+Covers:
+
+- authenticated `/api/search/global`
+- row-level ticket and ticket-note search
+- UI-safe search result shape
+- no dependency on unauthenticated dashboard APIs
+
+## Ops Chat Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+export DASHBOARD_SERVICE_TOKEN=<from runtime secret source>
+python3 scripts/smoke_ops_chat.py http://localhost:25480
+```
+
+Covers:
+
+- direct dashboard chat intake
+- Matrix/Element readiness metadata from `/api/ops-chat/matrix/health`
+- ticket creation from chat
+- real dashboard agent harness queue handoff for operational work
+- follow-up chat continuing the same ticket through `user-response` notes
+- RACI classification note in ticket context
+- dashboard service-token authentication for the Matrix bridge
 
 ## Wazuh EDR/Sysmon E2E
 

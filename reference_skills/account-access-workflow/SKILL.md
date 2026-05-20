@@ -92,6 +92,24 @@ curl -sS -X POST "$SOC_DASHBOARD_URL/api/tickets/$TICKET_ID/access-request" \
 - `SIEM analyst access`: routes to `Identity & Access`, accountable to Security
   Operations, and requires approval before Wazuh/SIEM read roles or alert index
   access are granted.
+- `Mailcow mailbox access`: routes to `Email Operations` for mailbox,
+  quarantine, shared mailbox, distribution group, SMTP, IMAP, and Roundcube
+  access.
+- `Wazuh SIEM access`: routes to `Security Operations` for alert index, rule,
+  manager API, EDR, and Sysmon evidence access.
+- `Keycloak identity administration access`: routes to `Identity & Access` for
+  realms, OIDC clients, MFA reset, password reset, account unlock, role mapping,
+  and group membership work.
+- `iTop ITSM access`: routes to `Business Applications` for ticketing, CMDB,
+  service catalog, incident queue, change queue, and team/profile access.
+- `Agentic platform administration access`: routes to `Platform Operations` for
+  dashboard, workflow, model proxy, RACI, setup, audit, and agent queue admin.
+- `Network control access`: routes to `Network Operations` for firewall, DNS,
+  VPN, proxy, WAF, routing, segmentation, and network device access.
+
+When the caller omits `assignment_group`, the dashboard infers the owning group
+from enabled `service_raci_rules` whose intent starts with `access-`. Explicit
+`assignment_group` still wins for customer-specific overrides.
 
 ## Guardrails
 
@@ -108,6 +126,12 @@ Control-plane smoke:
 
 ```bash
 python scripts/smoke_access_request_control_plane.py http://localhost:25480
+```
+
+System-specific RACI routing smoke:
+
+```bash
+python scripts/smoke_access_raci_routing.py http://localhost:25480
 ```
 
 Real local-model resume proof:

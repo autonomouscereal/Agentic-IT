@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agentic Operations</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260518-demo-readiness">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260519-global-chat">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -99,6 +99,14 @@
 
         <!-- Main Content -->
         <main class="main-content">
+            <div class="global-search-bar">
+                <div class="global-search-shell">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input id="global-search-input" class="global-search-input" placeholder="Search tickets, agents, approvals, workflows, CI/CD, tools, audit..." onkeydown="handleGlobalSearchKey(event)">
+                    <button class="btn btn-sm" onclick="runGlobalSearch()">Search</button>
+                </div>
+            </div>
+
             <!-- Overview Page -->
             <div class="page active" id="page-overview">
                 <div class="page-header">
@@ -674,9 +682,9 @@
         </div>
     </div>
 
-    <script src="/static/js/dashboard.js?v=20260518-demo-readiness"></script>
-    <script src="/static/js/charts.js?v=20260518-demo-readiness"></script>
-    <script src="/static/js/agents.js?v=20260518-demo-readiness"></script>
+    <script src="/static/js/dashboard.js?v=20260519-global-chat"></script>
+    <script src="/static/js/charts.js?v=20260519-global-chat"></script>
+    <script src="/static/js/agents.js?v=20260519-global-chat"></script>
     <script src="/static/js/websocket.js"></script>
 </body>
 </html>

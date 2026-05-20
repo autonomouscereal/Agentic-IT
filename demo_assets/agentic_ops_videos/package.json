@@ -1,0 +1,20 @@
+{
+  "name": "agentic-ops-demo-videos",
+  "private": true,
+  "scripts": {
+    "still": "remotion still src/index.tsx",
+    "render": "remotion render src/index.tsx",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.368",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.368"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "typescript": "^5.8.3"
+  }
+}

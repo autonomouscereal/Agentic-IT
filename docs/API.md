@@ -489,6 +489,19 @@ CI/CD security:
 - `GET /api/cicd/runs/{run_id}/reports/{tool}` - returns the auth-protected dashboard report for `semgrep`, `trivy`, `owasp_zap`, or `nuclei` from the stored canonical run record so operators do not need CI provider credentials to read findings
 - `POST /api/cicd/runs`
 
+Global search:
+
+- `GET /api/search/global?q=<query>&limit=60` - RBAC-aware search across tickets, notes, agents, approval gates, postmortems, workflows, CI/CD runs, tools, and audit records. Ticket results are row-level scoped and the endpoint does not return raw secrets.
+
+Ops Chat:
+
+- `GET /api/ops-chat/sessions`
+- `GET /api/ops-chat/sessions/{session_id}/messages`
+- `POST /api/ops-chat/message` - Matrix/Element chat intake that creates or continues traceable tickets for operational work and queues real Hermes/Claude Code agent harness tasks
+- `GET /api/ops-chat/matrix/health` - Matrix/Element/Keycloak bridge readiness metadata
+- `GET /api/ops-chat/openai/v1/models` - legacy compatibility model list; Matrix/Element is the supported chat client
+- `POST /api/ops-chat/openai/v1/chat/completions` - legacy compatibility endpoint that still routes operational work into tickets and real agents
+
 Knowledge:
 
 - `GET /api/knowledge`

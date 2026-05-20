@@ -231,6 +231,120 @@ async function apiDelete(path) {
     return apiRequest(path, { method: "DELETE" });
 }
 
+function handleGlobalSearchKey(event) {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        runGlobalSearch();
+    }
+}
+
+function searchTypeLabel(type) {
+    return ({
+        ticket: "Ticket",
+        ticket_note: "Ticket Note",
+        agent: "Agent",
+        change: "Approval Gate",
+        postmortem: "Postmortem",
+        workflow: "Workflow",
+        cicd: "CI/CD",
+        tool: "Tool",
+        audit: "Audit",
+    })[type] || type;
+}
+
+function renderSearchResult(item) {
+    const meta = item.metadata || {};
+    const chips = [
+        item.status ? `status: ${item.status}` : "",
+        meta.priority ? `priority: ${meta.priority}` : "",
+        meta.ticket_id ? `ticket #${meta.ticket_id}` : "",
+        meta.provider_ref ? `provider: ${meta.provider_ref}` : "",
+        item.updated_at ? formatTime(item.updated_at) : "",
+    ].filter(Boolean);
+    return `
+        <div class="search-result-item" onclick="openGlobalSearchResult(${escAttr(JSON.stringify(item))})">
+            <div class="search-result-head">
+                <div>
+                    <div class="search-result-type">${escHtml(searchTypeLabel(item.type))}</div>
+                    <div class="search-result-title">${escHtml(item.title || "Result")}</div>
+                </div>
+                ${item.status ? `<span class="status-badge ${statusClass(item.status)}">${escHtml(item.status)}</span>` : ""}
+            </div>
+            ${item.snippet ? `<div class="search-result-snippet">${escHtml(item.snippet)}</div>` : ""}
+            ${chips.length ? `<div class="search-result-meta">${chips.map(c => `<span>${escHtml(c)}</span>`).join("")}</div>` : ""}
+        </div>
+    `;
+}
+
+async function runGlobalSearch() {
+    const input = document.getElementById("global-search-input");
+    const query = (input?.value || "").trim();
+    if (query.length < 2) {
+        alert("Search needs at least 2 characters.");
+        return;
+    }
+    const data = await apiGet(`/api/search/global?q=${encodeURIComponent(query)}&limit=60`);
+    if (!data) return;
+    const groups = Object.entries(data.groups || {}).map(([type, count]) => `${searchTypeLabel(type)} ${count}`).join(" / ");
+    document.getElementById("modal-title").textContent = `Global Search`;
+    document.getElementById("modal-body").innerHTML = `
+        <div class="search-results-header">
+            <div>
+                <div class="section-title">Results for "${escHtml(query)}"</div>
+                <div class="learning-meta">${data.total || 0} visible results${groups ? ` / ${escHtml(groups)}` : ""}</div>
+            </div>
+        </div>
+        <div class="search-result-grid">
+            ${(data.results || []).length ? data.results.map(renderSearchResult).join("") : '<div class="learning-empty">No matching records found within your access scope.</div>'}
+        </div>
+    `;
+    document.getElementById("ticket-modal").classList.add("active");
+}
+
+function openGlobalSearchResult(item) {
+    closeModal("ticket-modal");
+    if (!item || !item.type) return;
+    if (item.type === "ticket" || item.type === "ticket_note") {
+        const ticketId = item.type === "ticket" ? item.id : item.metadata?.ticket_id;
+        if (ticketId) viewTicket(ticketId);
+        return;
+    }
+    if (item.type === "postmortem") {
+        navigateTo("postmortems");
+        viewPostmortem(item.id);
+        return;
+    }
+    if (item.type === "workflow") {
+        navigateTo("workflows");
+        viewWorkflow(item.id);
+        return;
+    }
+    if (item.type === "cicd") {
+        navigateTo("cicd");
+        viewCicdRun(item.id);
+        return;
+    }
+    if (item.type === "audit") {
+        navigateTo("audit");
+        const text = document.getElementById("audit-filter-text");
+        if (text) text.value = item.metadata?.target || item.title || "";
+        loadAudit();
+        return;
+    }
+    if (item.type === "change") {
+        navigateTo("changes");
+        return;
+    }
+    if (item.type === "agent") {
+        navigateTo("agents");
+        return;
+    }
+    if (item.type === "tool") {
+        navigateTo("tools");
+        return;
+    }
+}
+
 async function loadCurrentIdentity() {
     const label = document.getElementById("current-user-label");
     if (!label) return;

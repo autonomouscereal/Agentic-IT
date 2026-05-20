@@ -439,6 +439,28 @@ CREATE TABLE IF NOT EXISTS agent_steering_events (
     acknowledged_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS ops_chat_sessions (
+    id SERIAL PRIMARY KEY,
+    requester_name VARCHAR(240),
+    requester_email VARCHAR(300),
+    channel VARCHAR(80) NOT NULL DEFAULT 'ops-chat',
+    external_thread_id TEXT,
+    latest_ticket_id INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
+    status VARCHAR(40) NOT NULL DEFAULT 'open',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ops_chat_messages (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES ops_chat_sessions(id) ON DELETE CASCADE,
+    role VARCHAR(40) NOT NULL,
+    body TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    ticket_id INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS cicd_security_runs (
     id SERIAL PRIMARY KEY,
     provider VARCHAR(100) NOT NULL DEFAULT 'local',
@@ -485,6 +507,9 @@ INSERT INTO tools (name, type, host, port, description) VALUES
     ('SIEM-Ticket Bridge', 'bridge', 'localhost', NULL, 'Wazuh <-> iTop alert bridge'),
     ('Agent Memory', 'memory', 'agent-memory-db', 5432, 'Shared PostgreSQL/pgvector memory service for dashboard agents'),
     ('Roundcube Webmail', 'email-ui', 'host.docker.internal', 2581, 'Roundcube webmail client for Mailcow demo/report-phish workflows'),
+    ('Element Ops Chat', 'chat-ui', 'host.docker.internal', 3301, 'Element Web Matrix client connected to the Agentic Operations intake bridge'),
+    ('Matrix Synapse Ops Chat', 'chat', 'host.docker.internal', 3302, 'Matrix Synapse homeserver for real chat intake with Keycloak OIDC'),
+    ('Ops Chat Matrix Bridge', 'bridge', 'ops-chat-bridge', 29318, 'Matrix application-service bridge that creates dashboard tickets and queues real agents'),
     ('SearXNG', 'search', 'localhost', 7999, 'Local search engine for research'),
     ('GitLab', 'vcs', 'localhost', 80, 'GitLab CE for source management')
 ON CONFLICT (name) DO UPDATE SET
@@ -605,6 +630,13 @@ SET auto_assign_agent = true,
     auto_agent_prompt = 'Auto-work Security Operations EDR/SIEM alert tickets end to end using compact evidence first. Required actions: identify alert source, severity, affected host/user/IP, related telemetry, and provider ticket refs; classify incident scope; create approval-gated changes for endpoint scan, containment, account/session action, or network block only when evidence supports them; poll approvals; complete approved lab-safe actions with evidence; write a final resolution note with residual risk and postmortem/workflow recommendations. Do not browse full ticket context unless compact evidence is missing a specific fact.',
     updated_at = NOW()
 WHERE name = 'EDR/SIEM security alert';
+
+UPDATE service_raci_rules
+SET auto_assign_agent = true,
+    auto_agent_model = COALESCE(auto_agent_model, 'local/agent-default'),
+    auto_agent_prompt = 'Auto-work Identity & Access chat intake tickets safely. Required actions: read compact ticket context, identify whether this is account lockout, MFA, password reset, or access denial; ask the user for one concise clarification if needed; check related tickets/known outage evidence from dashboard context; do not change credentials or entitlements without an approval gate; create an approval-gated change for password reset, MFA reset, session revocation, or account unlock when required; write a user-readable resolution or next-step note; if no action is possible without external IAM integration, document the missing integration and keep the ticket routed to Identity & Access.',
+    updated_at = NOW()
+WHERE name = 'Account locked or MFA help';
 
 -- Baseline global skills for fresh installs
 INSERT INTO agent_skills (name, description, category, prompt_template, enabled, assigned_to_all)
@@ -746,6 +778,10 @@ CREATE INDEX IF NOT EXISTS idx_service_raci_rules_intent ON service_raci_rules(i
 CREATE INDEX IF NOT EXISTS idx_service_raci_rules_auto_agent ON service_raci_rules(auto_assign_agent) WHERE enabled = true;
 CREATE INDEX IF NOT EXISTS idx_service_intake_ticket ON service_intake_sessions(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_service_intake_created ON service_intake_sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_ops_chat_messages_session_created ON ops_chat_messages(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ops_chat_messages_ticket ON ops_chat_messages(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ops_chat_sessions_external_thread ON ops_chat_sessions(external_thread_id);
+CREATE INDEX IF NOT EXISTS idx_ops_chat_sessions_latest_ticket ON ops_chat_sessions(latest_ticket_id);
 CREATE INDEX IF NOT EXISTS idx_access_requests_parent ON access_requests(parent_ticket_id);
 CREATE INDEX IF NOT EXISTS idx_access_requests_access_ticket ON access_requests(access_ticket_id);
 CREATE INDEX IF NOT EXISTS idx_access_requests_change ON access_requests(change_id);
