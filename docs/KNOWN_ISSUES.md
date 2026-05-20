@@ -4,9 +4,9 @@ Last updated: 2026-05-20.
 
 ## Found During 2026-05-20 Ops Chat And Access RACI Work
 
-### Long live Ops Chat agent handoff can stall on the local provider lane
+### Ops Chat model route drift made live agent handoff look stalled
 
-Status: documented and bounded; routing/control-plane fixes completed.
+Status: fixed and verified.
 
 The Matrix/Element Ops Chat smoke created tickets and queued real Hermes agents.
 The no-spawn smoke accidentally allowed a follow-up continuation agent, and the
@@ -21,15 +21,58 @@ Fixes completed:
 - Account-lockout wording is now seeded into RACI keywords so chat requests like
   "cannot log into my account" route to Identity & Access instead of the
   generic Business Applications queue.
-- Live demo guidance now treats long Ops Chat agent runs as provider-sensitive:
-  use completed proof tickets for full workflows and keep live chat requests
-  small until provider/harness reliability is hardened further.
+- `scripts/switch_model_route.py` now updates `OPS_CHAT_AGENT_MODEL`, and
+  `docker-compose.yml` passes it into the API container. Chat-originated agents
+  now follow the active local/external model route.
+- `api/routes/ops_chat.py` now prefers the chat/default route model over stale
+  RACI `auto_agent_model` values for chat-originated handoffs.
 
 Verification:
 
-- Global search smoke passed on ticket `722`.
-- Ops Chat no-spawn smoke passed on ticket `723`.
-- Ops Chat real-spawn smoke created ticket `724` and spawned agent `279`.
+- Global search smoke passed on ticket `755`.
+- Access RACI smoke passed on parent ticket `756`, access requests `43`-`49`.
+- Ops Chat no-spawn smoke passed on ticket `764`.
+- Ops Chat scenario smoke passed with tickets `750`-`754`.
+- Ticket `754` spawned Hermes agent `284` through
+  `deepseek/deepseek-v4-flash`, wrote real agent notes, and landed in
+  `awaiting_user_response` with no active agent process.
+- The `login-troubleshooting` skill was reframed so historical login defects are
+  treated as regression runbooks, not current blockers. Ticket `754` received an
+  operator correction note documenting that future agents must cite fresh live
+  checks before saying a demo login path is broken.
+
+### Awaiting-user checkpoints were marked as failed agents
+
+Status: fixed and verified.
+
+Real Ops Chat agents wrote durable wait checkpoints such as
+`waiting_for_user` or `awaiting_user_response`, but two control-plane issues
+made the UI look harsher than the actual state:
+
+- `agent_tasks.status` was `VARCHAR(20)`, too short for
+  `awaiting_user_response`.
+- The process tracker did not treat `awaiting_` checkpoint statuses as durable
+  wait gates, and it did not recognize Hermes process command lines.
+
+Fixes completed:
+
+- Added migration `021_widen_agent_status_columns.sql`.
+- Updated fresh-install schema in `api/init_db.sql`.
+- Updated `task_tracker` and `agent_runner` wait-state parsing to include
+  `awaiting_`.
+- Updated `task_tracker` process detection to recognize Hermes.
+- Tightened agent prompts to forbid `curl | python` and similar
+  pipe-to-interpreter patterns.
+- Fixed Ops Chat follow-up resume so user replies to waiting tickets spawn a
+  continuation agent instead of being swallowed by a waiting old agent record.
+
+Verification:
+
+- Ticket `749`: agent `282` asked for the target system, the user replied via
+  Ops Chat, continuation agent `283` wrote Keycloak/SSO troubleshooting
+  guidance, and the ticket ended in `awaiting_user_response`.
+- Ticket `754`: fresh post-fix chat run spawned agent `284`, wrote real agent
+  notes, and ended in `awaiting_user_response` without a failed-agent badge.
 
 ## Found During 2026-05-19 Agentic Regression Push
 

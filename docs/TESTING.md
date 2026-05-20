@@ -476,6 +476,48 @@ Covers:
 - RACI classification note in ticket context
 - dashboard service-token authentication for the Matrix bridge
 
+## Ops Chat Scenario Smoke
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+export DASHBOARD_SERVICE_TOKEN=<from runtime secret source>
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-timeout 600
+```
+
+Covers a demo-realistic conversation set:
+
+- general chat that does not create a ticket
+- account lockout routed to Identity & Access
+- software request routed to Endpoint Support
+- phishing report routed to Security Operations with an approval gate
+- CI/CD delivery-gate request routed to DevSecOps with an approval gate
+- chat follow-up recorded as a `user-response` note
+- global search visibility for all scenario tickets
+- optional real Hermes/Claude agent handoff through the configured proxy
+
+Latest live result on 2026-05-20:
+
+```text
+smoke_ops_chat_scenarios.py: PASS marker=ops-chat-scenarios-1779250145
+general chat: no ticket
+account-lockout: ticket 750, Identity & Access
+software-request: ticket 751, Endpoint Support
+phishing-report: ticket 752, change 204, Security Operations
+deployment-gate: ticket 753, change 205, DevSecOps
+real-agent-handoff: ticket 754, agent 284, task 281, Hermes/deepseek-v4-flash
+final state: ticket 754 awaiting_user_response, no active agents
+```
+
+Follow-up proof:
+
+```text
+ticket 749: first chat agent 282 asked which system the user could not access
+user replied through Ops Chat with Keycloak/SSO details
+continuation agent 283 wrote user-facing Keycloak/SSO troubleshooting guidance
+ticket 749 ended awaiting_user_response with clean agent/task status
+```
+
 ## Wazuh EDR/Sysmon E2E
 
 ```bash

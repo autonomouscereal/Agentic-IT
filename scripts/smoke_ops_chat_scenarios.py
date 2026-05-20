@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""Run production-style Ops Chat scenarios across intake, tickets, and agents.
+
+This is intentionally API-level so it can run in CI and on the live server
+without a human driving Element. Matrix/Element remains the supported user
+client; this smoke exercises the same dashboard endpoint used by the bridge.
+"""
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
+
+
+def request(base, method, path, payload=None, timeout=90):
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Content-Type": "application/json"}
+    if TOKEN:
+        headers["X-Dashboard-Service-Token"] = TOKEN
+    req = urllib.request.Request(base.rstrip("/") + path, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            body = res.read().decode("utf-8")
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"{method} {path} failed: HTTP {exc.code}: {body}") from exc
+
+
+def require(condition, message):
+    if not condition:
+        raise AssertionError(message)
+
+
+def get_context(base, ticket_id):
+    return request(base, "GET", f"/api/tickets/{ticket_id}/context")
+
+
+def note_bodies(context):
+    return [str(note.get("body") or "") for note in context.get("notes") or []]
+
+
+def progress_note_bodies(context):
+    bodies = []
+    for note in context.get("notes") or []:
+        source = str(note.get("source") or "")
+        if source in ("agent-control-plane", "ops-chat"):
+            continue
+        bodies.append(str(note.get("body") or ""))
+    return bodies
+
+
+def run_general_chat(base, marker):
+    result = request(base, "POST", "/api/ops-chat/message", {
+        "message": f"What can this operations assistant help with? Marker {marker}.",
+        "requester_name": "Demo User",
+        "requester_email": "demo@example.invalid",
+        "external_thread_id": f"{marker}-general",
+        "force_new_ticket": True,
+        "spawn_agent": False,
+    })
+    require(not result.get("created_ticket"), f"general chat should not create a ticket: {result}")
+    require(result.get("ticket_id") is None, f"general chat returned a ticket: {result}")
+    return {"scenario": "general-chat", "reply": result.get("reply", "")[:180]}
+
+
+def run_ticket_scenario(base, marker, name, message, expected_group, expected_intent=None,
+                        expect_change=False):
+    result = request(base, "POST", "/api/ops-chat/message", {
+        "message": f"{message} Marker {marker}-{name}.",
+        "requester_name": "Demo User",
+        "requester_email": "demo@example.invalid",
+        "external_thread_id": f"{marker}-{name}",
+        "force_new_ticket": True,
+        "spawn_agent": False,
+    })
+    require(result.get("created_ticket"), f"{name} did not create a ticket: {result}")
+    ticket_id = result.get("ticket_id")
+    classification = result.get("classification") or {}
+    require(classification.get("assignment_group") == expected_group,
+            f"{name} routed to {classification.get('assignment_group')} instead of {expected_group}: {result}")
+    if expected_intent:
+        require(classification.get("intent") == expected_intent,
+                f"{name} intent {classification.get('intent')} != {expected_intent}: {result}")
+    if expect_change:
+        require(result.get("change_id"), f"{name} should create an approval gate: {result}")
+    context = get_context(base, ticket_id)
+    bodies = note_bodies(context)
+    require(any("Ops Chat intake classification" in body for body in bodies),
+            f"{name} ticket missing Ops Chat classification note")
+
+    follow = request(base, "POST", "/api/ops-chat/message", {
+        "session_id": result.get("session_id"),
+        "message": f"Follow-up for {marker}-{name}: the requester confirms this is urgent but no production change is approved yet.",
+        "requester_name": "Demo User",
+        "requester_email": "demo@example.invalid",
+        "spawn_agent": False,
+    })
+    require(follow.get("continued_ticket"), f"{name} follow-up did not continue ticket: {follow}")
+    context = get_context(base, ticket_id)
+    bodies = note_bodies(context)
+    require(any("User chat follow-up" in body for body in bodies),
+            f"{name} ticket missing user-response follow-up note")
+    return {
+        "scenario": name,
+        "ticket_id": ticket_id,
+        "intent": classification.get("intent"),
+        "assignment_group": classification.get("assignment_group"),
+        "change_id": result.get("change_id"),
+        "reply": result.get("reply", "")[:180],
+    }
+
+
+def wait_for_agent_progress(base, agent_id, ticket_id, timeout_seconds):
+    deadline = time.time() + timeout_seconds
+    last = None
+    while time.time() < deadline:
+        agent = request(base, "GET", f"/api/agents/{agent_id}", timeout=30)
+        context = get_context(base, ticket_id)
+        bodies = note_bodies(context)
+        progress_bodies = progress_note_bodies(context)
+        task = agent.get("task") or agent.get("current_task") or {}
+        agent_row = agent.get("agent") or agent
+        last = {
+            "agent_status": agent_row.get("status"),
+            "task_status": task.get("status"),
+            "note_count": len(bodies),
+            "latest_notes": bodies[-5:],
+        }
+        terminal = {agent_row.get("status"), task.get("status")} & {
+            "completed", "finished", "terminated", "failed", "stopped", "cancelled"
+        }
+        if terminal:
+            return {"status": "terminal", **last}
+        progress_markers = (
+            "Awaiting user response",
+            "Agent waiting",
+            "Agent checkpoint:",
+            "resolution",
+            "clarification",
+            "requester input",
+            "approval gate",
+            "access request",
+        )
+        if any(any(marker.lower() in body.lower() for marker in progress_markers)
+               for body in progress_bodies):
+            return {"status": "progress", **last}
+        time.sleep(10)
+    return {"status": "timeout", **(last or {})}
+
+
+def run_agent_handoff(base, marker, timeout_seconds):
+    result = request(base, "POST", "/api/ops-chat/message", {
+        "message": (
+            "I cannot log into my account before a customer call. "
+            "Please create the ticket, check context, write a concise user-facing next step, "
+            "and avoid any credential change unless an approval gate is opened."
+            f" Marker {marker}-agent."
+        ),
+        "requester_name": "Demo User",
+        "requester_email": "demo@example.invalid",
+        "external_thread_id": f"{marker}-agent",
+        "force_new_ticket": True,
+        "spawn_agent": True,
+    })
+    require(result.get("created_ticket"), f"agent handoff did not create ticket: {result}")
+    agent = result.get("agent") or {}
+    agent_id = agent.get("agent_id")
+    require(agent_id, f"agent handoff did not spawn a real agent: {result}")
+    ticket_id = result.get("ticket_id")
+    progress = wait_for_agent_progress(base, agent_id, ticket_id, timeout_seconds)
+    if progress.get("status") == "timeout":
+        request(base, "POST", f"/api/agents/{agent_id}/stop", {
+            "reason": f"ops-chat scenario smoke timeout for {marker}; stopping only spawned test agent"
+        }, timeout=30)
+        raise AssertionError(f"agent {agent_id} timed out without visible progress: {progress}")
+    return {
+        "scenario": "real-agent-handoff",
+        "ticket_id": ticket_id,
+        "agent_id": agent_id,
+        "task_id": agent.get("task_id"),
+        "progress": progress,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run Ops Chat scenario smoke tests")
+    parser.add_argument("base", nargs="?", default="http://localhost:25480")
+    parser.add_argument("--spawn-agent", action="store_true",
+                        help="Also spawn one real dashboard agent and wait for visible progress")
+    parser.add_argument("--agent-timeout", type=int, default=360)
+    args = parser.parse_args()
+
+    if not TOKEN:
+        raise SystemExit("DASHBOARD_SERVICE_TOKEN is required")
+    base = args.base.rstrip("/")
+    stamp = int(time.time())
+    marker = f"ops-chat-scenarios-{stamp}"
+
+    health = request(base, "GET", "/api/ops-chat/matrix/health")
+    require(health.get("client") == "Matrix Synapse + Element", f"unexpected chat health: {health}")
+
+    results = [run_general_chat(base, marker)]
+    results.append(run_ticket_scenario(
+        base,
+        marker,
+        "account-lockout",
+        "I cannot log into my account and I have a customer call in 20 minutes. I can receive SMS MFA codes.",
+        "Identity & Access",
+        "identity-help",
+        False,
+    ))
+    results.append(run_ticket_scenario(
+        base,
+        marker,
+        "software-request",
+        "I need approved screen recording software installed on my workstation for a training session.",
+        "Endpoint Support",
+        "endpoint-support",
+        False,
+    ))
+    results.append(run_ticket_scenario(
+        base,
+        marker,
+        "phishing-report",
+        "A user reported a suspicious email with a bad link from an unknown sender. Nobody should directly browse the URL.",
+        "Security Operations",
+        "phishing",
+        True,
+    ))
+    results.append(run_ticket_scenario(
+        base,
+        marker,
+        "deployment-gate",
+        "The deployment pipeline failed after Semgrep and Trivy findings and I need a delivery gate review.",
+        "DevSecOps",
+        "devsecops",
+        True,
+    ))
+    if args.spawn_agent:
+        results.append(run_agent_handoff(base, marker, args.agent_timeout))
+
+    query = urllib.parse.quote(marker)
+    search = request(base, "GET", f"/api/search/global?q={query}&limit=20")
+    require(search.get("total", 0) >= 4, f"global search did not find scenario tickets: {search}")
+
+    print(json.dumps({
+        "status": "passed",
+        "base": base,
+        "marker": marker,
+        "health": health,
+        "results": results,
+        "search_total": search.get("total"),
+    }, indent=2))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:
+        print(json.dumps({"status": "failed", "error": str(exc)}), file=sys.stderr)
+        raise

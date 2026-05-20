@@ -585,6 +585,7 @@ def _checkpoint_blocks_completion(checkpoint):
         return False
     waiting_markers = (
         "waiting_for_",
+        "awaiting_",
         "pending_approval",
         "pending_access",
         "blocked",

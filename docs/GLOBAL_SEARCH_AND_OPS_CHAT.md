@@ -97,11 +97,43 @@ messages continue the same ticket. By default it also expects a real agent
 harness task to be queued; set `OPS_CHAT_SMOKE_SPAWN_AGENT=false` only for
 unit-style checks where the live model lane must not be used.
 
-On 2026-05-20 the live smoke proved Element/Synapse/Keycloak health, ticket
-creation, follow-up note capture, and real Hermes queue handoff. The local model
-lane then stalled without note/checkpoint movement, so the live demo should keep
-chat actions small and use completed proof tickets for longer agent narratives
-until the provider/harness reliability work is completed.
+Scenario smoke:
+
+```bash
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-timeout 600
+```
+
+This covers:
+
+- harmless general chat without ticket creation
+- account-lockout intake routed to Identity & Access
+- software-install intake routed to Endpoint Support
+- phishing intake routed to Security Operations with an approval gate
+- CI/CD delivery-gate intake routed to DevSecOps with an approval gate
+- follow-up chat recorded as `user-response`
+- global search visibility for the scenario marker
+- optional real Hermes/Claude harness handoff through the AI proxy
+
+Latest live proof on 2026-05-20:
+
+- `scripts/smoke_ops_chat_scenarios.py --spawn-agent` created tickets `750`
+  through `754` and passed.
+- Ticket `754` came from Ops Chat, routed to Identity & Access, spawned Hermes
+  agent `284`, wrote live agent notes, and landed cleanly in
+  `awaiting_user_response` with no active agent process left behind.
+- Ticket `749` proves the follow-up path: the first agent asked for the target
+  login system, the user replied via Ops Chat, and continuation agent `283`
+  wrote Keycloak/SSO troubleshooting guidance.
+
+The 2026-05-20 hardening pass also fixed three demo-readiness issues:
+
+- `scripts/switch_model_route.py --route external` now updates
+  `OPS_CHAT_AGENT_MODEL` so chat-originated agents follow the active model
+  route.
+- The API Compose service now passes `OPS_CHAT_AGENT_MODEL` into the container.
+- Durable wait statuses such as `awaiting_user_response` fit the database
+  schema and are rendered as wait states instead of failed agents.
 
 ## Security Notes
 
@@ -114,3 +146,5 @@ until the provider/harness reliability work is completed.
 - The chat endpoint uses existing RACI, approval, provider sync,
   auto-assignment, agent queue, steering, and audit paths rather than a hidden
   workflow.
+- Chat follow-ups on a waiting ticket spawn a continuation agent; follow-ups on
+  a currently running agent are delivered as steering context.

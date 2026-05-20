@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS agent_tasks (
     ticket_id INTEGER REFERENCES tickets(id),
     task_type VARCHAR(50) NOT NULL DEFAULT 'ticket_resolution',
     prompt TEXT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'queued',
+    status VARCHAR(40) NOT NULL DEFAULT 'queued',
     output TEXT,
     error_message TEXT,
     checkpoints JSONB DEFAULT '[]',
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS tool_checks (
     id SERIAL PRIMARY KEY,
     tool_id INTEGER REFERENCES tools(id) ON DELETE CASCADE,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(20) NOT NULL,
+    status VARCHAR(40) NOT NULL,
     response_time_ms INTEGER,
     error TEXT,
     details JSONB

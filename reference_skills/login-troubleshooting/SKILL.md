@@ -1,13 +1,13 @@
 ﻿---
 name: login-troubleshooting
 description: >
-  Detailed troubleshooting guide for demo_account_1 login failures across all AI Server platforms.
-  Documents root cause analysis, diagnostic findings, attempted fixes, and remaining blockers
-  for Wazuh, iTop, GitLab, and Keycloak authentication issues. Use when investigating login failures,
-  debugging authentication, or fixing credential problems.
+  Current demo login status and regression guide for demo_account_1 across AI Server platforms.
+  Use when investigating login failures, debugging authentication, or fixing credential problems.
+  Treat the current verified status as authoritative; historical issue sections are regression
+  runbooks, not active blockers unless a fresh test proves recurrence.
 ---
 
-# Login Troubleshooting - Known Issues & Root Causes
+# Login Troubleshooting - Current Status And Regression Runbook
 
 **Date:** 2026-05-06
 **Affected Account:** `demo_account_1`
@@ -15,7 +15,32 @@ description: >
 
 ---
 
-## Resolution Update - 2026-05-11
+## Current Demo Status - 2026-05-20
+
+`demo_account_1` is the current demo account. The password lives only in vault
+key `demo_account_1`; never write it to notes, source, shell history, or docs.
+
+Agents must not tell users that GitLab OIDC, Wazuh dashboard, iTop, Keycloak, or
+Mailcow are broken based only on historical sections in this file. First perform
+or cite a fresh live check. The sections below are regression runbooks for what
+to inspect if a current login test fails.
+
+Current verified posture:
+
+| Platform | Current interpretation |
+|----------|------------------------|
+| Keycloak / SSO | Operational identity provider for the demo path. |
+| GitLab local login | Repaired; prior 422 issue was fixed. |
+| GitLab Keycloak OIDC | Repaired; prior `keycloak.internal:8443` route/CA/mapper issues were fixed. |
+| iTop | Login/API repaired in the demo environment. |
+| Wazuh Dashboard/API | Demo account paths repaired in the demo environment. |
+| Mailcow/Roundcube | Demo mailbox/webmail paths repaired for the current reference demo. |
+
+For live chat or ticket work, give the user targeted next steps for the named
+system and open an approval gate before changing credentials, MFA, group
+membership, or role assignments.
+
+## Historical Resolution Update - 2026-05-11
 
 `demo_account_1` has been repaired and rotated. The current password is stored only in vault key `demo_account_1`; do not write it to docs, scripts, logs, or shell history.
 
@@ -29,7 +54,7 @@ Verified checks:
 | GitLab | PASS: Rails `valid_password?` returns true; user active and admin |
 | Mailcow | PASS: mailbox exists; password flow delegated to Keycloak/Mailcow bridge |
 
-## GitLab Resolution Update - 2026-05-18
+## Historical GitLab Resolution Update - 2026-05-18
 
 GitLab local login and Keycloak OIDC were repaired for the demo account.
 
@@ -64,7 +89,7 @@ Prior fixes from 2026-05-11:
 - Removed hardcoded iTop/Mailcow DB passwords from `/opt/agentic-it/multiplatform_user_manager.py`.
 - Rotated the demo credential after an old failed iTop debug trace logged the test password; scrubbed the iTop error log pattern to `CheckCredentials("<redacted-demo-password>")`.
 
-## Issue Summary
+## Historical Issue Summary
 
 | Platform | Symptom | Root Cause | Status |
 |----------|---------|------------|--------|
@@ -334,4 +359,3 @@ The following temporary scripts are scattered in `/opt/agentic-it/` and should b
 3. **Wazuh RBAC hash regeneration** - API login fix (8-byte salt)
 4. **iTop cache/bridge investigation** - Login fix
 5. **Temp script cleanup** - Housekeeping
-

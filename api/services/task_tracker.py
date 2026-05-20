@@ -73,7 +73,8 @@ def _is_agent_process_alive(pid):
         return False
     except OSError:
         return False
-    return "claude" in cmdline or "anthropic-ai" in cmdline or "node" in cmdline
+    harness_markers = ("claude", "anthropic-ai", "hermes", "hermes-agent", "node")
+    return any(marker in cmdline for marker in harness_markers)
 
 
 def _runner_is_managing_task(task_id):
@@ -147,6 +148,7 @@ def _checkpoint_blocks_completion(checkpoint):
         return False
     waiting_markers = (
         "waiting_for_",
+        "awaiting_",
         "pending_approval",
         "pending_access",
         "blocked",
@@ -188,6 +190,64 @@ async def _wait_checkpoint_obsolete(agent_id, ticket_id):
 
 
 async def _mark_orphaned(task, reason):
+    cp = await _read_checkpoint(task.get("work_dir"))
+    if _checkpoint_blocks_completion(cp):
+        blocked_status = _blocked_task_status(cp)
+        output = (cp or {}).get("output") or reason
+        progress = int((cp or {}).get("progress_pct") or 50)
+        existing = task.get("checkpoints") or []
+        if isinstance(existing, str):
+            try:
+                existing = json.loads(existing)
+            except json.JSONDecodeError:
+                existing = []
+        existing.append({
+            "step": (cp or {}).get("step", "unknown"),
+            "status": (cp or {}).get("status", blocked_status),
+            "output": str(output)[:500],
+            "timestamp": (cp or {}).get("timestamp", datetime.now().isoformat()),
+        })
+        await execute(
+            "UPDATE agent_tasks SET status = $1, checkpoints = $2, progress_pct = GREATEST(progress_pct, $3), "
+            "output = $4, completed_at = NOW(), error_message = NULL WHERE id = $5",
+            blocked_status,
+            json.dumps(existing),
+            progress,
+            str(output)[:1000],
+            task["id"],
+        )
+        await execute(
+            "UPDATE agents SET status = $1, heartbeat = NOW(), error_message = $2, finished_at = NOW() WHERE id = $3",
+            blocked_status,
+            str(output)[:500],
+            task["agent_id"],
+        )
+        if task.get("ticket_id"):
+            await execute(
+                "UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2",
+                "pending_approval" if blocked_status == "pending_approval" else blocked_status,
+                task["ticket_id"],
+            )
+            await _add_checkpoint_note(task, (cp or {}).get("step", "unknown"),
+                                       (cp or {}).get("status", blocked_status), output, progress)
+        await log_event("agent", "info", f"agent_{task['agent_id']}",
+                        "orphaned_process_preserved_wait_checkpoint", f"task_{task['id']}", {
+                            "ticket_id": task["ticket_id"],
+                            "pid": task.get("pid"),
+                            "status": blocked_status,
+                            "reason": reason,
+                            "checkpoint": cp,
+                        })
+        if broadcast_fn:
+            await broadcast_fn({
+                "type": "agent_waiting",
+                "agent_id": task["agent_id"],
+                "ticket_id": task["ticket_id"],
+                "task_id": task["id"],
+                "status": blocked_status,
+                "reason": output,
+            })
+        return
     await execute(
         "UPDATE agent_tasks SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2",
         reason,

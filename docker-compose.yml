@@ -144,6 +144,7 @@ services:
       AGENT_ALLOWED_TOOLS: ${AGENT_ALLOWED_TOOLS:-Read,Write,Bash(curl *),Bash(node *),Bash(npx *),Bash(playwright *)}
       AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:-http://ai-proxy:4001}
       AGENT_LLM_AUTH_TOKEN: ${AGENT_LLM_AUTH_TOKEN:-}
+      OPS_CHAT_AGENT_MODEL: ${OPS_CHAT_AGENT_MODEL:-local/agent-default}
       HERMES_BIN: ${HERMES_BIN:-/home/cereal/.hermes/hermes-agent/venv/bin/hermes}
       HERMES_HOME: ${HERMES_HOME:-/home/cereal/.hermes}
       HERMES_DEFAULT_PROVIDER: ${HERMES_DEFAULT_PROVIDER:-dashboard-proxy}

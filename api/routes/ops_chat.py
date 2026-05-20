@@ -15,6 +15,22 @@ OPS_CHAT_MODEL = "agentic-ops-intake"
 DEFAULT_AGENT_MODEL = os.getenv("OPS_CHAT_AGENT_MODEL") or os.getenv("AGENT_DEFAULT_MODEL") or "local/agent-default"
 
 
+def _chat_agent_model(classification=None):
+    """Return the model for chat-originated agent work.
+
+    Ops Chat is a demo/customer entrypoint, so it should follow the active route
+    switch. A RACI rule may still set `auto_agent_model` for normal ticket
+    auto-assignment, but chat handoff uses OPS_CHAT_AGENT_MODEL/AGENT_DEFAULT_MODEL
+    first so stale per-rule values cannot silently route chat to the wrong lane.
+    """
+    return (
+        os.getenv("OPS_CHAT_AGENT_MODEL")
+        or os.getenv("AGENT_DEFAULT_MODEL")
+        or ((classification or {}).get("auto_agent_model"))
+        or DEFAULT_AGENT_MODEL
+    )
+
+
 def _json(value, default):
     if value is None:
         return default
@@ -135,12 +151,7 @@ async def _spawn_chat_agent(ticket_id, classification, message, requester_name=N
     ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"status": "error", "error": "ticket_not_found"}
-    model = (
-        classification.get("auto_agent_model")
-        or os.getenv("OPS_CHAT_AGENT_MODEL")
-        or os.getenv("AGENT_DEFAULT_MODEL")
-        or DEFAULT_AGENT_MODEL
-    )
+    model = _chat_agent_model(classification)
     extra_prompt = "\n".join([
         "This ticket originated from the real Matrix/Element Ops Chat client.",
         f"Requester: {requester_name or 'Chat User'}",
@@ -268,17 +279,30 @@ async def _continue_ticket_from_chat(session_id, ticket_id, message, requester_n
     resume = {"status": "not_needed"}
     if not spawn_agent:
         resume = {"status": "skipped", "reason": "spawn_agent_disabled"}
-    elif not active:
+    elif active and active.get("status") in ("spawned", "running", "working"):
+        resume = {
+            "status": "delivered_to_active_agent",
+            "agent_id": active.get("id"),
+            "task_id": active.get("task_id"),
+            "agent_status": active.get("status"),
+        }
+    else:
         ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
         if ticket:
             from services import agent_runner
+            prior = (
+                f"Prior waiting agent: {active.get('id')} / {active.get('status')}."
+                if active else
+                "No active agent was available."
+            )
             resume = await agent_runner.spawn_agent(
                 ticket_id,
-                os.getenv("OPS_CHAT_AGENT_MODEL") or os.getenv("AGENT_DEFAULT_MODEL") or DEFAULT_AGENT_MODEL,
+                _chat_agent_model(),
                 "\n".join([
                     build_ticket_resolution_prompt(ticket),
                     "",
                     "A requester sent a new Matrix/Element chat follow-up. Re-read the ticket notes, use the latest user-response note, continue the ticket, and write a user-readable note with the outcome.",
+                    prior,
                 ]),
                 "ticket_resolution",
             )
@@ -435,7 +459,7 @@ async def matrix_health():
         "bridge": "ops-chat-bridge",
         "identity": "Keycloak OIDC",
         "agent_harness": os.getenv("AGENT_HARNESS", "hermes"),
-        "agent_model": os.getenv("OPS_CHAT_AGENT_MODEL") or os.getenv("AGENT_DEFAULT_MODEL") or DEFAULT_AGENT_MODEL,
+        "agent_model": _chat_agent_model(),
     }
 
 
