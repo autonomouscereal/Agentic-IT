@@ -68,6 +68,8 @@ Important environment:
 - `MATRIX_SYNAPSE_TLS_KEY_PATH=./runtime/tls/dashboard.key`
 - `MATRIX_ELEMENT_TLS_CERT_PATH=./runtime/tls/dashboard.crt`
 - `MATRIX_ELEMENT_TLS_KEY_PATH=./runtime/tls/dashboard.key`
+- `MATRIX_BOT_LOCALPART=agentic-ops`
+- `MATRIX_BOT_DISPLAY_NAME=Agentic Ops Agent`
 - `OPS_CHAT_AGENT_MODEL=<active chat handoff model>`
 - `DASHBOARD_SERVICE_TOKEN=<vault/runtime secret>`
 
@@ -162,6 +164,18 @@ ticket creation, and real agent handoff.
 
 ## Demo Prompt
 
+Fastest browser path:
+
+1. Open `https://<host>:3303/#/user/@agentic-ops:agentic-ops.local`.
+2. Sign in with Keycloak.
+3. If Element asks about notifications or chat backup, dismiss it.
+4. Confirm the profile says `Agentic Ops Agent`.
+5. Click **Send message**.
+6. Send the operational request.
+
+Do not use **Explore Public Rooms** for the demo path; that is Element's
+generic Matrix UI and can lead operators away from the local support bot.
+
 ```text
 I cannot log into my account and I have a customer call in 20 minutes.
 ```
@@ -186,6 +200,11 @@ audit trail.
 - That DM created ticket `908`, spawned Hermes agent `307` / task `304`, wrote
   model-turn audit evidence, asked the user which account/system was affected,
   and stopped cleanly in `awaiting_user_response` with no active process left.
+- The direct bot-profile flow passed with marker
+  `element-direct-agent-ui-1779283071`: open
+  `https://192.168.50.222:3303/#/user/@agentic-ops:agentic-ops.local`, click
+  **Send message**, send the request, receive ticket `909`, and spawn Hermes
+  agent `308` / task `305`.
 - Playwright login proof passed as `demo_chat_alice`, landing at `#/home`.
   Use `demo_chat_alice`, `demo_chat_jeff`, or `demo_chat_exec` for the chat
   demo; passwords are stored in same-named server-manager vault keys.

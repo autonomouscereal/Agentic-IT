@@ -547,6 +547,14 @@ final state: no active dashboard agents and no active Hermes processes
 Latest Element/Matrix UI proof on 2026-05-20:
 
 ```text
+Direct bot-profile UI path: PASS
+URL: https://192.168.50.222:3303/#/user/@agentic-ops:agentic-ops.local
+Profile: Agentic Ops Agent
+Action: clicked Send message, sent a GitLab login request
+Marker: element-direct-agent-ui-1779283071
+Ticket: 909
+Agent: 308 / task 305
+
 smoke_ops_chat_playwright.js: PASS without HTTPS bypass
 Dashboard login: PASS as demo_account_1
 Element login: PASS as demo_chat_live11 at https://192.168.50.222:3303/#/home

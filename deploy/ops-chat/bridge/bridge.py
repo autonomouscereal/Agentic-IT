@@ -14,10 +14,41 @@ MATRIX_AS_TOKEN = os.getenv("MATRIX_AS_TOKEN", "")
 MATRIX_HS_TOKEN = os.getenv("MATRIX_HS_TOKEN", "")
 MATRIX_BOT_LOCALPART = os.getenv("MATRIX_BOT_LOCALPART", "agentic-ops")
 MATRIX_SERVER_NAME = os.getenv("MATRIX_SERVER_NAME", "agentic-ops.local")
+MATRIX_BOT_DISPLAY_NAME = os.getenv("MATRIX_BOT_DISPLAY_NAME", "Agentic Ops Agent")
 PORT = int(os.getenv("OPS_CHAT_BRIDGE_PORT", "29318"))
 
 BOT_USER_ID = f"@{MATRIX_BOT_LOCALPART}:{MATRIX_SERVER_NAME}"
 PROCESSED = set()
+
+
+async def ensure_bot_profile():
+    if not MATRIX_AS_TOKEN:
+        return
+    register_url = f"{MATRIX_HOMESERVER_URL}/_matrix/client/v3/register"
+    profile_url = (
+        f"{MATRIX_HOMESERVER_URL}/_matrix/client/v3/profile/"
+        f"{quote(BOT_USER_ID, safe='')}/displayname"
+    )
+    params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID}
+    async with ClientSession() as session:
+        async with session.post(
+            register_url,
+            params={"access_token": MATRIX_AS_TOKEN, "kind": "user"},
+            json={"type": "m.login.application_service", "username": MATRIX_BOT_LOCALPART},
+            timeout=30,
+        ) as response:
+            if response.status not in (200, 400):
+                body = await response.text()
+                print(f"Matrix bot registration check failed {response.status}: {body[:400]}", flush=True)
+        async with session.put(
+            profile_url,
+            params=params,
+            json={"displayname": MATRIX_BOT_DISPLAY_NAME},
+            timeout=30,
+        ) as response:
+            if response.status >= 400:
+                body = await response.text()
+                print(f"Matrix bot profile update failed {response.status}: {body[:400]}", flush=True)
 
 
 async def dashboard_chat(message, room_id, event_id, sender):
@@ -164,6 +195,7 @@ async def rooms(request):
 
 def create_app():
     app = web.Application()
+    app.on_startup.append(lambda _app: ensure_bot_profile())
     app.router.add_get("/health", health)
     app.router.add_put("/_matrix/app/v1/transactions/{txn_id}", transactions)
     app.router.add_get("/_matrix/app/v1/users/{user_id}", users)

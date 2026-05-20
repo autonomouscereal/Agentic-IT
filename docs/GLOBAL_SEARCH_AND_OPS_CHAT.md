@@ -118,6 +118,17 @@ messages continue the same ticket. By default it also expects a real agent
 harness task to be queued; set `OPS_CHAT_SMOKE_SPAWN_AGENT=false` only for
 unit-style checks where the live model lane must not be used.
 
+Fastest Element demo path:
+
+```text
+https://<host>:3303/#/user/@agentic-ops:agentic-ops.local
+```
+
+After Keycloak login, confirm the profile says `Agentic Ops Agent`, click
+**Send message**, and send the request. Avoid **Explore Public Rooms** for the
+demo; it is Element's generic Matrix directory, not the local support-agent
+intake route.
+
 Scenario smoke:
 
 ```bash
@@ -161,6 +172,10 @@ Latest live proof on 2026-05-20:
 - That DM created ticket `908`, spawned Hermes agent `307` / task `304`, wrote
   model-turn audit events, asked the requester which account/system they meant,
   and stopped in `awaiting_user_response` with no active process left behind.
+- Direct bot-profile Playwright proof passed with marker
+  `element-direct-agent-ui-1779283071`; Element showed `Agentic Ops Agent`,
+  the **Send message** button opened a DM, the bot replied in-room, ticket
+  `909` was created, and Hermes agent `308` / task `305` was spawned.
 - Playwright Element login passed through Keycloak as `demo_chat_alice` and
   landed at `https://192.168.50.222:3303/#/home`.
 - The Matrix bridge now auto-joins direct-message invites for

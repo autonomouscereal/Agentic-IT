@@ -75,6 +75,18 @@ curl -sS http://127.0.0.1:25480/api/ops-chat/matrix/health \
 
 ## Browser Proof
 
+Recommended human demo path:
+
+1. Open `https://<host>:3303/#/user/@agentic-ops:agentic-ops.local`.
+2. Sign in with Keycloak.
+3. Dismiss Element's notification/chat-backup prompts if they appear.
+4. Confirm the profile says `Agentic Ops Agent`.
+5. Click **Send message**.
+6. Type the user's request and press Enter.
+
+Avoid **Explore Public Rooms** during the demo. That is Element's general
+Matrix room-directory feature and is not the support-agent intake path.
+
 Run the Playwright proof from an operator workstation:
 
 ```powershell
@@ -101,6 +113,10 @@ Latest live proof: marker `ops-chat-same-origin-playwright-1779261056` created
 ticket `908`, spawned Hermes agent `307` / task `304`, recorded model-turn audit
 events, asked the requester which account/system they meant, and stopped in the
 durable `awaiting_user_response` state with no active process left behind.
+
+Latest direct-profile proof: marker `element-direct-agent-ui-1779283071`
+created ticket `909` from the Element UI, spawned Hermes agent `308` / task
+`305`, and showed the bot reply in the Matrix room.
 
 ## Troubleshooting
 
@@ -134,4 +150,3 @@ Bot does not respond to a DM:
 - Check `ops-chat-bridge` logs and `/health`.
 - Ensure the bot localpart matches `MATRIX_BOT_LOCALPART`.
 - Confirm the appservice tokens in Synapse and the bridge match.
-
