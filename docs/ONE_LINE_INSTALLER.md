@@ -209,6 +209,12 @@ Operational chat creates traceable tickets and queues real Hermes/Claude Code
 agent harness tasks through the configured AI proxy instead of a separate hidden
 bot workflow.
 
+The reference chat deployment serves Element on HTTPS port `3303`; HTTP port
+`3301` redirects to that UI. Synapse's browser-facing client/OIDC callback URL
+is HTTPS port `3302`, while the bridge uses Synapse's internal HTTP listener.
+Keep `MATRIX_PUBLIC_BASEURL` and `MATRIX_ELEMENT_PUBLIC_URL` browser-routable
+and HTTPS before running `scripts/setup_ops_chat_keycloak.py`.
+
 Multiple installs can run on the same host when different `--target`, `--dashboard-port`, `--db-port`, and optionally `--project-name` values are used. The compose file does not use fixed container names.
 
 ## Post-Install Doctor

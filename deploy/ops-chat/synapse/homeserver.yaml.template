@@ -2,6 +2,7 @@ server_name: "{{MATRIX_SERVER_NAME}}"
 pid_file: /data/homeserver.pid
 public_baseurl: "{{MATRIX_PUBLIC_BASEURL}}/"
 web_client_location: "{{MATRIX_ELEMENT_PUBLIC_URL}}/"
+{{MATRIX_SYNAPSE_TLS_CONFIG}}
 
 listeners:
   - port: 8008
@@ -11,6 +12,7 @@ listeners:
     resources:
       - names: [client, federation, metrics]
         compress: false
+{{MATRIX_SYNAPSE_PUBLIC_LISTENER}}
 
 database:
   name: psycopg2
@@ -58,6 +60,17 @@ sso:
 
 password_config:
   enabled: false
+
+rc_login:
+  address:
+    per_second: 20
+    burst_count: 200
+  account:
+    per_second: 20
+    burst_count: 200
+  failed_attempts:
+    per_second: 20
+    burst_count: 200
 
 rc_message:
   per_second: 2

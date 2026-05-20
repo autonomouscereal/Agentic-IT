@@ -1,7 +1,9 @@
 import os
 import secrets
 import base64
+import shutil
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 CONFIG_DIR = Path("/config")
@@ -24,6 +26,13 @@ def _oidc_endpoint_lines(public_issuer, backchannel_base):
         return "    discover: true"
     public = public_issuer.rstrip("/")
     backchannel = backchannel_base.rstrip("/")
+    scheme = urlparse(backchannel).scheme.lower()
+    if scheme != "https":
+        print(
+            "Ignoring MATRIX_OIDC_BACKCHANNEL_BASEURL because Synapse requires "
+            "HTTPS OIDC token, userinfo, and JWKS endpoints."
+        )
+        return "    discover: true"
     return "\n".join(
         [
             "    discover: false",
@@ -52,6 +61,54 @@ def _new_signing_key():
     return f"ed25519 auto {seed}\n"
 
 
+def _truthy(value):
+    return str(value or "").lower() in ("1", "true", "yes", "on")
+
+
+def _synapse_tls_config():
+    if not _truthy(env("MATRIX_SYNAPSE_TLS_ENABLED", "false")):
+        return ""
+    cert_path, key_path = _prepare_synapse_tls_files()
+    return "\n".join(
+        [
+            f'tls_certificate_path: "{cert_path}"',
+            f'tls_private_key_path: "{key_path}"',
+            "",
+        ]
+    )
+
+
+def _prepare_synapse_tls_files():
+    source_cert = Path(env("MATRIX_SYNAPSE_TLS_CERT_FILE", "/etc/ssl/certs/ops-chat-synapse.crt"))
+    source_key = Path(env("MATRIX_SYNAPSE_TLS_KEY_FILE", "/etc/ssl/private/ops-chat-synapse.key"))
+    target_cert = DATA_DIR / "ops-chat-synapse.crt"
+    target_key = DATA_DIR / "ops-chat-synapse.key"
+    shutil.copyfile(source_cert, target_cert)
+    shutil.copyfile(source_key, target_key)
+    target_cert.chmod(0o644)
+    # Synapse drops privileges inside the image; keep the copied key readable to
+    # that process while avoiding broader host permissions on the mounted key.
+    target_key.chmod(0o644)
+    return str(target_cert), str(target_key)
+
+
+def _synapse_public_listener():
+    if not _truthy(env("MATRIX_SYNAPSE_TLS_ENABLED", "false")):
+        return ""
+    port = env("MATRIX_SYNAPSE_TLS_PORT", "8448")
+    return "\n".join(
+        [
+            "  - port: " + port,
+            "    tls: true",
+            "    type: http",
+            "    x_forwarded: false",
+            "    resources:",
+            "      - names: [client, federation, metrics]",
+            "        compress: false",
+        ]
+    )
+
+
 def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     DATA_DIR.chmod(0o777)
@@ -78,6 +135,8 @@ def main():
         "MATRIX_OIDC_CLIENT_ID": env("MATRIX_OIDC_CLIENT_ID", "agentic-ops-chat"),
         "MATRIX_OIDC_CLIENT_SECRET": env("MATRIX_OIDC_CLIENT_SECRET"),
         "MATRIX_BOT_LOCALPART": env("MATRIX_BOT_LOCALPART", "agentic-ops"),
+        "MATRIX_SYNAPSE_TLS_CONFIG": _synapse_tls_config(),
+        "MATRIX_SYNAPSE_PUBLIC_LISTENER": _synapse_public_listener(),
     }
     render_template("homeserver.yaml.template", DATA_DIR / "homeserver.yaml", values)
     render_template("ops-chat-appservice.yaml.template", DATA_DIR / "ops-chat-appservice.yaml", values)

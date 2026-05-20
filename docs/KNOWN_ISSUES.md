@@ -4,6 +4,73 @@ Last updated: 2026-05-20.
 
 ## Found During 2026-05-20 Ops Chat And Access RACI Work
 
+### Ops Chat Element login failed or landed on unusable chat state
+
+Status: fixed and verified.
+
+Symptoms:
+
+- Element showed "This login provider is unavailable right now" for Keycloak.
+- After OIDC started working, Synapse callbacks could fail because secure OIDC
+  session cookies were issued against an HTTP Matrix public base URL.
+- Repeat demo-user logins could show Element's digital-identity prompt before
+  the chat home.
+
+Fix:
+
+- Synapse now uses the browser-routable HTTPS issuer and HTTPS public base URL.
+- Element is served over HTTPS on port `3303`, while `3301` redirects.
+- Element config disables custom homeserver editing and sets E2EE/verification
+  defaults appropriate for the demo intake surface.
+- Synapse login rate limits were raised for the local lab to avoid demo lockout
+  after repeated Playwright login tests.
+
+Verification:
+
+- Playwright Keycloak login proof passed as `demo_chat_alice` and landed at
+  `https://192.168.50.222:3303/#/home`.
+
+### Matrix bridge did not auto-join Element direct-message invites
+
+Status: fixed and verified.
+
+Element could create a DM with `@agentic-ops:agentic-ops.local`, but the bridge
+did not join the room, so user messages remained in Matrix and never created a
+dashboard ticket.
+
+Fix:
+
+- The Matrix appservice bridge now handles `m.room.member` invite events for
+  the bot user.
+- The bridge joins the room with the appservice token, sends a connected
+  message, then processes room messages into `/api/ops-chat/message`.
+
+Verification:
+
+- Browser-created Matrix DM marker `matrix-ui-live-chat-1779258900` created
+  dashboard ticket `907`, spawned Hermes agent `306` / task `303`, and settled
+  into `awaiting_user_response` with no active agents left behind.
+
+### Broad Ops Chat RACI routing had ambiguous enterprise cases
+
+Status: fixed and verified.
+
+The first 50-case no-spawn routing matrix misrouted account access, executive
+support, mailbox forwarding, EDR, URL block, network segmentation, backup
+restore, UI bug, and platform self-repair examples.
+
+Fix:
+
+- Migration `023_enterprise_ops_raci_expansion.sql` seeds/refines broad
+  enterprise RACI groups and rules, including explicit GitLab/Wazuh access,
+  executive support, backup restore, platform self-repair, and
+  network/security phrasing.
+
+Verification:
+
+- `scripts/smoke_ops_chat_enterprise_matrix.py` passed 50/50 with marker
+  `ops-chat-enterprise-matrix-1779257312` on tickets `846`-`895`.
+
 ### Chat-created approval gates did not resume waiting agents
 
 Status: fixed and verified.

@@ -15,8 +15,8 @@ in the Agentic Operations control plane.
 
 Reference stack:
 
-- Element Web service: `ops-chat`, default port `${OPS_CHAT_PORT:-3301}`
-- Matrix Synapse service: `ops-chat-synapse`, default port `${OPS_CHAT_SYNAPSE_PORT:-3302}`
+- Element Web service: `ops-chat`, default HTTPS port `${OPS_CHAT_HTTPS_PORT:-3303}`
+- Matrix Synapse service: `ops-chat-synapse`, default public HTTPS port `${OPS_CHAT_SYNAPSE_PORT:-3302}`
 - Matrix application-service bridge: `ops-chat-bridge`
 - Identity provider: Keycloak OIDC
 - Dashboard endpoint: `/api/ops-chat/message`
@@ -46,11 +46,12 @@ docker compose up -d ops-chat-db ops-chat-bridge ops-chat-synapse ops-chat
 
 Important environment:
 
-- `OPS_CHAT_PORT=3301`
+- `OPS_CHAT_PORT=3301` (HTTP compatibility redirect)
+- `OPS_CHAT_HTTPS_PORT=3303`
 - `OPS_CHAT_SYNAPSE_PORT=3302`
 - `MATRIX_SERVER_NAME=agentic-ops.local`
-- `MATRIX_PUBLIC_BASEURL=http://localhost:3302`
-- `MATRIX_ELEMENT_PUBLIC_URL=http://localhost:3301`
+- `MATRIX_PUBLIC_BASEURL=https://localhost:3302`
+- `MATRIX_ELEMENT_PUBLIC_URL=https://localhost:3303`
 - `MATRIX_DB_PASSWORD=<vault/runtime secret>`
 - `MATRIX_REGISTRATION_SHARED_SECRET=<vault/runtime secret>`
 - `MATRIX_AS_TOKEN=<vault/runtime secret>`
@@ -60,6 +61,11 @@ Important environment:
 - `MATRIX_OIDC_CLIENT_ID=agentic-ops-chat`
 - `MATRIX_OIDC_CLIENT_SECRET=<vault/runtime secret>`
 - `MATRIX_OIDC_CA_CERT_PATH=<trusted CA certificate for OIDC issuer HTTPS>`
+- `MATRIX_SYNAPSE_TLS_ENABLED=true`
+- `MATRIX_SYNAPSE_TLS_CERT_PATH=./runtime/tls/dashboard.crt`
+- `MATRIX_SYNAPSE_TLS_KEY_PATH=./runtime/tls/dashboard.key`
+- `MATRIX_ELEMENT_TLS_CERT_PATH=./runtime/tls/dashboard.crt`
+- `MATRIX_ELEMENT_TLS_KEY_PATH=./runtime/tls/dashboard.key`
 - `OPS_CHAT_AGENT_MODEL=<active chat handoff model>`
 - `DASHBOARD_SERVICE_TOKEN=<vault/runtime secret>`
 
@@ -73,6 +79,10 @@ python3 scripts/switch_model_route.py --route external --restart
 The switcher updates both `AGENT_DEFAULT_MODEL` and `OPS_CHAT_AGENT_MODEL`.
 Do not manually leave Ops Chat on `local/agent-default` while the demo proxy is
 set to the external route.
+
+The public Synapse URL must be HTTPS when Keycloak OIDC is enabled. Synapse
+sets secure OIDC session cookies; using an HTTP `MATRIX_PUBLIC_BASEURL` can
+produce a missing-session callback failure after successful Keycloak login.
 
 Synapse is strict about PostgreSQL locale. The reference `ops-chat-db` service
 must initialize with `POSTGRES_INITDB_ARGS="--locale=C --encoding=UTF8"`. If a
@@ -111,6 +121,18 @@ python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --all-agent-cases --agent-timeout 600
 ```
 
+Broad routing matrix:
+
+```bash
+python3 scripts/smoke_ops_chat_enterprise_matrix.py http://localhost:25480
+```
+
+This creates 50 no-spawn chat-intake tickets across executive support, IAM,
+email, phishing/EDR, network, endpoint, procurement, onboarding/offboarding,
+infrastructure, cloud, database, UI support, CI/CD, audit/compliance, and
+platform self-repair. It should pass with zero routing failures before a
+broad-demo session.
+
 This proves general chat no-ticket behavior, account lockout, software request,
 VPN connectivity routing, phishing approval gate, CI/CD approval gate,
 follow-up notes, global search visibility, and optional real agent handoff.
@@ -129,6 +151,24 @@ audit trail.
 ## Latest Lab Proof
 
 2026-05-20:
+
+- Element Web is served on `https://192.168.50.222:3303`; the old
+  `http://192.168.50.222:3301` URL redirects there. Synapse public client/OIDC
+  callback traffic is on `https://192.168.50.222:3302`.
+- Playwright login proof passed as `demo_chat_alice`, landing at `#/home`.
+  Use `demo_chat_alice`, `demo_chat_jeff`, or `demo_chat_exec` for the chat
+  demo; passwords are stored in same-named server-manager vault keys.
+- The Matrix appservice auto-joins DM invites for
+  `@agentic-ops:agentic-ops.local`, then sends a connected message before
+  routing user requests into the dashboard.
+- Browser-created Matrix DM marker `matrix-ui-live-chat-1779258900` created
+  ticket `907`, spawned Hermes agent `306` / task `303`, and settled in
+  `awaiting_user_response`.
+- Enterprise matrix marker `ops-chat-enterprise-matrix-1779257312` passed 50/50
+  RACI routing checks on tickets `846`-`895`.
+- Real-agent scenario marker `ops-chat-scenarios-1779257332` passed on tickets
+  `896`-`906`, including account, software, VPN, phishing, CI/CD, and approval
+  gate handoffs.
 
 - Scenario smoke with real handoff passed on tickets `750`-`754`.
 - Ticket `754` routed account lockout to Identity & Access, spawned Hermes

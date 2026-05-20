@@ -65,6 +65,18 @@ async def send_matrix_message(room_id, text):
                 print(f"Matrix send failed {response.status}: {body}", flush=True)
 
 
+async def join_matrix_room(room_id):
+    url = f"{MATRIX_HOMESERVER_URL}/_matrix/client/v3/join/{quote(room_id, safe='')}"
+    params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID}
+    async with ClientSession() as session:
+        async with session.post(url, params=params, json={}, timeout=30) as response:
+            body = await response.text()
+            if response.status >= 400:
+                print(f"Matrix join failed {response.status}: {body[:400]}", flush=True)
+                return False
+            return True
+
+
 def event_text(event):
     content = event.get("content") or {}
     if content.get("msgtype") != "m.text":
@@ -73,30 +85,49 @@ def event_text(event):
 
 
 async def handle_matrix_event(event):
-    event_id = event.get("event_id")
-    if not event_id or event_id in PROCESSED:
-        return
-    PROCESSED.add(event_id)
-    if len(PROCESSED) > 5000:
-        PROCESSED.clear()
+    try:
+        event_id = event.get("event_id")
+        if not event_id or event_id in PROCESSED:
+            return
+        PROCESSED.add(event_id)
+        if len(PROCESSED) > 5000:
+            PROCESSED.clear()
 
-    sender = event.get("sender") or ""
-    if sender == BOT_USER_ID or sender.startswith(f"@{MATRIX_BOT_LOCALPART}:"):
-        return
-    room_id = event.get("room_id")
-    text = event_text(event)
-    if not room_id or not text:
-        return
+        sender = event.get("sender") or ""
+        event_type = event.get("type")
+        room_id = event.get("room_id")
+        content = event.get("content") or {}
+        if (
+            event_type == "m.room.member"
+            and event.get("state_key") == BOT_USER_ID
+            and content.get("membership") == "invite"
+            and room_id
+        ):
+            print(f"Matrix bot invite received for {room_id}; joining as {BOT_USER_ID}", flush=True)
+            if await join_matrix_room(room_id):
+                await send_matrix_message(
+                    room_id,
+                    "Agentic Ops is connected. Send me an operational request and I will route it into a traceable ticket when work is needed.",
+                )
+            return
 
-    result = await dashboard_chat(text, room_id, event_id, sender)
-    reply = result.get("reply") or "I received the message, but the dashboard did not return a reply."
-    ticket_id = result.get("ticket_id")
-    agent = result.get("agent") or {}
-    if ticket_id:
-        reply = f"{reply}\n\nDashboard ticket: #{ticket_id}"
-        if agent.get("agent_id"):
-            reply += f"\nAgent: #{agent.get('agent_id')} / task #{agent.get('task_id')}"
-    await send_matrix_message(room_id, reply)
+        if sender == BOT_USER_ID or sender.startswith(f"@{MATRIX_BOT_LOCALPART}:"):
+            return
+        text = event_text(event)
+        if not room_id or not text:
+            return
+
+        result = await dashboard_chat(text, room_id, event_id, sender)
+        reply = result.get("reply") or "I received the message, but the dashboard did not return a reply."
+        ticket_id = result.get("ticket_id")
+        agent = result.get("agent") or {}
+        if ticket_id:
+            reply = f"{reply}\n\nDashboard ticket: #{ticket_id}"
+            if agent.get("agent_id"):
+                reply += f"\nAgent: #{agent.get('agent_id')} / task #{agent.get('task_id')}"
+        await send_matrix_message(room_id, reply)
+    except Exception as exc:
+        print(f"Matrix event handling failed: {exc}", flush=True)
 
 
 async def health(request):
@@ -113,8 +144,12 @@ async def transactions(request):
     if MATRIX_HS_TOKEN and token != MATRIX_HS_TOKEN:
         return web.json_response({"error": "forbidden"}, status=403)
     payload = await request.json()
-    for event in payload.get("events") or []:
+    events = payload.get("events") or []
+    print(f"Matrix transaction {request.match_info.get('txn_id')} events={len(events)}", flush=True)
+    for event in events:
         if event.get("type") == "m.room.message":
+            asyncio.create_task(handle_matrix_event(event))
+        elif event.get("type") == "m.room.member":
             asyncio.create_task(handle_matrix_event(event))
     return web.json_response({})
 

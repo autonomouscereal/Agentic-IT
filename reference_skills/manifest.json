@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-19T15:44:00.098533+00:00",
+  "generated_at": "2026-05-20T06:37:54.804265+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -8,8 +8,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 3291,
-          "sha256": "0690fa1a93abbdbc01eb27779139886700e118682f7e3f2b8f5c27c0a192c618"
+          "size": 5810,
+          "sha256": "11bbd7a88f1e29e4b28afad5ac1a94e64abcbbba6210d079c395f4baa1af746c"
         }
       ]
     },
@@ -19,8 +19,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 7545,
-          "sha256": "6845039c31cea02c54e4e95fb0b1845d2e7623953c16a62fdf19d47a7e64ddfa"
+          "size": 8813,
+          "sha256": "dfbba8b81c61be15ede7b3a88d850caa13d6df134554bf2376004d3ae09bcc59"
         }
       ]
     },
@@ -30,8 +30,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 8256,
-          "sha256": "5af55b19c0a7f993555a4f4bc4f2fb6c615edffdb6cd602084760e5be8cbe912"
+          "size": 8919,
+          "sha256": "9e65a23c1fc6a47536bee2233d58946dace04e4c8b56d8b4ac697ac95360010a"
         }
       ]
     },
@@ -68,8 +68,8 @@
       "files": [
         {
           "path": "certs/generate-certs.sh",
-          "size": 2218,
-          "sha256": "77ab0bf7bde56a453a0448cfd996d94170ba705ca4e6c35afeb2c76138b1de96"
+          "size": 2420,
+          "sha256": "7460750fece88a1cd337d699da20255a5072d5aced43b589515ae9622d9a7728"
         },
         {
           "path": "docker-compose.yml",
@@ -220,8 +220,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 6913,
-          "sha256": "ffbd8dfebc2fec5dff2a632fbc1fec89c1d2b4e2580f05dd307c750b7ca02da7"
+          "size": 8685,
+          "sha256": "72d13aa0beb0762ee3d3a90ca21fcb0ae4606cdad5398a24ea4c08c0040535d3"
         }
       ]
     },
@@ -465,8 +465,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 16642,
-          "sha256": "efff0d1ca80e4c3c1e91aad0615111c9f506bf0394aa8a9225ffb4921ba7bbfd"
+          "size": 17922,
+          "sha256": "dd60394aa131de6d7e96b71ee2cfd34c9bddc81d6fd6ca63797c018d8ce031dd"
         }
       ]
     },
@@ -674,8 +674,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 11399,
-          "sha256": "08815979fe1e9e8fc8cf1bdc6c244537e04953b6e0d89e1922016be66effee00"
+          "size": 12565,
+          "sha256": "773672714f1e8fadb9dc089d1ee1f9bf6f9ef25519b0894ea67989ef3bdff55b"
         },
         {
           "path": "ssh_client.py",
@@ -695,8 +695,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 1129,
-          "sha256": "b19d4092edc1ae49c25cf6ffaab2455f6495d60e730fa2147a32925151bc1008"
+          "size": 1725,
+          "sha256": "994c5b5ca2679705f771271652f445548d03bec278f71f8fbcb49a012f18ec95"
         }
       ]
     },
@@ -833,8 +833,8 @@
         },
         {
           "path": "SKILL.md",
-          "size": 47410,
-          "sha256": "3016a189ed986b3a5277c72dbc297b39ac7cbc2da5a9a0a750d366dc61b9fa99"
+          "size": 48019,
+          "sha256": "17681b25ba3b4422c2da65840d10dba0b81dff2a969e864b0b9be4b6b2acd47d"
         }
       ]
     },
@@ -1068,8 +1068,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 4375,
-          "sha256": "61717d95cdc28c8e4597a4049d93a59fd9ddec1cad5d68fd0358e3dbc672af30"
+          "size": 6922,
+          "sha256": "8ab1e649499c076835ab47e802c2fe9674c0963323d8b57f17829be832ca6bf2"
         }
       ]
     },

@@ -22,8 +22,9 @@ approved reference modules when those capabilities are missing.
   Compose-managed `soc-dashboard-ai-proxy-1`; there should be no `4401` proxy
   listener in this lab.
 - Reference modules: iTop `http://192.168.50.222:25432`, Wazuh Dashboard `https://192.168.50.222:26443`, Keycloak `https://192.168.50.222:8443/admin/master/console/`, GitLab `http://192.168.50.222`, Mailcow/Roundcube `http://192.168.50.222:2581`
-- Ops Chat: Element Web reference client on `http://192.168.50.222:3301` with
-  Matrix Synapse on `http://192.168.50.222:3302`, Keycloak OIDC login, and a
+- Ops Chat: Element Web reference client on
+  `https://192.168.50.222:3303` (`http://192.168.50.222:3301` redirects) with
+  Matrix Synapse on `https://192.168.50.222:3302`, Keycloak OIDC login, and a
   dashboard Matrix bridge that creates tickets and queues real agent harness
   work.
 - Current Windows working copy: `D:\IT AGENT PROJECT`
@@ -32,8 +33,10 @@ approved reference modules when those capabilities are missing.
 - Database: PostgreSQL 16 only, accessed through `asyncpg` with parameterized raw SQL
 - Default harness/model: Hermes Agent through the model gateway with local/on-prem routing (`local/agent-default`) by default; Claude Code remains available as a fallback harness.
 
-The shared demo user is `demo_account_1`; its password is stored only in the
-local server-manager vault key `demo_account_1`. The dashboard itself now has
+The shared dashboard demo user is `demo_account_1`; its password is stored only
+in the local server-manager vault key `demo_account_1`. For the Element Ops
+Chat demo, use `demo_chat_alice`, `demo_chat_jeff`, or `demo_chat_exec`; those
+passwords are stored as same-named server-manager vault keys. The dashboard itself now has
 a first-party login page at `/login`; failed UI login attempts redirect back to
 that page, successful logins mint a signed HttpOnly `dashboard_session`, and
 the sidebar shows the signed-in account plus sign-out. Latest 2026-05-18 login
@@ -123,6 +126,12 @@ Matrix Synapse and Keycloak OIDC. A Matrix application-service bridge sends room
 messages to `/api/ops-chat/message`; general harmless chat stays lightweight,
 while operational requests create or continue traceable tickets and queue real
 Hermes/Claude Code agent harness work through the configured AI proxy.
+
+Latest live UI proof: a Playwright browser test signed into Element through
+Keycloak as `demo_chat_alice`, landed at `#/home`, then a fresh Matrix DM to
+`@agentic-ops:agentic-ops.local` created ticket `907` from the browser chat,
+spawned Hermes agent `306`, and settled the ticket in
+`awaiting_user_response`.
 
 Installer entrypoints:
 

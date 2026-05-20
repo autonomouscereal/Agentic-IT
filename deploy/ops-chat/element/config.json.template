@@ -3,10 +3,19 @@
     "m.homeserver": {
       "base_url": "__MATRIX_PUBLIC_BASEURL__",
       "server_name": "__MATRIX_SERVER_NAME__"
+    },
+    "io.element.e2ee": {
+      "default": false,
+      "force_disable": true
     }
   },
+  "io.element.e2ee": {
+    "default": false,
+    "force_disable": true
+  },
+  "force_verification": false,
   "brand": "Agentic Ops Chat",
-  "disable_custom_urls": false,
+  "disable_custom_urls": true,
   "disable_guests": true,
   "disable_login_language_selector": false,
   "features": {
@@ -14,7 +23,10 @@
     "feature_element_call_video_rooms": false
   },
   "setting_defaults": {
-    "breadcrumbs": true
+    "breadcrumbs": true,
+    "force_verification": false,
+    "UIFeature.advancedEncryption": false,
+    "UIFeature.BulkUnverifiedSessionsReminder": false
   },
   "default_theme": "dark"
 }

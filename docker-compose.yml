@@ -236,7 +236,7 @@ services:
     restart: unless-stopped
     user: "0:0"
     ports:
-      - "${OPS_CHAT_SYNAPSE_BIND:-127.0.0.1}:${OPS_CHAT_SYNAPSE_PORT:-3302}:8008"
+      - "${OPS_CHAT_SYNAPSE_BIND:-127.0.0.1}:${OPS_CHAT_SYNAPSE_PORT:-3302}:${MATRIX_SYNAPSE_PUBLIC_PORT:-8448}"
     environment:
       MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-agentic-ops.local}
       MATRIX_PUBLIC_BASEURL: ${MATRIX_PUBLIC_BASEURL:-http://localhost:3302}
@@ -251,6 +251,12 @@ services:
       MATRIX_OIDC_CLIENT_ID: ${MATRIX_OIDC_CLIENT_ID:-agentic-ops-chat}
       MATRIX_OIDC_CLIENT_SECRET: ${MATRIX_OIDC_CLIENT_SECRET:-}
       MATRIX_BOT_LOCALPART: ${MATRIX_BOT_LOCALPART:-agentic-ops}
+      MATRIX_SYNAPSE_TLS_ENABLED: ${MATRIX_SYNAPSE_TLS_ENABLED:-true}
+      MATRIX_SYNAPSE_TLS_PORT: ${MATRIX_SYNAPSE_PUBLIC_PORT:-8448}
+      MATRIX_SYNAPSE_TLS_CERT_FILE: /etc/ssl/certs/ops-chat-synapse.crt
+      MATRIX_SYNAPSE_TLS_KEY_FILE: /etc/ssl/private/ops-chat-synapse.key
+      UID: ${MATRIX_RUN_AS_UID:-1000}
+      GID: ${MATRIX_RUN_AS_GID:-1000}
       SSL_CERT_FILE: /etc/ssl/certs/ops-chat-oidc-ca.pem
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ops-chat-oidc-ca.pem
     entrypoint: ["/bin/sh", "-c"]
@@ -264,6 +270,8 @@ services:
       - ops-chat-synapse-data:/data
       - ./deploy/ops-chat/synapse:/config:ro
       - ${MATRIX_OIDC_CA_CERT_PATH:-./runtime/tls/dashboard-ca.crt}:/etc/ssl/certs/ops-chat-oidc-ca.pem:ro
+      - ${MATRIX_SYNAPSE_TLS_CERT_PATH:-./runtime/tls/dashboard.crt}:/etc/ssl/certs/ops-chat-synapse.crt:ro
+      - ${MATRIX_SYNAPSE_TLS_KEY_PATH:-./runtime/tls/dashboard.key}:/etc/ssl/private/ops-chat-synapse.key:ro
 
   ops-chat:
     build:
@@ -273,9 +281,14 @@ services:
     restart: unless-stopped
     ports:
       - "${OPS_CHAT_BIND:-127.0.0.1}:${OPS_CHAT_PORT:-3301}:80"
+      - "${OPS_CHAT_BIND:-127.0.0.1}:${OPS_CHAT_HTTPS_PORT:-3303}:443"
     environment:
       MATRIX_PUBLIC_BASEURL: ${MATRIX_PUBLIC_BASEURL:-http://localhost:3302}
       MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-agentic-ops.local}
+      MATRIX_ELEMENT_PUBLIC_URL: ${MATRIX_ELEMENT_PUBLIC_URL:-http://localhost:3301}
+    volumes:
+      - ${MATRIX_ELEMENT_TLS_CERT_PATH:-./runtime/tls/dashboard.crt}:/etc/nginx/tls/ops-chat.crt:ro
+      - ${MATRIX_ELEMENT_TLS_KEY_PATH:-./runtime/tls/dashboard.key}:/etc/nginx/tls/ops-chat.key:ro
     depends_on:
       ops-chat-synapse:
         condition: service_started

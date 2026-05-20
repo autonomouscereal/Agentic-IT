@@ -69,6 +69,20 @@ Compose services:
 - `ops-chat`: Element Web
 - `ops-chat-bridge`: Matrix appservice to dashboard bridge
 
+Default reference ports:
+
+- `https://<host>:3303`: Element Web UI.
+- `http://<host>:3301`: compatibility redirect to the HTTPS Element UI.
+- `https://<host>:3302`: public Matrix/Synapse client API and OIDC callback.
+- `http://ops-chat-synapse:8008`: internal bridge-to-Synapse API.
+
+The Element and Synapse public listeners reuse the dashboard runtime TLS
+certificate by default. Set `MATRIX_ELEMENT_PUBLIC_URL` and
+`MATRIX_PUBLIC_BASEURL` to browser-routable HTTPS URLs before configuring the
+Keycloak OIDC client. Synapse OIDC login uses `Secure` cookies; an HTTP Matrix
+public base URL can cause the OIDC callback to fail with a missing-session
+error.
+
 Synapse requires a PostgreSQL database initialized with locale `C`. The
 reference Compose service sets `POSTGRES_INITDB_ARGS="--locale=C --encoding=UTF8"`.
 If Synapse logs an incorrect-collation error, recreate only the
@@ -105,6 +119,19 @@ python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --all-agent-cases --agent-timeout 600
 ```
 
+Broad routing matrix:
+
+```bash
+python3 scripts/smoke_ops_chat_enterprise_matrix.py http://localhost:25480
+```
+
+This no-spawn matrix covers 50 enterprise request types across executive
+support, IAM, email, phishing/EDR, network, endpoint, procurement,
+onboarding/offboarding, infrastructure, cloud, database, UI support, CI/CD,
+audit/compliance, and platform self-repair. It proves each chat-style request
+creates a ticket and lands in the expected RACI group without spending model
+capacity on all 50 cases.
+
 This covers:
 
 - harmless general chat without ticket creation
@@ -118,6 +145,20 @@ This covers:
 - optional real Hermes/Claude harness handoff through the AI proxy
 
 Latest live proof on 2026-05-20:
+
+- Playwright Element login passed through Keycloak as `demo_chat_alice` and
+  landed at `https://192.168.50.222:3303/#/home`.
+- The Matrix bridge now auto-joins direct-message invites for
+  `@agentic-ops:agentic-ops.local`. A browser-created Element DM with marker
+  `matrix-ui-live-chat-1779258900` created ticket `907`, spawned Hermes agent
+  `306` / task `303`, and ended in `awaiting_user_response`.
+- The 50-case enterprise Ops Chat matrix passed with marker
+  `ops-chat-enterprise-matrix-1779257312`; tickets `846`-`895` all routed to
+  their expected RACI groups.
+- The real-agent scenario suite passed with marker
+  `ops-chat-scenarios-1779257332`; tickets `896`-`906` covered general chat,
+  account lockout, software request, VPN, phishing approval, CI/CD approval,
+  and five Hermes-backed agent handoffs.
 
 - `scripts/smoke_ops_chat_scenarios.py --spawn-agent` created tickets `750`
   through `754` and passed.

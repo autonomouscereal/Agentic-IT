@@ -158,6 +158,14 @@ context with notes and attachment metadata.
 
 Latest Ops Chat routing proof, 2026-05-20:
 
+- Broad enterprise matrix marker `ops-chat-enterprise-matrix-1779257312`
+  created tickets `846`-`895` and passed 50/50 no-spawn RACI checks across
+  executive support, IAM, email, phishing/EDR, network, endpoint, procurement,
+  onboarding/offboarding, infrastructure, cloud, database, UI support, CI/CD,
+  audit/compliance, and platform self-repair.
+- Real-agent scenario marker `ops-chat-scenarios-1779257332` created tickets
+  `896`-`906` and passed general chat, account lockout, software request, VPN,
+  phishing approval, CI/CD approval, and Hermes-backed handoff cases.
 - Ticket `781`: VPN report classified as `vpn-connectivity` and routed to
   `Network Operations`.
 - Ticket `772`: software request collected workstation, standard OBS Studio,

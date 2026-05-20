@@ -484,6 +484,7 @@ export DASHBOARD_SERVICE_TOKEN=<from runtime secret source>
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-timeout 600
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --all-agent-cases --agent-timeout 600
+python3 scripts/smoke_ops_chat_enterprise_matrix.py http://localhost:25480
 ```
 
 Covers a demo-realistic conversation set:
@@ -497,6 +498,12 @@ Covers a demo-realistic conversation set:
 - chat follow-up recorded as a `user-response` note
 - global search visibility for all scenario tickets
 - optional real Hermes/Claude agent handoff through the configured proxy
+- 50-case no-spawn enterprise RACI coverage for broad demo prompts
+
+For browser-level proof, use Playwright against
+`https://<host>:3303`. The expected path is: Element login through Keycloak,
+DM invite to `@agentic-ops:agentic-ops.local`, appservice auto-join, dashboard
+ticket creation, and real harness spawn when `spawn_agent` policy allows it.
 
 Latest live result on 2026-05-20:
 
@@ -535,6 +542,44 @@ placeholder-note guardrail rerun: ticket 778, agent 290, no "test note", stopped
 VPN routing rerun: ticket 781, intent vpn-connectivity, Network Operations
 approval-resume rerun: ticket 784, change 223 bound to agent 293, approval spawned agent 294, change completed, ticket closed
 final state: no active dashboard agents and no active Hermes processes
+```
+
+Latest Element/Matrix UI proof on 2026-05-20:
+
+```text
+Element login: PASS as demo_chat_alice at https://192.168.50.222:3303/#/home
+Matrix UI DM marker: matrix-ui-live-chat-1779258900
+Room: !ggxyGdDLBtBqDWoygC:agentic-ops.local
+Dashboard ticket: 907
+Agent: 306 / task 303
+Final ticket state: awaiting_user_response
+Global search: marker returned ticket 907
+Final active agents: 0
+```
+
+Latest broad-routing proof:
+
+```text
+smoke_ops_chat_enterprise_matrix.py: PASS
+marker: ops-chat-enterprise-matrix-1779257312
+case_count: 50
+failure_count: 0
+tickets: 846-895
+covered groups: Executive Support, Identity & Access, Email Operations,
+Security Operations, Network Operations, Endpoint Support, Procurement &
+Vendor Management, Infrastructure Operations, Cloud Operations, Database
+Operations, Business Applications, DevSecOps, Compliance & Audit, Platform
+Operations
+```
+
+Latest all-agent scenario proof:
+
+```text
+smoke_ops_chat_scenarios.py --spawn-agent --all-agent-cases: PASS
+marker: ops-chat-scenarios-1779257332
+tickets: 896-906
+agents: 301-305 plus Matrix UI agent 306
+final state: no active dashboard agents
 ```
 
 ## Wazuh EDR/Sysmon E2E

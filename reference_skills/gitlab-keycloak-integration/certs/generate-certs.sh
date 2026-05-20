@@ -6,11 +6,13 @@ set -euo pipefail
 
 CERT_DIR="${1:-/opt/agentic-it/gitlab-keycloak-integration/certs}"
 DOMAIN="${DOMAIN:-keycloak.internal}"
+PUBLIC_IP="${PUBLIC_IP:-192.168.50.222}"
 
 mkdir -p "$CERT_DIR"
 
 echo "=== Generating TLS Certificates ==="
 echo "  Domain: ${DOMAIN}"
+echo "  Public IP: ${PUBLIC_IP}"
 echo "  Cert dir: ${CERT_DIR}"
 
 # Generate CA private key and certificate
@@ -18,6 +20,9 @@ openssl genrsa -out "${CERT_DIR}/ca-key.pem" 4096 2>/dev/null
 openssl req -x509 -new -nodes -key "${CERT_DIR}/ca-key.pem" \
     -sha256 -days 3650 \
     -subj "/C=US/ST=Local/L=Local/O=Internal CA/CN=Internal Root CA" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign" \
+    -addext "subjectKeyIdentifier=hash" \
     -out "${CERT_DIR}/ca-cert.pem" 2>/dev/null
 echo "  [OK] CA certificate created"
 
@@ -35,13 +40,13 @@ cat > "${CERT_DIR}/ext.cnf" <<EOF
 subjectAltName = @alt_names
 authorityKeyIdentifier = keyid:always,issuer
 basicConstraints = CA:FALSE
-keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
 
 [alt_names]
 DNS.1 = ${DOMAIN}
 DNS.2 = localhost
-IP.1 = 127.0.0.1
+IP.1 = ${PUBLIC_IP}
 IP.2 = 127.0.0.1
 EOF
 
@@ -65,4 +70,4 @@ echo "    CA cert:  ${CERT_DIR}/ca-cert.pem"
 echo "    Server cert:  ${CERT_DIR}/server-cert.pem"
 echo "    Server key:   ${CERT_DIR}/server-key.pem"
 echo ""
-echo "  Valid for: ${DOMAIN}, localhost, 127.0.0.1, 127.0.0.1"
+echo "  Valid for: ${DOMAIN}, localhost, ${PUBLIC_IP}, 127.0.0.1"
