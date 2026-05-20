@@ -71,17 +71,23 @@ Compose services:
 
 Default reference ports:
 
-- `https://<host>:3303`: Element Web UI.
+- `https://<host>:3303`: Element Web UI and same-origin Matrix client API.
 - `http://<host>:3301`: compatibility redirect to the HTTPS Element UI.
-- `https://<host>:3302`: public Matrix/Synapse client API and OIDC callback.
+- `https://<host>:3302`: optional direct Matrix/Synapse client API for
+  diagnostics.
 - `http://ops-chat-synapse:8008`: internal bridge-to-Synapse API.
 
-The Element and Synapse public listeners reuse the dashboard runtime TLS
-certificate by default. Set `MATRIX_ELEMENT_PUBLIC_URL` and
-`MATRIX_PUBLIC_BASEURL` to browser-routable HTTPS URLs before configuring the
-Keycloak OIDC client. Synapse OIDC login uses `Secure` cookies; an HTTP Matrix
-public base URL can cause the OIDC callback to fail with a missing-session
-error.
+The browser-facing chat URL is `3303`. Element nginx proxies `/_matrix/` and
+`/_synapse/` to Synapse while preserving the full host header, including the
+port. This keeps Element, Synapse callbacks, and browser Matrix probes on one
+trusted origin and avoids the "Cannot reach homeserver" / canonical redirect
+loop class of failures.
+
+The Element and Synapse listeners reuse the dashboard runtime TLS certificate
+by default. Set `MATRIX_ELEMENT_PUBLIC_URL` and `MATRIX_PUBLIC_BASEURL` to the
+same browser-routable HTTPS URL before configuring the Keycloak OIDC client.
+Synapse OIDC login uses `Secure` cookies; an HTTP Matrix public base URL can
+cause the OIDC callback to fail with a missing-session error.
 
 Synapse requires a PostgreSQL database initialized with locale `C`. The
 reference Compose service sets `POSTGRES_INITDB_ARGS="--locale=C --encoding=UTF8"`.
@@ -90,8 +96,9 @@ If Synapse logs an incorrect-collation error, recreate only the
 
 When the Keycloak issuer uses a self-signed or private-enterprise certificate,
 set `MATRIX_OIDC_CA_CERT_PATH` to the CA certificate path on the deployment host.
-The Synapse container mounts that file as its Python TLS trust bundle for OIDC
-discovery. Do not disable TLS verification for demo convenience.
+The Synapse container installs that file into the system CA bundle at startup
+before OIDC discovery/token exchange. Do not disable TLS verification for demo
+convenience.
 
 For lab deployments with an older Keycloak CA that lacks modern X.509 key-usage
 extensions, set `MATRIX_OIDC_BACKCHANNEL_BASEURL` to a private same-host
@@ -146,6 +153,14 @@ This covers:
 
 Latest live proof on 2026-05-20:
 
+- Browser-level Playwright smoke passed through the complete current path:
+  dashboard login as `demo_account_1`, Element login via Keycloak as
+  `demo_chat_live11`, same-origin Matrix probe on
+  `https://192.168.50.222:3303/_matrix/client/versions`, and a real Matrix DM
+  marker `ops-chat-same-origin-playwright-1779261056`.
+- That DM created ticket `908`, spawned Hermes agent `307` / task `304`, wrote
+  model-turn audit events, asked the requester which account/system they meant,
+  and stopped in `awaiting_user_response` with no active process left behind.
 - Playwright Element login passed through Keycloak as `demo_chat_alice` and
   landed at `https://192.168.50.222:3303/#/home`.
 - The Matrix bridge now auto-joins direct-message invites for

@@ -210,10 +210,18 @@ agent harness tasks through the configured AI proxy instead of a separate hidden
 bot workflow.
 
 The reference chat deployment serves Element on HTTPS port `3303`; HTTP port
-`3301` redirects to that UI. Synapse's browser-facing client/OIDC callback URL
-is HTTPS port `3302`, while the bridge uses Synapse's internal HTTP listener.
-Keep `MATRIX_PUBLIC_BASEURL` and `MATRIX_ELEMENT_PUBLIC_URL` browser-routable
-and HTTPS before running `scripts/setup_ops_chat_keycloak.py`.
+`3301` redirects to that UI. Element also proxies `/_matrix/` and `/_synapse/`
+to Synapse on the same browser origin, so `MATRIX_PUBLIC_BASEURL` and
+`MATRIX_ELEMENT_PUBLIC_URL` should both point at `https://<host>:3303`.
+Synapse's direct HTTPS port `3302` remains available for diagnostics, while the
+bridge uses Synapse's internal HTTP listener.
+
+Keep the chat URLs browser-routable and HTTPS before running
+`scripts/setup_ops_chat_keycloak.py`. If the installer also deploys or manages
+the Keycloak edge, Keycloak should use the same runtime CA chain as the
+dashboard or another CA supplied through `MATRIX_OIDC_CA_CERT_PATH`. Synapse
+installs that CA in the container trust bundle before OIDC token exchange. Do
+not disable TLS verification to make a demo work.
 
 Multiple installs can run on the same host when different `--target`, `--dashboard-port`, `--db-port`, and optionally `--project-name` values are used. The compose file does not use fixed container names.
 

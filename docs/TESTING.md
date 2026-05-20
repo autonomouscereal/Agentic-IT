@@ -547,6 +547,16 @@ final state: no active dashboard agents and no active Hermes processes
 Latest Element/Matrix UI proof on 2026-05-20:
 
 ```text
+smoke_ops_chat_playwright.js: PASS without HTTPS bypass
+Dashboard login: PASS as demo_account_1
+Element login: PASS as demo_chat_live11 at https://192.168.50.222:3303/#/home
+Same-origin Matrix probe: PASS at https://192.168.50.222:3303/_matrix/client/versions
+Matrix UI DM marker: ops-chat-same-origin-playwright-1779261056
+Dashboard ticket: 908
+Agent: 307 / task 304
+Final ticket state: awaiting_user_response
+Final active agents: 0
+
 Element login: PASS as demo_chat_alice at https://192.168.50.222:3303/#/home
 Matrix UI DM marker: matrix-ui-live-chat-1779258900
 Room: !ggxyGdDLBtBqDWoygC:agentic-ops.local

@@ -16,7 +16,9 @@ in the Agentic Operations control plane.
 Reference stack:
 
 - Element Web service: `ops-chat`, default HTTPS port `${OPS_CHAT_HTTPS_PORT:-3303}`
-- Matrix Synapse service: `ops-chat-synapse`, default public HTTPS port `${OPS_CHAT_SYNAPSE_PORT:-3302}`
+- Matrix Synapse service: `ops-chat-synapse`, proxied through Element on
+  `${OPS_CHAT_HTTPS_PORT:-3303}` with optional direct diagnostics on
+  `${OPS_CHAT_SYNAPSE_PORT:-3302}`
 - Matrix application-service bridge: `ops-chat-bridge`
 - Identity provider: Keycloak OIDC
 - Dashboard endpoint: `/api/ops-chat/message`
@@ -50,7 +52,7 @@ Important environment:
 - `OPS_CHAT_HTTPS_PORT=3303`
 - `OPS_CHAT_SYNAPSE_PORT=3302`
 - `MATRIX_SERVER_NAME=agentic-ops.local`
-- `MATRIX_PUBLIC_BASEURL=https://localhost:3302`
+- `MATRIX_PUBLIC_BASEURL=https://localhost:3303`
 - `MATRIX_ELEMENT_PUBLIC_URL=https://localhost:3303`
 - `MATRIX_DB_PASSWORD=<vault/runtime secret>`
 - `MATRIX_REGISTRATION_SHARED_SECRET=<vault/runtime secret>`
@@ -80,9 +82,13 @@ The switcher updates both `AGENT_DEFAULT_MODEL` and `OPS_CHAT_AGENT_MODEL`.
 Do not manually leave Ops Chat on `local/agent-default` while the demo proxy is
 set to the external route.
 
-The public Synapse URL must be HTTPS when Keycloak OIDC is enabled. Synapse
-sets secure OIDC session cookies; using an HTTP `MATRIX_PUBLIC_BASEURL` can
-produce a missing-session callback failure after successful Keycloak login.
+The browser-facing Synapse URL must be HTTPS when Keycloak OIDC is enabled.
+The reference deployment sets `MATRIX_PUBLIC_BASEURL` and
+`MATRIX_ELEMENT_PUBLIC_URL` to the same `https://<host>:3303` origin, then lets
+Element nginx proxy `/_matrix/` and `/_synapse/` to Synapse. This avoids
+browser homeserver certificate/CORS failures and Synapse canonical redirect
+loops. Using an HTTP `MATRIX_PUBLIC_BASEURL` can produce a missing-session
+callback failure after successful Keycloak login.
 
 Synapse is strict about PostgreSQL locale. The reference `ops-chat-db` service
 must initialize with `POSTGRES_INITDB_ARGS="--locale=C --encoding=UTF8"`. If a
@@ -91,11 +97,11 @@ only the `ops-chat-db-data` volume; do not touch the dashboard PostgreSQL
 volume.
 
 When the Keycloak issuer uses a private-enterprise CA, set
-`MATRIX_OIDC_CA_CERT_PATH` to that CA certificate. For lab deployments with a
-legacy CA that modern Python rejects, set `MATRIX_OIDC_BACKCHANNEL_BASEURL` to a
-private same-host Keycloak HTTP realm URL. Synapse keeps the public HTTPS issuer
-and browser authorization URL, then uses the private backchannel only for
-server-side token, userinfo, and JWKS calls.
+`MATRIX_OIDC_CA_CERT_PATH` to that CA certificate. Synapse installs that CA into
+the container trust bundle before OIDC discovery and token exchange. For lab
+deployments with a legacy CA that modern Python rejects, set
+`MATRIX_OIDC_BACKCHANNEL_BASEURL` to a private same-host Keycloak HTTPS realm
+URL signed by the mounted CA.
 
 ## Smoke Test
 
@@ -137,6 +143,23 @@ This proves general chat no-ticket behavior, account lockout, software request,
 VPN connectivity routing, phishing approval gate, CI/CD approval gate,
 follow-up notes, global search visibility, and optional real agent handoff.
 
+Browser Playwright smoke:
+
+```bash
+DASHBOARD_URL=https://<host>:25443 \
+DASHBOARD_USER=demo_account_1 \
+DASHBOARD_PASSWORD=<from vault> \
+OPS_CHAT_URL=https://<host>:3303 \
+OPS_CHAT_USER=<keycloak chat user> \
+OPS_CHAT_PASSWORD=<from vault> \
+OPS_CHAT_SEND_MESSAGE=true \
+node scripts/smoke_ops_chat_playwright.js
+```
+
+This proves dashboard login, Element login through Keycloak, same-origin Matrix
+health from inside the browser, DM creation to `@agentic-ops:agentic-ops.local`,
+ticket creation, and real agent handoff.
+
 ## Demo Prompt
 
 ```text
@@ -153,8 +176,16 @@ audit trail.
 2026-05-20:
 
 - Element Web is served on `https://192.168.50.222:3303`; the old
-  `http://192.168.50.222:3301` URL redirects there. Synapse public client/OIDC
-  callback traffic is on `https://192.168.50.222:3302`.
+  `http://192.168.50.222:3301` URL redirects there. Matrix client and OIDC
+  callback traffic also work same-origin under `https://192.168.50.222:3303`;
+  `https://192.168.50.222:3302` remains available for direct Synapse
+  diagnostics.
+- Playwright no-bypass browser proof passed as `demo_chat_live11`, including
+  dashboard login, Element/Keycloak login, browser Matrix health, and Matrix DM
+  marker `ops-chat-same-origin-playwright-1779261056`.
+- That DM created ticket `908`, spawned Hermes agent `307` / task `304`, wrote
+  model-turn audit evidence, asked the user which account/system was affected,
+  and stopped cleanly in `awaiting_user_response` with no active process left.
 - Playwright login proof passed as `demo_chat_alice`, landing at `#/home`.
   Use `demo_chat_alice`, `demo_chat_jeff`, or `demo_chat_exec` for the chat
   demo; passwords are stored in same-named server-manager vault keys.

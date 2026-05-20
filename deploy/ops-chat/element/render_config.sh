@@ -72,6 +72,32 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
 
+    location /_matrix/ {
+        proxy_pass http://ops-chat-synapse:8008/_matrix/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Forwarded-Host \$http_host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_read_timeout 90s;
+    }
+
+    location /_synapse/ {
+        proxy_pass http://ops-chat-synapse:8008/_synapse/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Forwarded-Host \$http_host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_read_timeout 90s;
+    }
+
+    location /.well-known/matrix/client {
+        default_type application/json;
+        add_header Access-Control-Allow-Origin * always;
+        return 200 '{"m.homeserver":{"base_url":"${public_url}"}}';
+    }
+
     location / {
         try_files \$uri \$uri/ /index.html;
     }

@@ -15,11 +15,21 @@ Symptoms:
   session cookies were issued against an HTTP Matrix public base URL.
 - Repeat demo-user logins could show Element's digital-identity prompt before
   the chat home.
+- Element could show "Cannot reach homeserver" when the browser had to talk to
+  Synapse on a separate origin or when Synapse canonicalized an OIDC redirect
+  without the public port.
+- Synapse OIDC callbacks could return `500` when the container did not trust
+  the Keycloak edge certificate used for token exchange.
 
 Fix:
 
 - Synapse now uses the browser-routable HTTPS issuer and HTTPS public base URL.
 - Element is served over HTTPS on port `3303`, while `3301` redirects.
+- Element nginx proxies `/_matrix/` and `/_synapse/` to Synapse on the same
+  browser origin and preserves the full `Host` header with port.
+- Synapse installs `MATRIX_OIDC_CA_CERT_PATH` into the container trust bundle
+  before startup; the live Keycloak nginx edge now presents the same trusted
+  Agentic Operations runtime CA chain as the dashboard.
 - Element config disables custom homeserver editing and sets E2EE/verification
   defaults appropriate for the demo intake surface.
 - Synapse login rate limits were raised for the local lab to avoid demo lockout
@@ -27,8 +37,10 @@ Fix:
 
 Verification:
 
-- Playwright Keycloak login proof passed as `demo_chat_alice` and landed at
-  `https://192.168.50.222:3303/#/home`.
+- Playwright Keycloak login proof passed as `demo_chat_live11` without HTTPS
+  bypass, proved same-origin Matrix health, sent a DM marker
+  `ops-chat-same-origin-playwright-1779261056`, created ticket `908`, spawned
+  Hermes agent `307` / task `304`, and landed in `awaiting_user_response`.
 
 ### Matrix bridge did not auto-join Element direct-message invites
 

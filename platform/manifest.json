@@ -78,7 +78,7 @@
       "depends_on": ["soc-dashboard", "service-desk-intake", "keycloak"],
       "provides": ["matrix-chat-intake", "element-web-client", "keycloak-oidc-login", "ticket-creating-user-chat", "real-agent-harness-handoff"],
       "required_secrets": ["DASHBOARD_SERVICE_TOKEN", "MATRIX_DB_PASSWORD", "MATRIX_REGISTRATION_SHARED_SECRET", "MATRIX_AS_TOKEN", "MATRIX_HS_TOKEN", "MATRIX_OIDC_CLIENT_SECRET"],
-      "ports": ["3301/tcp Element Web by default", "3302/tcp Matrix Synapse by default"],
+      "ports": ["3303/tcp Element Web plus same-origin Matrix API", "3301/tcp HTTP redirect", "3302/tcp optional direct Matrix Synapse diagnostics"],
       "health_checks": ["/api/ops-chat/matrix/health", "Element Web /", "Matrix Synapse /_matrix/client/versions", "Ops Chat Bridge /health"],
       "test_commands": ["python3 scripts/smoke_ops_chat.py http://localhost:25480"],
       "notes": "Element Web is the real user chat client. Matrix Synapse handles rooms and Keycloak/OIDC login. The dashboard Matrix bridge converts messages into traceable Ops Chat sessions; operational messages create tickets and queue Hermes/Claude Code agent harness tasks through the configured AI proxy."

@@ -239,8 +239,8 @@ services:
       - "${OPS_CHAT_SYNAPSE_BIND:-127.0.0.1}:${OPS_CHAT_SYNAPSE_PORT:-3302}:${MATRIX_SYNAPSE_PUBLIC_PORT:-8448}"
     environment:
       MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-agentic-ops.local}
-      MATRIX_PUBLIC_BASEURL: ${MATRIX_PUBLIC_BASEURL:-http://localhost:3302}
-      MATRIX_ELEMENT_PUBLIC_URL: ${MATRIX_ELEMENT_PUBLIC_URL:-http://localhost:3301}
+      MATRIX_PUBLIC_BASEURL: ${MATRIX_PUBLIC_BASEURL:-https://localhost:3303}
+      MATRIX_ELEMENT_PUBLIC_URL: ${MATRIX_ELEMENT_PUBLIC_URL:-https://localhost:3303}
       MATRIX_DB_PASSWORD: ${MATRIX_DB_PASSWORD:?MATRIX_DB_PASSWORD must be set}
       MATRIX_REGISTRATION_SHARED_SECRET: ${MATRIX_REGISTRATION_SHARED_SECRET:?MATRIX_REGISTRATION_SHARED_SECRET must be set}
       MATRIX_AS_TOKEN: ${MATRIX_AS_TOKEN:?MATRIX_AS_TOKEN must be set}
@@ -257,10 +257,10 @@ services:
       MATRIX_SYNAPSE_TLS_KEY_FILE: /etc/ssl/private/ops-chat-synapse.key
       UID: ${MATRIX_RUN_AS_UID:-1000}
       GID: ${MATRIX_RUN_AS_GID:-1000}
-      SSL_CERT_FILE: /etc/ssl/certs/ops-chat-oidc-ca.pem
-      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ops-chat-oidc-ca.pem
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
     entrypoint: ["/bin/sh", "-c"]
-    command: ["python /config/render.py && /start.py"]
+    command: ["update-ca-certificates >/tmp/ops-chat-ca-update.log 2>&1 || cat /tmp/ops-chat-ca-update.log; python /config/render.py && /start.py"]
     depends_on:
       ops-chat-db:
         condition: service_healthy
@@ -269,7 +269,7 @@ services:
     volumes:
       - ops-chat-synapse-data:/data
       - ./deploy/ops-chat/synapse:/config:ro
-      - ${MATRIX_OIDC_CA_CERT_PATH:-./runtime/tls/dashboard-ca.crt}:/etc/ssl/certs/ops-chat-oidc-ca.pem:ro
+      - ${MATRIX_OIDC_CA_CERT_PATH:-./runtime/tls/dashboard-ca.crt}:/usr/local/share/ca-certificates/ops-chat-oidc-ca.crt:ro
       - ${MATRIX_SYNAPSE_TLS_CERT_PATH:-./runtime/tls/dashboard.crt}:/etc/ssl/certs/ops-chat-synapse.crt:ro
       - ${MATRIX_SYNAPSE_TLS_KEY_PATH:-./runtime/tls/dashboard.key}:/etc/ssl/private/ops-chat-synapse.key:ro
 
@@ -283,15 +283,20 @@ services:
       - "${OPS_CHAT_BIND:-127.0.0.1}:${OPS_CHAT_PORT:-3301}:80"
       - "${OPS_CHAT_BIND:-127.0.0.1}:${OPS_CHAT_HTTPS_PORT:-3303}:443"
     environment:
-      MATRIX_PUBLIC_BASEURL: ${MATRIX_PUBLIC_BASEURL:-http://localhost:3302}
+      MATRIX_PUBLIC_BASEURL: ${MATRIX_PUBLIC_BASEURL:-https://localhost:3303}
       MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-agentic-ops.local}
-      MATRIX_ELEMENT_PUBLIC_URL: ${MATRIX_ELEMENT_PUBLIC_URL:-http://localhost:3301}
+      MATRIX_ELEMENT_PUBLIC_URL: ${MATRIX_ELEMENT_PUBLIC_URL:-https://localhost:3303}
     volumes:
       - ${MATRIX_ELEMENT_TLS_CERT_PATH:-./runtime/tls/dashboard.crt}:/etc/nginx/tls/ops-chat.crt:ro
       - ${MATRIX_ELEMENT_TLS_KEY_PATH:-./runtime/tls/dashboard.key}:/etc/nginx/tls/ops-chat.key:ro
     depends_on:
       ops-chat-synapse:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/config.json | grep -q 'default_server_config'"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
 
   ops-chat-bridge:
     build: ./deploy/ops-chat/bridge
