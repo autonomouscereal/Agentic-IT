@@ -79,6 +79,25 @@ credential, approval, and change gates must be enforced later by scoped vault
 leases, provider permission failures, workflow policy, and platform barriers
 when the ticket agent attempts work.
 
+The chat agent may ask a concise follow-up before ticket creation if the answer
+would materially change the route, scope, urgency, or whether the ask needs a
+ticket. Once enough context exists, it should create the ticket and the platform
+copies recent chat context into ticket evidence. General harmless requests can
+stay in chat without a ticket.
+
+If scope changes after ticket creation, use the reassignment endpoint instead
+of opening a duplicate ticket:
+
+```bash
+curl -sS -X POST "$SOC_DASHBOARD_URL/api/tickets/$TICKET_ID/assignment" \
+  -H "Content-Type: application/json" \
+  -d '{"assignee_team":"Tier 2 Endpoint Support","owning_group":"Endpoint Support","escalation_tier":"Tier 2","priority":"P2","reason":"Requester clarified that tier 2 endpoint packaging is required."}'
+```
+
+The endpoint updates canonical assignment fields and records a
+`ticket-assignment` note. Provider-side assignment sync depends on the active
+ticket adapter.
+
 Access-request RACI is also rule-driven. Rules whose intent starts with
 `access-` are used when an agent hits a permission wall and omits an explicit
 assignment group. Seeded examples route Mailcow to Email Operations, Wazuh/SIEM
@@ -172,6 +191,16 @@ Security Operations, linked to a change approval gate, and visible in ticket
 context with notes and attachment metadata.
 
 Latest Ops Chat routing proof, 2026-05-20:
+
+- Ticket `1176`: ambiguous video-editing software request was clarified in chat
+  before ticket creation, then synced to iTop ref `595`, preserved pre-ticket
+  chat context, and was reassigned/escalated to `Tier 2 Endpoint Support`.
+- Browser proof marker `ops-chat-playwright-1779301274503` created ticket
+  `1177` from Element after Keycloak login.
+- Real-agent proofs `ops-chat-scenarios-1779301430` and
+  `ops-chat-scenarios-1779301734` spawned Hermes agents `326` and `327` for
+  account-lockout and software-request cases, then the smoke-owned live agent
+  process was stopped after visible evidence to keep the demo queue clean.
 
 - Broad enterprise matrix marker `ops-chat-enterprise-matrix-1779257312`
   created tickets `846`-`895` and passed 50/50 no-spawn RACI checks across

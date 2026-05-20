@@ -33,8 +33,12 @@ Reference stack:
 - The dashboard hands each new chat message to the configured Hermes/Claude
   harness with an `ops_chat_tool.py` toolbelt.
 - General harmless chat can be answered without a ticket.
+- The chat agent may ask one concise pre-ticket clarification when the answer
+  changes routing, scope, urgency, or whether a ticket is needed.
 - Operational chat creates or continues a canonical ticket, intake session,
   internal note, audit event, and real agent-harness queue task.
+- When a ticket is created after clarification, recent chat context is copied
+  into the ticket description and the Ops Chat-created note.
 - The chat agent decides whether to answer directly or use the tool to create a
   ticket. Do not reintroduce app-side JSON parsing as the decision-maker.
 - During the chat-intake turn, the agent must finish with exactly one final
@@ -210,9 +214,33 @@ Matrix room. Open the dashboard ticket afterward to show the agent-created
 ticket note, user-response notes, agent assignment, and any approval/access
 gates created later by real execution barriers.
 
+Ticket reassignment/escalation:
+
+```bash
+curl -sS -X POST "$SOC_DASHBOARD_URL/api/tickets/$TICKET_ID/assignment" \
+  -H "Content-Type: application/json" \
+  -d '{"assignee_team":"Tier 2 Endpoint Support","owning_group":"Endpoint Support","escalation_tier":"Tier 2","priority":"P2","reason":"Scope requires tier 2 endpoint packaging."}'
+```
+
+Use this when the agent or operator learns the request belongs to a different
+queue or tier. It writes a `ticket-assignment` note for auditability.
+
 ## Latest Lab Proof
 
 2026-05-20:
+
+- Clarification/reassignment proof passed on ticket `1176`: the chat agent
+  asked a pre-ticket software clarification, created the ticket after the user
+  answered, synced to iTop ref `595`, preserved prior chat context, and was
+  reassigned/escalated to `Tier 2 Endpoint Support` with a ticket-assignment
+  note.
+- Playwright browser proof now handles Element device verification,
+  service-worker, notification, and new-contact confirmation prompts. Marker
+  `ops-chat-playwright-1779301274503` created ticket `1177` from the Element UI.
+- Real-agent proofs passed with markers `ops-chat-scenarios-1779301430` and
+  `ops-chat-scenarios-1779301734`, spawning Hermes agents `326` and `327` on
+  tickets `1185` and `1191`. The account-lockout case wrote user-facing login
+  next steps; the software-request case asked for the minimum missing details.
 
 - Harness-required chat toolbelt proof:
   - Marker `harness-answer-tool-1779286572` used the Hermes chat harness and

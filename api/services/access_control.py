@@ -130,6 +130,7 @@ ROUTE_REQUIREMENTS = [
     ("GET", "/api/access/me", "ui:read"),
     ("GET", "/api/tickets*", "tickets:read"),
     ("POST", "/api/tickets/*/notes", "tickets:note"),
+    ("POST", "/api/tickets/*/assignment", "tickets:note"),
     ("POST", "/api/tickets/*/request-info", "tickets:request_info"),
     ("POST", "/api/tickets/*/user-response", "tickets:note"),
     ("POST", "/api/tickets/*/assign-agent", "agents:spawn"),

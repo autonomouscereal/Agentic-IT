@@ -502,6 +502,37 @@ Ops Chat:
 - `GET /api/ops-chat/openai/v1/models` - legacy compatibility model list; Matrix/Element is the supported chat client
 - `POST /api/ops-chat/openai/v1/chat/completions` - legacy compatibility endpoint that still routes operational work into tickets and real agents
 
+## Ticket Reassignment And Escalation
+
+`POST /api/tickets/{ticket_id}/assignment`
+
+Updates the canonical dashboard assignment fields and writes a
+`ticket-assignment` note for auditability. Use this when a chat/ticket agent or
+operator discovers that the scope belongs to another queue or must move to Tier
+2/Tier 3.
+
+Request body:
+
+```json
+{
+  "assignee_team": "Tier 2 Endpoint Support",
+  "owning_group": "Endpoint Support",
+  "assignee": "endpoint.tier2.demo",
+  "escalation_tier": "Tier 2",
+  "priority": "P2",
+  "actor": "ops-chat-reassignment-smoke",
+  "reason": "Requester clarified that endpoint packaging is required."
+}
+```
+
+Notes:
+
+- `priority` accepts `P1`-`P4` or numeric `1`-`4`.
+- `escalation_tier` is audit evidence in the note trail; it is not a separate
+  database column.
+- Provider-side assignment sync is adapter-specific. The canonical dashboard
+  assignment and note are always updated.
+
 Knowledge:
 
 - `GET /api/knowledge`

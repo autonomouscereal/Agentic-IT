@@ -1,6 +1,6 @@
 # Testing Runbook
 
-Last updated: 2026-05-18.
+Last updated: 2026-05-20.
 
 ## Local Source Validation
 
@@ -38,6 +38,52 @@ Expected: Mailcow routes to Email Operations, Wazuh/SIEM to Security
 Operations, GitLab to DevSecOps, Keycloak/IAM to Identity & Access, iTop to
 Business Applications, Agentic Operations platform admin to Platform Operations,
 and network controls to Network Operations.
+
+## Ops Chat And Agent Intake
+
+```bash
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-case account-lockout --agent-timeout 420
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-case software-request --agent-timeout 420
+```
+
+Browser proof from the API container or an operator workstation with Playwright:
+
+```bash
+DASHBOARD_URL=https://<host>:25443 \
+DASHBOARD_USER=demo_account_1 \
+DASHBOARD_PASSWORD=<from vault> \
+OPS_CHAT_URL=https://<host>:3303 \
+OPS_CHAT_USER=demo_chat_alice \
+OPS_CHAT_PASSWORD=<from vault> \
+OPS_CHAT_SEND_MESSAGE=true \
+PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
+node scripts/smoke_ops_chat_playwright.js
+```
+
+Expected:
+
+- harmless/general chat returns an answer without a ticket;
+- benign current-information questions can use the private web-search tool
+  without creating a ticket;
+- ambiguous operational requests can ask one clarification before ticket
+  creation;
+- once enough context exists, the chat agent creates a ticket, preserves recent
+  chat context in ticket evidence, syncs to the configured ticket provider, and
+  queues the real Hermes/Claude ticket agent when enabled;
+- follow-up chat becomes `user-response` notes;
+- `/api/tickets/{id}/assignment` can reassign or escalate the ticket with a
+  `ticket-assignment` audit note.
+
+Latest verified result on 2026-05-20:
+
+```text
+clarification/reassignment: ticket 1176, iTop ref 595, Tier 2 Endpoint Support, P2
+browser Element send: marker ops-chat-playwright-1779301274503, ticket 1177
+real agent account-lockout: marker ops-chat-scenarios-1779301430, ticket 1185, agent 326
+real agent software-request: marker ops-chat-scenarios-1779301734, ticket 1191, agent 327
+active agents after cleanup: 0
+```
 
 ## Server Health
 

@@ -344,7 +344,7 @@ class iTopProvider(TicketProvider):
 
         existing_ticket = await fetchrow(
             """
-            SELECT t.id, t.status, t.provider_payload,
+            SELECT t.id, t.status, t.description, t.assignee_team, t.access_scope, t.provider_payload,
                    EXISTS (
                        SELECT 1 FROM agents a
                        WHERE a.ticket_id = t.id
@@ -356,6 +356,22 @@ class iTopProvider(TicketProvider):
             str(key_val), ticket_class
         )
         if existing_ticket:
+            local_description = existing_ticket.get("description") or ""
+            provider_description = ticket_data["description"] or ""
+            access_scope = existing_ticket.get("access_scope")
+            if isinstance(access_scope, str):
+                try:
+                    import json
+                    access_scope = json.loads(access_scope)
+                except Exception:
+                    access_scope = {}
+            is_ops_chat_ticket = isinstance(access_scope, dict) and access_scope.get("source") == "ops-chat"
+            if is_ops_chat_ticket and len(local_description) > len(provider_description):
+                ticket_data["description"] = local_description
+            local_team = (existing_ticket.get("assignee_team") or "").strip()
+            provider_team = (ticket_data["assignee_team"] or "").strip()
+            if is_ops_chat_ticket and local_team and (not provider_team or provider_team == "Security Team"):
+                ticket_data["assignee_team"] = local_team
             local_status = _effective_local_status(
                 ticket_data["status"],
                 existing_ticket.get("status"),

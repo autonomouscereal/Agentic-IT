@@ -81,17 +81,6 @@ async def sync_manifest_tools(body: dict = None):
     the setup page remains the source for modules that are not actually in use.
     """
     await cleanup_tool_inventory()
-    await execute("""
-        INSERT INTO tools (name, type, host, port, description)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (name) DO UPDATE SET
-            type = EXCLUDED.type,
-            host = EXCLUDED.host,
-            port = EXCLUDED.port,
-            description = EXCLUDED.description,
-            updated_at = NOW()
-    """, "Agent Memory", "memory", "agent-memory-db", 5432,
-        "Shared PostgreSQL/pgvector memory service for dashboard agents")
     await executemany("""
         INSERT INTO tools (name, type, host, port, description)
         VALUES ($1, $2, $3, $4, $5)
@@ -102,8 +91,26 @@ async def sync_manifest_tools(body: dict = None):
             description = EXCLUDED.description,
             updated_at = NOW()
     """, [
+        ("iTop ITSM", "itsm", "host.docker.internal", 25432,
+         "Reference ITSM/ticket provider used for provider-sync demos"),
+        ("Wazuh SIEM", "siem", "host.docker.internal", 26500,
+         "Wazuh manager API for SIEM/EDR investigation workflows"),
+        ("Wazuh Indexer", "siem", "host.docker.internal", 26920,
+         "Wazuh/OpenSearch indexer for alert evidence"),
+        ("Wazuh Dashboard", "siem-ui", "host.docker.internal", 26443,
+         "Wazuh dashboard UI for security operations demos"),
+        ("Zeek IDS", "ids", "host.docker.internal", 26001,
+         "Zeek reference IDS service"),
+        ("Suricata IDS", "ids", None, None,
+         "Suricata reference IDS service"),
+        ("GitLab", "vcs", "host.docker.internal", 80,
+         "GitLab CE reference source-control and CI/CD provider"),
+        ("SearXNG", "search", "host.docker.internal", 7999,
+         "Private web research/search provider for agents"),
         ("Keycloak", "iam", "host.docker.internal", 8443,
          "Keycloak identity provider and Admin Console"),
+        ("Mailcow", "email-api", "host.docker.internal", 8081,
+         "Reference Mailcow email module via the working API/UI shim"),
         ("Mailcow API/UI Shim", "email-api", "host.docker.internal", 8081,
          "Optional Mailcow compatibility API and demo admin UI sidecar"),
         ("Roundcube Webmail", "email-ui", "host.docker.internal", 2581,
@@ -114,6 +121,8 @@ async def sync_manifest_tools(body: dict = None):
          "Matrix Synapse homeserver for real chat intake with Keycloak OIDC"),
         ("Ops Chat Matrix Bridge", "bridge", "ops-chat-bridge", 29318,
          "Matrix application-service bridge that creates dashboard tickets and queues real agents"),
+        ("Agent Memory", "memory", "agent-memory-db", 5432,
+         "Shared PostgreSQL/pgvector memory service for dashboard agents"),
     ])
     await execute("DELETE FROM tools WHERE name = 'Open WebUI Ops Chat'")
     manifest = platform_manifest.load_manifest()

@@ -120,6 +120,12 @@ Expected:
   `ops_chat_tool.py web-search` command before the chat agent sends its final
   `answer`. Suspicious URL handling remains ticket/workflow controlled and must
   not directly browse or curl the URL.
+- ambiguous requests can be clarified before ticket creation when the answer
+  changes routing or scope. Once the ticket is created, recent chat context is
+  copied into the ticket description and the Ops Chat note.
+- ticket scope changes can be handled with
+  `POST /api/tickets/{id}/assignment` to reassign, set owning group, and record
+  escalation tier evidence.
 
 Implementation note: Ops Chat does not rely on application-side structured
 parsing to classify the user message. The Matrix bridge hands the message to
@@ -127,7 +133,24 @@ the configured Hermes/Claude harness. That chat agent receives
 `ops_chat_tool.py`; it either answers directly or uses the tool to create the
 ticket and spawn the ticket-resolution agent.
 
-Latest live proof: marker `ops-chat-same-origin-playwright-1779261056` created
+Latest live proof:
+
+- Browser login and send path: marker `ops-chat-playwright-1779301274503`
+  passed through dashboard login, Element/Keycloak login, same-origin Matrix
+  probe, direct bot profile navigation, first-login Element prompts, a Matrix
+  DM to `@agentic-ops:agentic-ops.local`, and ticket creation (`1177`).
+- Clarification path: ambiguous software request was answered with a
+  pre-ticket follow-up question; the clarification created ticket `1176`,
+  synced to iTop ref `595`, and preserved the prior chat context in ticket
+  evidence.
+- Escalation path: ticket `1176` was reassigned to `Tier 2 Endpoint Support`
+  through `/api/tickets/1176/assignment` with a `ticket-assignment` note.
+- Real-agent path: markers `ops-chat-scenarios-1779301430` and
+  `ops-chat-scenarios-1779301734` spawned Hermes agents `326` and `327` on
+  tickets `1185` and `1191`, producing user-facing account-login and
+  software-request notes.
+
+Earlier proof: marker `ops-chat-same-origin-playwright-1779261056` created
 ticket `908`, spawned Hermes agent `307` / task `304`, recorded model-turn audit
 events, asked the requester which account/system they meant, and stopped in the
 durable `awaiting_user_response` state with no active process left behind.

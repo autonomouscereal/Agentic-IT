@@ -77,10 +77,29 @@ def run_general_chat(base, marker):
     })
     require(not web.get("created_ticket"), f"benign web question should not create a ticket: {web}")
     require(len(str(web.get("reply") or "")) > 20, f"benign web question returned weak reply: {web}")
+    cat = request(base, "POST", "/api/ops-chat/message", {
+        "message": f"Send me a short text picture of a cat. Marker {marker}.",
+        "requester_name": "Demo User",
+        "requester_email": "demo@example.invalid",
+        "external_thread_id": f"{marker}-cat-memory",
+        "force_new_ticket": True,
+        "spawn_agent": False,
+    })
+    require(not cat.get("created_ticket"), f"cat chat should not create a ticket: {cat}")
+    cat_follow = request(base, "POST", "/api/ops-chat/message", {
+        "session_id": cat.get("session_id"),
+        "message": "Make that cat look sleepier, please.",
+        "requester_name": "Demo User",
+        "requester_email": "demo@example.invalid",
+        "spawn_agent": False,
+    })
+    require(not cat_follow.get("created_ticket"), f"cat follow-up should stay general chat: {cat_follow}")
+    require(cat_follow.get("ticket_id") is None, f"cat follow-up unexpectedly attached to ticket: {cat_follow}")
     return {
         "scenario": "general-chat",
         "reply": result.get("reply", "")[:180],
         "web_search_reply": web.get("reply", "")[:220],
+        "cat_followup_reply": cat_follow.get("reply", "")[:180],
     }
 
 

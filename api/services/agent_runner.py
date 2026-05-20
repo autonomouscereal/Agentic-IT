@@ -35,7 +35,7 @@ MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "/app/agent_models.json")
 AGENT_PERMISSION_MODE = os.getenv("AGENT_PERMISSION_MODE", "acceptEdits")
 AGENT_ALLOWED_TOOLS = os.getenv(
     "AGENT_ALLOWED_TOOLS",
-    "Read,Write,Bash(curl *),Bash(python *),Bash(python3 *),Bash(node *),Bash(npx *),Bash(playwright *)",
+    "Read,Write,Bash(curl *),Bash(python *),Bash(python3 *),Bash(git *),Bash(rg *),Bash(ls *),Bash(pwd),Bash(node *),Bash(npm *),Bash(npx *),Bash(playwright *)",
 ).strip()
 AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", "").strip()
 AGENT_LLM_AUTH_TOKEN = os.getenv("AGENT_LLM_AUTH_TOKEN", "").strip()
@@ -1887,6 +1887,11 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Ticket detail: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}`
 - Broader ticket context only when needed: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}/context`
 - Add ticket notes: `POST /api/tickets/{ticket.get('id', '{ticket_id}')}/notes`
+- Reassign/escalate when scope changes: `POST /api/tickets/{ticket.get('id', '{ticket_id}')}/assignment`
+  - Use this when investigation shows the work belongs to a different group,
+    needs tier 2/3 escalation, or priority changed. Include `assignee_team`,
+    `owning_group`, optional `escalation_tier`, `priority`, `actor`, and
+    `reason`. Add clear evidence in the reason.
 - Request approval: `POST /api/changes/request`
   - Required JSON: `{{"agent_id": <agent_instance_id>, "ticket_id": {ticket.get('id', '{ticket_id}')}, "action": "short verb phrase", "target": "system/account/domain", "reason": "why approval is required", "risk_level": "low|medium|high", "approval_policy": {{"auto_complete": false}}}}`
   - Do not use `title` or `description` fields for change requests.
@@ -1940,6 +1945,16 @@ Do not use Playwright to open suspicious/phishing/malware URLs from tickets,
 emails, SIEM, EDR, or user text. Those URLs must stay on the passive,
 reputation-adapter, or approved isolated-detonation path above.
 
+## Platform Operations Capability
+You are allowed to work on the Agentic Operations platform itself when the
+ticket scope asks for setup, integration, tool health, dashboard UI repair,
+workflow repair, CI/CD remediation, or provider/module deployment. Use the
+available skills, dashboard API, local repository tools, Playwright for trusted
+UI checks, and server-manager/deployment skills when they are present in the
+workspace. Keep the same governance model: do not print secrets, do not bypass
+credential leases, and stop at real access/approval/change barriers when the
+platform or provider denies the action.
+
 ## Live Ticket Note Steering
 Operators and ticketing providers can add notes while you are already running.
 Those updates are delivered without stopping or replacing your task:
@@ -1968,6 +1983,14 @@ Treat iTop, ServiceNow, Jira, and local-only tickets as providers behind the das
 Do not fetch broad schema, docs, or tool inventory endpoints such as `/openapi.json`, `/api/tools`, `/api/tools/status`, `/docs`, or `/redoc`. The runner blocks those calls because they have caused local models to stall on oversized context. Use the bounded ticket/evidence endpoints above.
 Do not read saved harness `tool-results` files from current or prior agent workdirs to recover context. Those files can be oversized and stale; re-query the canonical dashboard API with narrower filters instead.
 When posting a postmortem, use the exact body fields `ticket_id`, `agent_id`, `task_id`, `status`, `summary`, `went_well`, `improvements`, `workflow_proposal`, `skill_proposals`, `test_cases`, `guardrails`, `documentation`, and `created_by`. Text fields must be strings. `skill_proposals`, `test_cases`, and `guardrails` must be JSON arrays, not strings. Put timeline, root cause, residual risk, and evidence details into the text fields instead of inventing extra top-level fields.
+
+## Filesystem Search Boundaries
+Do not recursively search from `/`, `/home`, `/root`, or other broad filesystem
+roots. That can stall the runner and produce noisy transcripts. Start with the
+bounded dashboard evidence endpoint and this work directory. If you need local
+files, search only explicit relevant roots such as this workspace, `/app`,
+`/app/skills`, or a repo path named in the ticket. Prefer `rg` with explicit
+paths and limits over `grep -R` or `find /`.
 
 ## Checkpoint Protocol
 After each major step, write your progress to `checkpoint.json` in your work directory.

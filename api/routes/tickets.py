@@ -236,6 +236,7 @@ async def create_ticket(
         provider_class=provider_class,
         sync_provider=sync_provider,
         created_by=created_by,
+        assignee_team=assignee_team,
         auto_assign=auto_assign,
     )
     update_fields = []
@@ -325,6 +326,102 @@ async def add_ticket_note(
         text = f"{title}\n\n{text}"
     author, source = await _infer_note_attribution(ticket_id, author, source, agent_id, request)
     return await ticket_service.add_note(ticket_id, text, author, source, visibility, external_ref)
+
+
+@router.post("/{ticket_id}/assignment")
+async def update_ticket_assignment(
+    ticket_id: int,
+    assignee_team: str = Body(None),
+    owning_group: str = Body(None),
+    assignee: str = Body(None),
+    escalation_tier: str = Body(None),
+    priority: str = Body(None),
+    actor: str = Body("dashboard"),
+    reason: str = Body(""),
+    request: Request = None,
+):
+    """Reassign or escalate a ticket while preserving an auditable note trail."""
+    ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
+    if not ticket:
+        return {"error": "Ticket not found"}
+    ticket_decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:note",
+    )
+    if not ticket_decision.get("allow"):
+        raise HTTPException(status_code=403, detail=ticket_decision)
+
+    updates = []
+    values = []
+    idx = 1
+    if assignee_team is not None:
+        updates.append(f"assignee_team = ${idx}")
+        values.append(assignee_team)
+        idx += 1
+    if owning_group is not None:
+        updates.append(f"owning_group = ${idx}")
+        values.append(owning_group)
+        idx += 1
+    if assignee is not None:
+        updates.append(f"assignee = ${idx}")
+        values.append(assignee)
+        idx += 1
+    if priority is not None:
+        normalized_priority = str(priority).strip()
+        if normalized_priority not in ("", "P1", "P2", "P3", "P4", "1", "2", "3", "4"):
+            raise HTTPException(status_code=400, detail=f"Unsupported priority: {priority}")
+        updates.append(f"priority = ${idx}")
+        values.append(normalized_priority)
+        idx += 1
+    if not updates and not escalation_tier:
+        raise HTTPException(status_code=400, detail="No assignment or escalation fields supplied.")
+    if updates:
+        values.append(ticket_id)
+        await execute(
+            f"UPDATE tickets SET {', '.join(updates)}, updated_at = NOW() WHERE id = ${idx}",
+            *values,
+        )
+
+    changes = []
+    if assignee_team is not None and assignee_team != ticket.get("assignee_team"):
+        changes.append(f"Assignment group: `{ticket.get('assignee_team') or 'unassigned'}` -> `{assignee_team or 'unassigned'}`")
+    if owning_group is not None and owning_group != ticket.get("owning_group"):
+        changes.append(f"Owning group: `{ticket.get('owning_group') or 'unowned'}` -> `{owning_group or 'unowned'}`")
+    if assignee is not None and assignee != ticket.get("assignee"):
+        changes.append(f"Assignee: `{ticket.get('assignee') or 'unassigned'}` -> `{assignee or 'unassigned'}`")
+    if priority is not None and str(priority).strip() != str(ticket.get("priority") or ""):
+        changes.append(f"Priority: `{ticket.get('priority') or 'unset'}` -> `{str(priority).strip() or 'unset'}`")
+    if escalation_tier:
+        changes.append(f"Escalation tier: `{escalation_tier}`")
+
+    note = await ticket_service.add_note(
+        ticket_id,
+        "\n".join([
+            "Ticket assignment updated",
+            f"Actor: {actor}",
+            *(changes or ["No field value changed; escalation context recorded."]),
+            "",
+            reason or "No reason provided.",
+        ]),
+        author=actor,
+        source="ticket-assignment",
+        visibility="internal",
+        external_ref=f"assignment:{ticket_id}:{int(datetime.now().timestamp())}",
+    )
+    await log_event("ticket", "info", actor, "ticket_assignment_updated",
+                    f"ticket_{ticket_id}", {
+                        "assignee_team": assignee_team,
+                        "owning_group": owning_group,
+                        "assignee": assignee,
+                        "priority": priority,
+                        "escalation_tier": escalation_tier,
+                        "reason": reason,
+                        "note_id": note.get("id"),
+                    })
+    updated = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
+    compact_ticket_payload(updated)
+    return {"status": "updated", "ticket": updated, "note_id": note.get("id")}
 
 
 @router.post("/{ticket_id}/attachments")

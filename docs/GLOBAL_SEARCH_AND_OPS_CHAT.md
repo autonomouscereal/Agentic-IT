@@ -73,6 +73,14 @@ change gates are enforced later by platform policy, scoped vault leases,
 provider permissions, workflow rules, and real execution barriers when the
 ticket agent attempts the work.
 
+The chat agent may ask one concise follow-up before opening a ticket when the
+answer would materially change routing, scope, urgency, or whether the request
+needs tracking at all. Once the agent has enough context and creates the
+ticket, the recent chat history is copied into both the ticket description and
+the Ops Chat-created ticket note. Harmless/general requests such as a text cat,
+basic advice, or benign current-information questions can be answered without a
+ticket; operational work must become a ticket.
+
 Compose services:
 
 - `ops-chat-db`: PostgreSQL for Synapse
@@ -176,8 +184,40 @@ This covers:
 - follow-up chat recorded as `user-response`
 - global search visibility for the scenario marker
 - optional real Hermes/Claude harness handoff through the AI proxy
+- pre-ticket clarification followed by ticket creation with preserved chat
+  history
+- reassignment/escalation using `POST /api/tickets/{id}/assignment`
 
 Latest live proof on 2026-05-20:
+
+- Clarification and escalation proof:
+  - The chat agent asked a pre-ticket clarification for ambiguous video-editing
+    software instead of opening a premature ticket.
+  - The follow-up answer created ticket `1176`, synced to iTop ref `595`,
+    preserved both the ambiguous and clarified chat messages in dashboard
+    evidence, and kept the agent-selected `Endpoint Support` assignment instead
+    of letting the iTop default team overwrite it.
+  - `POST /api/tickets/1176/assignment` reassigned the work to
+    `Tier 2 Endpoint Support`, kept owning group `Endpoint Support`, raised
+    priority to `P2`, and wrote a `ticket-assignment` note with
+    `Escalation tier: Tier 2`.
+- Browser proof refresh:
+  - `scripts/smoke_ops_chat_playwright.js` now handles Element's first-login
+    device verification, service-worker, notification, and "new contact"
+    confirmation prompts.
+  - The live browser smoke passed dashboard login, Element/Keycloak login,
+    same-origin Matrix probe, direct bot profile navigation, Matrix DM send,
+    and ticket creation with marker `ops-chat-playwright-1779301274503`
+    producing ticket `1177`.
+- Real harness proof refresh:
+  - `scripts/smoke_ops_chat_scenarios.py --spawn-agent --agent-case account-lockout`
+    passed with marker `ops-chat-scenarios-1779301430`, ticket `1185`,
+    Hermes agent `326`, and a user-facing account-login next-step note.
+  - `scripts/smoke_ops_chat_scenarios.py --spawn-agent --agent-case software-request`
+    passed with marker `ops-chat-scenarios-1779301734`, ticket `1191`,
+    Hermes agent `327`, and a request for the minimum missing details
+    (approved software name and workstation hostname). The spawned smoke agent
+    was stopped after visible progress to leave the demo queue clean.
 
 - Harness-required Ops Chat proof:
   - General chat marker `harness-answer-tool-1779286572` was answered by the
