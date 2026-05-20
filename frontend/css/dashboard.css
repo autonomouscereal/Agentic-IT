@@ -1107,6 +1107,51 @@ body {
     padding: 12px;
 }
 
+.learning-tabs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.learning-tab {
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 9px 14px 10px;
+}
+
+.learning-tab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.learning-tab.active {
+    color: var(--accent-primary);
+    border-color: var(--border-color);
+    background: var(--bg-card);
+    margin-bottom: -1px;
+}
+
+.learning-tab-panel {
+    display: none;
+}
+
+.learning-tab-panel.active {
+    display: block;
+}
+
+.learning-tab-card {
+    margin: 0;
+}
+
 .learning-item {
     padding: 12px;
     background: var(--bg-tertiary);

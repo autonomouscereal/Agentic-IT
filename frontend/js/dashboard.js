@@ -1202,7 +1202,21 @@ async function recordDemoCicdRun() {
 }
 
 async function loadLearning() {
-    await Promise.all([loadPostmortems(), loadSkills(), loadKnowledge()]);
+    await Promise.all([loadSkills(), loadKnowledge()]);
+}
+
+function setLearningTab(tab) {
+    const activeTab = tab === "skills" ? "skills" : "knowledge";
+    ["knowledge", "skills"].forEach(name => {
+        const button = document.getElementById(`learning-tab-${name}`);
+        const panel = document.getElementById(`learning-panel-${name}`);
+        const active = name === activeTab;
+        if (button) {
+            button.classList.toggle("active", active);
+            button.setAttribute("aria-selected", active ? "true" : "false");
+        }
+        if (panel) panel.classList.toggle("active", active);
+    });
 }
 
 async function loadAccess() {

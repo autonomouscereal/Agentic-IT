@@ -161,3 +161,34 @@ Validation evidence:
   `C:\Users\cereal\Documents\Codex\2026-05-20\without-rebuilding-the-environment-i-want\playwright-workflows-buttons`
 - Final Playwright metrics showed workflow row button gap `7px` and
   `overflows: []`.
+
+## Learning Page Tab Split
+
+After operator review, the Learning page was simplified because Postmortems
+already has its own first-class page.
+
+Static-only redeploy:
+
+- `frontend/index.html`
+- `frontend/css/dashboard.css`
+- `frontend/js/dashboard.js`
+
+Changes:
+
+- Removed the duplicate Postmortems table from Learning.
+- Split Learning into two tabs only: `Knowledge Articles` and `Skills`.
+- Moved article actions into the Knowledge tab and skill creation into the
+  Skills tab.
+- Added a frontend regression test so `postmortems-tbody` cannot reappear in
+  the Learning page section.
+
+Validation evidence:
+
+- Local regression suite: `python -m pytest tests/test_frontend_ui_regressions.py`
+  returned `13 passed`.
+- Authenticated Playwright crawl used `https://192.168.50.222:25443/` with
+  `demo_account_1` from the vault.
+- Screenshots and metrics:
+  `C:\Users\cereal\Documents\Codex\2026-05-20\without-rebuilding-the-environment-i-want\playwright-learning-tabs`
+- Final Playwright metrics showed `duplicatePostmortemsTable: false`,
+  `visiblePostmortemText: false`, and `overflows: []`.
