@@ -353,6 +353,45 @@ body {
     color: var(--bg-primary);
 }
 
+.workflow-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    align-items: flex-start;
+    min-width: 82px;
+}
+
+.workflow-actions .btn,
+.workflow-modal-actions .btn {
+    border: 1px solid rgba(0, 212, 255, 0.35);
+    background: rgba(0, 212, 255, 0.14);
+    color: var(--accent-primary);
+    min-width: 74px;
+    min-height: 28px;
+    padding: 5px 10px;
+    line-height: 1.2;
+    box-shadow: none;
+}
+
+.workflow-actions .btn-success,
+.workflow-modal-actions .btn-success {
+    border-color: rgba(0, 255, 136, 0.36);
+    background: rgba(0, 255, 136, 0.14);
+    color: var(--accent-secondary);
+}
+
+.workflow-modal-actions .btn-danger {
+    border-color: rgba(255, 71, 87, 0.38);
+    background: rgba(255, 71, 87, 0.12);
+    color: var(--accent-danger);
+}
+
+.workflow-modal-actions .btn-warning {
+    border-color: rgba(255, 215, 0, 0.38);
+    background: rgba(255, 215, 0, 0.12);
+    color: var(--accent-warning);
+}
+
 /* Filter Select */
 .filter-select {
     background: var(--bg-tertiary);

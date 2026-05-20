@@ -132,3 +132,32 @@ Validation evidence:
 - Screenshots and metrics:
   `C:\Users\cereal\Documents\Codex\2026-05-20\without-rebuilding-the-environment-i-want\playwright-ui-fix-focused-final`
 - Final Playwright metrics showed `overflows: []` for Agents, Intake, and Setup.
+
+## Workflow Button Repair
+
+After operator review, the Workflows page row actions were repaired without
+touching backend services.
+
+Static-only redeploy:
+
+- `frontend/css/dashboard.css`
+- `frontend/js/dashboard.js`
+
+Changes:
+
+- Wrapped each workflow row action set in a dedicated `.workflow-actions`
+  control stack.
+- Added explicit vertical gaps so `Detail` and `Approve` no longer touch.
+- Changed workflow row and modal actions to quieter outlined buttons so the
+  action column does not visually dominate the table.
+
+Validation evidence:
+
+- Local regression suite: `python -m pytest tests/test_frontend_ui_regressions.py`
+  returned `12 passed`.
+- Authenticated Playwright crawl used `https://192.168.50.222:25443/` with
+  `demo_account_1` from the vault.
+- Screenshots and metrics:
+  `C:\Users\cereal\Documents\Codex\2026-05-20\without-rebuilding-the-environment-i-want\playwright-workflows-buttons`
+- Final Playwright metrics showed workflow row button gap `7px` and
+  `overflows: []`.

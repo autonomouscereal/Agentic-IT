@@ -761,8 +761,10 @@ async function loadWorkflows() {
             <td>${w.version || 1}</td>
             <td>${formatTime(w.updated_at)}<div class="module-meta">${w.run_count || 0} runs / ${w.completed_run_count || 0} complete${w.latest_run_at ? ` / last ${formatTime(w.latest_run_at)}` : ""}</div></td>
             <td>
-                <button class="btn btn-sm" onclick="viewWorkflow(${w.id})">Detail</button>
-                ${w.status !== "active" ? `<button class="btn btn-sm btn-success" onclick="reviewWorkflow(${w.id}, true)">Approve</button>` : ""}
+                <div class="workflow-actions">
+                    <button class="btn btn-sm" onclick="viewWorkflow(${w.id})">Detail</button>
+                    ${w.status !== "active" ? `<button class="btn btn-sm btn-success" onclick="reviewWorkflow(${w.id}, true)">Approve</button>` : ""}
+                </div>
             </td>
         </tr>
     `).join("");
@@ -2057,7 +2059,7 @@ async function viewWorkflow(id) {
                 </div>
             `).join("") : '<div class="learning-meta">No tickets or test runs linked yet.</div>'}
         </div>
-        <div class="modal-actions-bar">
+        <div class="modal-actions-bar workflow-modal-actions">
             <button class="btn btn-sm btn-success" onclick="reviewWorkflow(${data.id}, true)">Approve</button>
             <button class="btn btn-sm btn-danger" onclick="reviewWorkflow(${data.id}, false)">Request Revision</button>
             <button class="btn btn-sm btn-warning" onclick="rerunWorkflow(${data.id})">Rerun on Ticket</button>
