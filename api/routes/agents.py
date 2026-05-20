@@ -147,9 +147,30 @@ async def agent_stats():
 @router.get("/models")
 async def list_models():
     """Return available models for agent selection."""
-    from services.agent_runner import get_available_models
-    models = await get_available_models()
-    return {"models": models}
+    from services.agent_runner import get_agent_runtime_config
+    config = await get_agent_runtime_config()
+    return {
+        "models": config["models"],
+        "default": config["default_model"],
+        "default_model": config["default_model"],
+        "default_harness": config["default_harness"],
+        "setups": config["setups"],
+        "available_harnesses": config["available_harnesses"],
+    }
+
+
+@router.get("/config")
+async def get_agent_config():
+    """Return editable non-secret agent runtime defaults."""
+    from services.agent_runner import get_agent_runtime_config
+    return await get_agent_runtime_config()
+
+
+@router.put("/config")
+async def update_agent_config(config: dict = Body(...)):
+    """Persist editable non-secret agent runtime defaults."""
+    from services.agent_runner import update_agent_runtime_config
+    return await update_agent_runtime_config(config)
 
 
 @router.get("/runner-health")
@@ -188,6 +209,7 @@ async def get_ws_info():
 async def spawn_agent(
     ticket_id: int = Body(...),
     model: str = Body("deepseek/deepseek-v4-flash"),
+    harness: str = Body(None),
     prompt: str = Body(None),
     task_type: str = Body("ticket_resolution"),
     requested_permissions: list = Body(None),
@@ -211,13 +233,18 @@ async def spawn_agent(
     if not prompt:
         prompt = f"Investigate and resolve this ticket: {ticket['title']}. Class: {ticket['itop_class']}. Description: {ticket['description'] or 'N/A'}"
 
+    spawn_kwargs = {
+        "actor_context": access_control.subject_from_request(request),
+        "requested_permissions": requested_permissions,
+    }
+    if harness:
+        spawn_kwargs["harness"] = harness
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
         prompt,
         task_type,
-        actor_context=access_control.subject_from_request(request),
-        requested_permissions=requested_permissions,
+        **spawn_kwargs,
     )
     await log_event("agent", "info", "dashboard", "agent_spawned",
                     f"ticket_{ticket_id}", {"model": model, "task_type": task_type})
@@ -228,6 +255,7 @@ async def spawn_agent(
 async def create_from_prompt(
     prompt: str = Body(...),
     model: str = Body("deepseek/deepseek-v4-flash"),
+    harness: str = Body(None),
     request: Request = None,
 ):
     """Create a ticket from a prompt and spawn an agent to work it."""
@@ -245,12 +273,15 @@ async def create_from_prompt(
 
     # Spawn agent
     from services import agent_runner
+    spawn_kwargs = {"actor_context": access_control.subject_from_request(request)}
+    if harness:
+        spawn_kwargs["harness"] = harness
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
         agent_prompt,
         "ad_hoc",
-        actor_context=access_control.subject_from_request(request),
+        **spawn_kwargs,
     )
     await log_event("agent", "info", "dashboard", "create_from_prompt",
                     f"ticket_{ticket_id}", {"prompt_preview": prompt[:200]})

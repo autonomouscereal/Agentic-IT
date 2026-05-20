@@ -24,7 +24,7 @@ CASES = [
     ("standard-lockout", "I cannot log into my account and MFA is not working.", "Identity & Access"),
     ("password-reset", "I forgot my password and need to regain access.", "Identity & Access"),
     ("gitlab-access", "I need GitLab repository access for project phoenix.", "Identity & Access"),
-    ("wazuh-access", "Please grant Wazuh analyst access for an investigation.", "Identity & Access"),
+    ("wazuh-access", "Please grant Wazuh analyst access for an investigation.", "Security Operations"),
     ("mailbox-access", "Add Alice to the finance shared mailbox as a reviewer.", "Email Operations"),
     ("distribution-list", "Add Jeff to the customer-updates distribution list.", "Email Operations"),
     ("mail-forwarding", "Set temporary mail forwarding for a departing employee.", "Email Operations"),
@@ -46,15 +46,15 @@ CASES = [
     ("offboarding", "Offboard a departing employee and revoke access at 5 PM.", "Identity & Access"),
     ("restore-file", "Restore a deleted finance file from backup.", "Infrastructure Operations"),
     ("server-backup-failed", "The backup failed for a production server overnight.", "Infrastructure Operations"),
-    ("tls-renewal", "Renew the TLS certificate for the dashboard before it expires.", "Infrastructure Operations"),
+    ("tls-renewal", "Renew the TLS certificate for the dashboard before it expires.", "Platform Operations"),
     ("cloud-vm", "Create an Azure VM for a temporary reporting workload.", "Cloud Operations"),
     ("s3-bucket", "Create an S3 bucket for project archive data.", "Cloud Operations"),
     ("cloud-cost", "Investigate a sudden cloud cost increase.", "Cloud Operations"),
     ("database-slow", "Postgres queries are timing out for the customer portal.", "Database Operations"),
     ("database-access", "Grant read-only database access for an analyst.", "Database Operations"),
     ("schema-change", "Apply a database schema change to staging.", "Database Operations"),
-    ("ui-bug", "Fix this UI on the dashboard because a button is broken.", "Business Applications"),
-    ("blank-page", "The web page shows a blank page after login.", "Business Applications"),
+    ("ui-bug", "Fix this UI on the dashboard because a button is broken.", "Platform Operations"),
+    ("blank-page", "The dashboard web page shows a blank page after login.", "Platform Operations"),
     ("app-error", "A business application throws an invalid JSON popup.", "Business Applications"),
     ("delivery-gate", "The deployment pipeline failed with Semgrep and Trivy findings.", "DevSecOps"),
     ("zap-finding", "OWASP ZAP found a security issue in the release gate.", "DevSecOps"),
@@ -73,7 +73,7 @@ CASES = [
 ]
 
 
-def request(base, method, path, payload=None, timeout=90):
+def request(base, method, path, payload=None, timeout=240):
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     headers = {"Content-Type": "application/json"}
     if TOKEN:
@@ -92,6 +92,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("base", nargs="?", default="http://localhost:25480")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--case", action="append", dest="only_cases",
+                        help="Run only the named case slug. Can be supplied more than once.")
+    parser.add_argument("--case-timeout", type=int, default=240)
     parser.add_argument("--strict-routing", action="store_true",
                         help="Fail on expected-group mismatch instead of reporting routing quality.")
     args = parser.parse_args()
@@ -99,9 +102,16 @@ def main():
         raise SystemExit("DASHBOARD_SERVICE_TOKEN is required")
     marker = f"ops-chat-enterprise-matrix-{int(time.time())}"
     cases = CASES[: args.limit] if args.limit else CASES
+    if args.only_cases:
+        wanted = set(args.only_cases)
+        cases = [case for case in cases if case[0] in wanted]
+        missing = sorted(wanted - {case[0] for case in cases})
+        if missing:
+            raise SystemExit(f"Unknown case slug(s): {', '.join(missing)}")
     results = []
     failures = []
-    for slug, message, expected_group in cases:
+    for index, (slug, message, expected_group) in enumerate(cases, start=1):
+        print(json.dumps({"progress": "case_start", "index": index, "total": len(cases), "case": slug}), flush=True)
         result = request(args.base, "POST", "/api/ops-chat/message", {
             "message": f"{message} Matrix marker {marker}-{slug}.",
             "requester_name": "Enterprise Matrix Tester",
@@ -109,7 +119,7 @@ def main():
             "external_thread_id": f"{marker}-{slug}",
             "force_new_ticket": True,
             "spawn_agent": False,
-        })
+        }, timeout=args.case_timeout)
         classification = result.get("classification") or {}
         actual_group = classification.get("assignment_group")
         ticketed = bool(result.get("created_ticket"))
@@ -126,6 +136,7 @@ def main():
             "ok": ok,
         }
         results.append(record)
+        print(json.dumps({"progress": "case_done", **record}), flush=True)
         if not ok:
             failures.append(record)
     search = request(args.base, "GET", f"/api/search/global?q={urllib.parse.quote(marker)}&limit=10")

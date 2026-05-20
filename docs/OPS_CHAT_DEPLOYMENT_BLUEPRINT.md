@@ -111,6 +111,15 @@ Expected:
 - chat intake itself does not open approval gates; approval/access/change gates
   appear only when the ticket agent hits enforced platform, credential,
   workflow, or provider barriers.
+- ticket agents can talk back to the user through the same Matrix room when
+  they call `/api/tickets/{id}/request-info` or `/api/tickets/{id}/status`.
+  The bridge polls `/api/ops-chat/outbound/pending`, sends each user-facing
+  update, and acks it through `/api/ops-chat/outbound/ack` so restarts do not
+  duplicate messages.
+- benign current-information questions can use the private SearXNG-backed
+  `ops_chat_tool.py web-search` command before the chat agent sends its final
+  `answer`. Suspicious URL handling remains ticket/workflow controlled and must
+  not directly browse or curl the URL.
 
 Implementation note: Ops Chat does not rely on application-side structured
 parsing to classify the user message. The Matrix bridge hands the message to

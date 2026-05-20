@@ -327,7 +327,8 @@ async def create_setup_ticket(
             "output SETUP_ONBOARDING_BOOTSTRAP_COMPLETE, and an ISO timestamp. "
             "7. Reply exactly: SETUP_ONBOARDING_BOOTSTRAP_COMPLETE"
         )
-        spawn = await agent_runner.spawn_agent(parent_ticket["id"], model, prompt, "platform_setup")
+        spawn_kwargs = {"harness": harness} if harness else {}
+        spawn = await agent_runner.spawn_agent(parent_ticket["id"], model, prompt, "platform_setup", **spawn_kwargs)
         result["agent"] = spawn
     return result
 
@@ -408,5 +409,6 @@ async def create_module_ticket(
             "If credentials or access are missing, create an access request and stop at a waiting checkpoint. "
             "Write checkpoint.json with a clear status and reply with a one-line summary."
         )
-        result["agent"] = await agent_runner.spawn_agent(ticket["id"], model, prompt, "platform_setup")
+        spawn_kwargs = {"harness": harness} if harness else {}
+        result["agent"] = await agent_runner.spawn_agent(ticket["id"], model, prompt, "platform_setup", **spawn_kwargs)
     return result

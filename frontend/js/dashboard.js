@@ -40,6 +40,7 @@ function setAgentOpenCount(count) {
 document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     initTicketSorting();
+    initTicketInfiniteScroll();
     loadCurrentIdentity();
     loadAgentModels();
     applyAuditUrlFilters();
@@ -54,6 +55,31 @@ function initNavigation() {
             navigateTo(page);
         });
     });
+}
+
+function initTicketInfiniteScroll() {
+    const scrollRoot = document.querySelector(".main-content");
+    const sentinel = document.getElementById("ticket-pagination");
+    if (sentinel && "IntersectionObserver" in window) {
+        const observer = new IntersectionObserver(entries => {
+            const activePage = document.querySelector(".page.active");
+            if (!activePage || activePage.id !== "page-tickets") return;
+            if (entries.some(entry => entry.isIntersecting) && !ticketListState.loading && !ticketListState.done) {
+                loadMoreTickets();
+            }
+        }, { root: scrollRoot || null, rootMargin: "500px 0px" });
+        observer.observe(sentinel);
+    }
+    const onScroll = () => {
+        const activePage = document.querySelector(".page.active");
+        if (!activePage || activePage.id !== "page-tickets") return;
+        if (ticketListState.loading || ticketListState.done) return;
+        const remaining = scrollRoot
+            ? scrollRoot.scrollHeight - (scrollRoot.scrollTop + scrollRoot.clientHeight)
+            : document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
+        if (remaining < 480) loadMoreTickets();
+    };
+    (scrollRoot || window).addEventListener("scroll", onScroll, { passive: true });
 }
 
 function navigateTo(page) {
@@ -119,6 +145,8 @@ function openAuditTrail(query, source = "") {
 }
 
 let ticketSort = { by: "updated_at", dir: "desc" };
+let ticketListState = { key: "", offset: 0, limit: 200, total: 0, loading: false, done: false, rows: [] };
+let agentRuntimeConfig = { models: [], default_model: "", default_harness: "hermes", setups: [], available_harnesses: [] };
 const DEMO_TICKET_IDS = [531, 83, 82, 580, 578, 525, 539, 422, 558, 575, 530, 118, 363, 430];
 const DEMO_TICKET_ORDER = new Map(DEMO_TICKET_IDS.map((id, idx) => [id, idx]));
 
@@ -609,57 +637,99 @@ async function loadPendingChanges() {
     }).join("");
 }
 
-// Load tickets
-async function loadTickets() {
-    const status = document.getElementById("ticket-filter-status")?.value || "";
-    const params = new URLSearchParams();
-    if (status && status !== "__demo") params.set("status", status);
-    params.set("sort_by", ticketSort.by);
-    params.set("sort_dir", ticketSort.dir);
-    params.set("limit", status === "__demo" ? "1000" : "200");
+function ticketQueryKey(status) {
+    return JSON.stringify({ status, sort_by: ticketSort.by, sort_dir: ticketSort.dir });
+}
 
-    const data = await apiGet(`/api/tickets?${params}`);
-    if (!data) return;
-    if (status === "__demo") {
-        data.tickets = (data.tickets || [])
-            .filter(t => DEMO_TICKET_ORDER.has(Number(t.id)))
-            .sort((a, b) => DEMO_TICKET_ORDER.get(Number(a.id)) - DEMO_TICKET_ORDER.get(Number(b.id)));
-    }
+function updateTicketPagination() {
+    const statusEl = document.getElementById("ticket-page-status");
+    const moreBtn = document.getElementById("ticket-load-more");
+    if (!statusEl || !moreBtn) return;
+    const loaded = ticketListState.rows.length;
+    const total = ticketListState.total || loaded;
+    statusEl.textContent = ticketListState.loading
+        ? `Loading tickets... ${loaded}${total ? ` of ${total}` : ""}`
+        : `Showing ${loaded} of ${total} tickets`;
+    moreBtn.style.display = !ticketListState.done && loaded > 0 ? "" : "none";
+    moreBtn.disabled = ticketListState.loading;
+}
 
+function renderTicketRows(rows) {
     const tbody = document.getElementById("tickets-tbody");
     if (!tbody) return;
-
-    if (data.tickets.length === 0) {
+    if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="9" class="loading">No tickets found</td></tr>';
+        updateTicketPagination();
         return;
     }
-
-    tbody.innerHTML = data.tickets.map(t => {
+    tbody.innerHTML = rows.map(t => {
         const isSynced = !!t.synced_at;
         const sourceBadge = isSynced
             ? `<span class="source-badge itop" title="Synced from iTop">iTop</span>`
             : `<span class="source-badge local" title="Local">Local</span>`;
         return `
-        <tr data-itop-ref="${t.itop_ref}" class="${DEMO_TICKET_ORDER.has(Number(t.id)) ? "demo-ticket-row" : ""}">
+        <tr data-itop-ref="${escAttr(t.itop_ref)}" class="${DEMO_TICKET_ORDER.has(Number(t.id)) ? "demo-ticket-row" : ""}">
             <td>${t.id}</td>
-            <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(t.title)}">
+            <td class="ticket-title-cell" title="${escAttr(t.title)}">
                 ${sourceBadge}
                 ${DEMO_TICKET_ORDER.has(Number(t.id)) ? '<span class="source-badge demo">Demo</span>' : ""}
                 ${t.external_url ? `<a class="ticket-link" href="${escAttr(t.external_url)}" target="_blank" rel="noopener">${escHtml(t.title)}</a>` : escHtml(t.title)}
             </td>
             <td><span class="class-badge">${escHtml(t.itop_class || "Incident")}</span></td>
-            <td><span class="status-badge ${statusClass(t.status)}">${t.status}</span></td>
-            <td>${t.priority || "-"}</td>
+            <td><span class="status-badge ${statusClass(t.status)}">${escHtml(t.status)}</span></td>
+            <td>${escHtml(t.priority || "-")}</td>
             <td>${escHtml(t.assignee || "-")}</td>
-            <td>${t.agent_status ? `<span class="status-badge ${statusClass(t.agent_status)}">${t.agent_status}</span>` : "-"}</td>
+            <td>${t.agent_status ? `<span class="status-badge ${statusClass(t.agent_status)}">${escHtml(t.agent_status)}</span>` : "-"}</td>
             <td>${formatTime(t.updated_at)}</td>
-            <td>
+            <td class="row-actions">
                 <button class="btn btn-sm" onclick="viewTicket(${t.id})">Detail</button>
                 ${!t.agent_status ? `<button class="btn btn-sm btn-success" onclick="assignAgent(${t.id})">Assign Agent</button>` : ""}
             </td>
         </tr>
         `;
     }).join("");
+    updateTicketPagination();
+}
+
+// Load tickets
+async function loadTickets(options = {}) {
+    const status = document.getElementById("ticket-filter-status")?.value || "";
+    const key = ticketQueryKey(status);
+    const append = !!options.append && key === ticketListState.key && !ticketListState.done;
+    if (ticketListState.loading) return;
+    if (!append) {
+        ticketListState = { key, offset: 0, limit: status === "__demo" ? 1000 : 200, total: 0, loading: false, done: false, rows: [] };
+    }
+    ticketListState.loading = true;
+    updateTicketPagination();
+    const params = new URLSearchParams();
+    if (status && status !== "__demo") params.set("status", status);
+    params.set("sort_by", ticketSort.by);
+    params.set("sort_dir", ticketSort.dir);
+    params.set("limit", String(ticketListState.limit));
+    params.set("offset", String(ticketListState.offset));
+
+    const data = await apiGet(`/api/tickets?${params}`);
+    ticketListState.loading = false;
+    if (!data) {
+        updateTicketPagination();
+        return;
+    }
+    let incoming = data.tickets || [];
+    if (status === "__demo") {
+        incoming = incoming
+            .filter(t => DEMO_TICKET_ORDER.has(Number(t.id)))
+            .sort((a, b) => DEMO_TICKET_ORDER.get(Number(a.id)) - DEMO_TICKET_ORDER.get(Number(b.id)));
+    }
+    ticketListState.total = status === "__demo" ? incoming.length : Number(data.total || incoming.length);
+    ticketListState.offset += incoming.length;
+    ticketListState.rows = append ? ticketListState.rows.concat(incoming) : incoming;
+    ticketListState.done = status === "__demo" || ticketListState.rows.length >= ticketListState.total || incoming.length < ticketListState.limit;
+    renderTicketRows(ticketListState.rows);
+}
+
+function loadMoreTickets() {
+    loadTickets({ append: true });
 }
 
 async function loadWorkflows() {
@@ -1204,10 +1274,12 @@ function renderPostmortemRows(tbody, rows, compact) {
             <td style="max-width:${compact ? "360" : "560"}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.summary || "-")}</td>
             <td>${formatTime(p.updated_at || p.created_at)}</td>
             <td>
-                <button class="btn btn-sm" onclick="viewPostmortem(${p.id})">Full</button>
-                ${p.status === "approved" || p.status === "ready_for_review" ? `<button class="btn btn-sm" onclick="promotePostmortem(${p.id})">Promote / Update Assets</button>` : ""}
-                ${p.status !== "approved" && p.status !== "promoted" ? `<button class="inline-link" onclick="reviewPostmortem(${p.id}, true)">approve</button>` : ""}
-                <button class="inline-link" onclick="openAuditTrail('postmortem_${p.id}')">audit</button>
+                <div class="table-actions">
+                    <button class="btn btn-sm" onclick="viewPostmortem(${p.id})">Full</button>
+                    ${p.status === "approved" || p.status === "ready_for_review" ? `<button class="btn btn-sm" onclick="promotePostmortem(${p.id})">Promote Assets</button>` : ""}
+                    ${p.status !== "approved" && p.status !== "promoted" ? `<button class="inline-link" onclick="reviewPostmortem(${p.id}, true)">approve</button>` : ""}
+                    <button class="inline-link" onclick="openAuditTrail('postmortem_${p.id}')">audit</button>
+                </div>
             </td>
         </tr>
     `).join("");
@@ -1347,11 +1419,13 @@ async function loadChanges() {
             <td><span class="status-badge ${statusClass(c.status)}">${c.status}</span></td>
             <td>${formatTime(c.requested_at)}</td>
             <td>
-                ${c.status === "pending" ? `
-                    <button class="btn btn-sm btn-success" onclick="approveChange(${c.id})">Approve</button>
-                    <button class="btn btn-sm btn-danger" onclick="rejectChange(${c.id})">Reject</button>
-                ` : ""}
-                <button class="inline-link" onclick="openAuditTrail('change_${c.id}')">audit</button>
+                <div class="table-actions">
+                    ${c.status === "pending" ? `
+                        <button class="btn btn-sm btn-success" onclick="approveChange(${c.id})">Approve</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectChange(${c.id})">Reject</button>
+                    ` : ""}
+                    <button class="inline-link" onclick="openAuditTrail('change_${c.id}')">audit</button>
+                </div>
             </td>
         </tr>
     `).join("");
@@ -2090,8 +2164,9 @@ async function loadTicketActivity(ticketId) {
 
 // Assign agent to ticket
 async function assignAgent(ticketId) {
-    const model = document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b";
-    const result = await apiPost(`/api/tickets/${ticketId}/assign-agent`, { model });
+    const model = selectedAgentModel();
+    const harness = selectedAgentHarness();
+    const result = await apiPost(`/api/tickets/${ticketId}/assign-agent`, { model, harness });
     if (result?.error) {
         alert(result.error);
     } else if (result) {
@@ -2101,10 +2176,11 @@ async function assignAgent(ticketId) {
 }
 
 async function startTicketPostmortem(ticketId) {
-    const model = document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b";
+    const model = selectedAgentModel();
+    const harness = selectedAgentHarness();
     const context = prompt("Optional postmortem context or review focus:", "");
     if (context === null) return;
-    const result = await apiPost(`/api/tickets/${ticketId}/postmortem`, { model, context });
+    const result = await apiPost(`/api/tickets/${ticketId}/postmortem`, { model, harness, context });
     if (result && !result.error) {
         closeModal("ticket-modal");
         navigateTo("agents");
@@ -2114,10 +2190,11 @@ async function startTicketPostmortem(ticketId) {
 }
 
 async function startTicketWorkflow(ticketId) {
-    const model = document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b";
+    const model = selectedAgentModel();
+    const harness = selectedAgentHarness();
     const context = prompt("Describe the workflow/automation to build or improve:", "");
     if (context === null) return;
-    const result = await apiPost(`/api/tickets/${ticketId}/workflow`, { model, context });
+    const result = await apiPost(`/api/tickets/${ticketId}/workflow`, { model, harness, context });
     if (result && !result.error) {
         closeModal("ticket-modal");
         navigateTo("agents");
@@ -2215,10 +2292,171 @@ async function createSkill() {
 async function loadAgentModels() {
     const data = await apiGet("/api/agents/models");
     const selects = document.querySelectorAll("[data-agent-model-select]");
-    const models = data?.models || ["qwen/qwen3.6-27b"];
+    let localDefaults = {};
+    try {
+        localDefaults = JSON.parse(localStorage.getItem("agentRuntimeDefaults") || "{}");
+    } catch {
+        localDefaults = {};
+    }
+    agentRuntimeConfig = {
+        models: data?.models || ["qwen/qwen3.6-27b"],
+        default_model: localDefaults.default_model || data?.default_model || data?.default || "qwen/qwen3.6-27b",
+        default_harness: localDefaults.default_harness || data?.default_harness || "hermes",
+        setups: data?.setups || [],
+        available_harnesses: data?.available_harnesses || [{ name: "hermes" }, { name: "claude-code" }],
+    };
+    const models = agentRuntimeConfig.models;
     selects.forEach(select => {
         select.innerHTML = models.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join("");
+        const preferred = select.id === "agent-model-select" || select.id === "setup-model"
+            ? agentRuntimeConfig.default_model
+            : select.value || agentRuntimeConfig.default_model;
+        if (preferred && models.includes(preferred)) select.value = preferred;
     });
+    renderAgentHarnessSelectors();
+    renderAgentSetupSelector();
+}
+
+function renderAgentHarnessSelectors() {
+    const harnesses = (agentRuntimeConfig.available_harnesses || [{ name: "hermes" }, { name: "claude-code" }])
+        .map(h => h.name || h)
+        .filter(Boolean);
+    document.querySelectorAll("[data-agent-harness-select]").forEach(select => {
+        const current = select.value || agentRuntimeConfig.default_harness || "hermes";
+        select.innerHTML = harnesses.map(h => `<option value="${escAttr(h)}">${h === "claude-code" ? "Claude Code" : escHtml(h)}</option>`).join("");
+        select.value = harnesses.includes(current) ? current : (agentRuntimeConfig.default_harness || harnesses[0] || "hermes");
+    });
+    const setupHarness = document.getElementById("setup-harness");
+    if (setupHarness && agentRuntimeConfig.default_harness) setupHarness.value = agentRuntimeConfig.default_harness;
+    const defaultHarness = document.getElementById("agent-default-harness");
+    if (defaultHarness) defaultHarness.value = agentRuntimeConfig.default_harness || "hermes";
+    const defaultModel = document.getElementById("agent-default-model");
+    if (defaultModel && agentRuntimeConfig.default_model) defaultModel.value = agentRuntimeConfig.default_model;
+}
+
+function renderAgentSetupSelector() {
+    const select = document.getElementById("agent-setup-select");
+    if (!select) return;
+    const setups = agentRuntimeConfig.setups || [];
+    const current = select.value;
+    select.innerHTML = '<option value="">Default setup</option>' + setups.map((setup, idx) => (
+        `<option value="${idx}">${escHtml(setup.name)} - ${escHtml(setup.harness)} / ${escHtml(setup.model)}</option>`
+    )).join("");
+    if (current && setups[Number(current)]) select.value = current;
+}
+
+function setAgentConfigStatus(message, kind = "") {
+    const el = document.getElementById("agent-config-status");
+    if (!el) return;
+    el.textContent = message || "";
+    el.className = `setup-help agent-config-status ${kind}`.trim();
+}
+
+function selectedAgentHarness() {
+    return document.getElementById("agent-default-harness")?.value
+        || document.getElementById("setup-harness")?.value
+        || agentRuntimeConfig.default_harness
+        || "hermes";
+}
+
+function selectedAgentModel() {
+    return document.getElementById("agent-model-select")?.value
+        || document.getElementById("agent-default-model")?.value
+        || agentRuntimeConfig.default_model
+        || "qwen/qwen3.6-27b";
+}
+
+async function saveAgentDefaults() {
+    const defaultHarness = document.getElementById("agent-default-harness")?.value || agentRuntimeConfig.default_harness || "hermes";
+    const defaultModel = document.getElementById("agent-default-model")?.value || agentRuntimeConfig.default_model || selectedAgentModel();
+    const payload = {
+        default_harness: defaultHarness,
+        default_model: defaultModel,
+        setups: agentRuntimeConfig.setups || [],
+    };
+    const updated = await apiPut("/api/agents/config", {
+        ...payload,
+    });
+    if (updated?.default_harness && !updated.error) {
+        agentRuntimeConfig = updated;
+        try { localStorage.removeItem("agentRuntimeDefaults"); } catch {}
+        await loadAgentModels();
+        loadRunnerHealth();
+        setAgentConfigStatus("Saved server default.");
+    } else if (updated?.error) {
+        try { localStorage.setItem("agentRuntimeDefaults", JSON.stringify(payload)); } catch {}
+        agentRuntimeConfig.default_harness = defaultHarness;
+        agentRuntimeConfig.default_model = defaultModel;
+        setAgentConfigStatus("Saved in this browser; server persistence waits for the next safe API recycle.", "warning");
+    } else {
+        try { localStorage.setItem("agentRuntimeDefaults", JSON.stringify(payload)); } catch {}
+        agentRuntimeConfig.default_harness = defaultHarness;
+        agentRuntimeConfig.default_model = defaultModel;
+        setAgentConfigStatus("Saved in this browser; server persistence waits for the next safe API recycle.", "warning");
+    }
+}
+
+function applyAgentSetupSelection() {
+    const idx = document.getElementById("agent-setup-select")?.value;
+    const setup = idx === "" ? null : (agentRuntimeConfig.setups || [])[Number(idx)];
+    if (!setup) {
+        const name = document.getElementById("agent-setup-name");
+        if (name) name.value = "";
+        return;
+    }
+    const name = document.getElementById("agent-setup-name");
+    const harness = document.getElementById("agent-setup-harness");
+    const model = document.getElementById("agent-setup-model");
+    if (name) name.value = setup.name || "";
+    if (harness) harness.value = setup.harness || agentRuntimeConfig.default_harness || "hermes";
+    if (model) model.value = setup.model || agentRuntimeConfig.default_model || selectedAgentModel();
+    const defaultHarness = document.getElementById("agent-default-harness");
+    const defaultModel = document.getElementById("agent-default-model");
+    if (defaultHarness) defaultHarness.value = setup.harness || defaultHarness.value;
+    if (defaultModel) defaultModel.value = setup.model || defaultModel.value;
+}
+
+async function saveAgentSetup() {
+    const name = document.getElementById("agent-setup-name")?.value.trim();
+    if (!name) {
+        alert("Name the setup first.");
+        return;
+    }
+    const setup = {
+        name,
+        harness: document.getElementById("agent-setup-harness")?.value || selectedAgentHarness(),
+        model: document.getElementById("agent-setup-model")?.value || selectedAgentModel(),
+    };
+    const setups = (agentRuntimeConfig.setups || []).filter(s => String(s.name || "").toLowerCase() !== name.toLowerCase());
+    setups.push(setup);
+    const updated = await apiPut("/api/agents/config", {
+        default_harness: agentRuntimeConfig.default_harness || setup.harness,
+        default_model: agentRuntimeConfig.default_model || setup.model,
+        setups,
+    });
+    if (updated && !updated.error) {
+        agentRuntimeConfig = updated;
+        await loadAgentModels();
+        const select = document.getElementById("agent-setup-select");
+        if (select) select.value = String((agentRuntimeConfig.setups || []).findIndex(s => s.name === setup.name));
+    } else if (updated?.error) {
+        alert(updated.error);
+    }
+}
+
+async function deleteAgentSetup() {
+    const idx = document.getElementById("agent-setup-select")?.value;
+    if (idx === "") return;
+    const setups = (agentRuntimeConfig.setups || []).filter((_, rowIdx) => rowIdx !== Number(idx));
+    const updated = await apiPut("/api/agents/config", {
+        default_harness: agentRuntimeConfig.default_harness,
+        default_model: agentRuntimeConfig.default_model,
+        setups,
+    });
+    if (updated && !updated.error) {
+        agentRuntimeConfig = updated;
+        await loadAgentModels();
+    }
 }
 
 // Approve change
@@ -2280,6 +2518,8 @@ let setupManifest = null;
 let setupPlan = null;
 let setupRuntime = null;
 let setupModuleStatuses = {};
+let setupModuleActions = {};
+let setupModuleNotes = {};
 
 async function loadSetup() {
     setupManifest = await apiGet("/api/setup/manifest");
@@ -2304,7 +2544,7 @@ function renderSetupRuntime() {
     const aiInput = document.getElementById("setup-ai-base-url");
     if (aiInput && !aiInput.value && proxy) aiInput.value = proxy;
     const harnessSelect = document.getElementById("setup-harness");
-    if (harnessSelect && ["hermes", "claude-code"].includes(harness)) harnessSelect.value = harness;
+    if (harnessSelect) harnessSelect.value = agentRuntimeConfig.default_harness || harness || "hermes";
     panel.innerHTML = `
         <div><strong>Proxy URL:</strong> ${escHtml(proxy || "not configured")}</div>
         <div><strong>Proxy health:</strong> <span class="status-badge ${statusClass(modelStatus)}">${escHtml(modelStatus)}</span></div>
@@ -2320,20 +2560,54 @@ function setupSelectedProfileModules() {
     return new Set(setupManifest?.profiles?.[profile]?.modules || []);
 }
 
+function defaultSetupActionFor(module, profileModules = setupSelectedProfileModules()) {
+    const moduleStatus = setupModuleStatuses[module.id] || {};
+    const deployStatus = moduleStatus.deployment_status || "not_configured";
+    const isReady = ["ready", "built_in", "configured"].includes(deployStatus);
+    return isReady ? "keep" : (profileModules.has(module.id) ? "deploy" : "disabled");
+}
+
+function syncSetupModuleInputs() {
+    document.querySelectorAll("[data-setup-action]").forEach(input => {
+        setupModuleActions[input.dataset.setupAction] = input.value || "disabled";
+    });
+    document.querySelectorAll("[data-setup-notes]").forEach(input => {
+        setupModuleNotes[input.dataset.setupNotes] = input.value || "";
+    });
+}
+
 function renderSetupModules() {
     const grid = document.getElementById("setup-modules");
     if (!grid || !setupManifest) return;
+    syncSetupModuleInputs();
     const selected = setupSelectedProfileModules();
     const modules = setupManifest.modules || [];
-    grid.innerHTML = modules.map(m => {
+    const categorySelect = document.getElementById("setup-module-category");
+    if (categorySelect && categorySelect.options.length <= 1) {
+        const categories = [...new Set(modules.map(m => m.category).filter(Boolean))].sort();
+        categorySelect.innerHTML = '<option value="">All categories</option>' + categories.map(c => `<option value="${escAttr(c)}">${escHtml(c)}</option>`).join("");
+    }
+    const search = (document.getElementById("setup-module-search")?.value || "").trim().toLowerCase();
+    const category = document.getElementById("setup-module-category")?.value || "";
+    const actionFilter = document.getElementById("setup-module-action-filter")?.value || "";
+    const visibleModules = modules.filter(m => {
+        const inProfile = selected.has(m.id);
+        const defaultAction = setupModuleActions[m.id] || defaultSetupActionFor(m, selected);
+        const haystack = [m.id, m.name, m.category, m.status, m.skill, m.provider_contract, m.notes].join(" ").toLowerCase();
+        return (!search || haystack.includes(search))
+            && (!category || m.category === category)
+            && (!actionFilter || defaultAction === actionFilter);
+    });
+    const countEl = document.getElementById("setup-module-count");
+    if (countEl) countEl.textContent = `${visibleModules.length} of ${modules.length} modules`;
+    grid.innerHTML = visibleModules.map(m => {
         const inProfile = selected.has(m.id);
         const statusLabel = m.status || "unknown";
         const moduleStatus = setupModuleStatuses[m.id] || {};
         const deployStatus = moduleStatus.deployment_status || "not_configured";
-        const isReady = ["ready", "built_in", "configured"].includes(deployStatus);
-        const defaultAction = isReady ? "keep" : (inProfile ? "deploy" : "disabled");
+        const defaultAction = setupModuleActions[m.id] || defaultSetupActionFor(m, selected);
         return `
-            <div class="module-card ${inProfile ? "selected" : ""}">
+            <div class="module-card ${inProfile ? "selected" : ""}" data-module-card="${escAttr(m.id)}">
                 <div class="module-card-head">
                     <div>
                         <strong>${escHtml(m.name)}</strong>
@@ -2347,14 +2621,14 @@ function renderSetupModules() {
                 </div>
                 <div class="module-desc">${escHtml(m.notes || "")}</div>
                 <div class="module-controls">
-                    <select class="filter-select" data-setup-action="${escAttr(m.id)}" onchange="generateSetupPlan()">
+                    <select class="filter-select" data-setup-action="${escAttr(m.id)}" onchange="setupModuleActions['${escJs(m.id)}']=this.value;generateSetupPlan()">
                         <option value="keep" ${defaultAction === "keep" ? "selected" : ""}>Keep active</option>
                         <option value="deploy" ${defaultAction === "deploy" ? "selected" : ""}>Deploy reference</option>
                         <option value="integrate">Integrate existing</option>
                         <option value="disabled" ${defaultAction === "disabled" ? "selected" : ""}>Off / not in scope</option>
                     </select>
                 </div>
-                <textarea class="setup-textarea module-note-input" rows="3" data-setup-notes="${escAttr(m.id)}" placeholder="Module notes: port, endpoint, credential vault key, tenant, migration detail..."></textarea>
+                <textarea class="setup-textarea module-note-input" rows="3" data-setup-notes="${escAttr(m.id)}" oninput="setupModuleNotes['${escJs(m.id)}']=this.value" placeholder="Module notes: port, endpoint, credential vault key, tenant, migration detail...">${escHtml(setupModuleNotes[m.id] || "")}</textarea>
                 <div class="module-actions-row">
                     <button class="btn btn-sm" onclick="createModuleSetupTicket('${escJs(m.id)}', null, false)">Ticket</button>
                     <button class="btn btn-sm btn-warning" onclick="createModuleSetupTicket('${escJs(m.id)}', null, true)">Ticket + Agent</button>
@@ -2364,10 +2638,27 @@ function renderSetupModules() {
                 ${m.skill ? `<div class="module-meta">Skill: ${escHtml(m.skill)} ${m.skill_available ? "" : "(missing in container)"}</div>` : ""}
             </div>
         `;
-    }).join("");
+    }).join("") || '<div class="tool-empty">No modules match the current filters</div>';
+}
+
+function bulkSetSetupModules(action) {
+    syncSetupModuleInputs();
+    const selected = setupSelectedProfileModules();
+    document.querySelectorAll("[data-setup-action]").forEach(input => {
+        const id = input.dataset.setupAction;
+        if (action === "profile") {
+            const module = (setupManifest.modules || []).find(m => m.id === id) || { id };
+            input.value = defaultSetupActionFor(module, selected);
+        } else {
+            input.value = action;
+        }
+        setupModuleActions[id] = input.value;
+    });
+    generateSetupPlan();
 }
 
 function collectSetupChoices() {
+    syncSetupModuleInputs();
     const profile = document.getElementById("setup-profile")?.value || "soc";
     const profileModules = setupSelectedProfileModules();
     const include = [];
@@ -2375,17 +2666,16 @@ function collectSetupChoices() {
     const existingTools = [];
     const moduleActions = {};
     const moduleNotes = {};
-    document.querySelectorAll("[data-setup-action]").forEach(input => {
-        const id = input.dataset.setupAction;
-        const action = input.value || "disabled";
+    (setupManifest?.modules || []).forEach(module => {
+        const id = module.id;
+        const action = setupModuleActions[id] || defaultSetupActionFor(module, profileModules);
         moduleActions[id] = action;
         if (action !== "disabled" && !profileModules.has(id)) include.push(id);
         if (action === "disabled" && profileModules.has(id)) exclude.push(id);
         if (action === "integrate") existingTools.push(id);
     });
-    document.querySelectorAll("[data-setup-notes]").forEach(input => {
-        const value = input.value?.trim();
-        if (value) moduleNotes[input.dataset.setupNotes] = value;
+    Object.entries(setupModuleNotes).forEach(([id, value]) => {
+        if (String(value || "").trim()) moduleNotes[id] = String(value).trim();
     });
     return {
         profile,

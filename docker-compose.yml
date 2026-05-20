@@ -141,10 +141,11 @@ services:
       AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE: ${AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE:-1}
       AGENT_AUDITOR_AUTO_RECOVER: ${AGENT_AUDITOR_AUTO_RECOVER:-false}
       AGENT_PERMISSION_MODE: ${AGENT_PERMISSION_MODE:-acceptEdits}
-      AGENT_ALLOWED_TOOLS: ${AGENT_ALLOWED_TOOLS:-Read,Write,Bash(curl *),Bash(node *),Bash(npx *),Bash(playwright *)}
+      AGENT_ALLOWED_TOOLS: ${AGENT_ALLOWED_TOOLS:-Read,Write,Bash(curl *),Bash(python *),Bash(python3 *),Bash(node *),Bash(npx *),Bash(playwright *)}
       AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:-http://ai-proxy:4001}
       AGENT_LLM_AUTH_TOKEN: ${AGENT_LLM_AUTH_TOKEN:-}
       OPS_CHAT_AGENT_MODEL: ${OPS_CHAT_AGENT_MODEL:-local/agent-default}
+      OPS_CHAT_SEARCH_URL: ${OPS_CHAT_SEARCH_URL:-http://host.docker.internal:7999}
       HERMES_BIN: ${HERMES_BIN:-/home/cereal/.hermes/hermes-agent/venv/bin/hermes}
       HERMES_HOME: ${HERMES_HOME:-/home/cereal/.hermes}
       HERMES_DEFAULT_PROVIDER: ${HERMES_DEFAULT_PROVIDER:-dashboard-proxy}
@@ -189,7 +190,7 @@ services:
       - ./frontend:/frontend:ro
       - ./platform:/app/platform:ro
       - ./reference_skills:/app/skills:ro
-      - ./agent_models.json:/app/agent_models.json:ro
+      - ./agent_models.json:/app/agent_models.json:rw
       - ./agent_work:/app/agent_work
       - ${CLAUDE_CREDENTIALS_FILE:-./runtime/empty_credentials.json}:/root/.claude/.credentials.json:ro
       - ${CLAUDE_SETTINGS_FILE:-./runtime/claude_settings.json}:/root/.claude/settings.json:ro
@@ -311,6 +312,8 @@ services:
       MATRIX_BOT_DISPLAY_NAME: ${MATRIX_BOT_DISPLAY_NAME:-Agentic Ops Agent}
       MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-agentic-ops.local}
       OPS_CHAT_BRIDGE_PORT: 29318
+      OPS_CHAT_OUTBOUND_ENABLED: ${OPS_CHAT_OUTBOUND_ENABLED:-true}
+      OPS_CHAT_OUTBOUND_POLL_SECONDS: ${OPS_CHAT_OUTBOUND_POLL_SECONDS:-5}
     depends_on:
       api:
         condition: service_started

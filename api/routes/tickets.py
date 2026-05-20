@@ -214,6 +214,7 @@ async def create_ticket(
     sync_provider: bool = Body(None),
     created_by: str = Body("dashboard"),
     auto_assign: bool = Body(True),
+    assignee_team: str = Body(None),
     owning_group: str = Body(None),
     security_classification: str = Body("internal"),
     access_scope: dict = Body(None),
@@ -243,6 +244,10 @@ async def create_ticket(
     if owning_group is not None:
         update_fields.append(f"owning_group = ${idx}")
         update_values.append(owning_group)
+        idx += 1
+    if assignee_team is not None:
+        update_fields.append(f"assignee_team = ${idx}")
+        update_values.append(assignee_team)
         idx += 1
     if security_classification:
         update_fields.append(f"security_classification = ${idx}")
@@ -574,6 +579,7 @@ async def sync_all(body=Body(None)):
 async def assign_agent(
     ticket_id: int,
     model: str = Body("deepseek/deepseek-v4-flash"),
+    harness: str = Body(None),
     prompt: str = Body(None),
     requested_permissions: list = Body(None),
     request: Request = None,
@@ -602,12 +608,17 @@ async def assign_agent(
             "agent_id": active_agent["id"],
             "status": active_agent["status"],
         }
+    spawn_kwargs = {
+        "actor_context": access_control.subject_from_request(request),
+        "requested_permissions": requested_permissions,
+    }
+    if harness:
+        spawn_kwargs["harness"] = harness
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
         prompt or build_ticket_resolution_prompt(ticket),
-        actor_context=access_control.subject_from_request(request),
-        requested_permissions=requested_permissions,
+        **spawn_kwargs,
     )
     await log_event("ticket", "info", "dashboard", "agent_assigned",
                     f"ticket_{ticket_id}", {"model": model, "agent_id": result.get("agent_id")})
@@ -618,6 +629,7 @@ async def assign_agent(
 async def start_postmortem(
     ticket_id: int,
     model: str = Body("deepseek/deepseek-v4-flash"),
+    harness: str = Body(None),
     context: str = Body(None),
     request: Request = None,
 ):
@@ -649,12 +661,15 @@ async def start_postmortem(
             "status": active_postmortem["status"],
         }
 
+    spawn_kwargs = {"actor_context": access_control.subject_from_request(request)}
+    if harness:
+        spawn_kwargs["harness"] = harness
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
         build_postmortem_prompt(ticket, context),
         "postmortem",
-        actor_context=access_control.subject_from_request(request),
+        **spawn_kwargs,
     )
     await log_event("agent", "info", "dashboard", "postmortem_requested",
                     f"ticket_{ticket_id}", {"model": model, "agent_id": result.get("agent_id")})
@@ -665,6 +680,7 @@ async def start_postmortem(
 async def start_workflow_build(
     ticket_id: int,
     model: str = Body("deepseek/deepseek-v4-flash"),
+    harness: str = Body(None),
     context: str = Body(None),
     request: Request = None,
 ):
@@ -696,12 +712,15 @@ async def start_workflow_build(
             "status": active_workflow["status"],
         }
 
+    spawn_kwargs = {"actor_context": access_control.subject_from_request(request)}
+    if harness:
+        spawn_kwargs["harness"] = harness
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
         build_workflow_prompt(ticket, context),
         "workflow_build",
-        actor_context=access_control.subject_from_request(request),
+        **spawn_kwargs,
     )
     await log_event("agent", "info", "dashboard", "workflow_build_requested",
                     f"ticket_{ticket_id}", {"model": model, "agent_id": result.get("agent_id")})

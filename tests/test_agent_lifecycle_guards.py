@@ -1085,6 +1085,16 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertEqual(allowed.returncode, 0)
         self.assertIn("ok", allowed.stdout)
 
+    def test_dashboard_api_helper_is_provisioned_for_safe_agent_json_reads(self):
+        module = load_agent_runner()
+        with tempfile.TemporaryDirectory() as tmp:
+            helper = module._write_dashboard_api_helper(tmp)
+            helper_text = Path(helper).read_text(encoding="utf-8")
+
+        self.assertIn("dashboard_session=", helper_text)
+        self.assertIn("urllib.request", helper_text)
+        self.assertIn("Safe bounded dashboard API helper", helper_text)
+
     def test_ticket_prompts_include_suspicious_url_guardrail(self):
         module = load_task_prompts()
         ticket = {"id": 42, "title": "reported phish"}

@@ -120,17 +120,24 @@ Keycloak roles.
 
 ## Demo Routing Notes
 
-The Ops Chat demo uses RACI as the source of truth for intake routing. Current
-high-signal examples:
+The Ops Chat demo is agent-intake-first. The chat harness chooses whether to
+answer directly or create a ticket, and if it creates a ticket it chooses the
+initial class, priority, and assignment group through `ops_chat_tool.py`.
+RACI/service rules remain the organization policy map, access-owner reference,
+and demo expectation hints; they are not an app-side parser in front of the
+chat agent.
+
+Current high-signal examples:
 
 - Account lockout or MFA help routes to `Identity & Access`.
 - Software install requests route to `Endpoint Support`.
 - VPN tunnel failures such as "VPN stopped connecting after reboot" route to
   `Network Operations` through intent `vpn-connectivity`.
 - Repository, pipeline, and delivery-gate requests route to `DevSecOps`.
-- Phishing and EDR/security alerts route to `Security Operations` and open
-  approval gates before mailbox, SIEM, containment, URL block, or endpoint
-  response work.
+- Phishing and EDR/security alerts route to `Security Operations`. Approval
+  gates for mailbox, SIEM, containment, URL block, or endpoint response work
+  are opened later only when the ticket agent hits the real workflow/provider
+  barrier.
 
 When a message mixes concepts, prefer the operational blocker. For example,
 "I cannot reach the finance file share because VPN stopped connecting" should

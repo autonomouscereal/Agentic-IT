@@ -8,5 +8,18 @@
     "qwen/qwen3.6-27b4",
     "qwen/qwen3.6-27b5"
   ],
-  "default": "local/agent-default"
+  "default": "local/agent-default",
+  "default_harness": "hermes",
+  "setups": [
+    {
+      "name": "Hermes local default",
+      "harness": "hermes",
+      "model": "local/agent-default"
+    },
+    {
+      "name": "Claude external fallback",
+      "harness": "claude-code",
+      "model": "deepseek/deepseek-v4-flash"
+    }
+  ]
 }

@@ -473,7 +473,9 @@ Covers:
 - ticket creation from chat
 - real dashboard agent harness queue handoff for operational work
 - follow-up chat continuing the same ticket through `user-response` notes
-- agent intake decision note in ticket context
+- `Ops Chat agent-created ticket` note in ticket context
+- outbound delivery of user-facing `/request-info` and ticket status notes to
+  Matrix via `/api/ops-chat/outbound/pending` and idempotent ack
 - dashboard service-token authentication for the Matrix bridge
 
 ## Ops Chat Scenario Smoke

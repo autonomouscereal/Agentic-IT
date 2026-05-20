@@ -16,6 +16,8 @@ MATRIX_BOT_LOCALPART = os.getenv("MATRIX_BOT_LOCALPART", "agentic-ops")
 MATRIX_SERVER_NAME = os.getenv("MATRIX_SERVER_NAME", "agentic-ops.local")
 MATRIX_BOT_DISPLAY_NAME = os.getenv("MATRIX_BOT_DISPLAY_NAME", "Agentic Ops Agent")
 PORT = int(os.getenv("OPS_CHAT_BRIDGE_PORT", "29318"))
+OUTBOUND_ENABLED = os.getenv("OPS_CHAT_OUTBOUND_ENABLED", "true").lower() not in ("0", "false", "no", "off")
+OUTBOUND_POLL_SECONDS = float(os.getenv("OPS_CHAT_OUTBOUND_POLL_SECONDS", "5"))
 
 BOT_USER_ID = f"@{MATRIX_BOT_LOCALPART}:{MATRIX_SERVER_NAME}"
 PROCESSED = set()
@@ -81,6 +83,43 @@ async def dashboard_chat(message, room_id, event_id, sender):
                 return {"reply": text[:1000], "error": True}
 
 
+async def dashboard_outbound_pending(limit=50):
+    headers = {
+        "X-Dashboard-Service-Token": DASHBOARD_SERVICE_TOKEN,
+        "X-Dashboard-Service-User": "ops-chat-matrix-bridge",
+    }
+    async with ClientSession(headers=headers) as session:
+        async with session.get(
+            f"{DASHBOARD_API_BASE}/api/ops-chat/outbound/pending?limit={int(limit)}&matrix_only=true",
+            timeout=30,
+        ) as response:
+            text = await response.text()
+            if response.status >= 400:
+                print(f"Dashboard outbound poll failed {response.status}: {text[:400]}", flush=True)
+                return []
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                print(f"Dashboard outbound poll returned non-JSON: {text[:400]}", flush=True)
+                return []
+            return payload.get("events") or []
+
+
+async def dashboard_outbound_ack(event):
+    headers = {
+        "Content-Type": "application/json",
+        "X-Dashboard-Service-Token": DASHBOARD_SERVICE_TOKEN,
+        "X-Dashboard-Service-User": "ops-chat-matrix-bridge",
+    }
+    async with ClientSession(headers=headers) as session:
+        async with session.post(f"{DASHBOARD_API_BASE}/api/ops-chat/outbound/ack", json=event, timeout=30) as response:
+            text = await response.text()
+            if response.status >= 400:
+                print(f"Dashboard outbound ack failed {response.status}: {text[:400]}", flush=True)
+                return False
+            return True
+
+
 async def send_matrix_message(room_id, text):
     txn_id = f"ops-{int(time.time() * 1000)}"
     url = (
@@ -94,6 +133,8 @@ async def send_matrix_message(room_id, text):
             if response.status >= 400:
                 body = await response.text()
                 print(f"Matrix send failed {response.status}: {body}", flush=True)
+                return False
+            return True
 
 
 async def join_matrix_room(room_id):
@@ -167,7 +208,49 @@ async def health(request):
         "bot_user_id": BOT_USER_ID,
         "dashboard": DASHBOARD_API_BASE,
         "homeserver": MATRIX_HOMESERVER_URL,
+        "outbound_enabled": OUTBOUND_ENABLED,
+        "outbound_poll_seconds": OUTBOUND_POLL_SECONDS,
     })
+
+
+async def poll_dashboard_outbound(app):
+    await asyncio.sleep(3)
+    while True:
+        try:
+            events = await dashboard_outbound_pending(limit=50)
+            for event in events:
+                room_id = event.get("room_id")
+                body = event.get("body")
+                if not room_id or not body:
+                    continue
+                sent = await send_matrix_message(room_id, body)
+                if sent:
+                    await dashboard_outbound_ack(event)
+                    print(
+                        f"Delivered outbound chat event {event.get('event_key')} "
+                        f"for ticket {event.get('ticket_id')} to {room_id}",
+                        flush=True,
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"Dashboard outbound poll loop failed: {exc}", flush=True)
+        await asyncio.sleep(max(1.0, OUTBOUND_POLL_SECONDS))
+
+
+async def start_background(app):
+    if OUTBOUND_ENABLED:
+        app["outbound_task"] = asyncio.create_task(poll_dashboard_outbound(app))
+
+
+async def stop_background(app):
+    task = app.get("outbound_task")
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 async def transactions(request):
@@ -196,6 +279,8 @@ async def rooms(request):
 def create_app():
     app = web.Application()
     app.on_startup.append(lambda _app: ensure_bot_profile())
+    app.on_startup.append(start_background)
+    app.on_cleanup.append(stop_background)
     app.router.add_get("/health", health)
     app.router.add_put("/_matrix/app/v1/transactions/{txn_id}", transactions)
     app.router.add_get("/_matrix/app/v1/users/{user_id}", users)

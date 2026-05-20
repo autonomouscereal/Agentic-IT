@@ -67,7 +67,21 @@ def run_general_chat(base, marker):
     })
     require(not result.get("created_ticket"), f"general chat should not create a ticket: {result}")
     require(result.get("ticket_id") is None, f"general chat returned a ticket: {result}")
-    return {"scenario": "general-chat", "reply": result.get("reply", "")[:180]}
+    web = request(base, "POST", "/api/ops-chat/message", {
+        "message": f"What is a current rough median home price in Reno Nevada? Use private web search if needed. Marker {marker}.",
+        "requester_name": "Demo User",
+        "requester_email": "demo@example.invalid",
+        "external_thread_id": f"{marker}-web-search",
+        "force_new_ticket": True,
+        "spawn_agent": False,
+    })
+    require(not web.get("created_ticket"), f"benign web question should not create a ticket: {web}")
+    require(len(str(web.get("reply") or "")) > 20, f"benign web question returned weak reply: {web}")
+    return {
+        "scenario": "general-chat",
+        "reply": result.get("reply", "")[:180],
+        "web_search_reply": web.get("reply", "")[:220],
+    }
 
 
 def run_ticket_scenario(base, marker, name, message, expected_group, expected_intent=None,
@@ -92,7 +106,7 @@ def run_ticket_scenario(base, marker, name, message, expected_group, expected_in
                 f"{name} opened an intake-time approval gate; gates must come from execution barriers: {result}")
     context = get_context(base, ticket_id)
     bodies = note_bodies(context)
-    require(any("Ops Chat agent-created ticket" in body or "Ops Chat agent intake decision" in body for body in bodies),
+    require(any("Ops Chat agent-created ticket" in body for body in bodies),
             f"{name} ticket missing Ops Chat agent-created ticket note")
 
     follow = request(base, "POST", "/api/ops-chat/message", {

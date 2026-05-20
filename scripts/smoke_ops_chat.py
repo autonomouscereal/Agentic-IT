@@ -51,8 +51,7 @@ def main():
     context = request("GET", f"/api/tickets/{ticket_id}/context")
     notes = context.get("notes") or []
     require(any(
-        "Ops Chat agent-created ticket" in str(note.get("body", "")) or
-        "Ops Chat agent intake decision" in str(note.get("body", ""))
+        "Ops Chat agent-created ticket" in str(note.get("body", ""))
         for note in notes
     ), "ticket context missing Ops Chat agent-created ticket note")
     health = request("GET", "/api/ops-chat/matrix/health")
@@ -66,12 +65,39 @@ def main():
         "spawn_agent": SPAWN_AGENT,
     })
     require(follow.get("continued_ticket"), f"Ops Chat follow-up did not continue existing ticket: {follow}")
+    ask = request("POST", f"/api/tickets/{ticket_id}/request-info", {
+        "question": f"What username is affected? Marker ops-chat-{stamp}.",
+        "requested_by": "smoke_ops_chat",
+        "contact_method": "matrix",
+        "recipient": "Demo User",
+        "context": "Outbound chat delivery smoke.",
+    })
+    require(ask.get("status") == "awaiting_user_response", f"request-info failed: {ask}")
+    pending = request("GET", f"/api/ops-chat/outbound/pending?limit=20&ticket_id={ticket_id}")
+    events = pending.get("events") or []
+    event = next((item for item in events if item.get("ticket_id") == ticket_id and item.get("source") == "user-info-request"), None)
+    require(event, f"Ops Chat outbound did not expose pending user-info request: {pending}")
+    ack = request("POST", "/api/ops-chat/outbound/ack", event)
+    require(ack.get("status") in ("acked", "already_acked"), f"Ops Chat outbound ack failed: {ack}")
+    pending_after_ack = request("GET", f"/api/ops-chat/outbound/pending?limit=20&ticket_id={ticket_id}")
+    require(not any(item.get("event_key") == event.get("event_key") for item in pending_after_ack.get("events") or []),
+            f"Ops Chat outbound event reappeared after ack: {pending_after_ack}")
+    restored = request("POST", "/api/ops-chat/message", {
+        "session_id": direct.get("session_id"),
+        "message": f"Follow-up for ops-chat-{stamp}: my username is demo.user.",
+        "requester_name": "Demo User",
+        "requester_email": "demo@example.invalid",
+        "spawn_agent": False,
+    })
+    require(restored.get("continued_ticket"), f"Ops Chat response did not continue ticket: {restored}")
     print(json.dumps({
         "status": "passed",
         "base": BASE,
         "direct_ticket_id": ticket_id,
         "agent": direct.get("agent"),
         "follow_up": follow.get("reply", "")[:180],
+        "outbound_event": event.get("event_key"),
+        "status_restore": (restored.get("status_restore") or {}).get("status"),
     }, indent=2))
 
 

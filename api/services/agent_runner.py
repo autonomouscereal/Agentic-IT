@@ -35,7 +35,7 @@ MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "/app/agent_models.json")
 AGENT_PERMISSION_MODE = os.getenv("AGENT_PERMISSION_MODE", "acceptEdits")
 AGENT_ALLOWED_TOOLS = os.getenv(
     "AGENT_ALLOWED_TOOLS",
-    "Read,Write,Bash(curl *),Bash(node *),Bash(npx *),Bash(playwright *)",
+    "Read,Write,Bash(curl *),Bash(python *),Bash(python3 *),Bash(node *),Bash(npx *),Bash(playwright *)",
 ).strip()
 AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", "").strip()
 AGENT_LLM_AUTH_TOKEN = os.getenv("AGENT_LLM_AUTH_TOKEN", "").strip()
@@ -115,7 +115,7 @@ def _transient_model_operator_summary(error):
     return "Model provider returned a transient error. The runner preserved progress and will retry or fall back according to provider policy."
 
 
-async def _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds):
+async def _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds, selected_harness=None):
     """Put the same task back on the runner queue after a provider backoff."""
     if delay_seconds > 0:
         await asyncio.sleep(delay_seconds)
@@ -130,7 +130,7 @@ async def _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_i
     if task_meta.get("task_status") != "queued" or task_meta.get("agent_status") in ("stopped", "terminated", "failed", "finished"):
         return
     sequence = next(_queue_counter)
-    await _agent_queue.put((priority_rank, sequence, work_dir, prompt, task_id, agent_id))
+    await _agent_queue.put((priority_rank, sequence, work_dir, prompt, task_id, agent_id, selected_harness))
     await log_event("agent", "info", f"agent_{agent_id}", "agent_transient_model_retry_enqueued",
                     f"task_{task_id}", {
                         "priority_rank": priority_rank,
@@ -139,7 +139,7 @@ async def _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_i
                     })
 
 
-async def _schedule_transient_model_retry(agent_id, task_id, task_meta, work_dir, prompt, result, error):
+async def _schedule_transient_model_retry(agent_id, task_id, task_meta, work_dir, prompt, result, error, selected_harness=None):
     """Schedule a retry/resume for provider-capacity errors."""
     if AGENT_TRANSIENT_MODEL_RETRY_MAX <= 0 or not _is_transient_model_capacity_error(error):
         return None
@@ -212,7 +212,7 @@ async def _schedule_transient_model_retry(agent_id, task_id, task_meta, work_dir
                         "error": error[:500],
                     })
     asyncio.create_task(
-        _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds)
+        _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds, selected_harness)
     )
     return {"status": "scheduled", "attempts": attempts, "delay_seconds": delay_seconds}
 
@@ -772,7 +772,12 @@ def _ensure_queue_workers():
 async def _agent_queue_worker():
     """Run queued agent tasks in priority order."""
     while True:
-        priority_rank, sequence, work_dir, prompt, task_id, agent_id = await _agent_queue.get()
+        item = await _agent_queue.get()
+        if len(item) == 6:
+            priority_rank, sequence, work_dir, prompt, task_id, agent_id = item
+            selected_harness = None
+        else:
+            priority_rank, sequence, work_dir, prompt, task_id, agent_id, selected_harness = item
         try:
             await log_event("agent", "info", f"agent_{agent_id}", "agent_queue_dequeued",
                             f"task_{task_id}", {
@@ -780,7 +785,10 @@ async def _agent_queue_worker():
                                 "sequence": sequence,
                                 "queued_depth": _agent_queue.qsize(),
                             })
-            await _spawn_with_semaphore(work_dir, prompt, task_id, agent_id)
+            if selected_harness is None:
+                await _spawn_with_semaphore(work_dir, prompt, task_id, agent_id)
+            else:
+                await _spawn_with_semaphore(work_dir, prompt, task_id, agent_id, selected_harness)
         finally:
             _agent_queue.task_done()
 
@@ -938,6 +946,115 @@ def _write_curl_guard(work_dir, real_curl=None, blocked_paths=None, max_output_b
         f.write(_curl_guard_script(resolved_curl, blocked_paths, max_output_bytes, allowed_hosts))
     os.chmod(guard_path, 0o755)
     return guard_path
+
+
+def _dashboard_api_helper_script():
+    return r'''#!/usr/bin/env python3
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+BASE = os.environ.get("DASHBOARD_API_BASE", "http://localhost:8000").rstrip("/")
+TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
+
+
+def load_workspace_cookie():
+    env_cookie = os.environ.get("DASHBOARD_AGENT_SESSION_COOKIE", "")
+    if env_cookie:
+        return env_cookie
+    current = os.getcwd()
+    for _ in range(8):
+        candidate = os.path.join(current, "dashboard_auth.json")
+        try:
+            with open(candidate, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            cookie = payload.get("cookie")
+            if cookie:
+                return cookie
+        except (OSError, ValueError, TypeError):
+            pass
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return ""
+
+
+def read_payload(args):
+    if args.data_file:
+        with open(args.data_file, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    if args.data:
+        return json.loads(args.data)
+    return None
+
+
+def request(method, path, payload=None, timeout=45):
+    if not path.startswith("/"):
+        path = "/" + path
+    url = BASE + path
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+    cookie = load_workspace_cookie()
+    if cookie:
+        headers["Cookie"] = "dashboard_session=" + cookie
+    if TOKEN:
+        headers["X-Dashboard-Service-Token"] = TOKEN
+    req = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            body = res.read().decode("utf-8", errors="replace")
+            if not body:
+                return {}
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                return {"raw": body}
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        print(json.dumps({
+            "ok": False,
+            "status": exc.code,
+            "path": path,
+            "error": body[:2000],
+        }, indent=2), file=sys.stderr)
+        return {"ok": False, "status": exc.code, "error": body[:2000]}
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Safe bounded dashboard API helper for agent workspaces."
+    )
+    parser.add_argument("method", choices=["get", "post", "put", "patch", "delete"])
+    parser.add_argument("path", help="Dashboard API path, for example /api/tickets/123/context")
+    parser.add_argument("--data-file", default="", help="JSON payload file for POST/PUT/PATCH")
+    parser.add_argument("--data", default="", help="Small JSON payload string; prefer --data-file")
+    parser.add_argument("--timeout", type=int, default=45)
+    args = parser.parse_args()
+    payload = read_payload(args)
+    result = request(args.method, args.path, payload=payload, timeout=args.timeout)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    if isinstance(result, dict) and result.get("ok") is False:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
+def _write_dashboard_api_helper(work_dir):
+    helper_path = os.path.join(work_dir, "dashboard_api.py")
+    with open(helper_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_dashboard_api_helper_script())
+    os.chmod(helper_path, 0o755)
+    return helper_path
 
 
 def _chown_agent_tree(path, uid=None, gid=None):
@@ -1616,6 +1733,117 @@ def _load_model_config():
     return _model_config
 
 
+def _save_model_config(config):
+    """Persist non-secret agent runtime defaults in the model config file."""
+    global _model_config
+    directory = os.path.dirname(MODEL_CONFIG_PATH)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    tmp_path = f"{MODEL_CONFIG_PATH}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, MODEL_CONFIG_PATH)
+    except OSError:
+        # Docker bind-mounted single files can be writable but reject atomic
+        # replace. Fall back to truncating the mounted file in place.
+        with open(MODEL_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+            f.write("\n")
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+    _model_config = config
+    return config
+
+
+def _available_harness_names():
+    return {item.get("name") for item in list_harnesses() if item.get("name")}
+
+
+def _normalize_harness_name(value=None, config=None):
+    config = config or _load_model_config()
+    requested = str(value or "").strip()
+    if requested == "auto":
+        requested = ""
+    fallback = (
+        str(config.get("default_harness") or "").strip()
+        or AGENT_HARNESS
+        or "hermes"
+    )
+    candidate = requested or fallback
+    available = _available_harness_names()
+    if candidate in available:
+        return candidate
+    if fallback in available:
+        return fallback
+    if AGENT_HARNESS in available:
+        return AGENT_HARNESS
+    return "claude-code" if "claude-code" in available else next(iter(available), "claude-code")
+
+
+async def get_agent_runtime_config():
+    """Return model, harness, and operator-defined runtime setups."""
+    config = _load_model_config()
+    models = config.get("models") or ["deepseek/deepseek-v4-flash"]
+    default_model = config.get("default") or models[0]
+    setups = config.get("setups") if isinstance(config.get("setups"), list) else []
+    return {
+        "models": models,
+        "default_model": default_model,
+        "default_harness": _normalize_harness_name(config.get("default_harness"), config),
+        "setups": setups,
+        "available_harnesses": list_harnesses(),
+    }
+
+
+async def update_agent_runtime_config(payload):
+    """Update non-secret agent defaults and named harness/model setups."""
+    payload = payload or {}
+    config = dict(_load_model_config())
+    models = list(config.get("models") or ["deepseek/deepseek-v4-flash"])
+    if payload.get("models"):
+        models = [str(m).strip() for m in payload.get("models") if str(m).strip()]
+        config["models"] = models
+    default_model = str(payload.get("default_model") or payload.get("default") or config.get("default") or (models[0] if models else "")).strip()
+    if default_model:
+        if default_model not in models:
+            models.append(default_model)
+            config["models"] = models
+        config["default"] = default_model
+    config["default_harness"] = _normalize_harness_name(payload.get("default_harness"), config)
+    if "setups" in payload:
+        clean_setups = []
+        seen = set()
+        for row in payload.get("setups") or []:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()[:80]
+            model = str(row.get("model") or "").strip()
+            if not name or not model or name.lower() in seen:
+                continue
+            if model not in models:
+                models.append(model)
+            clean_setups.append({
+                "name": name,
+                "harness": _normalize_harness_name(row.get("harness"), config),
+                "model": model,
+            })
+            seen.add(name.lower())
+        config["models"] = models
+        config["setups"] = clean_setups[:24]
+    saved = _save_model_config(config)
+    await log_event("agent", "info", "dashboard", "agent_runtime_config_updated",
+                    "agent_models", {
+                        "default_model": saved.get("default"),
+                        "default_harness": saved.get("default_harness"),
+                        "setup_count": len(saved.get("setups") or []),
+                    })
+    return await get_agent_runtime_config()
+
+
 def _build_agent_context_md(ticket, skills, prompt):
     """Build workspace instructions for the spawned agent."""
     skills_section = ""
@@ -1647,7 +1875,13 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
 - Base URL inside this runner: `{DASHBOARD_API_BASE}`
 - Authentication is attached automatically by the per-agent curl guard as a
   signed, scoped session cookie. Do not print, copy, store, or manually add
-  dashboard auth material; use `curl` normally against the dashboard API.
+  dashboard auth material.
+- Preferred command path: use the workspace helper `python3 dashboard_api.py`
+  for dashboard reads and writes. Examples:
+  - `python3 dashboard_api.py get /api/tickets/{ticket.get('id', '{ticket_id}')}/context`
+  - `python3 dashboard_api.py post /api/tickets/{ticket.get('id', '{ticket_id}')}/notes --data-file note.json`
+  This helper attaches the scoped session cookie, parses JSON safely, and keeps
+  output readable for humans.
 - Preferred bounded evidence: `GET /api/postmortems/evidence/{ticket.get('id', '{ticket_id}')}?task_log_lines=0&max_notes=8&max_articles=1&max_audit=6`
   - This includes relevant active/tested/approved reusable workflows and knowledge articles; follow matching active/approved workflows first and note any deviation.
 - Ticket detail: `GET /api/tickets/{ticket.get('id', '{ticket_id}')}`
@@ -1660,6 +1894,10 @@ Use the canonical dashboard API for ticket context, notes, approvals, postmortem
   use the Write tool to create a JSON file, then run a simple Bash curl command
   with `-d @payload.json`. Do not create JSON payloads with Bash heredocs or
   inline `-d '{{...}}'`.
+- Never pipe network output into another interpreter or shell. Do not run
+  patterns like `curl ... | python3 -m json.tool`, `curl ... | bash`,
+  `wget ... | sh`, or equivalent. Use `dashboard_api.py`, or save response data
+  to a file and inspect it as data.
 - Poll approval: `GET /api/changes/{{change_id}}/status`
 - Complete approved lab/demo containment when no concrete provider adapter is available: `POST /api/changes/{{change_id}}/complete` with JSON `{{"actor": "agent-<agent_instance_id>", "result": "lab-safe evidence and production adapter note"}}`, then add a ticket note.
 - Persist postmortems: `POST /api/postmortems`
@@ -1915,6 +2153,7 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, 
 
     await _write_agent_dashboard_session(work_dir, agent_id, dashboard_subject)
 
+    helper_path = _write_dashboard_api_helper(work_dir)
     global_guard_path = _write_global_curl_guard()
     guard_path = _write_curl_guard(work_dir)
     if guard_path:
@@ -1922,6 +2161,7 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, 
                         f"task_{task_id}", {
                             "work_dir": work_dir,
                             "guard_path": guard_path,
+                            "dashboard_api_helper": helper_path,
                             "global_guard_path": global_guard_path,
                             "blocked_paths": _split_guard_paths(AGENT_CURL_BLOCKED_PATHS),
                             "max_output_bytes": AGENT_CURL_MAX_OUTPUT_BYTES,
@@ -1951,9 +2191,9 @@ async def _provision_work_dir(agent_id, task_id, model, ticket, skills, prompt, 
     return work_dir
 
 
-async def _run_agent(work_dir, prompt, task_id):
+async def _run_agent(work_dir, prompt, task_id, selected_harness=None):
     """Spawn selected agent harness subprocess and wait for completion."""
-    harness = get_harness(AGENT_HARNESS)
+    harness = get_harness(_normalize_harness_name(selected_harness))
     env = harness.build_env(
         os.environ.copy(),
         llm_base_url=AGENT_LLM_BASE_URL,
@@ -2077,7 +2317,7 @@ async def _run_agent(work_dir, prompt, task_id):
         }
 
 
-async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", actor_context=None, requested_permissions=None):
+async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", actor_context=None, requested_permissions=None, harness=None):
     """Spawn the selected agent harness to work on a ticket.
 
     Returns task_id on success.
@@ -2096,6 +2336,8 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
         "SELECT name, description FROM agent_skills WHERE enabled = true AND assigned_to_all = true"
     )
     skills.extend(row or [])
+
+    selected_harness = _normalize_harness_name(harness)
 
     # Create agent record first (agent_tasks has FK to agents)
     agent_id = await fetchval(
@@ -2191,6 +2433,7 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
     await log_event("agent", "info", f"agent_{agent_id}", "spawn_requested",
                     f"ticket_{ticket_id}", {
                         "model": model,
+                        "harness": selected_harness,
                         "task_id": task_id,
                         "priority": ticket.get("priority"),
                         "priority_rank": priority_rank,
@@ -2202,13 +2445,13 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
         "Agent assigned",
         (
             f"Agent `{agent_id}` was assigned with model `{model}` for `{task_type}`. "
-            f"The runner provisioned an isolated workspace and queued the task with priority rank `{priority_rank}`."
+            f"The runner provisioned an isolated workspace and queued the task with harness `{selected_harness}` and priority rank `{priority_rank}`."
         ),
     )
 
     _ensure_queue_workers()
     sequence = next(_queue_counter)
-    await _agent_queue.put((priority_rank, sequence, work_dir, prompt, task_id, agent_id))
+    await _agent_queue.put((priority_rank, sequence, work_dir, prompt, task_id, agent_id, selected_harness))
     await log_event("agent", "info", f"agent_{agent_id}", "agent_queue_enqueued",
                     f"task_{task_id}", {
                         "priority": ticket.get("priority"),
@@ -2223,11 +2466,12 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
         "task_id": task_id,
         "ticket_id": ticket_id,
         "model": model,
+        "harness": selected_harness,
         "priority_rank": priority_rank,
     }
 
 
-async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
+async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id, selected_harness=None):
     """Wait for semaphore slot, then run agent."""
     async with _semaphore:
         task_meta = await fetchrow("""
@@ -2261,11 +2505,12 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 "Agent started",
                 (
                     f"Agent `{agent_id}` started `{task_meta.get('task_type') or 'ticket_resolution'}` "
-                    f"in workspace `{work_dir}`. Progress checkpoints and approval gates will be recorded here."
+                    f"with harness `{_normalize_harness_name(selected_harness)}` in workspace `{work_dir}`. "
+                    "Progress checkpoints and approval gates will be recorded here."
                 ),
             )
 
-        result = await _run_agent(work_dir, prompt, task_id)
+        result = await _run_agent(work_dir, prompt, task_id, selected_harness)
         terminal_meta = await fetchrow("""
             SELECT at.status AS task_status, a.status AS agent_status, at.ticket_id
             FROM agent_tasks at
@@ -2546,6 +2791,7 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id):
                 prompt,
                 result,
                 raw_error,
+                selected_harness,
             )
             if transient_retry:
                 _active_processes.pop(task_id, None)
@@ -2757,7 +3003,10 @@ async def get_runner_health():
         "no_output_stall_seconds": AGENT_NO_OUTPUT_STALL_SECONDS,
         "permission_mode": AGENT_PERMISSION_MODE,
         "allowed_tools": AGENT_ALLOWED_TOOLS,
-        "harness": AGENT_HARNESS,
+        "harness": _normalize_harness_name(config.get("default_harness")),
+        "env_harness": AGENT_HARNESS,
+        "default_harness": _normalize_harness_name(config.get("default_harness")),
+        "setups": config.get("setups") or [],
         "available_harnesses": list_harnesses(),
         "ps_path": shutil.which("ps"),
         "dashboard_api_base": DASHBOARD_API_BASE,

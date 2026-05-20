@@ -37,11 +37,13 @@ Reference stack:
   internal note, audit event, and real agent-harness queue task.
 - The chat agent decides whether to answer directly or use the tool to create a
   ticket. Do not reintroduce app-side JSON parsing as the decision-maker.
-- During the chat-intake turn, the agent must use exactly one dashboard tool:
-  `python ops_chat_tool.py answer ...` for general chat or
-  `python ops_chat_tool.py create-ticket ...` for tracked work. It must not run
-  arbitrary curl, inline Python, external image generators, package installs, or
-  suspicious URL fetches in this lightweight chat turn.
+- During the chat-intake turn, the agent must finish with exactly one final
+  dashboard tool: `python ops_chat_tool.py answer ...` for general chat or
+  `python ops_chat_tool.py create-ticket ...` for tracked work. For benign
+  current-information questions it may first use
+  `python ops_chat_tool.py web-search ...`, then finish with `answer`. It must
+  not run arbitrary curl, inline Python, external image generators, package
+  installs, or suspicious URL fetches in this lightweight chat turn.
 - The chat agent may decide routing and assignment, but it is not an approval
   authority. Approval, access, credential, and change gates must come from real
   downstream barriers: scoped vault leases, provider permissions, workflow
@@ -83,6 +85,9 @@ Important environment:
 - `MATRIX_BOT_LOCALPART=agentic-ops`
 - `MATRIX_BOT_DISPLAY_NAME=Agentic Ops Agent`
 - `OPS_CHAT_AGENT_MODEL=<active chat handoff model>`
+- `OPS_CHAT_SEARCH_URL=<private SearXNG base URL, default http://host.docker.internal:7999>`
+- `OPS_CHAT_OUTBOUND_ENABLED=true`
+- `OPS_CHAT_OUTBOUND_POLL_SECONDS=5`
 - `DASHBOARD_SERVICE_TOKEN=<vault/runtime secret>`
 
 `OPS_CHAT_AGENT_MODEL` must follow the active route profile. Use:
@@ -128,10 +133,12 @@ Expected:
 
 - `/api/ops-chat/matrix/health` reports Matrix Synapse + Element.
 - direct `/api/ops-chat/message` creates a ticket.
-- the ticket contains `Ops Chat agent intake decision`.
+- the ticket contains `Ops Chat agent-created ticket`.
 - operational chat queues a real dashboard agent task unless
   `OPS_CHAT_SMOKE_SPAWN_AGENT=false` is set.
 - follow-up chat on the same session is recorded as a `user-response` note.
+- a ticket `/request-info` note appears in `/api/ops-chat/outbound/pending`,
+  can be acked by the bridge, and does not duplicate after ack.
 
 Scenario smoke:
 
@@ -154,11 +161,12 @@ platform self-repair. By default it verifies ticket creation and nonempty
 agent-selected assignment; add `--strict-routing` to fail when an assignment
 does not match the expected demo hint.
 
-This proves general chat no-ticket behavior, account lockout, software request,
-VPN connectivity routing, phishing and CI/CD routing without intake-time
-approval gates, follow-up notes, global search visibility, and optional real
-agent handoff. The risky-action gates must appear only during downstream ticket
-execution.
+This proves general chat no-ticket behavior, private-web-search assisted
+answers when the search provider is configured, account lockout, software
+request, VPN connectivity routing, phishing and CI/CD routing without
+intake-time approval gates, follow-up notes, outbound ticket updates back to
+chat, global search visibility, and optional real agent handoff. The
+risky-action gates must appear only during downstream ticket execution.
 
 Browser Playwright smoke:
 
@@ -196,9 +204,11 @@ I cannot log into my account and I have a customer call in 20 minutes.
 ```
 
 Expected demo answer: ticket number, assignment group, priority, and real agent
-harness queue status. Open the dashboard ticket afterward to show the agent
-intake decision, notes, agent assignment, and any approval/access gates created
-later by real execution barriers.
+harness queue status. If the ticket agent asks the requester a question or
+resolves the ticket, the bridge posts that user-facing status back into the
+Matrix room. Open the dashboard ticket afterward to show the agent-created
+ticket note, user-response notes, agent assignment, and any approval/access
+gates created later by real execution barriers.
 
 ## Latest Lab Proof
 
@@ -260,10 +270,11 @@ later by real execution barriers.
   agents `291` and `292`.
 - VPN routing was corrected and verified on ticket `781`, which classified as
   `vpn-connectivity` and routed to `Network Operations`.
-- Chat-created approval gates are now rebound to the spawned agent id. Ticket
-  `784` proved the full path: change `223` was bound to agent `293`, approval
-  spawned continuation agent `294`, the change completed with lab-safe
-  evidence, and the ticket closed with no active processes.
+- Approval gates created during downstream ticket execution are now rebound to
+  the spawned agent id. Ticket `784` proved the full path: change `223` was
+  bound to agent `293`, approval spawned continuation agent `294`, the change
+  completed with lab-safe evidence, and the ticket closed with no active
+  processes.
 - Agent note-quality guardrails now explicitly forbid placeholder/debug notes
   such as "test note"; the rerun on ticket `778` proved the complex
   phishing/EDR path stopped at approval without placeholder notes.

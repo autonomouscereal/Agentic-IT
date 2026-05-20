@@ -19,9 +19,11 @@ const opsChatUrl = process.env.OPS_CHAT_URL || "https://127.0.0.1:3303";
 const opsChatUser = process.env.OPS_CHAT_USER || "";
 const opsChatPassword = process.env.OPS_CHAT_PASSWORD || "";
 const sendChatMessage = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_SEND_MESSAGE || "");
+const testOutbound = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_TEST_OUTBOUND || "");
 const chatMarker = process.env.OPS_CHAT_MARKER || `ops-chat-playwright-${Date.now()}`;
 const ignoreHttpsErrors = /^(1|true|yes|on)$/i.test(process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS || "");
 const screenshotDir = process.env.PLAYWRIGHT_SCREENSHOT_DIR || "";
+const dashboardServiceToken = process.env.DASHBOARD_SERVICE_TOKEN || "";
 
 function requireSecret(name, value) {
   if (!value) {
@@ -195,6 +197,65 @@ async function sendOpsChatMessage(page) {
   return { marker: chatMarker, ticketId: match ? Number(match[1]) : null };
 }
 
+async function sendComposerMessage(page, message) {
+  const composers = [
+    'textarea[placeholder*="Message"]',
+    '[aria-label*="Message"]',
+    '[contenteditable="true"]',
+    '[role="textbox"]',
+    'div[aria-label*="Send a message"]',
+  ];
+  for (const selector of composers) {
+    const composer = page.locator(selector).last();
+    if (await composer.isVisible().catch(() => false)) {
+      await composer.click();
+      await composer.fill(message).catch(async () => {
+        await composer.type(message);
+      });
+      await page.keyboard.press("Enter");
+      return;
+    }
+  }
+  throw new Error("Ops Chat message composer was not found");
+}
+
+async function verifyOutboundTicketChat(context, page, ticketId) {
+  if (!testOutbound) return null;
+  requireSecret("DASHBOARD_SERVICE_TOKEN", dashboardServiceToken);
+  if (!ticketId) throw new Error("ticketId is required for outbound chat verification");
+  const headers = { "X-Dashboard-Service-Token": dashboardServiceToken };
+  const question = `What username is affected for marker ${chatMarker}?`;
+  const ask = await context.request.post(`${dashboardUrl.replace(/\/$/, "")}/api/tickets/${ticketId}/request-info`, {
+    headers,
+    data: {
+      question,
+      requested_by: "playwright-ops-chat-smoke",
+      contact_method: "matrix",
+      recipient: opsChatUser,
+      context: "Browser-level outbound Matrix delivery proof.",
+    },
+  });
+  if (!ask.ok()) {
+    throw new Error(`request-info failed: HTTP ${ask.status()} ${(await ask.text()).slice(0, 400)}`);
+  }
+  await page.getByText(new RegExp(`Ticket #${ticketId} needs your input`, "i")).first().waitFor({ state: "visible", timeout: 90000 });
+  const reply = `The affected username is ${opsChatUser}. Marker ${chatMarker}.`;
+  await sendComposerMessage(page, reply);
+  await page.getByText(/I added your update to ticket #/i).first().waitFor({ state: "visible", timeout: 90000 });
+  const contextResponse = await context.request.get(`${dashboardUrl.replace(/\/$/, "")}/api/tickets/${ticketId}/context`, { headers });
+  if (!contextResponse.ok()) {
+    throw new Error(`ticket context failed: HTTP ${contextResponse.status()} ${(await contextResponse.text()).slice(0, 400)}`);
+  }
+  const ticketContext = await contextResponse.json();
+  const notes = ticketContext.notes || [];
+  const hasResponse = notes.some((note) => String(note.body || "").includes(reply));
+  if (!hasResponse) {
+    throw new Error("chat follow-up was not reflected as a ticket user-response note");
+  }
+  await maybeScreenshot(page, "ops-chat-outbound");
+  return { ticketId, outboundQuestionDelivered: true, userResponseRecorded: true };
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -207,12 +268,14 @@ async function sendOpsChatMessage(page) {
     const chatPage = await context.newPage();
     const chat = await opsChatLoginAndProbe(chatPage);
     const message = sendChatMessage ? await sendOpsChatMessage(chatPage) : null;
+    const outbound = message ? await verifyOutboundTicketChat(context, chatPage, message.ticketId) : null;
     await browser.close();
     console.log(JSON.stringify({
       status: "passed",
       dashboard: { url: dashboardFinalUrl, user: dashboardUser },
       ops_chat: { url: chat.url, user: opsChatUser, matrix_probe: chat.matrixProbe },
       message,
+      outbound,
     }, null, 2));
   } catch (error) {
     await browser.close();

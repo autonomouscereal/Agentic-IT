@@ -236,8 +236,9 @@ Latest live proof on 2026-05-20:
 - VPN routing was corrected and verified with marker
   `ops-chat-scenarios-1779251833`: ticket `781` classified as
   `vpn-connectivity` and routed to `Network Operations`.
-- Chat-created approval gates are now bound to the spawned agent so approval can
-  resume the waiting agent path. Ticket `784` / change `223` proved this:
+- Approval gates created during downstream ticket execution are now bound to the
+  spawned agent so approval can resume the waiting agent path. Ticket `784` /
+  change `223` proved this:
   initial agent `293` stopped at the approval gate, approval spawned
   continuation agent `294`, the change completed with lab-safe evidence, and
   the ticket closed with no active processes left behind.
@@ -255,6 +256,14 @@ The 2026-05-20 hardening pass also fixed three demo-readiness issues:
 - Chat intake no longer creates approval gates before agent execution.
   Approval-gate resume remains supported for gates created later by ticket
   execution, access requests, or workflow policy.
+- Ops Chat now has an outbound delivery ledger. User-facing
+  `/request-info` and `/status` notes appear in
+  `/api/ops-chat/outbound/pending`, the Matrix bridge posts them back to the
+  original room, and `/api/ops-chat/outbound/ack` prevents duplicate delivery
+  after bridge restarts.
+- Benign current-information chat can use the private SearXNG-backed
+  `ops_chat_tool.py web-search` command before the final `answer`; suspicious
+  URLs still must not be fetched directly.
 - A dedicated `VPN connectivity issue` RACI rule prevents VPN tunnel failures
   from being treated as generic IAM entitlement requests.
 
@@ -274,3 +283,5 @@ The 2026-05-20 hardening pass also fixed three demo-readiness issues:
   provider permission failures.
 - Chat follow-ups on a waiting ticket spawn a continuation agent; follow-ups on
   a currently running agent are delivered as steering context.
+- If a ticket was in `awaiting_user_response`, a Matrix follow-up restores the
+  previous ticket status before resuming or steering the agent.

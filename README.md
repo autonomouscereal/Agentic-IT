@@ -50,6 +50,12 @@ dashboard/system/mailbox/queue/quarantine pages, Roundcube webmail PASS at
 `/webmail`, Mailcow IMAP PASS, and the Roundcube `Report Phish` path creates
 Mailcow quarantine plus dashboard/iTop evidence.
 
+Local Playwright validation should target `https://192.168.50.222:25443/` with
+lab certificate errors ignored, then sign in through `/login` using the
+`demo_account_1` vault credential. The `127.0.0.1:25480` service URL is for
+server-side health/API checks only and should not be used as the browser UI
+entrypoint while authentication is enforced.
+
 ## Documentation Map
 
 - [Autonomous Enterprise Operations Vision](docs/ENTERPRISE_OPERATIONS_VISION.md)
@@ -74,6 +80,7 @@ Mailcow quarantine plus dashboard/iTop evidence.
 - [FedRAMP-Style Security Hardening](docs/FEDRAMP_SECURITY_HARDENING.md)
 - [Global Search And Ops Chat](docs/GLOBAL_SEARCH_AND_OPS_CHAT.md)
 - [Ops Chat Deployment Blueprint](docs/OPS_CHAT_DEPLOYMENT_BLUEPRINT.md)
+- [Agentic Ops UI Deployment 2026-05-20](docs/AGENTIC_OPS_UI_DEPLOYMENT_2026-05-20.md)
 
 ## Hard Rules
 

@@ -289,8 +289,13 @@ async function createAgentFromPrompt() {
     const input = document.getElementById("agent-prompt-input");
     const prompt = input?.value.trim();
     if (!prompt) return;
-    const model = document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b";
-    const result = await apiPost("/api/agents/create-from-prompt", { prompt, model });
+    const model = typeof selectedAgentModel === "function"
+        ? selectedAgentModel()
+        : (document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b");
+    const harness = typeof selectedAgentHarness === "function"
+        ? selectedAgentHarness()
+        : (document.getElementById("agent-default-harness")?.value || "hermes");
+    const result = await apiPost("/api/agents/create-from-prompt", { prompt, model, harness });
     if (result && !result.error) {
         input.value = "";
         loadAgents();
