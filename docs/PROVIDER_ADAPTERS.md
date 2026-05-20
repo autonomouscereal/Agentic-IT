@@ -1,6 +1,6 @@
 # Ticket Provider Adapter Guide
 
-Last updated: 2026-05-11.
+Last updated: 2026-05-20.
 
 ## Goal
 
@@ -98,6 +98,29 @@ A provider adapter should always populate:
 - `synced_at` when sync succeeds
 
 If the provider has a direct browser URL, set `provider_url`. If not, `ticket_links.external_ticket_url()` may generate provider-specific links for supported providers.
+
+## Ops Chat Ticket Sync
+
+Ops Chat-created tickets are canonical dashboard tickets and should follow the
+same provider contract as tickets created from the dashboard UI or API. In the
+current lab, the active provider is iTop, so a healthy chat-created ticket
+should show:
+
+- `provider=itop`
+- a numeric `provider_ref` / `itop_ref`
+- `provider_sync_status=synced`
+- a usable `external_url` to the iTop ticket
+- preserved Ops Chat evidence and recent chat context in the dashboard ticket
+
+Provider sync must not erase the richer local Ops Chat record. When iTop or
+another provider returns a shorter description, generic team, or partial payload,
+keep the dashboard's full chat context, agent-created note, requester follow-up,
+and agent-selected assignment as the canonical evidence trail.
+
+Use `POST /api/tickets/{id}/assignment` when the agent or operator learns that
+the scope belongs to another group or tier. Provider-side assignment push is
+adapter-specific, but the canonical dashboard assignment and
+`ticket-assignment` note are always written.
 
 ## Configuring ServiceNow
 

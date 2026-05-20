@@ -27,6 +27,13 @@ Expected providers:
 
 - Keep `local` always available for isolated demos and tests.
 - Keep iTop as the current reference ITSM, but treat it as one provider behind the canonical contract.
+- Ops Chat-created tickets should use the active provider by default. In the
+  current lab that means iTop, and a healthy chat-created ticket should have
+  `provider=itop`, a provider reference, `provider_sync_status=synced`, and a
+  usable provider URL.
+- Provider sync must not overwrite richer local evidence from Ops Chat. Keep
+  recent chat context, agent-selected assignment, and human-readable Ops Chat
+  notes even if the provider returns a short summary or generic assignment.
 - Configure ServiceNow/Jira/webhook only through environment variables or vault-injected env. Never hardcode API tokens, passwords, or instance URLs containing secrets.
 - Fail closed when external provider config is missing. The canonical ticket should record `provider_sync_status=create_failed` and `provider_last_error`.
 - Do not claim provider sync succeeded unless the provider returns a usable external reference.
@@ -87,4 +94,6 @@ GENERIC_TICKETING_DRY_RUN
 - `api/services/external_ticket_adapters.py`: ServiceNow, Jira, and generic webhook adapters.
 - `api/services/ticket_service.py`: canonical ticket create/push/update persistence.
 - `docs/PROVIDER_ADAPTERS.md`: detailed integration guide.
+- `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`: current Ops Chat
+  provider-sync and demo-readiness checkpoint.
 - `scripts/smoke_provider_adapters.py`: safe live smoke test.

@@ -1,6 +1,6 @@
 # Agent Operations Runbook
 
-Last updated: 2026-05-18.
+Last updated: 2026-05-20.
 
 ## Operator Mental Model
 
@@ -148,6 +148,47 @@ These notes use sources such as `agent-control-plane`, `agent-checkpoint`, and
 
 Use the ticket modal's **Full Audit Trail** action to jump into the Audit page
 with the ticket filter preloaded.
+
+## Chat-Originated Agent Work
+
+Ops Chat messages are a first-class agent entry point. The user starts in
+Element, not the dashboard, but the work must still be visible in the same
+ticket, agent, approval, provider-sync, and audit surfaces.
+
+Expected chat path:
+
+1. Matrix/Element user sends a message to `Agentic Ops Agent`.
+2. `ops-chat-bridge` forwards the room event to `/api/ops-chat/message`.
+3. The dashboard runs the configured Hermes/Claude chat harness with
+   `ops_chat_tool.py`.
+4. The chat harness either answers harmless/general chat directly, asks one
+   concise clarification, or creates a ticket with agent-selected class,
+   priority, and assignment group.
+5. Operational tickets sync through the active provider adapter, iTop in the
+   lab, then queue the real ticket-resolution agent when enabled.
+6. If the ticket agent calls `/api/tickets/{id}/request-info`, the bridge posts
+   that user-facing note back to the Matrix room.
+7. The user's chat reply becomes a `user-response` ticket note and is delivered
+   to active agents through the normal steering inbox.
+
+The chat harness can decide whether work needs a ticket and where it should be
+assigned. It is not an approval authority. Approval, access, credential, and
+change gates must be created only when the ticket agent hits a real platform
+barrier such as a vault lease denial, provider `403`, workflow policy, or
+change approval requirement.
+
+For demo-quality evidence, a chat-created ticket should show:
+
+- an Ops Chat-created note with the Matrix room/session metadata;
+- preserved recent chat context, especially when clarification happened before
+  ticket creation;
+- `provider=itop` and `provider_sync_status=synced` when iTop sync is enabled;
+- a real agent assignment/task when the case is operational and spawning is on;
+- user-facing `/request-info` or `/status` notes reflected back to Element;
+- no raw provider stack trace, model transcript dump, or placeholder notes.
+
+Use `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md` as the checkpoint
+for current live proof tickets and the broad UI test matrix.
 
 ## Live Note Steering
 

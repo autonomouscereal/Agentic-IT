@@ -1,6 +1,6 @@
 # Agentic Operations API Reference
 
-Last updated: 2026-05-18.
+Last updated: 2026-05-20.
 
 Base URL in the current lab:
 
@@ -498,9 +498,20 @@ Ops Chat:
 - `GET /api/ops-chat/sessions`
 - `GET /api/ops-chat/sessions/{session_id}/messages`
 - `POST /api/ops-chat/message` - Matrix/Element chat intake that creates or continues traceable tickets for operational work and queues real Hermes/Claude Code agent harness tasks
+- `GET /api/ops-chat/outbound/pending` - Matrix bridge poll endpoint for user-facing ticket questions/status updates created by ticket agents
+- `POST /api/ops-chat/outbound/ack` - idempotently acknowledges outbound Matrix delivery so bridge restarts do not duplicate ticket updates
 - `GET /api/ops-chat/matrix/health` - Matrix/Element/Keycloak bridge readiness metadata
 - `GET /api/ops-chat/openai/v1/models` - legacy compatibility model list; Matrix/Element is the supported chat client
 - `POST /api/ops-chat/openai/v1/chat/completions` - legacy compatibility endpoint that still routes operational work into tickets and real agents
+
+`POST /api/ops-chat/message` is agent-intake-first. The dashboard invokes the
+configured Hermes/Claude harness with `ops_chat_tool.py`; the harness must
+finish with an `answer` tool call for harmless chat or a `create-ticket` tool
+call for tracked work. It may ask one concise clarification before ticket
+creation when the answer changes routing/scope/urgency. Approval gates are not
+created by the chat intake turn; they are created later by real ticket execution
+barriers such as access requests, scoped vault leases, workflow policy, or
+provider permission failures.
 
 ## Ticket Reassignment And Escalation
 

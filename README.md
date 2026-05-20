@@ -80,6 +80,7 @@ entrypoint while authentication is enforced.
 - [FedRAMP-Style Security Hardening](docs/FEDRAMP_SECURITY_HARDENING.md)
 - [Global Search And Ops Chat](docs/GLOBAL_SEARCH_AND_OPS_CHAT.md)
 - [Ops Chat Deployment Blueprint](docs/OPS_CHAT_DEPLOYMENT_BLUEPRINT.md)
+- [Ops Chat Agentic UI Testing And Demo Readiness](docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md)
 - [Agentic Ops UI Deployment 2026-05-20](docs/AGENTIC_OPS_UI_DEPLOYMENT_2026-05-20.md)
 
 ## Hard Rules
@@ -136,11 +137,28 @@ messages to `/api/ops-chat/message`; general harmless chat stays lightweight,
 while operational requests create or continue traceable tickets and queue real
 Hermes/Claude Code agent harness work through the configured AI proxy.
 
-Latest live UI proof: a Playwright browser test signed into Element through
-Keycloak as `demo_chat_live11`, proved same-origin Matrix health, then a fresh
-Matrix DM to `@agentic-ops:agentic-ops.local` created ticket `908` from the
-browser chat, spawned Hermes agent `307`, and settled the ticket in
-`awaiting_user_response`.
+The chat decision is harness-driven, not an app-side parser. The chat agent may
+ask one concise follow-up before creating a ticket if the answer changes route,
+scope, urgency, or whether a ticket is needed. Once a ticket is created, recent
+chat context is copied into ticket evidence and the active provider syncs the
+canonical ticket. In the current lab, Ops Chat tickets sync to iTop by default.
+
+Latest live proof set, 2026-05-20:
+
+- ticket `1176`: ambiguous software request clarified in chat, then synced to
+  iTop ref `595`, preserving pre-ticket chat context.
+- ticket `1176`: reassigned/escalated to `Tier 2 Endpoint Support` through
+  `/api/tickets/1176/assignment`.
+- ticket `1177`: created from the real Element UI by Playwright marker
+  `ops-chat-playwright-1779301274503`.
+- tickets `1185` and `1191`: real Hermes agents handled account-lockout and
+  software-request cases and wrote user-facing notes.
+- marker `ops-chat-scenarios-1779302571`: no-spawn scenario smoke validated
+  general chat, private web lookup, cat memory, account, software, VPN,
+  phishing, CI/CD routing, and no intake-time approval gates.
+
+For the full test matrix and demo acceptance bar, see
+`docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`.
 
 Installer entrypoints:
 

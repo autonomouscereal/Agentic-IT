@@ -41,6 +41,10 @@ and network controls to Network Operations.
 
 ## Ops Chat And Agent Intake
 
+The full deployment and demo-readiness checkpoint lives in
+`docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`. Treat this section as
+the quick runbook and the checkpoint doc as the evidence catalog.
+
 ```bash
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-case account-lockout --agent-timeout 420

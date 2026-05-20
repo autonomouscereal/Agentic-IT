@@ -26,6 +26,13 @@ Rules:
   read capability.
 - Do not return credential values, raw secrets, or unbounded audit details.
 - Keep queries bounded; default UI searches should not exceed 60 visible rows.
+- The dashboard shell must show the global search field above every page, not
+  only on tickets or audit. Results should deep-link to the native record when
+  possible: ticket modal, CI/CD run modal, workflow/postmortem detail, or the
+  matching page for agents, tools, approvals, and audit.
+- Ops Chat proof markers should be searchable by ticket title, ticket note, and
+  audit event so a demo operator can jump from the conversation marker to the
+  canonical evidence trail.
 
 Smoke:
 
@@ -36,3 +43,6 @@ python3 scripts/smoke_global_search.py http://localhost:25480
 
 The smoke creates a local ticket and note with a unique marker, then proves the
 operator can find both through global search.
+
+For the current Ops Chat/global-search evidence checkpoint, see
+`docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`.

@@ -73,6 +73,40 @@ Reference docs:
 - `reference_skills/mailcow/SKILL.md`
 - `reference_skills/roundcube-webmail/SKILL.md`
 
+## Ops Chat Collaboration Intake Module
+
+Ops Chat is the reference collaboration-front-door capability. It is deployed
+with the platform when an organization wants a Teams/Slack-like user experience
+without requiring a cloud collaboration tenant during demos or greenfield
+installs.
+
+Important boundaries:
+
+- Element Web is the browser client. Do not replace it with a dashboard chat
+  shim just to make testing easier.
+- Matrix Synapse owns rooms, users, OIDC callbacks, and event delivery.
+- Keycloak is the identity provider in the reference deployment.
+- `ops-chat-bridge` is an application-service bridge that forwards Matrix room
+  messages to the dashboard Ops Chat API and sends user-facing ticket updates
+  back into Matrix rooms.
+- The chat decision is harness-driven. Hermes or Claude Code receives the
+  message with `ops_chat_tool.py`, then answers directly or creates the
+  canonical ticket.
+- General chat can stay no-ticket. Operational work must become traceable once
+  enough context exists.
+- Approval and access authority stays in the downstream control plane:
+  credential leases, provider permissions, workflow policy, access requests,
+  and approval gates.
+- Chat-created tickets must sync through the active ticket provider when one is
+  configured, iTop in the current lab.
+
+Reference docs:
+
+- `docs/GLOBAL_SEARCH_AND_OPS_CHAT.md`
+- `docs/OPS_CHAT_DEPLOYMENT_BLUEPRINT.md`
+- `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`
+- `reference_skills/ops-chat-client/SKILL.md`
+
 ## Adding A Module
 
 Add an object to `platform/manifest.json` with:

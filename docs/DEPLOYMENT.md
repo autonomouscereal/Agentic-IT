@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-Last updated: 2026-05-19.
+Last updated: 2026-05-20.
 
 ## Requirements
 
@@ -28,6 +28,7 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | Default harness | Hermes Agent |
 | Product default model | `local/agent-default` |
 | Lab external model | `deepseek/deepseek-v4-flash` |
+| Ops Chat | `https://192.168.50.222:3303` Element/Matrix client |
 
 ## Upload
 
@@ -127,6 +128,85 @@ Windows, copy or download the CA cert locally and run:
 runtime material and must never be committed. For production, replace the
 runtime certs with enterprise PKI or ACME-issued certificates and keep
 `DASHBOARD_COOKIE_SECURE=true`.
+
+## Ops Chat Reference Deployment
+
+Ops Chat is the Matrix/Element user-facing intake path. It is part of the
+reference deployment, not a separate demo shim. The stack is:
+
+- `ops-chat`: Element Web UI.
+- `ops-chat-synapse`: Matrix homeserver.
+- `ops-chat-db`: PostgreSQL database for Synapse only.
+- `ops-chat-bridge`: Matrix appservice bridge into the dashboard.
+- Keycloak: OIDC identity provider.
+- Dashboard API: canonical ticket, note, agent, provider-sync, and audit system.
+
+Default browser URL:
+
+```text
+https://<host>:3303/#/user/@agentic-ops:agentic-ops.local
+```
+
+The older `http://<host>:3301` listener is only a compatibility redirect to the
+HTTPS Element UI. Do not use it as the demo entry point. Direct Synapse
+diagnostics remain available on `https://<host>:3302`, while browser Matrix
+client calls should use the same-origin Element path
+`https://<host>:3303/_matrix/client/versions`.
+
+Required environment values:
+
+```text
+OPS_CHAT_PORT=3301
+OPS_CHAT_HTTPS_PORT=3303
+OPS_CHAT_SYNAPSE_PORT=3302
+MATRIX_SERVER_NAME=agentic-ops.local
+MATRIX_PUBLIC_BASEURL=https://<host>:3303
+MATRIX_ELEMENT_PUBLIC_URL=https://<host>:3303
+MATRIX_OIDC_ISSUER=https://<host>:8443/realms/<realm>
+MATRIX_OIDC_CLIENT_ID=agentic-ops-chat
+MATRIX_OIDC_CLIENT_SECRET=<from vault/runtime secret>
+MATRIX_OIDC_CA_CERT_PATH=./runtime/tls/dashboard-ca.crt
+MATRIX_AS_TOKEN=<from vault/runtime secret>
+MATRIX_HS_TOKEN=<from vault/runtime secret>
+OPS_CHAT_AGENT_MODEL=<active route model>
+OPS_CHAT_OUTBOUND_ENABLED=true
+```
+
+Deployment:
+
+```bash
+docker compose up -d --build ops-chat-db ops-chat-synapse ops-chat-bridge ops-chat
+python3 scripts/setup_ops_chat_keycloak.py
+```
+
+Validation:
+
+```bash
+curl -sk https://<host>:3303/config.json
+curl -sk https://<host>:3303/_matrix/client/versions
+curl -sk https://<host>:3302/_matrix/client/versions
+curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
+  http://127.0.0.1:25480/api/ops-chat/matrix/health
+```
+
+The chat intake turn is harness-driven. The Matrix bridge sends messages to
+`/api/ops-chat/message`, the dashboard invokes Hermes or Claude Code with the
+`ops_chat_tool.py` toolbelt, and the chat agent either answers directly or uses
+the tool to create a traceable ticket. Do not replace this with an app-side JSON
+classifier. Risky actions still require real downstream barriers: access
+requests, scoped credential leases, provider permission failures, workflow
+policy, and approval gates.
+
+Current lab proof is documented in
+`docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`. The most recent
+checkpoint includes:
+
+- Element browser send marker `ops-chat-playwright-1779301274503`, ticket
+  `1177`.
+- Clarification, iTop sync, and reassignment proof on ticket `1176`, iTop ref
+  `595`.
+- Real Hermes chat/ticket agents on tickets `1185` and `1191`.
+- Broad no-spawn scenario coverage marker `ops-chat-scenarios-1779302571`.
 
 For iTop deployments:
 

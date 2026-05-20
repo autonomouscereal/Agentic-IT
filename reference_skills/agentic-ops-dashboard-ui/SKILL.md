@@ -16,6 +16,10 @@ dashboard UI at `https://192.168.50.222:25443/`.
   `https://192.168.50.222:25443/`.
 - Login at `/login` as `demo_account_1`; retrieve the password from the
   server-manager vault key `demo_account_1`.
+- For chat/intake UI proof, use Element at
+  `https://192.168.50.222:3303/#/user/@agentic-ops:agentic-ops.local` with a
+  demo chat account such as `demo_chat_alice`, `demo_chat_jeff`, or
+  `demo_chat_exec` from the same vault.
 - Never print or commit secrets.
 - Check active agents before recreating the API service.
 - Static `frontend/` changes can be synced without restarting containers.
@@ -96,6 +100,12 @@ Required assertions:
 - Agents page shows harness options `hermes` and `claude-code`.
 - Saving default harness/model returns `Saved server default.`
 - `/api/agents/config` readback matches the selected default.
+- Global search is visible above every dashboard page and can find a unique
+  marker from tickets, ticket notes, agents, audit, workflows, postmortems,
+  tools, and CI/CD records according to the logged-in user's scope.
+- Ops Chat Element proof can log in through Keycloak, open the Agentic Ops Agent
+  profile, send a direct message, and show a dashboard ticket or no-ticket
+  answer according to the request.
 - Overflow count is zero for the checked viewport.
 - Console errors are zero after filtering expected network interruptions only.
 
@@ -105,3 +115,8 @@ The 2026-05-20 deploy evidence is documented in:
 
 `docs/AGENTIC_OPS_UI_DEPLOYMENT_2026-05-20.md`
 
+Ops Chat and global-search readiness are documented in:
+
+- `docs/GLOBAL_SEARCH_AND_OPS_CHAT.md`
+- `docs/OPS_CHAT_DEPLOYMENT_BLUEPRINT.md`
+- `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`
