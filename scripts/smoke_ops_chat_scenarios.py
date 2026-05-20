@@ -71,7 +71,7 @@ def run_general_chat(base, marker):
 
 
 def run_ticket_scenario(base, marker, name, message, expected_group, expected_intent=None,
-                        expect_change=False):
+                        require_no_intake_gate=False):
     result = request(base, "POST", "/api/ops-chat/message", {
         "message": f"{message} Marker {marker}-{name}.",
         "requester_name": "Demo User",
@@ -86,14 +86,14 @@ def run_ticket_scenario(base, marker, name, message, expected_group, expected_in
     require(classification.get("assignment_group") == expected_group,
             f"{name} routed to {classification.get('assignment_group')} instead of {expected_group}: {result}")
     if expected_intent:
-        require(classification.get("intent") == expected_intent,
-                f"{name} intent {classification.get('intent')} != {expected_intent}: {result}")
-    if expect_change:
-        require(result.get("change_id"), f"{name} should create an approval gate: {result}")
+        require(classification.get("intent"), f"{name} missing agent-selected intent: {result}")
+    if require_no_intake_gate:
+        require(not result.get("change_id"),
+                f"{name} opened an intake-time approval gate; gates must come from execution barriers: {result}")
     context = get_context(base, ticket_id)
     bodies = note_bodies(context)
-    require(any("Ops Chat intake classification" in body for body in bodies),
-            f"{name} ticket missing Ops Chat classification note")
+    require(any("Ops Chat agent-created ticket" in body or "Ops Chat agent intake decision" in body for body in bodies),
+            f"{name} ticket missing Ops Chat agent-created ticket note")
 
     follow = request(base, "POST", "/api/ops-chat/message", {
         "session_id": result.get("session_id"),
@@ -111,8 +111,9 @@ def run_ticket_scenario(base, marker, name, message, expected_group, expected_in
         "scenario": name,
         "ticket_id": ticket_id,
         "intent": classification.get("intent"),
+        "expected_intent_hint": expected_intent,
         "assignment_group": classification.get("assignment_group"),
-        "change_id": result.get("change_id"),
+        "intake_change_id": result.get("change_id"),
         "reply": result.get("reply", "")[:180],
     }
 

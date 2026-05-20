@@ -50,8 +50,11 @@ def main():
         require((direct.get("agent") or {}).get("agent_id"), f"Ops Chat did not queue real agent harness work: {direct}")
     context = request("GET", f"/api/tickets/{ticket_id}/context")
     notes = context.get("notes") or []
-    require(any("Ops Chat intake classification" in str(note.get("body", "")) for note in notes),
-            "ticket context missing Ops Chat classification note")
+    require(any(
+        "Ops Chat agent-created ticket" in str(note.get("body", "")) or
+        "Ops Chat agent intake decision" in str(note.get("body", ""))
+        for note in notes
+    ), "ticket context missing Ops Chat agent-created ticket note")
     health = request("GET", "/api/ops-chat/matrix/health")
     require(health.get("client") == "Matrix Synapse + Element", f"unexpected chat health: {health}")
 

@@ -71,6 +71,14 @@ auto-assignment fields are:
 The dashboard RACI UI exposes these fields so demo/customer routing can choose
 which queues are human-owned and which queues are automatically handled.
 
+Ops Chat is intentionally agent-intake-first. The Matrix/Element chat endpoint
+uses the configured Hermes/Claude harness to decide whether to answer directly
+or create a ticket, and to choose the initial class, priority, and assignment
+group. It does not create approval gates at intake time. Real access,
+credential, approval, and change gates must be enforced later by scoped vault
+leases, provider permission failures, workflow policy, and platform barriers
+when the ticket agent attempts work.
+
 Access-request RACI is also rule-driven. Rules whose intent starts with
 `access-` are used when an agent hits a permission wall and omits an explicit
 assignment group. Seeded examples route Mailcow to Email Operations, Wazuh/SIEM

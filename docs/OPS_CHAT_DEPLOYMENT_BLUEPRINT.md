@@ -8,8 +8,8 @@ It uses a real Matrix/Element stack, not a chat shim:
 - `ops-chat-db`: PostgreSQL database for Synapse.
 - `ops-chat-bridge`: Matrix application-service bridge into the dashboard.
 - Keycloak: OIDC identity provider.
-- Dashboard Ops Chat API: canonical intake, RACI routing, tickets, audit, and
-  real Hermes/Claude Code agent handoff through the AI proxy.
+- Dashboard Ops Chat API: canonical chat intake, tickets, audit, and real
+  Hermes/Claude Code agent handoff through the AI proxy.
 
 ## Network Contract
 
@@ -106,8 +106,17 @@ Expected:
 - Element redirects through Keycloak and lands at `#/home`;
 - browser `fetch("/_matrix/client/versions")` returns `200`;
 - a direct message to `@agentic-ops:agentic-ops.local` creates a dashboard
-  ticket;
+  ticket when the chat agent chooses to call the dashboard ticket tool;
 - policy-eligible work queues a real agent task.
+- chat intake itself does not open approval gates; approval/access/change gates
+  appear only when the ticket agent hits enforced platform, credential,
+  workflow, or provider barriers.
+
+Implementation note: Ops Chat does not rely on application-side structured
+parsing to classify the user message. The Matrix bridge hands the message to
+the configured Hermes/Claude harness. That chat agent receives
+`ops_chat_tool.py`; it either answers directly or uses the tool to create the
+ticket and spawn the ticket-resolution agent.
 
 Latest live proof: marker `ops-chat-same-origin-playwright-1779261056` created
 ticket `908`, spawned Hermes agent `307` / task `304`, recorded model-turn audit
@@ -150,3 +159,12 @@ Bot does not respond to a DM:
 - Check `ops-chat-bridge` logs and `/health`.
 - Ensure the bot localpart matches `MATRIX_BOT_LOCALPART`.
 - Confirm the appservice tokens in Synapse and the bridge match.
+
+Chat creates tickets but opens approval gates too early:
+
+- This is not expected. Ops Chat intake may choose ticket class, priority, and
+  assignment group only.
+- Approval gates belong to downstream ticket execution, access requests,
+  provider permission failures, and workflow policy barriers.
+- Check `/api/ops-chat/message` responses for `change_id`; it should be empty
+  during initial chat intake.

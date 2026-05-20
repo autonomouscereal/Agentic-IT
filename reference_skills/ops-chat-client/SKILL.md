@@ -4,7 +4,7 @@ description: >
   Deploy, validate, and manage the Matrix/Element Ops Chat client, Keycloak OIDC
   identity path, Matrix application-service bridge, and dashboard agent-harness
   chat intake workflow. Use when configuring chat-based user intake, demoing
-  conversational ticket creation, testing RACI routing from chat, or
+  conversational ticket creation, testing agent-selected routing from chat, or
   troubleshooting chat-to-agent handoff.
 ---
 
@@ -30,10 +30,22 @@ Reference stack:
 - Matrix/Element is the user-facing chat surface.
 - Synapse owns rooms, events, and OIDC login.
 - The bridge receives Matrix room messages and calls the dashboard Ops Chat API.
+- The dashboard hands each new chat message to the configured Hermes/Claude
+  harness with an `ops_chat_tool.py` toolbelt.
 - General harmless chat can be answered without a ticket.
 - Operational chat creates or continues a canonical ticket, intake session,
-  internal note, audit event, optional approval gate, and real agent-harness
-  queue task.
+  internal note, audit event, and real agent-harness queue task.
+- The chat agent decides whether to answer directly or use the tool to create a
+  ticket. Do not reintroduce app-side JSON parsing as the decision-maker.
+- During the chat-intake turn, the agent must use exactly one dashboard tool:
+  `python ops_chat_tool.py answer ...` for general chat or
+  `python ops_chat_tool.py create-ticket ...` for tracked work. It must not run
+  arbitrary curl, inline Python, external image generators, package installs, or
+  suspicious URL fetches in this lightweight chat turn.
+- The chat agent may decide routing and assignment, but it is not an approval
+  authority. Approval, access, credential, and change gates must come from real
+  downstream barriers: scoped vault leases, provider permissions, workflow
+  policy, and platform approval gates when the ticket agent attempts work.
 - Follow-up room messages on an existing session become `user-response` notes,
   which are delivered to active agents through the steering inbox.
 - Never perform hidden work outside tickets. If the user asks for account,
@@ -116,7 +128,7 @@ Expected:
 
 - `/api/ops-chat/matrix/health` reports Matrix Synapse + Element.
 - direct `/api/ops-chat/message` creates a ticket.
-- the ticket contains `Ops Chat intake classification`.
+- the ticket contains `Ops Chat agent intake decision`.
 - operational chat queues a real dashboard agent task unless
   `OPS_CHAT_SMOKE_SPAWN_AGENT=false` is set.
 - follow-up chat on the same session is recorded as a `user-response` note.
@@ -138,12 +150,15 @@ python3 scripts/smoke_ops_chat_enterprise_matrix.py http://localhost:25480
 This creates 50 no-spawn chat-intake tickets across executive support, IAM,
 email, phishing/EDR, network, endpoint, procurement, onboarding/offboarding,
 infrastructure, cloud, database, UI support, CI/CD, audit/compliance, and
-platform self-repair. It should pass with zero routing failures before a
-broad-demo session.
+platform self-repair. By default it verifies ticket creation and nonempty
+agent-selected assignment; add `--strict-routing` to fail when an assignment
+does not match the expected demo hint.
 
 This proves general chat no-ticket behavior, account lockout, software request,
-VPN connectivity routing, phishing approval gate, CI/CD approval gate,
-follow-up notes, global search visibility, and optional real agent handoff.
+VPN connectivity routing, phishing and CI/CD routing without intake-time
+approval gates, follow-up notes, global search visibility, and optional real
+agent handoff. The risky-action gates must appear only during downstream ticket
+execution.
 
 Browser Playwright smoke:
 
@@ -180,15 +195,25 @@ generic Matrix UI and can lead operators away from the local support bot.
 I cannot log into my account and I have a customer call in 20 minutes.
 ```
 
-Expected demo answer: ticket number, assignment group, priority, approval gate
-when applicable, and real agent harness queue status. Open the dashboard ticket
-afterward to show classification, notes, agent assignment, approval gates, and
-audit trail.
+Expected demo answer: ticket number, assignment group, priority, and real agent
+harness queue status. Open the dashboard ticket afterward to show the agent
+intake decision, notes, agent assignment, and any approval/access gates created
+later by real execution barriers.
 
 ## Latest Lab Proof
 
 2026-05-20:
 
+- Harness-required chat toolbelt proof:
+  - Marker `harness-answer-tool-1779286572` used the Hermes chat harness and
+    `ops_chat_tool.py answer` to answer a general cat request with no ticket.
+  - Marker `spawn-flag-enforced-1779286517` used the Hermes chat harness and
+    `ops_chat_tool.py create-ticket` to create ticket `930`, assign
+    `Identity & Access`, priority `P2`, with no intake-time approval gate.
+  - `spawn_agent=false` was enforced by the tool, returning
+    `spawn_agent_disabled_by_caller` and leaving zero active agents.
+- Do not replace this with app-side JSON parsing. If the model fails to call
+  the tool, fix the harness prompt/tool contract and retry through the harness.
 - Element Web is served on `https://192.168.50.222:3303`; the old
   `http://192.168.50.222:3301` URL redirects there. Matrix client and OIDC
   callback traffic also work same-origin under `https://192.168.50.222:3303`;

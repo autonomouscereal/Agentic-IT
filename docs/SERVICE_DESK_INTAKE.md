@@ -33,6 +33,15 @@ Auto-agent assignment is a RACI rule setting, not a hardcoded phishing shortcut:
 The seeded phishing rule auto-assigns Security Operations phishing incidents.
 Most other seeded rules stay manual until an operator enables them.
 
+Ops Chat is different from the dashboard Intake form. Ops Chat uses the real
+agent harness to decide whether a message is general chat or traceable
+operational work, then to select ticket class, priority, and assignment group.
+That chat intake decision is not allowed to approve risky action or grant
+access. The service-desk/RACI tables still define organization queues, access
+request owners, and optional auto-assignment policy, while approval gates are
+created only by downstream workflow, vault lease, provider permission, or
+change-policy barriers.
+
 Access request routes are seeded for common permission walls:
 
 - `GitLab repository access`: repository/project role requests route to

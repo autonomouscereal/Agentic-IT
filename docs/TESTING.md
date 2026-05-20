@@ -473,7 +473,7 @@ Covers:
 - ticket creation from chat
 - real dashboard agent harness queue handoff for operational work
 - follow-up chat continuing the same ticket through `user-response` notes
-- RACI classification note in ticket context
+- agent intake decision note in ticket context
 - dashboard service-token authentication for the Matrix bridge
 
 ## Ops Chat Scenario Smoke
@@ -493,12 +493,14 @@ Covers a demo-realistic conversation set:
 - account lockout routed to Identity & Access
 - software request routed to Endpoint Support
 - VPN connectivity routed to Network Operations
-- phishing report routed to Security Operations with an approval gate
-- CI/CD delivery-gate request routed to DevSecOps with an approval gate
+- phishing report routed to Security Operations without an intake-time approval
+  gate; containment gates must appear only during downstream ticket execution
+- CI/CD delivery-gate request routed to DevSecOps without an intake-time
+  approval gate; deployment gates must appear only during downstream execution
 - chat follow-up recorded as a `user-response` note
 - global search visibility for all scenario tickets
 - optional real Hermes/Claude agent handoff through the configured proxy
-- 50-case no-spawn enterprise RACI coverage for broad demo prompts
+- 50-case no-spawn enterprise chat coverage for broad demo prompts
 
 For browser-level proof, use Playwright against
 `https://<host>:3303`. The expected path is: Element login through Keycloak,

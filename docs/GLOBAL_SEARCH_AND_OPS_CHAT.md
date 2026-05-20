@@ -55,12 +55,23 @@ Operational path:
 2. The user sends a room message.
 3. Synapse delivers the message to `ops-chat-bridge`.
 4. The bridge calls `POST /api/ops-chat/message` with Matrix room/event metadata.
-5. The dashboard classifies the request through service-desk intake and RACI.
-6. Operational work creates or continues a canonical ticket.
-7. The dashboard queues a real `agent_runner.spawn_agent()` task using Hermes or
+5. A real dashboard agent harness receives the message with a small
+   `ops_chat_tool.py` toolbelt.
+6. The agent either answers directly or uses the tool to create a ticket with
+   class, priority, and assignment group.
+7. Operational work creates or continues a canonical ticket.
+8. The dashboard queues a real `agent_runner.spawn_agent()` task using Hermes or
    Claude Code through the AI proxy.
-8. Follow-up room messages become `user-response` notes and are delivered to
+9. Follow-up room messages become `user-response` notes and are delivered to
    active agents through the steering inbox.
+
+The chat agent is not filtered through a custom structured-output classifier.
+It decides what to do and calls the dashboard tool when work should become
+traceable. It is still not an approval authority: it cannot pre-approve risky
+action, grant credentials, or waive policy. Approval, access, credential, and
+change gates are enforced later by platform policy, scoped vault leases,
+provider permissions, workflow rules, and real execution barriers when the
+ticket agent attempts the work.
 
 Compose services:
 
@@ -112,11 +123,12 @@ Smoke:
 python3 scripts/smoke_ops_chat.py http://localhost:25480
 ```
 
-The smoke proves dashboard chat intake creates a real ticket, records the Ops
-Chat classification note, checks Matrix health metadata, and verifies follow-up
-messages continue the same ticket. By default it also expects a real agent
-harness task to be queued; set `OPS_CHAT_SMOKE_SPAWN_AGENT=false` only for
-unit-style checks where the live model lane must not be used.
+The smoke proves dashboard chat intake creates a real ticket through the chat
+agent toolbelt, records the Ops Chat agent-created ticket note, checks Matrix
+health metadata, and verifies follow-up messages continue the same ticket. By
+default it also expects a real agent harness task to be queued; set
+`OPS_CHAT_SMOKE_SPAWN_AGENT=false` only for unit-style checks where the live
+model lane must not be used.
 
 Fastest Element demo path:
 
@@ -147,8 +159,9 @@ This no-spawn matrix covers 50 enterprise request types across executive
 support, IAM, email, phishing/EDR, network, endpoint, procurement,
 onboarding/offboarding, infrastructure, cloud, database, UI support, CI/CD,
 audit/compliance, and platform self-repair. It proves each chat-style request
-creates a ticket and lands in the expected RACI group without spending model
-capacity on all 50 cases.
+creates a ticket with a nonempty agent-selected assignment group. Use
+`--strict-routing` when validating a locked demo prompt set against expected
+group hints.
 
 This covers:
 
@@ -156,14 +169,30 @@ This covers:
 - account-lockout intake routed to Identity & Access
 - software-install intake routed to Endpoint Support
 - VPN connectivity routed to Network Operations
-- phishing intake routed to Security Operations with an approval gate
-- CI/CD delivery-gate intake routed to DevSecOps with an approval gate
+- phishing intake routed to Security Operations; containment or mailbox action
+  approval must be opened only when the ticket agent hits that workflow barrier
+- CI/CD delivery-gate intake routed to DevSecOps; deployment approval must be
+  opened only when the ticket agent reaches the policy gate
 - follow-up chat recorded as `user-response`
 - global search visibility for the scenario marker
 - optional real Hermes/Claude harness handoff through the AI proxy
 
 Latest live proof on 2026-05-20:
 
+- Harness-required Ops Chat proof:
+  - General chat marker `harness-answer-tool-1779286572` was answered by the
+    Hermes chat harness through `ops_chat_tool.py answer`; no ticket was
+    created.
+  - Operational marker `spawn-flag-enforced-1779286517` was handled by the
+    Hermes chat harness through `ops_chat_tool.py create-ticket`, creating
+    ticket `930`, routing it to `Identity & Access`, setting priority `P2`, and
+    creating no intake-time approval gate.
+  - The `spawn_agent=false` caller policy was enforced by the tool itself:
+    ticket `930` returned `spawn_agent_disabled_by_caller` and left zero active
+    agents.
+  - Earlier regression ticket `929` proved the same tool path with
+    `spawn_agent=true`; its accidental agent `312` was stopped after a provider
+    capacity retry because that run was only a no-spawn policy test.
 - Browser-level Playwright smoke passed through the complete current path:
   dashboard login as `demo_account_1`, Element login via Keycloak as
   `demo_chat_live11`, same-origin Matrix probe on
@@ -183,8 +212,9 @@ Latest live proof on 2026-05-20:
   `matrix-ui-live-chat-1779258900` created ticket `907`, spawned Hermes agent
   `306` / task `303`, and ended in `awaiting_user_response`.
 - The 50-case enterprise Ops Chat matrix passed with marker
-  `ops-chat-enterprise-matrix-1779257312`; tickets `846`-`895` all routed to
-  their expected RACI groups.
+  `ops-chat-enterprise-matrix-1779257312`; tickets `846`-`895` validated the
+  earlier RACI-driven baseline before chat intake moved to agent-selected
+  routing.
 - The real-agent scenario suite passed with marker
   `ops-chat-scenarios-1779257332`; tickets `896`-`906` covered general chat,
   account lockout, software request, VPN, phishing approval, CI/CD approval,
@@ -222,8 +252,9 @@ The 2026-05-20 hardening pass also fixed three demo-readiness issues:
   schema and are rendered as wait states instead of failed agents.
 - Agents are instructed not to write placeholder/debug notes such as
   "test note"; notes must contain real operational context.
-- Chat approval gates created before agent execution are rebound to the spawned
-  agent id, which allows approval-gate resume to work for chat-originated work.
+- Chat intake no longer creates approval gates before agent execution.
+  Approval-gate resume remains supported for gates created later by ticket
+  execution, access requests, or workflow policy.
 - A dedicated `VPN connectivity issue` RACI rule prevents VPN tunnel failures
   from being treated as generic IAM entitlement requests.
 
@@ -235,8 +266,11 @@ The 2026-05-20 hardening pass also fixed three demo-readiness issues:
 - Matrix appservice tokens, database passwords, OIDC client secrets, and
   dashboard service tokens are runtime/vault secrets only.
 - Work-worthy chat is logged as tickets so operational action remains traceable.
-- The chat endpoint uses existing RACI, approval, provider sync,
-  auto-assignment, agent queue, steering, and audit paths rather than a hidden
-  workflow.
+- The chat endpoint uses the real agent harness for chat intake and existing
+  ticket, provider sync, agent queue, steering, and audit paths rather than a
+  hidden workflow.
+- Chat intake does not create approval gates. Approval gates and access
+  requests are created only by downstream platform/workflow barriers and
+  provider permission failures.
 - Chat follow-ups on a waiting ticket spawn a continuation agent; follow-ups on
   a currently running agent are delivered as steering context.

@@ -4,6 +4,75 @@ Last updated: 2026-05-20.
 
 ## Found During 2026-05-20 Ops Chat And Access RACI Work
 
+### Ops Chat intake was allowed to create approval gates
+
+Status: fixed in source; live verification follows the Ops Chat deployment
+checks for this change.
+
+Problem:
+
+- The earlier Ops Chat flow used deterministic RACI classification before a
+  real ticket agent started.
+- If a RACI route said approval was required, the chat intake endpoint opened a
+  change request immediately.
+- That made the intake layer look like an approval authority, which is the wrong
+  security model.
+
+Fix:
+
+- Ops Chat now uses the configured Hermes/Claude harness for the chat turn
+  itself.
+- The chat agent receives an `ops_chat_tool.py` toolbelt and can answer general
+  chat directly or use the tool to create a ticket with ticket class, priority,
+  intent, and assignment group.
+- The application no longer asks the model for strict JSON and then parses that
+  JSON as the decision surface.
+- Ops Chat no longer creates approval gates during initial intake.
+- Approval, access, credential, and change gates must come from real downstream
+  barriers: scoped vault leases, provider permission failures, workflow policy,
+  and platform change gates when the ticket agent attempts the work.
+
+Verification target:
+
+- `/api/ops-chat/message` for operational work should return a ticket and no
+  `change_id`.
+- The ticket should contain `Ops Chat agent-created ticket`.
+- Risky work should create access requests or approval gates only after the
+  spawned ticket agent hits the relevant enforced barrier.
+
+### Ops Chat agent improvised shell/web work instead of using the chat tool
+
+Status: fixed in source; live verification follows the toolbelt smoke.
+
+Problem:
+
+- A general chat request for a cat image caused the chat agent to improvise an
+  external command instead of using the provided dashboard tool.
+- The raw harness transcript was visible as the user reply, which is bad demo
+  UX and can leak secret-looking strings or scary safety warnings.
+
+Fix:
+
+- The chat prompt now requires exactly one `ops_chat_tool.py` command for every
+  chat turn.
+- The allowed chat-turn tools are `answer` for general replies and
+  `create-ticket` for operational work.
+- The prompt forbids inline scripts, curl, external web requests, package
+  installs, image generators, arbitrary shell commands, and suspicious URL
+  fetching during the chat-intake turn.
+- If the agent does not use the tool, the UI returns a clean retry/ticket
+  message and records only a bounded raw preview in audit for troubleshooting.
+- A harness retry is allowed; an app-side generic-answer fallback is not.
+
+Verification:
+
+- Marker `harness-answer-tool-1779286572` answered a cat request through the
+  Hermes harness and `ops_chat_tool.py answer`; no ticket was created.
+- Marker `spawn-flag-enforced-1779286517` created ticket `930` through the
+  Hermes harness and `ops_chat_tool.py create-ticket`, assigned it to
+  `Identity & Access`, returned no `change_id`, and honored
+  `spawn_agent=false` as `spawn_agent_disabled_by_caller`.
+
 ### Ops Chat Element login failed or landed on unusable chat state
 
 Status: fixed and verified.
@@ -83,24 +152,30 @@ Verification:
 - `scripts/smoke_ops_chat_enterprise_matrix.py` passed 50/50 with marker
   `ops-chat-enterprise-matrix-1779257312` on tickets `846`-`895`.
 
-### Chat-created approval gates did not resume waiting agents
+### Historical chat-created approval gates did not resume waiting agents
 
-Status: fixed and verified.
+Status: superseded by the 2026-05-20 barrier-model fix.
 
-Ops Chat creates an approval gate during ticket creation when RACI says the
-request may require risky action. That gate was created before the real agent
-was spawned, so the `change_requests.agent_id` field was empty. A waiting agent
-could stop cleanly at the gate, but approving that gate returned
+Earlier Ops Chat builds created an approval gate during ticket creation when
+RACI said the request might require risky action. That gate was created before
+the real agent was spawned, so the `change_requests.agent_id` field was empty.
+A waiting agent could stop cleanly at the gate, but approving that gate returned
 `not_applicable` instead of spawning a continuation agent.
 
-Fix:
+Historical fix:
 
 - `api/routes/ops_chat.py` now binds the chat-created change request to the
   spawned agent id as soon as the handoff succeeds.
 - A new migration `022_ops_chat_agent_gate_and_vpn_routing.sql` records the
   related RACI/demo routing hardening.
 
-Verification:
+Current fix:
+
+- Ops Chat no longer creates approval gates during intake.
+- Approval gates must be created later by the ticket execution path, access
+  request path, provider permission failure, or workflow policy barrier.
+
+Historical verification:
 
 - Ticket `784` created from Ops Chat with marker
   `ops-chat-approval-resume-1779251871`.
