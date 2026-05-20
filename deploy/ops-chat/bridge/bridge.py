@@ -18,6 +18,14 @@ MATRIX_BOT_DISPLAY_NAME = os.getenv("MATRIX_BOT_DISPLAY_NAME", "Agentic Ops Agen
 PORT = int(os.getenv("OPS_CHAT_BRIDGE_PORT", "29318"))
 OUTBOUND_ENABLED = os.getenv("OPS_CHAT_OUTBOUND_ENABLED", "true").lower() not in ("0", "false", "no", "off")
 OUTBOUND_POLL_SECONDS = float(os.getenv("OPS_CHAT_OUTBOUND_POLL_SECONDS", "5"))
+DASHBOARD_TIMEOUT_SECONDS = int(os.getenv("OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS", "180"))
+TYPING_TIMEOUT_MS = int(os.getenv("OPS_CHAT_TYPING_TIMEOUT_MS", "45000"))
+WORKING_ACK_ENABLED = os.getenv("OPS_CHAT_WORKING_ACK_ENABLED", "true").lower() not in ("0", "false", "no", "off")
+WORKING_ACK_DELAY_SECONDS = float(os.getenv("OPS_CHAT_WORKING_ACK_DELAY_SECONDS", "2.5"))
+WORKING_ACK_TEXT = os.getenv(
+    "OPS_CHAT_WORKING_ACK_TEXT",
+    "I am working on that now. I will reply here when the agent finishes.",
+)
 
 BOT_USER_ID = f"@{MATRIX_BOT_LOCALPART}:{MATRIX_SERVER_NAME}"
 PROCESSED = set()
@@ -70,7 +78,7 @@ async def dashboard_chat(message, room_id, event_id, sender):
         "X-Dashboard-Service-User": "ops-chat-matrix-bridge",
     }
     async with ClientSession(headers=headers) as session:
-        async with session.post(f"{DASHBOARD_API_BASE}/api/ops-chat/message", json=payload, timeout=90) as response:
+        async with session.post(f"{DASHBOARD_API_BASE}/api/ops-chat/message", json=payload, timeout=DASHBOARD_TIMEOUT_SECONDS) as response:
             text = await response.text()
             if response.status >= 400:
                 return {
@@ -137,6 +145,24 @@ async def send_matrix_message(room_id, text):
             return True
 
 
+async def set_matrix_typing(room_id, typing=True, timeout_ms=None):
+    if not room_id:
+        return False
+    url = (
+        f"{MATRIX_HOMESERVER_URL}/_matrix/client/v3/rooms/"
+        f"{quote(room_id, safe='')}/typing/{quote(BOT_USER_ID, safe='')}"
+    )
+    payload = {"typing": bool(typing), "timeout": int(timeout_ms or TYPING_TIMEOUT_MS)}
+    params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID}
+    async with ClientSession() as session:
+        async with session.put(url, params=params, json=payload, timeout=15) as response:
+            if response.status >= 400:
+                body = await response.text()
+                print(f"Matrix typing update failed {response.status}: {body[:300]}", flush=True)
+                return False
+            return True
+
+
 async def join_matrix_room(room_id):
     url = f"{MATRIX_HOMESERVER_URL}/_matrix/client/v3/join/{quote(room_id, safe='')}"
     params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID}
@@ -154,6 +180,65 @@ def event_text(event):
     if content.get("msgtype") != "m.text":
         return ""
     return str(content.get("body") or "").strip()
+
+
+async def process_user_message_event(event):
+    sender = event.get("sender") or ""
+    room_id = event.get("room_id")
+    event_id = event.get("event_id")
+    text = event_text(event)
+    if sender == BOT_USER_ID or sender.startswith(f"@{MATRIX_BOT_LOCALPART}:"):
+        return False
+    if not room_id or not text:
+        return False
+    await set_matrix_typing(room_id, True)
+    task = asyncio.create_task(dashboard_chat(text, room_id, event_id, sender))
+    try:
+        if WORKING_ACK_ENABLED:
+            try:
+                result = await asyncio.wait_for(asyncio.shield(task), timeout=max(0.1, WORKING_ACK_DELAY_SECONDS))
+            except asyncio.TimeoutError:
+                await send_matrix_message(room_id, WORKING_ACK_TEXT)
+                result = await task
+        else:
+            result = await task
+        reply = result.get("reply") or "I received the message, but the dashboard did not return a reply."
+        ticket_id = result.get("ticket_id")
+        agent = result.get("agent") or {}
+        if ticket_id:
+            reply = f"{reply}\n\nDashboard ticket: #{ticket_id}"
+            if agent.get("agent_id"):
+                reply += f"\nAgent: #{agent.get('agent_id')} / task #{agent.get('task_id')}"
+        await send_matrix_message(room_id, reply)
+        return True
+    finally:
+        await set_matrix_typing(room_id, False, timeout_ms=1)
+
+
+async def process_recent_room_messages(room_id):
+    url = (
+        f"{MATRIX_HOMESERVER_URL}/_matrix/client/v3/rooms/"
+        f"{quote(room_id, safe='')}/messages"
+    )
+    params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID, "dir": "b", "limit": "12"}
+    async with ClientSession() as session:
+        async with session.get(url, params=params, timeout=20) as response:
+            if response.status >= 400:
+                body = await response.text()
+                print(f"Matrix recent-message fetch failed {response.status}: {body[:300]}", flush=True)
+                return 0
+            payload = await response.json()
+    processed = 0
+    for event in reversed(payload.get("chunk") or []):
+        event_id = event.get("event_id")
+        if not event_id or event_id in PROCESSED:
+            continue
+        if event.get("type") != "m.room.message":
+            continue
+        PROCESSED.add(event_id)
+        if await process_user_message_event(event):
+            processed += 1
+    return processed
 
 
 async def handle_matrix_event(event):
@@ -177,27 +262,13 @@ async def handle_matrix_event(event):
         ):
             print(f"Matrix bot invite received for {room_id}; joining as {BOT_USER_ID}", flush=True)
             if await join_matrix_room(room_id):
-                await send_matrix_message(
-                    room_id,
-                    "Agentic Ops is connected. Send me an operational request and I will route it into a traceable ticket when work is needed.",
-                )
+                await asyncio.sleep(1)
+                processed = await process_recent_room_messages(room_id)
+                if processed == 0:
+                    print(f"Matrix bot joined {room_id}; waiting for the user's first message", flush=True)
             return
 
-        if sender == BOT_USER_ID or sender.startswith(f"@{MATRIX_BOT_LOCALPART}:"):
-            return
-        text = event_text(event)
-        if not room_id or not text:
-            return
-
-        result = await dashboard_chat(text, room_id, event_id, sender)
-        reply = result.get("reply") or "I received the message, but the dashboard did not return a reply."
-        ticket_id = result.get("ticket_id")
-        agent = result.get("agent") or {}
-        if ticket_id:
-            reply = f"{reply}\n\nDashboard ticket: #{ticket_id}"
-            if agent.get("agent_id"):
-                reply += f"\nAgent: #{agent.get('agent_id')} / task #{agent.get('task_id')}"
-        await send_matrix_message(room_id, reply)
+        await process_user_message_event(event)
     except Exception as exc:
         print(f"Matrix event handling failed: {exc}", flush=True)
 

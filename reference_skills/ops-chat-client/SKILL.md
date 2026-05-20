@@ -39,12 +39,15 @@ Reference stack:
   internal note, audit event, and real agent-harness queue task.
 - When a ticket is created after clarification, recent chat context is copied
   into the ticket description and the Ops Chat-created note.
-- The chat agent decides whether to answer directly or use the tool to create a
-  ticket. Do not reintroduce app-side JSON parsing as the decision-maker.
+- The chat agent decides whether to answer directly, create a new ticket, or
+  continue/cancel an existing ticket from the same room. Do not assume one
+  Matrix room equals one ticket; the room can contain several unrelated asks.
+  Do not reintroduce app-side JSON parsing as the decision-maker.
 - During the chat-intake turn, the agent must finish with exactly one final
-  dashboard tool: `python ops_chat_tool.py answer ...` for general chat or
-  `python ops_chat_tool.py create-ticket ...` for tracked work. For benign
-  current-information questions it may first use
+  dashboard tool: `python ops_chat_tool.py answer --reply-file answer.md` for
+  general chat, `python ops_chat_tool.py create-ticket ...` for new tracked
+  work, or `python ops_chat_tool.py continue-ticket ...` for updates to an
+  existing room ticket. For benign current-information questions it may first use
   `python ops_chat_tool.py web-search ...`, then finish with `answer`. It must
   not run arbitrary curl, inline Python, external image generators, package
   installs, or suspicious URL fetches in this lightweight chat turn.
@@ -52,8 +55,14 @@ Reference stack:
   authority. Approval, access, credential, and change gates must come from real
   downstream barriers: scoped vault leases, provider permissions, workflow
   policy, and platform approval gates when the ticket agent attempts work.
-- Follow-up room messages on an existing session become `user-response` notes,
-  which are delivered to active agents through the steering inbox.
+- Follow-up room messages do not automatically attach to the latest ticket.
+  The chat agent sees recent linked tickets and must decide whether the message
+  is harmless chat, a new ticket, or a `user-response` note on a specific
+  existing ticket. Cancellation-like updates mark the ticket cancelled and stop
+  that ticket's active test/worker agent when present.
+- The bridge sets Matrix typing state and, for turns that take longer than a few
+  seconds, sends a short working acknowledgement so the user sees that the
+  agent is alive before the final answer/ticket response arrives.
 - Never perform hidden work outside tickets. If the user asks for account,
   system, email, deployment, security, access, change, research, or repair work,
   create or continue a ticket.

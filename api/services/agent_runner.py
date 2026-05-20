@@ -2860,11 +2860,21 @@ async def stop_agent_task(agent_id, reason="stopped via dashboard"):
     if task["pid"]:
         if task["id"] in _active_processes:
             proc = _active_processes[task["id"]]
-            proc.terminate()
             try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
+                proc.terminate()
+            except ProcessLookupError:
+                _active_processes.pop(task["id"], None)
+                proc = None
+            try:
+                if proc is not None:
+                    await asyncio.wait_for(proc.wait(), timeout=5)
             except asyncio.TimeoutError:
-                proc.kill()
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+            except ProcessLookupError:
+                pass
         else:
             try:
                 os.kill(task["pid"], signal.SIGTERM)

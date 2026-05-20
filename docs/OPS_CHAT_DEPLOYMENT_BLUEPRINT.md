@@ -116,6 +116,10 @@ Expected:
   The bridge polls `/api/ops-chat/outbound/pending`, sends each user-facing
   update, and acks it through `/api/ops-chat/outbound/ack` so restarts do not
   duplicate messages.
+- the bridge sets Matrix typing state and sends a short working acknowledgement
+  for long harness turns (`OPS_CHAT_WORKING_ACK_ENABLED=true`,
+  `OPS_CHAT_WORKING_ACK_DELAY_SECONDS=2.5` by default) so users do not have to
+  wonder whether the agent received the message.
 - benign current-information questions can use the private SearXNG-backed
   `ops_chat_tool.py web-search` command before the chat agent sends its final
   `answer`. Suspicious URL handling remains ticket/workflow controlled and must
@@ -130,8 +134,22 @@ Expected:
 Implementation note: Ops Chat does not rely on application-side structured
 parsing to classify the user message. The Matrix bridge hands the message to
 the configured Hermes/Claude harness. That chat agent receives
-`ops_chat_tool.py`; it either answers directly or uses the tool to create the
-ticket and spawn the ticket-resolution agent.
+`ops_chat_tool.py`; it either answers directly, creates a new ticket and spawns
+the ticket-resolution agent, or continues/cancels a specific existing room
+ticket. A room is not treated as a single-ticket container.
+
+Latest UX proof:
+
+- Browser Element flow marker `ops-chat-ux-live-1779314587` passed using
+  `demo_chat_direct4`: first-turn current-information answer, follow-up general
+  answer, watermelon procurement ticket `1266`, cancellation of ticket `1266`,
+  and a distinct replacement pizza ticket `1267`.
+- Direct API harness flow `!ux-watermelon2-1779308718:agentic-ops.local`
+  passed the same behavior on tickets `1259` and `1260`, with both tickets
+  synced to iTop.
+- Cancellation now stops the active chat-created ticket agent when the requester
+  cancels the ticket, and `agent_runner.stop_agent_task` handles stale process
+  handles without returning a scary 500.
 
 Latest live proof:
 

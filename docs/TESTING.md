@@ -65,6 +65,16 @@ PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
 node scripts/smoke_ops_chat_playwright.js
 ```
 
+End-user UX proof through Element:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_direct4"
+$env:OPS_CHAT_PASSWORD="<from vault>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+node scripts/smoke_ops_chat_user_experience.js
+```
+
 Expected:
 
 - harmless/general chat returns an answer without a ticket;
@@ -76,6 +86,13 @@ Expected:
   chat context in ticket evidence, syncs to the configured ticket provider, and
   queues the real Hermes/Claude ticket agent when enabled;
 - follow-up chat becomes `user-response` notes;
+- a room can contain harmless chat plus multiple tickets; the chat harness
+  chooses answer/create/continue instead of the app blindly attaching every
+  later message to the latest ticket;
+- cancellation-like updates cancel the correct ticket and stop its active
+  chat-created agent when one exists;
+- replacement asks in the same room create a distinct ticket unless the harness
+  explicitly decides it is a same-ticket scope update;
 - `/api/tickets/{id}/assignment` can reassign or escalate the ticket with a
   `ticket-assignment` audit note.
 
@@ -90,6 +107,8 @@ active agents after cleanup: 0
 browser UI retest: marker ops-chat-ui-exec-1779283445, ticket 1197, outbound chat user-response passed
 50-case enterprise retest: marker ops-chat-enterprise-matrix-1779305167, tickets 1198-1248, 50/50 passed
 post-guard real agent: marker ops-chat-scenarios-1779307368, ticket 1255, agent 333, canonical-ticket no-duplicate prompt verified
+direct watermelon UX: session !ux-watermelon2-1779308718, tickets 1259 cancelled and 1260 pizza replacement, both synced to iTop
+Element watermelon UX: marker ops-chat-ux-live-1779314587, tickets 1266 cancelled and 1267 pizza replacement, passed
 ```
 
 ## Server Health

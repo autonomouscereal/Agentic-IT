@@ -4,6 +4,63 @@ Last updated: 2026-05-20.
 
 ## Found During 2026-05-20 Ops Chat UI Retest
 
+### Ops Chat felt unresponsive and assumed one ticket per Matrix room
+
+Status: fixed and verified.
+
+Symptoms:
+
+- A first user message could receive only the old bridge "Agentic Ops is
+  connected" greeting, forcing the user to ask the same question twice.
+- Element did not show a typing/working signal while the dashboard chat harness
+  was running, so longer real-agent turns felt like sending a message into a
+  dead bot.
+- After a room created one ticket, every later message in that same room was
+  automatically recorded as a `user-response` note on the latest ticket before
+  the chat harness could decide whether it was a new ask, a cancellation, a
+  replacement request, or harmless general chat.
+- Currency replies passed through shell arguments could be mangled by shell
+  expansion, for example `US$0.65` becoming a shell-path-looking artifact.
+
+Fix:
+
+- The Matrix bridge no longer sends the blanket connected greeting as the only
+  first response. After joining a DM it backfills recent user messages, then
+  waits for the user if there is nothing to process.
+- The bridge now sets Matrix typing state while `/api/ops-chat/message` is
+  running and clears it afterward.
+- `/api/ops-chat/message` no longer blindly continues the latest room ticket.
+  It records the user message as chat context, passes recent linked tickets to
+  the real Hermes/Claude harness, and lets the harness choose one final tool:
+  `answer`, `create-ticket`, or `continue-ticket`.
+- `ops_chat_tool.py answer` and `create-ticket` now support `--reply-file`, and
+  the prompt tells agents to use a file for currency/multiline replies instead
+  of passing dollar amounts through shell arguments.
+
+Verification target:
+
+- A first harmless current-information question should receive a real answer on
+  the first attempt, with no ticket.
+- A follow-up general question should preserve chat context.
+- A new operational ask in the same room should create a ticket and sync it to
+  the configured ticket provider.
+- A cancellation should update the correct existing ticket.
+- A replacement request should create a new ticket unless the agent explicitly
+  determines it is a same-ticket scope change.
+
+Verified:
+
+- Direct API harness flow `!ux-watermelon2-1779308718:agentic-ops.local`
+  answered the first current-information question on the first try, preserved
+  follow-up context, created watermelon ticket `1259`, cancelled it, and created
+  replacement pizza ticket `1260`.
+- Browser Element UX proof marker `ops-chat-ux-live-1779314587` passed with
+  watermelon ticket `1266` and replacement pizza ticket `1267`.
+- The bridge now sends a delayed working acknowledgement because Element did
+  not reliably expose Matrix typing state in the Playwright DOM.
+- `agent_runner.stop_agent_task` now tolerates already-exited process handles
+  instead of returning a 500 during cancellation cleanup.
+
 ### Ops Chat all-agent scenario smoke can timeout during chat-intake provider turn
 
 Status: under investigation; narrow reruns should be used for demo proof until

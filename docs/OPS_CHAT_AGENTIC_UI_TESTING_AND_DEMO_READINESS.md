@@ -19,7 +19,8 @@ The user experience should be:
 2. User signs in through Keycloak.
 3. User messages `Agentic Ops Agent`.
 4. The chat agent answers harmless/general questions directly.
-5. If the request needs tracking, the chat agent creates or continues a ticket.
+5. If the request needs tracking, the chat agent creates a new ticket or
+   continues/cancels a specific existing ticket.
 6. The ticket syncs to the active ticket provider, iTop in the lab.
 7. A real Hermes/Claude ticket agent works the ticket when appropriate.
 8. If the ticket agent needs more information, it asks through the ticket and
@@ -71,9 +72,25 @@ The dashboard gives the configured Hermes/Claude harness a small
 - optional `web-search`, then `answer`, for benign current-information
   questions
 - `create-ticket` for tracked operational work
+- `continue-ticket` for updates, requester replies, cancellations, or scope
+  changes that clearly belong to one of the recent tickets in the room
 
 The application may recover side effects and enforce safety, but it should not
 replace the agent's decision with a brittle custom JSON classifier.
+
+Important room behavior:
+
+- A Matrix room is a conversation, not a ticket container. One room can contain
+  harmless chat, several tickets, cancellations, and replacement requests.
+- The dashboard records recent linked tickets and passes them to the harness as
+  context. The harness must decide per message whether to answer, create, or
+  continue.
+- Cancellation-like `continue-ticket` updates mark the selected ticket
+  `cancelled`, record the requester note, and stop that ticket's active agent
+  if one is present.
+- The Matrix bridge sets typing state while the harness is working and sends a
+  delayed "working on that" acknowledgement when the turn takes more than a few
+  seconds, because Element may not visibly render typing in every browser state.
 
 Allowed pre-ticket clarification:
 
