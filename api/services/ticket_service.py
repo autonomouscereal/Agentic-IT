@@ -494,8 +494,17 @@ async def push_to_provider(ticket_id, provider=None):
 
 
 async def add_note(ticket_id, body, author="dashboard", source="dashboard", visibility="internal", external_ref=None):
-    if not await fetchrow("SELECT id FROM tickets WHERE id = $1", ticket_id):
+    ticket = await fetchrow("SELECT id, access_scope FROM tickets WHERE id = $1", ticket_id)
+    if not ticket:
         return {"error": "Ticket not found"}
+    scope = _loads_json(ticket.get("access_scope")) or {}
+    if (
+        not external_ref
+        and str(source or "").strip() == "agent"
+        and str(visibility or "").strip() in {"user", "public"}
+        and str(scope.get("source") or "").strip() == "ops-chat"
+    ):
+        external_ref = "ops-chat-agent-note"
     note_id = await fetchval("""
         INSERT INTO ticket_notes (ticket_id, source, author, body, visibility, external_ref)
         VALUES ($1, $2, $3, $4, $5, $6)

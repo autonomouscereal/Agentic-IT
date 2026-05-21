@@ -44,6 +44,8 @@ def load_ticket_service(calls):
             ticket = dict(stored.get("ticket") or {})
             ticket["id"] = args[0]
             return ticket
+        if "SELECT id, access_scope FROM tickets WHERE id = $1" in query:
+            return {"id": args[0], "access_scope": stored.get("access_scope", {})}
         if "SELECT id FROM tickets WHERE id = $1" in query:
             return {"id": args[0]}
         return None
@@ -208,6 +210,32 @@ class TicketServiceProviderSyncTests(unittest.TestCase):
         self.assertLessEqual(len(ticket["title"]), module.MAX_PROVIDER_TITLE_LENGTH)
         self.assertLessEqual(len(provider_title), module.MAX_PROVIDER_TITLE_LENGTH)
         self.assertTrue(provider_title.endswith("..."))
+
+    def test_ops_chat_agent_user_note_gets_outbound_marker(self):
+        calls = []
+        module = load_ticket_service(calls)
+        database = sys.modules["database"]
+        # The unit harness keeps mutable state inside the fetchrow closure; expose
+        # an ops-chat scope through the query call by replacing fetchrow narrowly.
+        async def fetchrow(query, *args):
+            calls.append(("fetchrow", query, args))
+            if "SELECT id, access_scope FROM tickets WHERE id = $1" in query:
+                return {"id": args[0], "access_scope": {"source": "ops-chat"}}
+            if "SELECT id FROM tickets WHERE id = $1" in query:
+                return {"id": args[0]}
+            return None
+        database.fetchrow = fetchrow
+        module.fetchrow = fetchrow
+        result = asyncio.run(module.add_note(
+            42,
+            "Agent-authored update for the requester.",
+            author="agent-1",
+            source="agent",
+            visibility="user",
+        ))
+        self.assertEqual(result["status"], "created")
+        insert_calls = [call for call in calls if call[0] == "fetchval" and "INSERT INTO ticket_notes" in call[1]]
+        self.assertEqual(insert_calls[-1][2][5], "ops-chat-agent-note")
 
 
 if __name__ == "__main__":

@@ -98,6 +98,21 @@ delivers that explicit agent-authored closure note to Matrix. Generic
 ticket-status messages remain control-plane fallbacks, not the desired final
 user experience.
 
+Agents may also send requester-facing progress or result notes before closure.
+For Ops Chat-originated tickets, the ticket service automatically marks
+agent-authored `visibility=user` or `visibility=public` notes with
+`external_ref=ops-chat-agent-note` when the agent does not provide a more
+specific `ops-chat-*` external reference. This keeps the agent in charge of when
+to update the requester while preventing old unrelated public notes from being
+backfilled into Matrix.
+
+Matrix delivery hardening note: the application-service bridge awaits inbound
+event processing before acknowledging Synapse transactions. If dashboard
+handoff fails, the bridge returns HTTP 500 so Synapse can retry instead of
+silently dropping the user's message. Agent-authored closure notes render in
+Matrix as "Agent completed this request..." and progress notes render as
+"Agent update..." for demo readability.
+
 The application may recover side effects and enforce safety, but it should not
 replace the agent's decision with a brittle custom JSON classifier.
 
@@ -108,6 +123,11 @@ Important room behavior:
 - The dashboard records recent linked tickets and passes them to the harness as
   context. The harness must decide per message whether to answer, create, or
   continue.
+- If the user explicitly asks for a fresh/new/separate ticket or says to open,
+  file, create, or put in a ticket, the toolbelt allows `create-ticket` even
+  when the same sentence contains words like "update" or "keep me updated."
+  This avoids stale-room false positives while preserving the agent's ownership
+  of old-vs-new decisions.
 - Cancellation-like `continue-ticket` updates mark the selected ticket
   `cancelled`, record the requester note, and stop that ticket's active agent
   if one is present.

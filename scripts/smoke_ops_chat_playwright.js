@@ -365,13 +365,24 @@ async function sendOpsChatMessage(page) {
   }
   if (directComposerReady) {
     const message = chatMessage.includes(chatMarker) ? chatMessage : `${chatMessage} Marker ${chatMarker}`;
+    const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+    const beforeTickets = Array.from(beforeText.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).map((match) => Number(match[1]));
     await sendComposerMessage(page, message);
-    await page.getByText(/Dashboard ticket: #|I created ticket #/i).first().waitFor({ state: "visible", timeout: 120000 });
+    await page.waitForFunction(
+      ({ beforeTickets }) => {
+        const text = document.body.innerText || "";
+        const ids = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).map((match) => Number(match[1]));
+        return ids.some((id) => !beforeTickets.includes(id));
+      },
+      { beforeTickets },
+      { timeout: 180000 },
+    );
     await maybeScreenshot(page, "ops-chat-message");
     const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
     const matches = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi));
-    const match = matches[matches.length - 1];
-    return { marker: chatMarker, ticketId: match ? Number(match[1]) : null };
+    const match = matches.map((item) => Number(item[1])).find((id) => !beforeTickets.includes(id));
+    if (!match) throw new Error("Ops Chat did not expose a newly-created dashboard ticket id after the message");
+    return { marker: chatMarker, ticketId: match };
   }
   const directMessage = page.getByText(/Send a Direct Message/i).first();
   if (await directMessage.isVisible().catch(() => false)) {
@@ -426,6 +437,8 @@ async function sendOpsChatMessage(page) {
   }
   await page.waitForTimeout(6000);
   const message = chatMessage.includes(chatMarker) ? chatMessage : `${chatMessage} Marker ${chatMarker}`;
+  const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+  const beforeTickets = Array.from(beforeText.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).map((match) => Number(match[1]));
   const composers = [
     'textarea[placeholder*="Message"]',
     '[aria-label*="Message"]',
@@ -450,12 +463,21 @@ async function sendOpsChatMessage(page) {
     const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 1000);
     throw new Error(`Ops Chat message composer was not found. url=${page.url()} body=${body}`);
   }
-  await page.getByText(/Dashboard ticket: #|I created ticket #/i).first().waitFor({ state: "visible", timeout: 120000 });
+  await page.waitForFunction(
+    ({ beforeTickets }) => {
+      const text = document.body.innerText || "";
+      const ids = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).map((match) => Number(match[1]));
+      return ids.some((id) => !beforeTickets.includes(id));
+    },
+    { beforeTickets },
+    { timeout: 180000 },
+  );
   await maybeScreenshot(page, "ops-chat-message");
   const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
   const matches = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi));
-  const match = matches[matches.length - 1];
-  return { marker: chatMarker, ticketId: match ? Number(match[1]) : null };
+  const match = matches.map((item) => Number(item[1])).find((id) => !beforeTickets.includes(id));
+  if (!match) throw new Error("Ops Chat did not expose a newly-created dashboard ticket id after the message");
+  return { marker: chatMarker, ticketId: match };
 }
 
 async function sendComposerMessage(page, message) {

@@ -26,6 +26,17 @@ def test_ops_chat_tool_rejects_followup_create_ticket_when_room_has_tickets():
     assert "The create-ticket tool will reject obvious follow-up" in source
 
 
+def test_ops_chat_lets_agent_decide_old_ticket_relevance():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    assert "Review each listed ticket's title, status, group, provider sync, and recency" in source
+    assert "the agent is responsible for deciding whether old room tickets are relevant or stale" in source
+    assert "def looks_like_explicit_new_ticket" in source
+    assert "not looks_like_explicit_new_ticket(original)" in source
+    assert "Explicit fresh/new/separate ticket requests should use create-ticket" in source
+    assert "terminal_statuses =" not in source
+    assert "do not continue old terminal tickets for new work" not in source
+
+
 def test_ops_chat_recovery_does_not_claim_update_without_user_response_note():
     source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
     assert "def _recover_ticket_update_side_effect" in source
@@ -90,8 +101,25 @@ def test_ops_chat_delivers_public_agent_notes_only():
     assert 'OUTBOUND_CHAT_NOTE_SOURCES = {"user-info-request", "ticket-status", "agent"}' in source
     assert "n.source = 'agent'" in source
     assert "COALESCE(n.visibility, 'internal') IN ('user', 'public')" in source
-    assert "COALESCE(n.external_ref, '') LIKE 'ops-chat-closure%'" in source
+    assert "COALESCE(n.external_ref, '') LIKE 'ops-chat-%'" in source
     assert "(n.source <> 'agent' AND COALESCE(n.visibility, 'internal') IN ('internal', 'user', 'public'))" in source
+
+
+def test_ops_chat_agent_notes_have_human_readable_matrix_prefixes():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    assert "external_ref=None" in source
+    assert "Agent completed this request for ticket" in source
+    assert "Agent update for ticket" in source
+    assert 'row.get("external_ref")' in source
+
+
+def test_matrix_bridge_awaits_event_processing_before_ack():
+    source = (ROOT / "deploy" / "ops-chat" / "bridge" / "bridge.py").read_text(encoding="utf-8")
+    transaction_body = source.split("async def transactions", 1)[1].split("\n\nasync def users", 1)[0]
+    assert "asyncio.create_task(handle_matrix_event(event))" not in transaction_body
+    assert "await handle_matrix_event(event)" in transaction_body
+    assert 'status=500' in transaction_body
+    assert 'event_processing_failed' in transaction_body
 
 
 def test_ticket_prompt_requires_user_facing_ops_chat_closure_note():

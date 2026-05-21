@@ -300,7 +300,7 @@ def _persist_agent_artifact(work_dir, session_id, tool_result):
     return tool_result
 
 
-def _compact_chat_note_body(source, body, ticket_id):
+def _compact_chat_note_body(source, body, ticket_id, external_ref=None):
     text = re.sub(r"\n{3,}", "\n\n", str(body or "").strip())
     if source == "user-info-request":
         lines = [line.rstrip() for line in text.splitlines()]
@@ -316,6 +316,10 @@ def _compact_chat_note_body(source, body, ticket_id):
         text = f"Ticket #{ticket_id} needs your input:\n\n{question}"
     elif source == "ticket-status":
         text = f"Ticket #{ticket_id} status update:\n\n{text}"
+    elif source == "agent" and str(external_ref or "").startswith("ops-chat-closure"):
+        text = f"Agent completed this request for ticket #{ticket_id}:\n\n{text}"
+    elif source == "agent" and str(external_ref or "").startswith("ops-chat-agent-note"):
+        text = f"Agent update for ticket #{ticket_id}:\n\n{text}"
     else:
         text = f"Ticket #{ticket_id} update:\n\n{text}"
     if len(text) > OUTBOUND_CHAT_MAX_BODY_CHARS:
@@ -1497,6 +1501,27 @@ def looks_like_existing_ticket_followup(text):
     ))
 
 
+def looks_like_explicit_new_ticket(text):
+    value = (text or "").lower()
+    return any(phrase in value for phrase in (
+        "fresh ticket",
+        "fresh request",
+        "new ticket",
+        "new request",
+        "new separate ticket",
+        "separate ticket",
+        "separate request",
+        "create a ticket",
+        "create a fresh",
+        "open a ticket",
+        "open a new",
+        "file a ticket",
+        "put in a ticket",
+        "fresh traceable ticket",
+        "new traceable ticket",
+    ))
+
+
 def message_hash(text):
     normalized = " ".join(str(text or "").strip().split()).lower()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24] if normalized else ""
@@ -1572,7 +1597,7 @@ def create_ticket(args):
     original = read_message(args.message_file)
     history = read_message(args.history_file)
     original_hash = message_hash(original)
-    if ALLOWED_TICKET_IDS and looks_like_existing_ticket_followup(original):
+    if ALLOWED_TICKET_IDS and looks_like_existing_ticket_followup(original) and not looks_like_explicit_new_ticket(original):
         allowed = ", ".join(str(value) for value in sorted(ALLOWED_TICKET_IDS))
         append_action({
             "mode": "create-ticket",
@@ -2378,6 +2403,9 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- Website/app hosting requests are operational. If the user only asks for a draft page or file, validate and return the artifact in chat. If they ask you to deploy/host it so someone can reach it, create a ticket. If the target is unclear, recommend the platform-managed static-site path and let the ticket agent request approval before publishing.",
         "- Requests to generate SLA reports, policy exceptions, risk acceptance, audit exports, evidence packages, or leadership metrics are operational Compliance & Audit work; create a ticket.",
         "- Existing ticket follow-up: use continue-ticket only when the user's message is clearly an update, cancellation, requested detail, or scope change for one of the existing chat tickets listed below.",
+        "- Review each listed ticket's title, status, group, provider sync, and recency before deciding whether the user's message belongs on an existing ticket or needs a new one.",
+        "- You may continue old resolved/closed/cancelled tickets when the user is clearly asking about that same work, but do not blindly attach unrelated new work to stale room history.",
+        "- If the user explicitly asks for a fresh, new, separate, opened, filed, or created ticket, create-ticket is valid even when they also ask you to keep them updated.",
         "- The create-ticket tool will reject obvious follow-up/update/cancel/reassign messages when this room already has linked tickets. Use continue-ticket for those.",
         "- Do not assume a Matrix room equals one ticket. A user may ask several unrelated things in the same room. Decide per message.",
         "- If the user cancels a prior request, continue that ticket and set status cancelled when appropriate.",
@@ -2488,6 +2516,8 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
                 "- New work involving install, purchase, account unlock, system/mailbox check, access, outage, deployment, security, ticket/request creation, or repair -> create-ticket.",
                 "- Mixed message with both current-info/general chat and operational work -> answer the general/current-info part in a reply file, then create-ticket/continue-ticket with that --reply-file so the user gets both outcomes.",
                 "- Update, cancellation, status check, or scope change for an existing linked ticket -> continue-ticket.",
+                "- Inspect the listed ticket status/title before choosing continue-ticket; the agent is responsible for deciding whether old room tickets are relevant or stale.",
+                "- Explicit fresh/new/separate ticket requests should use create-ticket, even if the user also says keep me updated.",
                 "- Do not decide approvals. Real platform/provider barriers enforce approval later.",
                 "- Do not say you created a ticket unless create-ticket succeeds.",
                 "",
@@ -2890,7 +2920,7 @@ async def pending_outbound_chat(limit: int = 50, matrix_only: bool = False,
                 (
                   n.source = 'agent'
                   AND COALESCE(n.visibility, 'internal') IN ('user', 'public')
-                  AND COALESCE(n.external_ref, '') LIKE 'ops-chat-closure%'
+                  AND COALESCE(n.external_ref, '') LIKE 'ops-chat-%'
                 )
                 OR (n.source <> 'agent' AND COALESCE(n.visibility, 'internal') IN ('internal', 'user', 'public'))
               )
@@ -2909,7 +2939,7 @@ async def pending_outbound_chat(limit: int = 50, matrix_only: bool = False,
     """, bool(matrix_only), ticket_id, session_id, sorted(OUTBOUND_CHAT_NOTE_SOURCES), bounded_limit)
     events = []
     for row in rows:
-        body = _compact_chat_note_body(row.get("source"), row.get("body"), row.get("ticket_id"))
+        body = _compact_chat_note_body(row.get("source"), row.get("body"), row.get("ticket_id"), row.get("external_ref"))
         events.append({
             "event_key": row.get("event_key"),
             "session_id": row.get("session_id"),

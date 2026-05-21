@@ -55,6 +55,16 @@ Reference stack:
   follow-up is needed. The bridge delivers this agent-authored closure note back
   to Matrix, so do not rely on a generic ticket-status event as the final user
   response.
+- Agents may send requester-facing progress/result notes while working. On
+  Ops Chat-originated tickets, agent-authored `visibility=user` or
+  `visibility=public` notes are automatically marked
+  `external_ref=ops-chat-agent-note` when no more specific `ops-chat-*`
+  reference is supplied, so the bridge can deliver the agent's own update
+  without exposing internal checkpoint notes.
+- The Matrix appservice bridge must await inbound event processing before
+  acknowledging Synapse transactions. Returning 200 before dashboard handoff can
+  silently drop user messages because Synapse will not retry. If processing
+  fails, return 500 and let Synapse retry.
 - When a ticket is created after clarification, recent chat context is copied
   into the ticket description and the Ops Chat-created note.
 - Chat-created tickets must preserve canonical contact metadata:
@@ -88,6 +98,10 @@ Reference stack:
   is harmless chat, a new ticket, or a `user-response` note on a specific
   existing ticket. Cancellation-like updates mark the ticket cancelled and stop
   that ticket's active test/worker agent when present.
+- Explicit fresh/new/separate ticket language keeps `create-ticket` available
+  even when the same message also says "keep me updated" or similar. Do not add
+  app-side terminal-ticket blockers; let the agent inspect stale room history
+  and decide whether old tickets are relevant.
 - Same-message `create-ticket` retries are idempotent. The tool passes a
   `message_hash` in ticket `access_scope`, and the dashboard returns the
   existing active ticket for the same `session_id + message_hash` instead of

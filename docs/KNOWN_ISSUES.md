@@ -6237,3 +6237,111 @@ Verification:
   unmarked agent note. `/api/ops-chat/outbound/pending?session_id=717` returned
   exactly the marked agent closure note and excluded the unmarked note. The
   synthetic rows were deleted after verification; active agents remained zero.
+
+### Ops Chat agent-visible progress note was not delivered back to the requester
+
+Status: fixed in source on 2026-05-21; live verification pending.
+
+Problem:
+
+- The fast Element UI regression created ticket `1420` from
+  `demo_chat_live10`.
+- The worker agent wrote a legitimate requester-facing note with
+  `source=agent` and `visibility=user`, but it did not set the newer
+  `ops-chat-closure` external reference because it was a progress/update note,
+  not the final closure note.
+- The bridge therefore delivered the later cancellation status note, but not
+  the worker's own requester-facing update. That was too restrictive for the
+  desired behavior where the actual agent decides when to talk to the user.
+
+Fix:
+
+- `ticket_service.add_note` now auto-marks agent-authored `user`/`public` notes
+  on Ops Chat-originated tickets with `external_ref=ops-chat-agent-note` when
+  the agent did not provide a more specific `ops-chat-*` reference.
+- Ops Chat outbound delivery now accepts public/user-visible `source=agent`
+  notes with any `ops-chat-*` external reference. This preserves the no-backfill
+  guard while letting worker agents send progress, clarification, result, and
+  closure notes to Matrix as they decide.
+
+Verification:
+
+- Source regression test added in `tests/test_ticket_service_provider_sync.py`.
+
+### Ops Chat reused an old resolved room ticket for new work during browser retest
+
+Status: documented as demo-nonblocking follow-up on 2026-05-21.
+
+Problem:
+
+- Browser test marker `ops-chat-browser-outbound-1779367241` used
+  `demo_chat_live11` in a room that still had historical ticket `908` linked.
+- The new message asked for fresh Keycloak login help, but the chat turn
+  continued the stale resolved ticket context and created access request ticket
+  `1422` against parent ticket `908` instead of opening a fresh canonical work
+  ticket.
+- This is exactly the bad multi-ticket room behavior the demo cannot show:
+  old completed tickets should not swallow new operational work.
+
+Correction:
+
+- The first attempted fix over-hardened the tool by blocking continuation of
+  terminal tickets unless the user explicitly named the ticket id.
+- That was removed because Ops Chat is intentionally agent-driven: the agent
+  should inspect the listed ticket title/status/group/provider sync/recency and
+  decide whether an old room ticket is relevant, stale, reusable, or unrelated.
+- The prompt now tells the agent to review ticket status and recency before
+  choosing `continue-ticket` or `create-ticket`, without an app-side hard stop.
+- The `create-ticket` tool now honors explicit fresh/new/separate/open/file
+  ticket language as an override to the follow-up-shaped wording check. This
+  prevents a phrase such as "create a fresh traceable ticket and keep me
+  updated" from being rejected only because it contains "updated."
+- The Playwright smoke remains strict about detecting whether a newly-created
+  ticket appeared when the test asks for fresh work, but the application itself
+  does not force that decision.
+
+Verification:
+
+- Source regression test documents the intended agent-owned decision model in
+  `tests/test_ops_chat_ticket_lifecycle_regressions.py`.
+- Remaining behavior where an agent may choose to continue an old room ticket
+  too often is accepted for the live demo. It is visible, auditable, and
+  recoverable through user steering; deeper tuning belongs after the demo.
+
+### Matrix Ops Chat transaction ack could drop user messages
+
+Status: fixed on 2026-05-21; focused regression added.
+
+Problem:
+
+- The Matrix application-service transaction route accepted events, spawned
+  `handle_matrix_event()` in a background task, and immediately returned HTTP
+  200.
+- If the bridge process crashed or the background task failed after that 200,
+  Synapse would not retry and the user message could be lost before it reached
+  the dashboard.
+
+Fix:
+
+- The transaction route now awaits message/member event processing before
+  returning 200.
+- If event processing fails, the route returns HTTP 500 so Synapse can retry.
+- Failed event ids are removed from the bridge's in-memory processed set so a
+  retried transaction can run the event again.
+
+### Agent-authored Ops Chat closure notes looked generic in Matrix
+
+Status: fixed on 2026-05-21; focused regression added.
+
+Problem:
+
+- Outbound agent notes were delivered, but the compact Matrix formatter treated
+  unknown sources as generic `Ticket # update`.
+- Final requester-visible closures could therefore look like a generic ticket
+  update instead of the agent's completion response.
+
+Fix:
+
+- The outbound compactor now receives `external_ref`.
+- `ops-chat-closure` notes render as `Agent completed this request...`.
+- `ops-chat-agent-note` notes render as `Agent update...`.

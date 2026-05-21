@@ -429,7 +429,7 @@ async def handle_matrix_event(event):
     try:
         event_id = event.get("event_id")
         if not event_id or event_id in PROCESSED:
-            return
+            return True
         PROCESSED.add(event_id)
         if len(PROCESSED) > 5000:
             PROCESSED.clear()
@@ -450,11 +450,17 @@ async def handle_matrix_event(event):
                 processed = await process_recent_room_messages(room_id)
                 if processed == 0:
                     print(f"Matrix bot joined {room_id}; waiting for the user's first message", flush=True)
-            return
+                return True
+            PROCESSED.discard(event_id)
+            return False
 
         await process_user_message_event(event)
+        return True
     except Exception as exc:
+        if event.get("event_id"):
+            PROCESSED.discard(event.get("event_id"))
         print(f"Matrix event handling failed: {exc}", flush=True)
+        return False
 
 
 async def health(request):
@@ -522,11 +528,16 @@ async def transactions(request):
     payload = await request.json()
     events = payload.get("events") or []
     print(f"Matrix transaction {request.match_info.get('txn_id')} events={len(events)}", flush=True)
+    failed = 0
     for event in events:
         if event.get("type") == "m.room.message":
-            asyncio.create_task(handle_matrix_event(event))
+            if not await handle_matrix_event(event):
+                failed += 1
         elif event.get("type") == "m.room.member":
-            asyncio.create_task(handle_matrix_event(event))
+            if not await handle_matrix_event(event):
+                failed += 1
+    if failed:
+        return web.json_response({"error": "event_processing_failed", "failed": failed}, status=500)
     return web.json_response({})
 
 

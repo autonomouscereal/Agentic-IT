@@ -516,10 +516,12 @@ The 2026-05-20 hardening pass also fixed three demo-readiness issues:
   `/request-info`, `/status`, and explicit agent closure notes appear in
   `/api/ops-chat/outbound/pending`, the Matrix bridge posts them back to the
   original room, and `/api/ops-chat/outbound/ack` prevents duplicate delivery
-  after bridge restarts. Ticket agents must mark chat closure notes with
-  `source=agent`, `visibility=public`, and `external_ref=ops-chat-closure` so
-  the bridge forwards the agent's actual final response without backfilling
-  unrelated internal or historical notes.
+  after bridge restarts. Ticket agents should mark chat closure notes with
+  `source=agent`, `visibility=public`, and `external_ref=ops-chat-closure`.
+  Agent-authored `user`/`public` notes on Ops Chat tickets are also auto-marked
+  `external_ref=ops-chat-agent-note` when the agent omits a more specific
+  `ops-chat-*` reference, so the bridge forwards the agent's own progress and
+  result notes without backfilling unrelated internal or historical notes.
 - Benign current-information chat can use the private SearXNG-backed
   `ops_chat_tool.py web-search` command before the final `answer`; suspicious
   URLs still must not be fetched directly.
