@@ -1934,6 +1934,7 @@ async function viewTicket(id) {
     const data = await apiGet(`/api/tickets/${id}`);
     if (!data) return;
     const description = cleanTicketDescription(data.description);
+    const modalBody = document.getElementById("modal-body");
 
     document.getElementById("modal-title").textContent = `Ticket #${data.id} - ${data.itop_class || "Incident"}::${data.itop_ref}`;
 
@@ -1975,7 +1976,8 @@ async function viewTicket(id) {
         </div>
     `;
 
-    document.getElementById("modal-body").innerHTML = `
+    modalBody.dataset.ticketId = String(data.id);
+    modalBody.innerHTML = `
         <div class="modal-section">
             <div class="section-title">Ticket Information</div>
             <div class="detail-row"><span class="detail-label">Title:</span><span>${escHtml(data.title)}</span></div>
@@ -1997,12 +1999,37 @@ async function viewTicket(id) {
         </div>
         ${agentSection}
         ${changesSection}
+        <div class="modal-section ticket-activity-section ticket-activity-loading" id="ticket-activity-section" data-ticket-id="${escAttr(data.id)}">
+            <div class="section-title">Evidence Trail</div>
+            <div class="timeline-summary">Loading ticket notes, agent work, approvals, model turns, and audit evidence...</div>
+            <div class="loading inline-loading">Loading evidence trail...</div>
+        </div>
         ${actionsBar}
     `;
     document.getElementById("ticket-modal").classList.add("active");
+    refreshModalScrollLayout(modalBody, { resetTop: true });
 
     // Load activity log for this ticket
     loadTicketActivity(id);
+}
+
+function refreshModalScrollLayout(modalBody, options = {}) {
+    if (!modalBody) return;
+    const resetTop = Boolean(options.resetTop);
+    requestAnimationFrame(() => {
+        if (resetTop) modalBody.scrollTop = 0;
+        modalBody.getBoundingClientRect();
+        requestAnimationFrame(() => {
+            const originalTop = resetTop ? 0 : modalBody.scrollTop;
+            const maxTop = Math.max(0, modalBody.scrollHeight - modalBody.clientHeight);
+            if (maxTop > 0) {
+                modalBody.scrollTop = Math.min(maxTop, originalTop + 1);
+                modalBody.scrollTop = originalTop;
+            }
+            modalBody.getBoundingClientRect();
+            window.dispatchEvent(new Event("resize"));
+        });
+    });
 }
 
 function jsonBlock(value) {
@@ -2534,13 +2561,14 @@ async function loadTicketActivity(ticketId) {
 
         const modalBody = document.getElementById("modal-body");
         if (!modalBody) return;
+        if (String(modalBody.dataset.ticketId || "") !== String(ticketId)) return;
 
         // Insert before the actions bar
         const actionsBar = modalBody.querySelector(".modal-actions-bar");
-        if (!actionsBar) return;
+        const existingActivity = modalBody.querySelector("#ticket-activity-section");
 
         const activityHtml = `
-            <div class="modal-section">
+            <div class="modal-section ticket-activity-section" id="ticket-activity-section" data-ticket-id="${escAttr(ticketId)}">
                 <div class="section-title">
                     Evidence Trail
                     <button class="inline-link" onclick="openAuditTrail('ticket_${ticketId}')">open full trail</button>
@@ -2586,9 +2614,25 @@ async function loadTicketActivity(ticketId) {
 
         const activityEl = document.createElement("div");
         activityEl.innerHTML = activityHtml;
-        modalBody.insertBefore(activityEl, actionsBar);
+        const nextActivity = activityEl.firstElementChild;
+        if (existingActivity) {
+            existingActivity.replaceWith(nextActivity);
+        } else if (actionsBar) {
+            modalBody.insertBefore(nextActivity, actionsBar);
+        } else {
+            modalBody.appendChild(nextActivity);
+        }
+        refreshModalScrollLayout(modalBody);
     } catch (e) {
         console.error("Failed to load ticket activity:", e);
+        const modalBody = document.getElementById("modal-body");
+        const existingActivity = modalBody?.querySelector("#ticket-activity-section");
+        if (existingActivity && String(modalBody?.dataset.ticketId || "") === String(ticketId)) {
+            existingActivity.innerHTML = `
+                <div class="section-title">Evidence Trail</div>
+                <div class="learning-meta">Evidence failed to load. Refresh the ticket details and try again.</div>
+            `;
+        }
     }
 }
 

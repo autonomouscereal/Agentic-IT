@@ -1511,7 +1511,7 @@ body {
     border-radius: var(--radius);
     width: 90%;
     max-width: 600px;
-    max-height: 80vh;
+    max-height: min(88vh, 920px);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1539,7 +1539,11 @@ body {
 
 .modal-body {
     padding: 20px;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
     font-size: 13px;
     color: var(--text-secondary);
     line-height: 1.8;
@@ -1710,6 +1714,22 @@ body {
 .modal-body .modal-section:last-child {
     border-bottom: none;
     margin-bottom: 0;
+}
+
+.ticket-activity-section {
+    contain: none;
+    content-visibility: visible;
+}
+
+.ticket-activity-loading {
+    min-height: 120px;
+}
+
+.inline-loading {
+    padding: 22px !important;
+    border: 1px dashed rgba(148, 163, 184, 0.28);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
 }
 
 .modal-body .section-title {

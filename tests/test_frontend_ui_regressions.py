@@ -156,6 +156,24 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn('"model_turn_events": model_turn_events', ticket_service)
         self.assertIn('"ticket_id" not in event_details', agent_runner)
 
+    def test_ticket_modal_activity_section_renders_before_async_context(self):
+        css = (ROOT / "frontend" / "css" / "dashboard.css").read_text(encoding="utf-8")
+        index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="ticket-activity-section"', self.dashboard_js)
+        self.assertIn("ticket-activity-loading", self.dashboard_js)
+        self.assertIn("modalBody.dataset.ticketId = String(data.id);", self.dashboard_js)
+        self.assertIn('String(modalBody.dataset.ticketId || "") !== String(ticketId)', self.dashboard_js)
+        self.assertIn("existingActivity.replaceWith(nextActivity);", self.dashboard_js)
+        self.assertIn("function refreshModalScrollLayout", self.dashboard_js)
+        self.assertIn("modalBody.scrollTop = Math.min(maxTop, originalTop + 1);", self.dashboard_js)
+        self.assertIn('window.dispatchEvent(new Event("resize"));', self.dashboard_js)
+        self.assertIn("flex: 1 1 auto", css)
+        self.assertIn("min-height: 0", css)
+        self.assertIn("scrollbar-gutter: stable", css)
+        self.assertIn("content-visibility: visible", css)
+        self.assertIn(".ticket-activity-loading", css)
+        self.assertIn("20260521-ticket-modal-scroll-refresh", index_html)
+
 
 if __name__ == "__main__":
     unittest.main()
