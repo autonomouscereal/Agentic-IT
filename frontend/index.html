@@ -65,6 +65,10 @@
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/></svg>
                     <span>Learning</span>
                 </li>
+                <li class="nav-item" data-page="skills">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 6 6 .9-4.5 4.3 1.1 6.2L12 16.5 6.4 19.4l1.1-6.2L3 8.9 9 8z"/></svg>
+                    <span>Skills</span>
+                </li>
                 <li class="nav-item" data-page="tools">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
                     <span>Tools</span>
@@ -122,7 +126,7 @@
 
                 <!-- Stat Cards -->
                 <div class="stat-cards">
-                    <div class="stat-card">
+                    <div class="stat-card clickable-card" onclick="openOverviewMetric('tickets')">
                         <div class="stat-icon" style="background: rgba(0,212,255,0.15); color: #00d4ff;">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
                         </div>
@@ -131,7 +135,7 @@
                             <div class="stat-label">Total Tickets</div>
                         </div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card clickable-card" onclick="openOverviewMetric('new_tickets')">
                         <div class="stat-icon" style="background: rgba(255,107,53,0.15); color: #ff6b35;">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         </div>
@@ -140,7 +144,7 @@
                             <div class="stat-label">New / Assigned</div>
                         </div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card clickable-card" onclick="openOverviewMetric('agents')">
                         <div class="stat-icon" style="background: rgba(0,255,136,0.15); color: #00ff88;">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42"/></svg>
                         </div>
@@ -149,7 +153,7 @@
                             <div class="stat-label">Open Agents</div>
                         </div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card clickable-card" onclick="openOverviewMetric('changes')">
                         <div class="stat-icon" style="background: rgba(255,215,0,0.15); color: #ffd700;">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                         </div>
@@ -238,8 +242,24 @@
                             <option value="__demo">Demo Proofs</option>
                             <option value="new">New</option>
                             <option value="assigned">Assigned</option>
+                            <option value="in_progress">In progress</option>
+                            <option value="awaiting_user">Awaiting user</option>
+                            <option value="cancelled">Cancelled</option>
                             <option value="resolved">Resolved</option>
                             <option value="closed">Closed</option>
+                        </select>
+                        <input id="ticket-filter-text" class="filter-input" placeholder="Search title, requester, team..." oninput="loadTickets()">
+                        <select id="ticket-filter-provider" class="filter-select" onchange="loadTickets()">
+                            <option value="">All providers</option>
+                            <option value="itop">iTop</option>
+                            <option value="local">Local</option>
+                        </select>
+                        <select id="ticket-filter-agent" class="filter-select" onchange="loadTickets()">
+                            <option value="">All agent states</option>
+                            <option value="assigned">Has agent</option>
+                            <option value="unassigned">No agent</option>
+                            <option value="running">Running/queued</option>
+                            <option value="completed">Completed agent</option>
                         </select>
                         <button class="btn btn-sm" onclick="loadTickets()">Refresh</button>
                     </div>
@@ -356,6 +376,9 @@
                             <label class="setup-label">Max active agents</label>
                             <input id="settings-profile-concurrent" class="filter-input" type="number" min="1" max="50">
                         </div>
+                        <label class="setup-label">Skill set</label>
+                        <div class="setup-help">Leave no boxes selected to make every enabled skill available to this profile. Select boxes only when this saved agent profile should use a constrained skill set.</div>
+                        <div id="settings-profile-skills" class="skill-checklist">Loading skills...</div>
                         <label class="setup-label">Fallbacks</label>
                         <textarea id="settings-profile-fallbacks" class="setup-textarea" rows="4" placeholder="One fallback per line: harness,model,route"></textarea>
                         <label class="setup-label">Notes</label>
@@ -423,10 +446,22 @@
                     </div>
                 </div>
                 <div class="chart-card wide">
-                    <div class="chart-header"><h3>Recent Intake Sessions</h3></div>
+                    <div class="chart-header">
+                        <h3>Recent Intake Sessions</h3>
+                        <div class="header-actions">
+                            <input id="intake-filter-text" class="filter-input" placeholder="Search requester, intent, status..." oninput="loadIntake()">
+                            <select id="intake-filter-status" class="filter-select" onchange="loadIntake()">
+                                <option value="">All statuses</option>
+                                <option value="submitted">Submitted</option>
+                                <option value="needs_clarification">Needs clarification</option>
+                                <option value="ticket_created">Ticket created</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="table-container compact">
                         <table class="data-table">
-                            <thead><tr><th>ID</th><th>Requester</th><th>Intent</th><th>Ticket</th><th>Status</th><th>Created</th></tr></thead>
+                            <thead><tr><th class="sortable" data-sort-table="intake" data-sort-key="id">ID</th><th class="sortable" data-sort-table="intake" data-sort-key="requester">Requester</th><th class="sortable" data-sort-table="intake" data-sort-key="intent">Intent</th><th class="sortable" data-sort-table="intake" data-sort-key="ticket_id">Ticket</th><th class="sortable" data-sort-table="intake" data-sort-key="status">Status</th><th class="sortable" data-sort-table="intake" data-sort-key="created_at">Created</th></tr></thead>
                             <tbody id="intake-sessions-tbody"><tr><td colspan="6" class="loading">Loading intake sessions...</td></tr></tbody>
                         </table>
                     </div>
@@ -445,6 +480,7 @@
                             <option value="rejected">Rejected</option>
                             <option value="completed">Completed</option>
                         </select>
+                        <input id="change-filter-text" class="filter-input" placeholder="Search action, target, ticket..." oninput="loadChanges()">
                         <button class="btn btn-sm" onclick="loadChanges()">Refresh</button>
                     </div>
                 </div>
@@ -452,12 +488,12 @@
                     <table class="data-table" id="changes-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Action</th>
-                                <th>Target</th>
-                                <th>Ticket</th>
-                                <th>Status</th>
-                                <th>Requested</th>
+                                <th class="sortable" data-sort-table="changes" data-sort-key="id">ID</th>
+                                <th class="sortable" data-sort-table="changes" data-sort-key="action">Action</th>
+                                <th class="sortable" data-sort-table="changes" data-sort-key="target">Target</th>
+                                <th class="sortable" data-sort-table="changes" data-sort-key="ticket_id">Ticket</th>
+                                <th class="sortable" data-sort-table="changes" data-sort-key="status">Status</th>
+                                <th class="sortable" data-sort-table="changes" data-sort-key="requested_at">Requested</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -480,6 +516,7 @@
                             <option value="approved">Approved</option>
                             <option value="active">Active</option>
                         </select>
+                        <input id="workflow-filter-text" class="filter-input" placeholder="Search workflow, key, class..." oninput="loadWorkflows()">
                         <button class="btn btn-sm" onclick="createWorkflowFromPrompt()">New Workflow</button>
                         <button class="btn btn-sm" onclick="loadWorkflows()">Refresh</button>
                     </div>
@@ -488,12 +525,12 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Name</th>
-                                <th>Class</th>
-                                <th>Status</th>
-                                <th>Version</th>
-                                <th>Updated</th>
+                                <th class="sortable" data-sort-table="workflows" data-sort-key="id">ID</th>
+                                <th class="sortable" data-sort-table="workflows" data-sort-key="name">Name</th>
+                                <th class="sortable" data-sort-table="workflows" data-sort-key="ticket_class">Class</th>
+                                <th class="sortable" data-sort-table="workflows" data-sort-key="status">Status</th>
+                                <th class="sortable" data-sort-table="workflows" data-sort-key="version">Version</th>
+                                <th class="sortable" data-sort-table="workflows" data-sort-key="updated_at">Updated</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -517,6 +554,7 @@
                             <option value="promoted">Promoted</option>
                             <option value="needs_revision">Needs revision</option>
                         </select>
+                        <input id="postmortem-filter-text" class="filter-input" placeholder="Search ticket, summary, status..." oninput="loadPostmortemsPage()">
                         <button class="btn btn-sm" onclick="loadPostmortemsPage()">Refresh</button>
                     </div>
                 </div>
@@ -524,11 +562,11 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Ticket</th>
-                                <th>Status</th>
-                                <th>Summary</th>
-                                <th>Updated</th>
+                                <th class="sortable" data-sort-table="postmortems" data-sort-key="id">ID</th>
+                                <th class="sortable" data-sort-table="postmortems" data-sort-key="ticket_id">Ticket</th>
+                                <th class="sortable" data-sort-table="postmortems" data-sort-key="status">Status</th>
+                                <th class="sortable" data-sort-table="postmortems" data-sort-key="summary">Summary</th>
+                                <th class="sortable" data-sort-table="postmortems" data-sort-key="updated_at">Updated</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -576,10 +614,22 @@
                     </div>
                 </div>
                 <div class="chart-card wide">
-                    <div class="chart-header"><h3>Recent Delivery Runs</h3></div>
+                    <div class="chart-header">
+                        <h3>Recent Delivery Runs</h3>
+                        <div class="header-actions">
+                            <input id="cicd-filter-text" class="filter-input" placeholder="Search repo, provider, ticket..." oninput="loadCicd()">
+                            <select id="cicd-filter-status" class="filter-select" onchange="loadCicd()">
+                                <option value="">All statuses</option>
+                                <option value="passed">Passed</option>
+                                <option value="failed">Failed</option>
+                                <option value="blocked">Blocked</option>
+                                <option value="pending">Pending</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="table-container compact">
                         <table class="data-table">
-                            <thead><tr><th>ID</th><th>Provider</th><th>Repo</th><th>Status</th><th>Ticket</th><th>Change</th><th>Created</th></tr></thead>
+                            <thead><tr><th class="sortable" data-sort-table="cicd" data-sort-key="id">ID</th><th class="sortable" data-sort-table="cicd" data-sort-key="provider">Provider</th><th class="sortable" data-sort-table="cicd" data-sort-key="repo_ref">Repo</th><th class="sortable" data-sort-table="cicd" data-sort-key="status">Status</th><th class="sortable" data-sort-table="cicd" data-sort-key="ticket_id">Ticket</th><th class="sortable" data-sort-table="cicd" data-sort-key="change_id">Change</th><th class="sortable" data-sort-table="cicd" data-sort-key="created_at">Created</th></tr></thead>
                             <tbody id="cicd-runs-tbody"><tr><td colspan="7" class="loading">Loading CI/CD runs...</td></tr></tbody>
                         </table>
                     </div>
@@ -591,35 +641,71 @@
                 <div class="page-header">
                     <h2>Learning</h2>
                     <div class="header-actions">
+                        <input id="knowledge-filter-text" class="filter-input" placeholder="Search articles..." oninput="loadLearning()">
+                        <select id="knowledge-filter-category" class="filter-select" onchange="loadLearning()">
+                            <option value="">All categories</option>
+                        </select>
+                        <select id="knowledge-sort" class="filter-select" onchange="loadLearning()">
+                            <option value="updated_at:desc">Newest</option>
+                            <option value="title:asc">Title A-Z</option>
+                            <option value="category:asc">Category</option>
+                        </select>
                         <button class="btn btn-sm" onclick="loadLearning()">Refresh</button>
                     </div>
                 </div>
-                <div class="learning-tabs" role="tablist" aria-label="Learning sections">
-                    <button class="learning-tab active" id="learning-tab-knowledge" role="tab" aria-selected="true" aria-controls="learning-panel-knowledge" onclick="setLearningTab('knowledge')">Knowledge Articles</button>
-                    <button class="learning-tab" id="learning-tab-skills" role="tab" aria-selected="false" aria-controls="learning-panel-skills" onclick="setLearningTab('skills')">Skills</button>
-                </div>
-                <div class="learning-tab-panel active" id="learning-panel-knowledge" role="tabpanel" aria-labelledby="learning-tab-knowledge">
-                    <div class="chart-card wide learning-tab-card">
-                        <div class="chart-header">
-                            <h3>Knowledge Articles</h3>
-                            <div class="header-actions">
-                                <button class="btn btn-sm" onclick="createKnowledgeArticle()">New Article</button>
-                                <button class="btn btn-sm" onclick="importKnowledgeUrl()">Import URL</button>
-                            </div>
+                <div class="chart-card wide learning-tab-card">
+                    <div class="chart-header">
+                        <h3>Knowledge Articles</h3>
+                        <div class="header-actions">
+                            <button class="btn btn-sm" onclick="createKnowledgeArticle()">New Article</button>
+                            <button class="btn btn-sm" onclick="importKnowledgeUrl()">Import URL</button>
                         </div>
-                        <div class="learning-list" id="knowledge-list">Loading knowledge...</div>
+                    </div>
+                    <div class="learning-list" id="knowledge-list">Loading knowledge...</div>
+                </div>
+            </div>
+
+            <!-- Skills Page -->
+            <div class="page" id="page-skills">
+                <div class="page-header">
+                    <h2>Agent Skills</h2>
+                    <div class="header-actions">
+                        <input id="skills-filter-text" class="filter-input" placeholder="Search skills, category, prompt..." oninput="loadSkillsPage()">
+                        <select id="skills-filter-status" class="filter-select" onchange="loadSkillsPage()">
+                            <option value="">All statuses</option>
+                            <option value="enabled">Enabled</option>
+                            <option value="disabled">Disabled</option>
+                            <option value="global">Global/default</option>
+                            <option value="profile">Profile-selected</option>
+                        </select>
+                        <select id="skills-filter-category" class="filter-select" onchange="loadSkillsPage()">
+                            <option value="">All categories</option>
+                        </select>
+                        <select id="skills-sort" class="filter-select" onchange="loadSkillsPage()">
+                            <option value="name:asc">Name A-Z</option>
+                            <option value="category:asc">Category</option>
+                            <option value="enabled:desc">Enabled first</option>
+                            <option value="updated_at:desc">Recently updated</option>
+                        </select>
+                        <button class="btn btn-sm" onclick="createSkill()">New Skill</button>
+                        <button class="btn btn-sm" onclick="loadSkillsPage()">Refresh</button>
                     </div>
                 </div>
-                <div class="learning-tab-panel" id="learning-panel-skills" role="tabpanel" aria-labelledby="learning-tab-skills">
-                    <div class="chart-card wide learning-tab-card">
-                        <div class="chart-header">
-                            <h3>Skills</h3>
-                            <div class="header-actions">
-                                <button class="btn btn-sm" onclick="createSkill()">New Skill</button>
-                            </div>
-                        </div>
-                        <div class="learning-list" id="skills-list">Loading skills...</div>
-                    </div>
+                <div class="skill-summary-strip" id="skills-summary">Loading skill inventory...</div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-sort-table="skills" data-sort-key="name">Skill</th>
+                                <th class="sortable" data-sort-table="skills" data-sort-key="category">Category</th>
+                                <th class="sortable" data-sort-table="skills" data-sort-key="enabled">Status</th>
+                                <th>Assigned Profiles</th>
+                                <th class="sortable" data-sort-table="skills" data-sort-key="updated_at">Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="skills-tbody"><tr><td colspan="6" class="loading">Loading skills...</td></tr></tbody>
+                    </table>
                 </div>
             </div>
 
@@ -628,6 +714,22 @@
                 <div class="page-header">
                     <h2>Provider Modules</h2>
                     <div class="header-actions">
+                        <input id="tools-filter-text" class="filter-input" placeholder="Search tools/modules..." oninput="loadTools()">
+                        <select id="tools-filter-status" class="filter-select" onchange="loadTools()">
+                            <option value="">All statuses</option>
+                            <option value="healthy">Healthy</option>
+                            <option value="degraded">Degraded</option>
+                            <option value="down">Down</option>
+                            <option value="unknown">Unknown</option>
+                            <option value="blueprint">Blueprint</option>
+                            <option value="no_health">No health check</option>
+                        </select>
+                        <select id="tools-filter-type" class="filter-select" onchange="loadTools()"><option value="">All types</option></select>
+                        <select id="tools-sort" class="filter-select" onchange="loadTools()">
+                            <option value="name:asc">Name A-Z</option>
+                            <option value="status:asc">Status</option>
+                            <option value="type:asc">Type</option>
+                        </select>
                         <button class="btn btn-sm" onclick="checkAllTools()">Check All</button>
                     </div>
                 </div>
@@ -677,10 +779,6 @@
                         <label class="setup-label operator-notes-label">Operator Notes</label>
                         <textarea id="setup-notes" class="setup-textarea" rows="4" placeholder="Existing products, deployment constraints, approval policy, network zones, tenant notes..."></textarea>
                     </div>
-                    <div class="setup-panel runtime-handoff-panel">
-                        <div class="setup-section-title">Runtime Handoff</div>
-                        <div id="setup-runtime-status" class="setup-summary">Runtime status has not loaded yet.</div>
-                    </div>
                     <div class="setup-panel wide provider-modules-panel">
                         <div class="setup-section-title">Provider-Agnostic Modules</div>
                         <div class="setup-help">Choose scope per module: deploy the reference module, integrate an existing enterprise tool, or turn the module off for this organization.</div>
@@ -706,27 +804,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="setup-panel full">
-                    <div class="setup-section-title">Generated Setup Plan</div>
-                    <div id="setup-summary" class="setup-summary">No plan generated yet.</div>
-                    <div class="table-container">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Step</th>
-                                    <th>Module</th>
-                                    <th>Category</th>
-                                    <th>Action</th>
-                                    <th>Skill</th>
-                                    <th>Checks</th>
-                                </tr>
-                            </thead>
-                            <tbody id="setup-plan-tbody">
-                                <tr><td colspan="6" class="loading">Generate a plan to preview steps</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                <div id="setup-summary" class="setup-summary setup-summary-inline">No plan generated yet.</div>
+                <div id="setup-plan-tbody" hidden></div>
             </div>
 
             <!-- Access Page -->
@@ -744,16 +823,33 @@
                         <div class="learning-list" id="access-me">Loading identity...</div>
                     </div>
                     <div class="chart-card wide">
-                        <div class="chart-header"><h3>Policy</h3></div>
+                        <div class="chart-header">
+                            <h3>Policy</h3>
+                            <div class="header-actions">
+                                <select id="access-policy-view" class="filter-select" onchange="loadAccess()">
+                                    <option value="summary">Summary</option>
+                                    <option value="roles">Role capabilities</option>
+                                    <option value="routes">API route requirements</option>
+                                    <option value="vault">Vault broker</option>
+                                </select>
+                                <input id="access-policy-filter" class="filter-input" placeholder="Filter policy..." oninput="loadAccess()">
+                            </div>
+                        </div>
                         <div class="learning-list" id="access-policy">Loading policy...</div>
                     </div>
                 </div>
                 <div class="chart-card wide">
-                    <div class="chart-header"><h3>Dashboard Users</h3></div>
+                    <div class="chart-header">
+                        <h3>Dashboard Users</h3>
+                        <div class="header-actions">
+                            <input id="access-user-filter" class="filter-input" placeholder="Search users, roles..." oninput="loadAccess()">
+                            <select id="access-user-role-filter" class="filter-select" onchange="loadAccess()"><option value="">All roles</option></select>
+                        </div>
+                    </div>
                     <div class="table-container compact">
                         <table class="data-table">
-                            <thead><tr><th>ID</th><th>User</th><th>Provider</th><th>Roles</th><th>Enabled</th></tr></thead>
-                            <tbody id="access-users-tbody"><tr><td colspan="5" class="loading">Loading users...</td></tr></tbody>
+                            <thead><tr><th class="sortable" data-sort-table="access" data-sort-key="id">ID</th><th class="sortable" data-sort-table="access" data-sort-key="username">User</th><th class="sortable" data-sort-table="access" data-sort-key="provider">Provider</th><th class="sortable" data-sort-table="access" data-sort-key="roles">Roles</th><th class="sortable" data-sort-table="access" data-sort-key="enabled">Enabled</th><th>Actions</th></tr></thead>
+                            <tbody id="access-users-tbody"><tr><td colspan="6" class="loading">Loading users...</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -764,19 +860,25 @@
                 <div class="page-header">
                     <h2>Audit Log</h2>
                     <div class="header-actions">
-                        <select id="audit-filter-source" class="filter-select">
+                        <select id="audit-filter-source" class="filter-select" onchange="loadAudit()">
                             <option value="">All Sources</option>
                             <option value="event">Events</option>
                             <option value="audit">Audit</option>
                             <option value="note">Notes</option>
                         </select>
-                        <select id="audit-filter-level" class="filter-select">
+                        <select id="audit-filter-level" class="filter-select" onchange="loadAudit()">
                             <option value="">All Levels</option>
                             <option value="info">Info</option>
                             <option value="warning">Warning</option>
                             <option value="error">Error</option>
                         </select>
-                        <input id="audit-filter-text" class="filter-input" placeholder="Actor/action/target">
+                        <input id="audit-filter-text" class="filter-input" placeholder="Actor/action/target" oninput="loadAudit()">
+                        <select id="audit-sort" class="filter-select" onchange="loadAudit()">
+                            <option value="created_at:desc">Newest</option>
+                            <option value="created_at:asc">Oldest</option>
+                            <option value="level:desc">Level</option>
+                            <option value="source:asc">Source</option>
+                        </select>
                         <button class="btn btn-sm" onclick="loadAudit()">Refresh</button>
                     </div>
                 </div>
@@ -798,7 +900,7 @@
         </div>
     </div>
 
-    <script src="/static/js/dashboard.js?v=20260521-golden-tags"></script>
+    <script src="/static/js/dashboard.js?v=20260521-ui-overhaul"></script>
     <script src="/static/js/charts.js?v=20260519-global-chat"></script>
     <script src="/static/js/agents.js?v=20260520-ui-pass"></script>
     <script src="/static/js/websocket.js"></script>

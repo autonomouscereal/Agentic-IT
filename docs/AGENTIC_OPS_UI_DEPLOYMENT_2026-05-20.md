@@ -138,6 +138,31 @@ Validation evidence:
 After operator review, the Workflows page row actions were repaired without
 touching backend services.
 
+## 2026-05-21 Broad Console Overhaul
+
+The next UI pass is documented in `docs/UI_OVERHAUL_2026-05-21.md`.
+
+Highlights:
+
+- Global search result modal gained client-side filters and sorting.
+- Overview metric cards now route operators into the matching work surface.
+- Intake, changes, workflows, postmortems, CI/CD, skills, tools, access users,
+  and audit are sortable/filterable.
+- Learning is knowledge-only; Skills is its own page with activate/deactivate,
+  view/edit, and runtime-profile assignment support.
+- Tools distinguish health-checked services from blueprint/no-probe modules.
+- Setup removed Runtime Handoff and Generated Setup Plan chrome.
+- Audit rows are compact expandable records instead of large always-open JSON
+  blocks.
+
+Focused local validation for this pass:
+
+```powershell
+node --check frontend/js/dashboard.js
+python -m py_compile api\routes\tickets.py api\services\agent_runner.py
+python -m pytest tests/test_access_control_policy.py tests/test_agent_harness.py tests/test_frontend_ui_regressions.py tests/test_setup_module_scope.py tests/test_skill_sync_preserve.py -q
+```
+
 Static-only redeploy:
 
 - `frontend/css/dashboard.css`

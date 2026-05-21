@@ -27,6 +27,17 @@ native record where possible: tickets open the ticket modal, CI/CD opens the run
 modal, workflows and postmortems open their detail views, and audit/tool/agent
 results navigate to the matching page.
 
+The result modal includes operator-side refinement controls:
+
+- result type filter
+- status filter
+- newest/oldest sort
+- type sort
+- title sort
+
+These are client-side refinements over the bounded, RBAC-filtered result set.
+They do not bypass row-level access checks or request unbounded audit details.
+
 Smoke:
 
 ```bash

@@ -53,6 +53,11 @@ Agent runtime configuration lives in the dashboard `Settings` page and
 profile, max active agents, default timeout, Codex reasoning effort, Codex fast
 mode, fallback order, and scoped routing assignments.
 
+Saved profiles can also pin enabled skills. Empty profile skill lists inherit
+all enabled global/default skills; selected skill lists add explicit pinned
+skills to that profile's spawned agent context. Manage this from Settings and
+the standalone Skills plane.
+
 Default profiles:
 
 - `codex-primary`: Codex `gpt-5.5`, high reasoning, fast mode off, 10 minute

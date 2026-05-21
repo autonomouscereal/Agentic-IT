@@ -2746,6 +2746,23 @@ async def spawn_agent(ticket_id, model=None, prompt=None, task_type="ticket_reso
     )
     selected_harness = runtime_profile["harness"]
     selected_model = runtime_profile["model"]
+    profile_skill_names = runtime_profile.get("skills") or []
+    if profile_skill_names:
+        placeholders = ", ".join(f"${idx}" for idx in range(1, len(profile_skill_names) + 1))
+        profile_skill_rows = await fetchall(
+            f"""
+            SELECT name, description
+            FROM agent_skills
+            WHERE enabled = true AND name IN ({placeholders})
+            ORDER BY name
+            """,
+            *profile_skill_names,
+        )
+        seen_skill_names = {s.get("name") for s in skills}
+        for skill in profile_skill_rows or []:
+            if skill.get("name") not in seen_skill_names:
+                skills.append(skill)
+                seen_skill_names.add(skill.get("name"))
 
     # Create agent record first (agent_tasks has FK to agents)
     agent_id = await fetchval(

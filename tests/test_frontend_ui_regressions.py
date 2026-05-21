@@ -80,19 +80,24 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn("function openGlobalSearchResult(item)", self.dashboard_js)
         self.assertIn(".search-result-item", css)
 
-    def test_learning_page_uses_two_tabs_without_duplicate_postmortems(self):
+    def test_learning_page_keeps_knowledge_and_skills_have_own_plane(self):
         index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
         css = (ROOT / "frontend" / "css" / "dashboard.css").read_text(encoding="utf-8")
-        learning_page = index_html.split('id="page-learning"', 1)[1].split("<!-- Tools Page -->", 1)[0]
-        self.assertIn("learning-tab-knowledge", learning_page)
-        self.assertIn("learning-tab-skills", learning_page)
-        self.assertIn("learning-panel-knowledge", learning_page)
-        self.assertIn("learning-panel-skills", learning_page)
+        learning_page = index_html.split('id="page-learning"', 1)[1].split("<!-- Skills Page -->", 1)[0]
+        skills_page = index_html.split('id="page-skills"', 1)[1].split("<!-- Tools Page -->", 1)[0]
+        self.assertIn("knowledge-filter-text", learning_page)
+        self.assertIn("knowledge-filter-category", learning_page)
+        self.assertIn("knowledge-sort", learning_page)
+        self.assertNotIn("learning-tab-skills", learning_page)
         self.assertNotIn("postmortems-tbody", learning_page)
-        self.assertIn("function setLearningTab(tab)", self.dashboard_js)
-        self.assertIn("await Promise.all([loadSkills(), loadKnowledge()]);", self.dashboard_js)
-        self.assertIn(".learning-tabs", css)
-        self.assertIn(".learning-tab-panel.active", css)
+        self.assertIn("skills-filter-text", skills_page)
+        self.assertIn("skills-filter-status", skills_page)
+        self.assertIn("settings-profile-skills", index_html)
+        self.assertIn("function loadSkillsPage()", self.dashboard_js)
+        self.assertIn("function renderProfileSkillChecklist(profile)", self.dashboard_js)
+        self.assertIn("await loadKnowledge();", self.dashboard_js)
+        self.assertIn(".skill-checklist", css)
+        self.assertIn(".skill-summary-strip", css)
 
     def test_ops_chat_is_matrix_element_real_agent_handoff(self):
         compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")

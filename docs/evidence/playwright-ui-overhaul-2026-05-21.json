@@ -1,0 +1,120 @@
+{
+  "title": "Agentic Operations",
+  "results": [
+    {
+      "page": "overview",
+      "active": 1,
+      "filters": 0,
+      "sortables": 0,
+      "overflow": []
+    },
+    {
+      "page": "tickets",
+      "active": 1,
+      "filters": 4,
+      "sortables": 8,
+      "overflow": []
+    },
+    {
+      "page": "intake",
+      "active": 1,
+      "filters": 6,
+      "sortables": 6,
+      "overflow": []
+    },
+    {
+      "page": "changes",
+      "active": 1,
+      "filters": 2,
+      "sortables": 6,
+      "overflow": []
+    },
+    {
+      "page": "workflows",
+      "active": 1,
+      "filters": 2,
+      "sortables": 6,
+      "overflow": []
+    },
+    {
+      "page": "postmortems",
+      "active": 1,
+      "filters": 2,
+      "sortables": 5,
+      "overflow": []
+    },
+    {
+      "page": "cicd",
+      "active": 1,
+      "filters": 5,
+      "sortables": 7,
+      "overflow": []
+    },
+    {
+      "page": "learning",
+      "active": 1,
+      "filters": 3,
+      "sortables": 0,
+      "overflow": []
+    },
+    {
+      "page": "skills",
+      "active": 1,
+      "filters": 4,
+      "sortables": 4,
+      "overflow": []
+    },
+    {
+      "page": "tools",
+      "active": 1,
+      "filters": 4,
+      "sortables": 0,
+      "overflow": []
+    },
+    {
+      "page": "setup",
+      "active": 1,
+      "filters": 50,
+      "sortables": 0,
+      "overflow": []
+    },
+    {
+      "page": "access",
+      "active": 1,
+      "filters": 4,
+      "sortables": 5,
+      "overflow": []
+    },
+    {
+      "page": "audit",
+      "active": 1,
+      "filters": 4,
+      "sortables": 0,
+      "overflow": []
+    },
+    {
+      "page": "settings",
+      "active": 1,
+      "filters": 14,
+      "sortables": 0,
+      "overflow": []
+    }
+  ],
+  "globalControls": {
+    "type": 1,
+    "status": 1,
+    "sort": 1
+  },
+  "setupRemoved": {
+    "runtimeHandoff": 0,
+    "generatedPlan": 0
+  },
+  "skillsControls": {
+    "filter": 1,
+    "rows": 111,
+    "actions": 333
+  },
+  "settingsSkillChecklist": 51,
+  "auditCompact": 100,
+  "consoleErrors": []
+}

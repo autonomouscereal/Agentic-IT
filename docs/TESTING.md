@@ -67,6 +67,28 @@ python -m py_compile .\soc-dashboard\scripts\smoke_agentic_system.py .\soc-dashb
 python -m unittest discover -s .\soc-dashboard\tests -p "test_*.py"
 ```
 
+## Dashboard UI Overhaul Smoke
+
+The 2026-05-21 console overhaul is documented in
+`docs/UI_OVERHAUL_2026-05-21.md`. Required UI smoke coverage now includes:
+
+- global search modal type/status/sort controls
+- overview metric tile navigation
+- sortable/filterable Intake, Tickets, Changes, Workflows, Postmortems, CI/CD,
+  Learning, Skills, Tools, Access, and Audit surfaces
+- Skills activate/deactivate/view/edit/profile assignment
+- Settings profile skill checklist
+- compact expandable audit rows
+- Setup page without Runtime Handoff or Generated Setup Plan
+
+Focused local pass:
+
+```powershell
+node --check frontend/js/dashboard.js
+python -m py_compile api\routes\tickets.py api\services\agent_runner.py
+python -m pytest tests/test_access_control_policy.py tests/test_agent_harness.py tests/test_frontend_ui_regressions.py tests/test_setup_module_scope.py tests/test_skill_sync_preserve.py -q
+```
+
 ## Prohibited Pattern Sweep
 
 Application code should not contain ORM/Pydantic/SQLAlchemy usage or hardcoded secrets.

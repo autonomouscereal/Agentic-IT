@@ -4,7 +4,8 @@ Last updated: 2026-05-21.
 
 The dashboard now treats agent runtime selection as platform configuration, not
 an Agents-tab widget. Operators use `Settings` to choose profiles, concurrency,
-timeouts, reasoning effort, fast mode, and scoped route assignments.
+timeouts, reasoning effort, fast mode, scoped route assignments, and profile
+skill bundles.
 
 ## Runtime Profiles
 
@@ -40,6 +41,23 @@ then task area, then the active profile. The `local-only` and
 `hermes-external` presets are treated as whole-platform operator modes for demos
 and customer posture changes, so they override seeded scoped assignments unless
 a caller explicitly requests a profile, model, or harness.
+
+## Skill Bundles
+
+Skills are managed from the standalone `Skills` plane instead of the Learning
+tab. Operators can search, sort, view, edit, activate, deactivate, and inspect
+profile assignment from that plane.
+
+Saved runtime profiles include an optional `skills` list:
+
+- Empty skill list: the profile inherits every enabled global/default skill.
+- Selected skill list: the profile still keeps global/default skills, and the
+  selected enabled skills are pinned into the spawned agent context.
+- Disabled skills are not included in future agent context.
+
+This keeps the demo-safe default of "all enabled skills are available" while
+allowing teams, workflows, RACI groups, or platform areas to use named saved
+agents with explicit extra or pinned skills.
 
 ## Concurrency And Timeouts
 

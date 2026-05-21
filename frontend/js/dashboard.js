@@ -1,6 +1,18 @@
 // Agentic Operations - Main JavaScript
 const API = "";
 let agentOpenCountState = null;
+let skillsCache = [];
+let knowledgeCache = [];
+let tableSortState = {
+    intake: { key: "created_at", dir: "desc" },
+    changes: { key: "requested_at", dir: "desc" },
+    workflows: { key: "updated_at", dir: "desc" },
+    postmortems: { key: "updated_at", dir: "desc" },
+    cicd: { key: "created_at", dir: "desc" },
+    skills: { key: "name", dir: "asc" },
+    tools: { key: "name", dir: "asc" },
+    access: { key: "username", dir: "asc" },
+};
 
 function computeAgentLifecycleCounts(agents) {
     const rows = agents || [];
@@ -40,6 +52,7 @@ function setAgentOpenCount(count) {
 document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     initTicketSorting();
+    initGenericTableSorting();
     initTicketInfiniteScroll();
     loadCurrentIdentity();
     loadAgentModels();
@@ -104,11 +117,107 @@ function navigateTo(page) {
         case "postmortems": loadPostmortemsPage(); break;
         case "cicd": loadCicd(); break;
         case "learning": loadLearning(); break;
+        case "skills": loadSkillsPage(); break;
         case "tools": loadTools(); break;
         case "setup": loadSetup(); break;
         case "access": loadAccess(); break;
         case "settings": loadSettings(); break;
         case "audit": loadAudit(); break;
+    }
+}
+
+function initGenericTableSorting() {
+    document.querySelectorAll("[data-sort-table]").forEach(th => {
+        th.addEventListener("click", () => {
+            const table = th.dataset.sortTable;
+            const key = th.dataset.sortKey;
+            if (!table || !key) return;
+            const current = tableSortState[table] || { key, dir: "asc" };
+            tableSortState[table] = {
+                key,
+                dir: current.key === key && current.dir === "asc" ? "desc" : "asc",
+            };
+            updateGenericSortIndicators(table);
+            reloadSortedTable(table);
+        });
+    });
+    Object.keys(tableSortState).forEach(updateGenericSortIndicators);
+}
+
+function updateGenericSortIndicators(table) {
+    document.querySelectorAll(`[data-sort-table="${table}"]`).forEach(th => {
+        th.classList.remove("sort-asc", "sort-desc");
+        if (th.dataset.sortKey === tableSortState[table]?.key) {
+            th.classList.add(tableSortState[table].dir === "asc" ? "sort-asc" : "sort-desc");
+        }
+    });
+}
+
+function reloadSortedTable(table) {
+    ({
+        intake: loadIntake,
+        changes: loadChanges,
+        workflows: loadWorkflows,
+        postmortems: loadPostmortemsPage,
+        cicd: loadCicd,
+        skills: loadSkillsPage,
+        tools: loadTools,
+        access: loadAccess,
+    }[table] || (() => {}))();
+}
+
+function sortableValue(row, key) {
+    const value = row?.[key];
+    if (key === "requester") return `${row.requester_name || ""} ${row.requester_email || ""}`.toLowerCase();
+    if (key === "roles") return normalizeList(row.roles).join(",").toLowerCase();
+    if (key.includes("_at") || key === "created" || key === "updated") return Date.parse(value || "") || 0;
+    if (typeof value === "number") return value;
+    if (typeof value === "boolean") return value ? 1 : 0;
+    return String(value ?? "").toLowerCase();
+}
+
+function sortRows(rows, table) {
+    const sort = tableSortState[table] || { key: "id", dir: "desc" };
+    return [...(rows || [])].sort((a, b) => {
+        const av = sortableValue(a, sort.key);
+        const bv = sortableValue(b, sort.key);
+        const cmp = typeof av === "number" && typeof bv === "number"
+            ? av - bv
+            : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" });
+        return sort.dir === "asc" ? cmp : -cmp;
+    });
+}
+
+function filterRows(rows, query, fields) {
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return rows || [];
+    return (rows || []).filter(row => fields.some(field => String(row?.[field] ?? "").toLowerCase().includes(q)));
+}
+
+function setSelectOptions(id, values, current = "") {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const existing = el.value || current;
+    const first = el.querySelector("option[value='']")?.outerHTML || '<option value="">All</option>';
+    el.innerHTML = first + [...new Set((values || []).filter(Boolean).map(String))]
+        .sort((a, b) => a.localeCompare(b))
+        .map(v => `<option value="${escAttr(v)}">${escHtml(v)}</option>`)
+        .join("");
+    if ([...el.options].some(o => o.value === existing)) el.value = existing;
+}
+
+function openOverviewMetric(metric) {
+    if (metric === "tickets") {
+        setSelectValue("ticket-filter-status", "");
+        navigateTo("tickets");
+    } else if (metric === "new_tickets") {
+        setSelectValue("ticket-filter-status", "new");
+        navigateTo("tickets");
+    } else if (metric === "agents") {
+        navigateTo("agents");
+    } else if (metric === "changes") {
+        setSelectValue("change-filter-status", "pending");
+        navigateTo("changes");
     }
 }
 
@@ -285,6 +394,8 @@ function searchTypeLabel(type) {
     })[type] || type;
 }
 
+let globalSearchState = { query: "", results: [], type: "", status: "", sort: "updated_at:desc" };
+
 function renderSearchResult(item) {
     const meta = item.metadata || {};
     const chips = [
@@ -309,6 +420,30 @@ function renderSearchResult(item) {
     `;
 }
 
+function renderGlobalSearchResults() {
+    let results = [...(globalSearchState.results || [])];
+    const type = document.getElementById("global-search-type-filter")?.value || globalSearchState.type || "";
+    const status = document.getElementById("global-search-status-filter")?.value || globalSearchState.status || "";
+    const sort = document.getElementById("global-search-sort")?.value || globalSearchState.sort || "updated_at:desc";
+    if (type) results = results.filter(item => item.type === type);
+    if (status) results = results.filter(item => String(item.status || "").toLowerCase() === status.toLowerCase());
+    const [key, dir] = sort.split(":");
+    results.sort((a, b) => {
+        const av = key === "type" ? searchTypeLabel(a.type) : key === "title" ? a.title : a.updated_at;
+        const bv = key === "type" ? searchTypeLabel(b.type) : key === "title" ? b.title : b.updated_at;
+        const cmp = key === "updated_at"
+            ? (Date.parse(av || "") || 0) - (Date.parse(bv || "") || 0)
+            : String(av || "").localeCompare(String(bv || ""), undefined, { numeric: true, sensitivity: "base" });
+        return dir === "asc" ? cmp : -cmp;
+    });
+    const grid = document.getElementById("global-search-results-grid");
+    const count = document.getElementById("global-search-visible-count");
+    if (count) count.textContent = `${results.length} shown`;
+    if (grid) grid.innerHTML = results.length
+        ? results.map(renderSearchResult).join("")
+        : '<div class="learning-empty">No matching records found within your filter.</div>';
+}
+
 async function runGlobalSearch() {
     const input = document.getElementById("global-search-input");
     const query = (input?.value || "").trim();
@@ -318,17 +453,36 @@ async function runGlobalSearch() {
     }
     const data = await apiGet(`/api/search/global?q=${encodeURIComponent(query)}&limit=60`);
     if (!data) return;
+    globalSearchState = { query, results: data.results || [], type: "", status: "", sort: "updated_at:desc" };
     const groups = Object.entries(data.groups || {}).map(([type, count]) => `${searchTypeLabel(type)} ${count}`).join(" / ");
+    const types = [...new Set((data.results || []).map(item => item.type).filter(Boolean))].sort();
+    const statuses = [...new Set((data.results || []).map(item => item.status).filter(Boolean))].sort();
     document.getElementById("modal-title").textContent = `Global Search`;
     document.getElementById("modal-body").innerHTML = `
         <div class="search-results-header">
             <div>
                 <div class="section-title">Results for "${escHtml(query)}"</div>
-                <div class="learning-meta">${data.total || 0} visible results${groups ? ` / ${escHtml(groups)}` : ""}</div>
+                <div class="learning-meta"><span id="global-search-visible-count">${(data.results || []).length} shown</span> of ${data.total || 0} visible results${groups ? ` / ${escHtml(groups)}` : ""}</div>
+            </div>
+            <div class="search-filter-bar">
+                <select id="global-search-type-filter" class="filter-select" onchange="renderGlobalSearchResults()">
+                    <option value="">All types</option>
+                    ${types.map(type => `<option value="${escAttr(type)}">${escHtml(searchTypeLabel(type))}</option>`).join("")}
+                </select>
+                <select id="global-search-status-filter" class="filter-select" onchange="renderGlobalSearchResults()">
+                    <option value="">All statuses</option>
+                    ${statuses.map(status => `<option value="${escAttr(status)}">${escHtml(status)}</option>`).join("")}
+                </select>
+                <select id="global-search-sort" class="filter-select" onchange="renderGlobalSearchResults()">
+                    <option value="updated_at:desc">Newest</option>
+                    <option value="updated_at:asc">Oldest</option>
+                    <option value="type:asc">Type</option>
+                    <option value="title:asc">Title A-Z</option>
+                </select>
             </div>
         </div>
-        <div class="search-result-grid">
-            ${(data.results || []).length ? data.results.map(renderSearchResult).join("") : '<div class="learning-empty">No matching records found within your access scope.</div>'}
+        <div class="search-result-grid" id="global-search-results-grid">
+            ${(data.results || []).length ? (data.results || []).map(renderSearchResult).join("") : '<div class="learning-empty">No matching records found within your access scope.</div>'}
         </div>
     `;
     document.getElementById("ticket-modal").classList.add("active");
@@ -643,7 +797,14 @@ async function loadPendingChanges() {
 }
 
 function ticketQueryKey(status) {
-    return JSON.stringify({ status, sort_by: ticketSort.by, sort_dir: ticketSort.dir });
+    return JSON.stringify({
+        status,
+        q: document.getElementById("ticket-filter-text")?.value || "",
+        provider: document.getElementById("ticket-filter-provider")?.value || "",
+        agent_state: document.getElementById("ticket-filter-agent")?.value || "",
+        sort_by: ticketSort.by,
+        sort_dir: ticketSort.dir,
+    });
 }
 
 function updateTicketPagination() {
@@ -699,6 +860,9 @@ function renderTicketRows(rows) {
 // Load tickets
 async function loadTickets(options = {}) {
     const status = document.getElementById("ticket-filter-status")?.value || "";
+    const q = document.getElementById("ticket-filter-text")?.value.trim() || "";
+    const provider = document.getElementById("ticket-filter-provider")?.value || "";
+    const agentState = document.getElementById("ticket-filter-agent")?.value || "";
     const key = ticketQueryKey(status);
     const append = !!options.append && key === ticketListState.key && !ticketListState.done;
     if (ticketListState.loading) return;
@@ -709,6 +873,9 @@ async function loadTickets(options = {}) {
     updateTicketPagination();
     const params = new URLSearchParams();
     if (status && status !== "__demo") params.set("status", status);
+    if (q) params.set("q", q);
+    if (provider) params.set("provider", provider);
+    if (agentState) params.set("agent_state", agentState);
     params.set("sort_by", ticketSort.by);
     params.set("sort_dir", ticketSort.dir);
     params.set("limit", String(ticketListState.limit));
@@ -739,13 +906,16 @@ function loadMoreTickets() {
 
 async function loadWorkflows() {
     const status = document.getElementById("workflow-filter-status")?.value || "";
+    const text = document.getElementById("workflow-filter-text")?.value || "";
     const params = new URLSearchParams();
     if (status) params.set("status", status);
+    params.set("limit", "250");
     const data = await apiGet(`/api/workflows?${params}`);
     if (!data) return;
     const tbody = document.getElementById("workflows-tbody");
     if (!tbody) return;
-    const workflows = data.workflows || [];
+    const workflows = sortRows(filterRows(data.workflows || [], text, ["name", "workflow_key", "description", "ticket_class", "status", "review_state"]), "workflows");
+    updateGenericSortIndicators("workflows");
     if (workflows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="loading">No workflows yet</td></tr>';
         return;
@@ -767,8 +937,8 @@ async function loadWorkflows() {
             <td>${formatTime(w.updated_at)}<div class="module-meta">${w.run_count || 0} runs / ${w.completed_run_count || 0} complete${w.latest_run_at ? ` / last ${formatTime(w.latest_run_at)}` : ""}</div></td>
             <td>
                 <div class="workflow-actions">
-                    <button class="btn btn-sm" onclick="viewWorkflow(${w.id})">Detail</button>
-                    ${w.status !== "active" ? `<button class="btn btn-sm btn-success" onclick="reviewWorkflow(${w.id}, true)">Approve</button>` : ""}
+                    <button class="btn btn-sm btn-detail" onclick="viewWorkflow(${w.id})">Detail</button>
+                    ${w.status !== "active" ? `<button class="btn btn-sm btn-approve" onclick="reviewWorkflow(${w.id}, true)">Approve</button>` : ""}
                 </div>
             </td>
         </tr>
@@ -817,7 +987,13 @@ async function loadIntake() {
     }
     const tbody = document.getElementById("intake-sessions-tbody");
     if (tbody && sessions) {
-        const rows = sessions.sessions || [];
+        const statusFilter = document.getElementById("intake-filter-status")?.value || "";
+        const text = document.getElementById("intake-filter-text")?.value || "";
+        let rows = sessions.sessions || [];
+        rows = rows.map(row => ({ ...row, intent: row.classification?.intent || "" }));
+        if (statusFilter) rows = rows.filter(row => row.status === statusFilter);
+        rows = sortRows(filterRows(rows, text, ["requester_name", "requester_email", "intent", "status", "ticket_id"]), "intake");
+        updateGenericSortIndicators("intake");
         if (rows.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" class="loading">No intake sessions yet</td></tr>';
         } else {
@@ -981,7 +1157,12 @@ async function loadCicd() {
     const data = await apiGet("/api/cicd/runs?limit=50");
     const tbody = document.getElementById("cicd-runs-tbody");
     if (!tbody || !data) return;
-    const rows = data.runs || [];
+    const statusFilter = document.getElementById("cicd-filter-status")?.value || "";
+    const text = document.getElementById("cicd-filter-text")?.value || "";
+    let rows = data.runs || [];
+    if (statusFilter) rows = rows.filter(row => row.status === statusFilter);
+    rows = sortRows(filterRows(rows, text, ["provider", "repo_ref", "branch", "status", "ticket_id", "change_id"]), "cicd");
+    updateGenericSortIndicators("cicd");
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="loading">No CI/CD security runs yet</td></tr>';
         return;
@@ -995,9 +1176,9 @@ async function loadCicd() {
                 ${row.repo_url || repoExternalUrl(row.provider, row.repo_ref) ? `<a class="inline-link" href="${escAttr(row.repo_url || repoExternalUrl(row.provider, row.repo_ref))}" target="_blank" rel="noopener">repo</a>` : ""}
             </td>
             <td><span class="status-badge ${statusClass(row.status)}">${escHtml(row.status)}</span></td>
-            <td>${row.ticket_id ? `<button class="btn btn-sm" onclick="viewTicket(${row.ticket_id})">#${row.ticket_id}</button>` : "-"}</td>
-            <td>${row.change_id ? `<button class="btn btn-sm" onclick="navigateTo('changes')">#${row.change_id}</button>` : "-"}</td>
-            <td>${formatTime(row.created_at)} <button class="inline-link" onclick="viewCicdRun(${row.id})">findings</button></td>
+            <td>${row.ticket_id ? `<button class="artifact-chip ticket-chip" onclick="viewTicket(${row.ticket_id})">Ticket #${row.ticket_id}</button>` : "-"}</td>
+            <td>${row.change_id ? `<button class="artifact-chip change-chip" onclick="navigateTo('changes')">Change #${row.change_id}</button>` : "-"}</td>
+            <td>${formatTime(row.created_at)} <button class="artifact-chip finding-chip" onclick="viewCicdRun(${row.id})">Findings</button></td>
         </tr>
     `).join("");
 }
@@ -1207,7 +1388,7 @@ async function recordDemoCicdRun() {
 }
 
 async function loadLearning() {
-    await Promise.all([loadSkills(), loadKnowledge()]);
+    await loadKnowledge();
 }
 
 function setLearningTab(tab) {
@@ -1225,10 +1406,11 @@ function setLearningTab(tab) {
 }
 
 async function loadAccess() {
-    const [me, users, policy] = await Promise.all([
+    const [me, users, policy, rolesData] = await Promise.all([
         apiGet("/api/access/me"),
         apiGet("/api/access/users"),
         apiGet("/api/access/policies"),
+        apiGet("/api/access/roles"),
     ]);
     const meEl = document.getElementById("access-me");
     if (meEl && me) {
@@ -1242,31 +1424,101 @@ async function loadAccess() {
     }
     const policyEl = document.getElementById("access-policy");
     if (policyEl && policy) {
-        policyEl.innerHTML = `
-            <div class="learning-item">
-                <div><strong>${escHtml(policy.auth_mode)}</strong> <span class="source-badge local">${escHtml(policy.enforcement)}</span></div>
-                <div>${escHtml(Object.keys(policy.role_capabilities || {}).join(", "))}</div>
-                <div class="learning-meta">Trusted proxy headers require a shared secret; WebSockets use signed HttpOnly sessions.</div>
-            </div>
-        `;
+        policyEl.innerHTML = renderAccessPolicy(policy);
     }
     const tbody = document.getElementById("access-users-tbody");
     if (tbody && users) {
-        const rows = users.users || [];
+        const roleNames = (rolesData?.roles || []).map(r => r.name).filter(Boolean);
+        setSelectOptions("access-user-role-filter", roleNames, document.getElementById("access-user-role-filter")?.value || "");
+        const roleFilter = document.getElementById("access-user-role-filter")?.value || "";
+        const text = document.getElementById("access-user-filter")?.value || "";
+        let rows = users.users || [];
+        if (roleFilter) rows = rows.filter(u => normalizeList(u.roles).includes(roleFilter));
+        rows = sortRows(filterRows(rows, text, ["username", "display_name", "email", "provider", "roles"]), "access");
+        updateGenericSortIndicators("access");
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="loading">No dashboard users configured</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">No dashboard users match the current filter</td></tr>';
         } else {
             tbody.innerHTML = rows.map(u => `
                 <tr>
                     <td>${u.id}</td>
                     <td>${escHtml(u.display_name || u.username)}<div class="module-meta">${escHtml(u.email || "")}</div></td>
                     <td>${escHtml(u.provider || "local")}</td>
-                    <td>${escHtml(normalizeList(u.roles).join(", "))}</td>
-                    <td>${u.enabled ? "yes" : "no"}</td>
+                    <td>${normalizeList(u.roles).map(role => `<span class="profile-chip">${escHtml(role)}</span>`).join("") || '<span class="learning-meta">none</span>'}</td>
+                    <td><span class="status-badge ${u.enabled ? "status-enabled" : "status-disabled"}">${u.enabled ? "enabled" : "disabled"}</span></td>
+                    <td><button class="btn btn-sm btn-edit" onclick="editUserRoles(${u.id}, '${escJs(normalizeList(u.roles).join(","))}')">Roles</button></td>
                 </tr>
             `).join("");
         }
     }
+}
+
+function renderAccessPolicy(policy) {
+    const view = document.getElementById("access-policy-view")?.value || "summary";
+    const query = (document.getElementById("access-policy-filter")?.value || "").trim().toLowerCase();
+    const matches = value => !query || String(value || "").toLowerCase().includes(query);
+    if (view === "roles") {
+        const rows = Object.entries(policy.role_capabilities || {})
+            .filter(([role, caps]) => matches(role) || matches((caps || []).join(" ")));
+        return rows.length ? rows.map(([role, caps]) => `
+            <div class="learning-item policy-row">
+                <div><strong>${escHtml(role)}</strong></div>
+                <div class="policy-chip-list">${(caps || []).map(cap => `<span class="policy-chip">${escHtml(cap)}</span>`).join("")}</div>
+            </div>
+        `).join("") : '<div class="learning-empty">No role capabilities match the filter.</div>';
+    }
+    if (view === "routes") {
+        const rows = (policy.route_requirements || [])
+            .filter(row => matches(row.method) || matches(row.path) || matches(row.permission));
+        return rows.length ? rows.map(row => `
+            <div class="learning-item policy-row">
+                <div><strong>${escHtml(row.method)}</strong> ${escHtml(row.path)}</div>
+                <div class="learning-meta">Requires ${escHtml(row.permission)}</div>
+            </div>
+        `).join("") : '<div class="learning-empty">No route requirements match the filter.</div>';
+    }
+    if (view === "vault") {
+        const broker = policy.credential_broker || {};
+        return `
+            <div class="learning-item policy-row">
+                <div><strong>Vault broker</strong> <span class="source-badge local">${escHtml(broker.vault_provider || "configured")}</span></div>
+                <div>${escHtml(policy.agent_vault_boundary || "")}</div>
+                <div class="learning-meta">Resolver: ${escHtml(broker.resolver_mode || "-")} / secret values returned: ${broker.secret_values_returned ? "yes" : "no"}</div>
+            </div>
+            <div class="learning-item policy-row">
+                <div><strong>Workflow preapproval</strong></div>
+                <div>${escHtml(policy.workflow_preapproved_leases || "")}</div>
+            </div>
+        `;
+    }
+    return `
+        <div class="learning-item policy-row">
+            <div><strong>${escHtml(policy.auth_mode)}</strong> <span class="source-badge local">${escHtml(policy.enforcement)}</span></div>
+            <div>Roles: ${escHtml(Object.keys(policy.role_capabilities || {}).join(", "))}</div>
+            <div class="learning-meta">Trusted proxy headers require a shared secret; WebSockets use signed HttpOnly sessions.</div>
+        </div>
+        <div class="learning-item policy-row">
+            <div><strong>Agent permission boundary</strong></div>
+            <div>${escHtml(policy.agent_permission_boundary || "")}</div>
+        </div>
+    `;
+}
+
+async function editUserRoles(userId, currentRolesCsv) {
+    const rolesData = await apiGet("/api/access/roles");
+    const available = (rolesData?.roles || []).map(r => r.name).filter(Boolean);
+    const current = currentRolesCsv || "";
+    const next = prompt(`Roles for user ${userId}. Available: ${available.join(", ")}`, current);
+    if (next === null) return;
+    const roles = next.split(",").map(v => v.trim()).filter(Boolean);
+    const invalid = roles.filter(role => !available.includes(role));
+    if (invalid.length) {
+        alert(`Unknown roles: ${invalid.join(", ")}`);
+        return;
+    }
+    const result = await apiPost(`/api/access/users/${userId}/roles`, roles);
+    if (result?.error) alert(result.error);
+    loadAccess();
 }
 
 async function loadPostmortems() {
@@ -1278,12 +1530,15 @@ async function loadPostmortems() {
 
 async function loadPostmortemsPage() {
     const status = document.getElementById("postmortem-filter-status")?.value || "";
+    const text = document.getElementById("postmortem-filter-text")?.value || "";
     const params = new URLSearchParams({ limit: "250" });
     if (status) params.set("status", status);
     const data = await apiGet(`/api/postmortems?${params}`);
     const tbody = document.getElementById("postmortems-page-tbody");
     if (!data || !tbody) return;
-    renderPostmortemRows(tbody, data.postmortems || [], false);
+    const rows = sortRows(filterRows(data.postmortems || [], text, ["summary", "status", "ticket_title", "ticket_id", "root_cause", "improvements"]), "postmortems");
+    updateGenericSortIndicators("postmortems");
+    renderPostmortemRows(tbody, rows, false);
 }
 
 function renderPostmortemRows(tbody, rows, compact) {
@@ -1296,14 +1551,14 @@ function renderPostmortemRows(tbody, rows, compact) {
             <td>${p.id}</td>
             <td>${p.ticket_id ? `<button class="inline-link" onclick="viewTicket(${p.ticket_id})">#${p.ticket_id}</button>` : "-"} ${escHtml(p.ticket_title || "")}</td>
             <td><span class="status-badge ${statusClass(p.status)}">${learningStatusLabel(p.status)}</span><div class="module-meta">${learningStatusHint(p.status)}</div></td>
-            <td style="max-width:${compact ? "360" : "560"}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.summary || "-")}</td>
+            <td class="postmortem-summary-cell" style="max-width:${compact ? "360" : "560"}px">${escHtml(p.summary || "-")}</td>
             <td>${formatTime(p.updated_at || p.created_at)}</td>
             <td>
                 <div class="table-actions">
-                    <button class="btn btn-sm" onclick="viewPostmortem(${p.id})">Full</button>
-                    ${p.status === "approved" || p.status === "ready_for_review" ? `<button class="btn btn-sm" onclick="promotePostmortem(${p.id})">Promote Assets</button>` : ""}
-                    ${p.status !== "approved" && p.status !== "promoted" ? `<button class="inline-link" onclick="reviewPostmortem(${p.id}, true)">approve</button>` : ""}
-                    <button class="inline-link" onclick="openAuditTrail('postmortem_${p.id}')">audit</button>
+                    <button class="btn btn-sm btn-detail" onclick="viewPostmortem(${p.id})">Full</button>
+                    ${p.status === "approved" || p.status === "ready_for_review" ? `<button class="btn btn-sm btn-promote" onclick="promotePostmortem(${p.id})">Promote</button>` : ""}
+                    ${p.status !== "approved" && p.status !== "promoted" ? `<button class="btn btn-sm btn-approve" onclick="reviewPostmortem(${p.id}, true)">Approve</button>` : ""}
+                    <button class="btn btn-sm btn-audit" onclick="openAuditTrail('postmortem_${p.id}')">Audit</button>
                 </div>
             </td>
         </tr>
@@ -1358,6 +1613,85 @@ async function promotePostmortem(postmortemId) {
     }
 }
 
+async function loadSkillsData() {
+    const data = await apiGet("/api/skills?enabled_only=false");
+    if (!data) return [];
+    skillsCache = data.skills || [];
+    return skillsCache;
+}
+
+function profileSkillAssignments(skill) {
+    const profiles = agentRuntimeConfig.profiles || [];
+    return profiles
+        .filter(profile => Array.isArray(profile.skills) && profile.skills.includes(skill.name))
+        .map(profile => profile.name || profile.id);
+}
+
+async function loadSkillsPage() {
+    const skills = await loadSkillsData();
+    const tbody = document.getElementById("skills-tbody");
+    const summary = document.getElementById("skills-summary");
+    if (!tbody) return;
+    setSelectOptions("skills-filter-category", skills.map(s => s.category || "general"), document.getElementById("skills-filter-category")?.value || "");
+    const status = document.getElementById("skills-filter-status")?.value || "";
+    const category = document.getElementById("skills-filter-category")?.value || "";
+    const text = document.getElementById("skills-filter-text")?.value || "";
+    const [sortKey, sortDir] = (document.getElementById("skills-sort")?.value || "name:asc").split(":");
+    tableSortState.skills = { key: sortKey, dir: sortDir || "asc" };
+    let rows = skills;
+    if (category) rows = rows.filter(s => (s.category || "general") === category);
+    if (status === "enabled") rows = rows.filter(s => s.enabled);
+    if (status === "disabled") rows = rows.filter(s => !s.enabled);
+    if (status === "global") rows = rows.filter(s => s.assigned_to_all);
+    if (status === "profile") rows = rows.filter(s => profileSkillAssignments(s).length > 0);
+    rows = sortRows(filterRows(rows, text, ["name", "description", "category", "prompt_template"]), "skills");
+    updateGenericSortIndicators("skills");
+    if (summary) {
+        const enabled = skills.filter(s => s.enabled).length;
+        const global = skills.filter(s => s.assigned_to_all).length;
+        summary.innerHTML = `
+            <span class="summary-pill success">${enabled} enabled</span>
+            <span class="summary-pill neutral">${skills.length} total</span>
+            <span class="summary-pill info">${global} default/global</span>
+            <span class="summary-pill warn">${skills.length - enabled} disabled</span>
+            <span class="learning-meta">Profiles with no selected skill boxes inherit every enabled default skill.</span>
+        `;
+    }
+    if (!skills.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No skills configured</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No skills match the current filter</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(s => {
+        const assignedProfiles = profileSkillAssignments(s);
+        return `
+            <tr>
+                <td>
+                    <strong>${escHtml(s.name)}</strong>
+                    <div class="module-meta">${escHtml(shortText(s.description || "", 130))}</div>
+                </td>
+                <td><span class="source-badge skill-category">${escHtml(s.category || "general")}</span></td>
+                <td>
+                    <span class="status-badge ${s.enabled ? "status-enabled" : "status-disabled"}">${s.enabled ? "enabled" : "disabled"}</span>
+                    ${s.assigned_to_all ? '<span class="source-badge default-skill">default</span>' : ""}
+                </td>
+                <td>${assignedProfiles.length ? assignedProfiles.map(p => `<span class="profile-chip">${escHtml(p)}</span>`).join("") : '<span class="learning-meta">All profiles by default</span>'}</td>
+                <td>${formatTime(s.updated_at || s.created_at)}</td>
+                <td>
+                    <div class="table-actions">
+                        <button class="btn btn-sm btn-detail" onclick="viewSkill(${s.id})">View</button>
+                        <button class="btn btn-sm btn-edit" onclick="editSkill(${s.id})">Edit</button>
+                        <button class="btn btn-sm ${s.enabled ? "btn-warning" : "btn-approve"}" onclick="toggleSkill(${s.id}, ${s.enabled ? "false" : "true"})">${s.enabled ? "Deactivate" : "Activate"}</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join("");
+}
+
 async function loadSkills() {
     const data = await apiGet("/api/skills?enabled_only=false");
     const list = document.getElementById("skills-list");
@@ -1402,7 +1736,20 @@ async function loadKnowledge() {
     const data = await apiGet("/api/knowledge?limit=50");
     const list = document.getElementById("knowledge-list");
     if (!data || !list) return;
-    const articles = data.articles || [];
+    let articles = data.articles || [];
+    knowledgeCache = articles;
+    setSelectOptions("knowledge-filter-category", articles.map(a => a.category || "general"), document.getElementById("knowledge-filter-category")?.value || "");
+    const category = document.getElementById("knowledge-filter-category")?.value || "";
+    const text = document.getElementById("knowledge-filter-text")?.value || "";
+    const [sortKey, sortDir] = (document.getElementById("knowledge-sort")?.value || "updated_at:desc").split(":");
+    if (category) articles = articles.filter(a => (a.category || "general") === category);
+    articles = filterRows(articles, text, ["title", "body", "category"]);
+    articles = [...articles].sort((a, b) => {
+        const av = sortKey.includes("_at") ? Date.parse(a[sortKey] || a.created_at || "") || 0 : String(a[sortKey] || "").toLowerCase();
+        const bv = sortKey.includes("_at") ? Date.parse(b[sortKey] || b.created_at || "") || 0 : String(b[sortKey] || "").toLowerCase();
+        const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" });
+        return (sortDir || "desc") === "asc" ? cmp : -cmp;
+    });
     if (articles.length === 0) {
         list.innerHTML = '<div class="learning-empty">No knowledge articles yet</div>';
         return;
@@ -1419,6 +1766,7 @@ async function loadKnowledge() {
 // Load changes
 async function loadChanges() {
     const status = document.getElementById("change-filter-status")?.value || "";
+    const text = document.getElementById("change-filter-text")?.value || "";
     const params = status ? `?status=${status}` : "";
 
     const data = await apiGet(`/api/changes${params}`);
@@ -1427,12 +1775,15 @@ async function loadChanges() {
     const tbody = document.getElementById("changes-tbody");
     if (!tbody) return;
 
-    if (data.changes.length === 0) {
+    const changes = sortRows(filterRows(data.changes || [], text, ["action", "target", "status", "ticket_title", "ticket_id", "risk_level"]), "changes");
+    updateGenericSortIndicators("changes");
+
+    if (changes.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="loading">No change requests</td></tr>';
         return;
     }
 
-    tbody.innerHTML = data.changes.map(c => `
+    tbody.innerHTML = changes.map(c => `
         <tr>
             <td>${c.id}</td>
             <td>
@@ -1446,10 +1797,10 @@ async function loadChanges() {
             <td>
                 <div class="table-actions">
                     ${c.status === "pending" ? `
-                        <button class="btn btn-sm btn-success" onclick="approveChange(${c.id})">Approve</button>
+                        <button class="btn btn-sm btn-approve" onclick="approveChange(${c.id})">Approve</button>
                         <button class="btn btn-sm btn-danger" onclick="rejectChange(${c.id})">Reject</button>
                     ` : ""}
-                    <button class="inline-link" onclick="openAuditTrail('change_${c.id}')">audit</button>
+                    <button class="btn btn-sm btn-audit" onclick="openAuditTrail('change_${c.id}')">Audit</button>
                 </div>
             </td>
         </tr>
@@ -1463,31 +1814,66 @@ async function loadTools() {
 
     const grid = document.getElementById("tools-grid");
     if (!grid) return;
+    let rows = [
+        ...(data.tools || []).map(t => ({
+            ...t,
+            kind: "active",
+            display_status: t.last_check_status || t.status || (t.last_check ? "unknown" : "no_health"),
+            has_health: Boolean(t.last_check || t.last_check_status),
+            search: [t.name, t.type, t.description, t.host, t.port, t.status, t.last_check_status].join(" "),
+        })),
+        ...(data.setup_modules || []).map(m => ({
+            ...m,
+            kind: "module",
+            type: m.category || "integration",
+            display_status: (m.health_checks || []).length ? (m.status || "blueprint") : "no_health",
+            has_health: Boolean((m.health_checks || []).length),
+            search: [m.name, m.id, m.category, m.status, m.provider_contract, m.skill, (m.health_checks || []).join(" ")].join(" "),
+        })),
+    ];
+    setSelectOptions("tools-filter-type", rows.map(row => row.type || row.category || row.kind), document.getElementById("tools-filter-type")?.value || "");
+    const query = document.getElementById("tools-filter-text")?.value || "";
+    const status = document.getElementById("tools-filter-status")?.value || "";
+    const type = document.getElementById("tools-filter-type")?.value || "";
+    const [sortKey, sortDir] = (document.getElementById("tools-sort")?.value || "name:asc").split(":");
+    tableSortState.tools = { key: sortKey, dir: sortDir || "asc" };
+    if (status) rows = rows.filter(row => row.display_status === status || row.status === status);
+    if (type) rows = rows.filter(row => (row.type || row.category || row.kind) === type);
+    rows = sortRows(filterRows(rows, query, ["name", "id", "type", "description", "search", "provider_contract", "skill"]), "tools");
+    updateGenericSortIndicators("tools");
+    grid.innerHTML = rows.map(renderToolCard).join("") || '<div class="tool-empty">No tools or integrations match the current filters</div>';
+}
 
-    const toolCards = data.tools.map(t => `
-        <div class="tool-card">
+function renderToolCard(row) {
+    const name = row.name || row.id || "Provider module";
+    const status = row.display_status || row.status || "unknown";
+    const noHealth = status === "no_health" || !row.has_health;
+    const isBlueprint = row.kind === "module" && (row.status || "").toLowerCase() === "blueprint";
+    const cardClass = [
+        "tool-card",
+        row.kind === "module" ? "integration-card" : "active-tool-card",
+        noHealth ? "no-health-card" : "",
+        isBlueprint ? "blueprint-card" : "",
+    ].filter(Boolean).join(" ");
+    const statusLabel = noHealth ? "No active check" : status;
+    const healthMeta = row.kind === "module"
+        ? ((row.health_checks || []).slice(0, 3).map(escHtml).join(" / ") || "Blueprint/integration item; no running health probe.")
+        : (row.last_check ? `Last check ${formatTime(row.last_check)}${row.response_time_ms ? ` / ${row.response_time_ms}ms` : ""}` : "Inventory item; no health result yet.");
+    return `
+        <div class="${cardClass}">
             <div class="tool-card-header">
-                <span class="tool-name">${escHtml(t.name)}</span>
-                <span class="tool-status-dot ${t.last_check_status || t.status || 'unknown'}"></span>
+                <span class="tool-name">${escHtml(name)}</span>
+                <span class="tool-status-group">
+                    ${noHealth ? '<span class="status-badge status-muted">no probe</span>' : `<span class="tool-status-dot ${escAttr(status)}"></span>`}
+                    <span class="status-badge ${statusClass(status)}">${escHtml(statusLabel)}</span>
+                </span>
             </div>
-            <div class="tool-type">${t.type}</div>
-            <div class="tool-desc">${escHtml(t.description || "")}</div>
-            ${t.host ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">${t.host}:${t.port || 'N/A'}</div>` : ""}
-            ${t.last_check ? `<div style="font-size:11px;color:var(--text-muted)">Last check: ${formatTime(t.last_check)}</div>` : ""}
+            <div class="tool-type">${escHtml(row.type || row.category || row.kind || "module")}</div>
+            <div class="tool-desc">${escHtml(row.description || row.provider_contract || row.skill || "Provider module")}</div>
+            ${row.host ? `<div class="learning-meta">${escHtml(row.host)}:${escHtml(row.port || "N/A")}</div>` : ""}
+            <div class="learning-meta">${healthMeta}</div>
         </div>
-    `);
-    const moduleCards = (data.setup_modules || []).map(m => `
-        <div class="tool-card integration-card">
-            <div class="tool-card-header">
-                <span class="tool-name">${escHtml(m.name || m.id)}</span>
-                <span class="status-badge ${statusClass(m.status)}">${escHtml(m.status || "blueprint")}</span>
-            </div>
-            <div class="tool-type">${escHtml(m.category || "integration")}</div>
-            <div class="tool-desc">${escHtml(m.provider_contract || m.skill || "Provider module")}</div>
-            <div class="learning-meta">${(m.health_checks || []).slice(0, 3).map(escHtml).join(" / ") || "No health checks declared"}</div>
-        </div>
-    `);
-    grid.innerHTML = [...toolCards, ...moduleCards].join("") || '<div class="tool-empty">No tools or integrations configured</div>';
+    `;
 }
 
 // Load audit log
@@ -1506,31 +1892,40 @@ async function loadAudit() {
     const timeline = document.getElementById("audit-timeline");
     if (!timeline) return;
 
-    if (data.audit.length === 0) {
+    let rows = data.audit || [];
+    const [sortKey, sortDir] = (document.getElementById("audit-sort")?.value || "created_at:desc").split(":");
+    rows = [...rows].sort((a, b) => {
+        const av = sortKey === "created_at" ? (Date.parse(a.created_at || "") || 0) : String(a[sortKey] || "").toLowerCase();
+        const bv = sortKey === "created_at" ? (Date.parse(b.created_at || "") || 0) : String(b[sortKey] || "").toLowerCase();
+        const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" });
+        return (sortDir || "desc") === "asc" ? cmp : -cmp;
+    });
+
+    if (rows.length === 0) {
         timeline.innerHTML = '<div class="loading">No audit entries</div>';
         return;
     }
 
-    timeline.innerHTML = data.audit.map(a => `
-        <div class="audit-entry">
-            <span class="audit-time">${formatTime(a.created_at)}</span>
-            <div class="audit-icon">&#9650;</div>
+    timeline.innerHTML = rows.map(a => `
+        <details class="audit-entry compact-audit-row">
+            <summary>
+                <span class="audit-time">${formatTime(a.created_at)}</span>
+                <span class="source-badge ${a.source === "event" ? "itop" : "local"}">${escHtml(a.source || "audit")}</span>
+                ${a.level ? `<span class="status-badge ${statusClass(a.level)}">${escHtml(a.level)}</span>` : ""}
+                <span class="audit-action">${escHtml(a.summary || `${a.actor || "system"}: ${a.action || "event"}`)}</span>
+                <span class="audit-details">${escHtml(a.category || "")}${a.ticket_id ? ` / ticket ${escHtml(a.ticket_id)}` : ""}${a.agent_id ? ` / agent ${escHtml(a.agent_id)}` : ""}</span>
+            </summary>
             <div class="audit-content">
-                <div class="audit-action">
-                    <span class="source-badge ${a.source === "event" ? "itop" : "local"}">${escHtml(a.source || "audit")}</span>
-                    ${a.level ? `<span class="status-badge ${statusClass(a.level)}">${escHtml(a.level)}</span>` : ""}
-                    ${escHtml(a.summary || `${a.actor}: ${a.action}`)}
-                </div>
-                <div class="audit-details">${escHtml(a.category || "")}${a.ticket_id ? ` &middot; ticket ${escHtml(a.ticket_id)}` : ""}${a.agent_id ? ` &middot; agent ${escHtml(a.agent_id)}` : ""}</div>
                 <div class="audit-links">
                     ${a.ticket_id ? `<button class="inline-link" onclick="viewTicket(${Number(a.ticket_id)})">ticket</button>` : ""}
                     ${a.ticket_id ? `<button class="inline-link" onclick="openAuditTrail('ticket_${escAttr(a.ticket_id)}')">ticket trail</button>` : ""}
                     ${a.agent_id ? `<button class="inline-link" onclick="openAuditTrail('agent_${escAttr(a.agent_id)}')">agent trail</button>` : ""}
                     ${a.target ? `<button class="inline-link" onclick="openAuditTrail('${escJs(a.target)}')">target trail</button>` : ""}
                 </div>
-                ${a.details ? `<pre class="audit-json">${escHtml(JSON.stringify(a.details, null, 2))}</pre>` : ""}
+                <div class="audit-details">Actor: ${escHtml(a.actor || "-")} / Action: ${escHtml(a.action || "-")} / Target: ${escHtml(a.target || "-")}</div>
+                ${a.details ? `<pre class="audit-json">${escHtml(JSON.stringify(a.details, null, 2))}</pre>` : '<div class="learning-meta">No expanded details recorded.</div>'}
             </div>
-        </div>
+        </details>
     `).join("");
 }
 
@@ -2321,7 +2716,65 @@ async function createSkill() {
         description: "",
         category: "custom",
     });
-    loadLearning();
+    loadSkillsPage();
+}
+
+async function viewSkill(skillId) {
+    const skill = await apiGet(`/api/skills/${skillId}`);
+    if (!skill || skill.error) {
+        alert(skill?.error || "Skill not found");
+        return;
+    }
+    document.getElementById("modal-title").textContent = `Skill #${skill.id}: ${skill.name}`;
+    document.getElementById("modal-body").innerHTML = `
+        <div class="modal-section">
+            <div class="detail-row"><span class="detail-label">Category:</span><span>${escHtml(skill.category || "general")}</span></div>
+            <div class="detail-row"><span class="detail-label">Status:</span><span class="status-badge ${skill.enabled ? "status-enabled" : "status-disabled"}">${skill.enabled ? "enabled" : "disabled"}</span></div>
+            <div class="detail-row"><span class="detail-label">Default:</span><span>${skill.assigned_to_all ? "available to all agents" : "profile/agent assigned"}</span></div>
+            <div class="detail-row"><span class="detail-label">Updated:</span><span>${formatDate(skill.updated_at || skill.created_at)}</span></div>
+            <div class="section-title">Description</div>
+            <div class="learning-item">${escHtml(skill.description || "No description")}</div>
+            <div class="section-title">Instructions</div>
+            <pre class="audit-json skill-preview">${escHtml(skill.prompt_template || "")}</pre>
+        </div>
+    `;
+    document.getElementById("ticket-modal").classList.add("active");
+}
+
+async function editSkill(skillId) {
+    const skill = await apiGet(`/api/skills/${skillId}`);
+    if (!skill || skill.error) {
+        alert(skill?.error || "Skill not found");
+        return;
+    }
+    const name = prompt("Skill name:", skill.name || "");
+    if (name === null || !name.trim()) return;
+    const category = prompt("Category:", skill.category || "general");
+    if (category === null) return;
+    const description = prompt("Description:", skill.description || "");
+    if (description === null) return;
+    const promptTemplate = prompt("Skill instructions:", skill.prompt_template || "");
+    if (promptTemplate === null || !promptTemplate.trim()) return;
+    const assignedToAll = confirm("Make this skill available to all agent profiles by default? Cancel keeps it profile-assigned only.");
+    const result = await apiPut(`/api/skills/${skillId}`, {
+        name: name.trim(),
+        category: category.trim() || "general",
+        description,
+        prompt_template: promptTemplate,
+        assigned_to_all: assignedToAll,
+    });
+    if (result?.error) alert(result.error);
+    await loadSkillsPage();
+    renderSettings();
+}
+
+async function toggleSkill(skillId, enabled) {
+    const verb = enabled ? "activate" : "deactivate";
+    if (!confirm(`Really ${verb} this skill? This changes future agent context; currently running agents are not interrupted.`)) return;
+    const result = await apiPut(`/api/skills/${skillId}`, { enabled });
+    if (result?.error) alert(result.error);
+    await loadSkillsPage();
+    renderSettings();
 }
 
 async function loadAgentModels() {
@@ -2429,7 +2882,8 @@ function renderSettings() {
 }
 
 async function loadSettings() {
-    await loadAgentModels();
+    await Promise.all([loadAgentModels(), loadSkillsData()]);
+    renderSettings();
     loadRunnerHealth();
 }
 
@@ -2454,6 +2908,28 @@ function applySettingsProfileSelection() {
     setInputValue("settings-profile-concurrent", profile.max_concurrent_agents || 1);
     setInputValue("settings-profile-fallbacks", (profile.fallbacks || []).map(f => `${f.harness},${f.model},${f.route || ""}`).join("\n"));
     setInputValue("settings-profile-notes", profile.notes || "");
+    renderProfileSkillChecklist(profile);
+}
+
+function renderProfileSkillChecklist(profile) {
+    const wrap = document.getElementById("settings-profile-skills");
+    if (!wrap) return;
+    const selected = new Set(profile?.skills || []);
+    const skills = (skillsCache || []).filter(skill => skill.enabled !== false)
+        .sort((a, b) => `${a.category || ""}:${a.name || ""}`.localeCompare(`${b.category || ""}:${b.name || ""}`, undefined, { sensitivity: "base" }));
+    if (!skills.length) {
+        wrap.innerHTML = '<div class="learning-meta">No enabled skills are available yet.</div>';
+        return;
+    }
+    wrap.innerHTML = skills.map(skill => `
+        <label class="skill-check-row ${selected.has(skill.name) ? "selected" : ""}">
+            <input type="checkbox" value="${escAttr(skill.name)}" ${selected.has(skill.name) ? "checked" : ""}>
+            <span>
+                <strong>${escHtml(skill.name)}</strong>
+                <small>${escHtml(skill.category || "general")}${skill.assigned_to_all ? " / default" : " / profile-selected"}</small>
+            </span>
+        </label>
+    `).join("");
 }
 
 function setInputValue(id, value) {
@@ -2475,6 +2951,9 @@ function profileFromEditor(existingId) {
         const [harness, model, route] = line.split(",").map(v => (v || "").trim());
         return harness && model ? { harness, model, route: route || "" } : null;
     }).filter(Boolean);
+    const selectedSkills = Array.from(document.querySelectorAll("#settings-profile-skills input:checked"))
+        .map(input => input.value)
+        .filter(Boolean);
     return {
         id,
         name,
@@ -2486,6 +2965,7 @@ function profileFromEditor(existingId) {
         timeout_minutes: Number(document.getElementById("settings-profile-timeout")?.value || 10),
         max_concurrent_agents: Number(document.getElementById("settings-profile-concurrent")?.value || 1),
         fallbacks,
+        skills: selectedSkills,
         notes: document.getElementById("settings-profile-notes")?.value || "",
     };
 }

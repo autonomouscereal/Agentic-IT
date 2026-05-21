@@ -26,6 +26,9 @@ Rules:
   read capability.
 - Do not return credential values, raw secrets, or unbounded audit details.
 - Keep queries bounded; default UI searches should not exceed 60 visible rows.
+- The dashboard result modal must support client-side type filtering, status
+  filtering, and newest/oldest/type/title sorting over the already scoped
+  result set.
 - The dashboard shell must show the global search field above every page, not
   only on tickets or audit. Results should deep-link to the native record when
   possible: ticket modal, CI/CD run modal, workflow/postmortem detail, or the

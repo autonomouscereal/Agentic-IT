@@ -109,7 +109,19 @@ Required assertions:
 - `/api/agents/config` readback matches the selected default.
 - Global search is visible above every dashboard page and can find a unique
   marker from tickets, ticket notes, agents, audit, workflows, postmortems,
-  tools, and CI/CD records according to the logged-in user's scope.
+  tools, and CI/CD records according to the logged-in user's scope. Its result
+  modal must expose type/status filters plus sort controls.
+- Overview metric tiles must route to the corresponding page/filter.
+- Intake sessions, changes, workflows, postmortems, CI/CD runs, tools, skills,
+  access users, and audit rows must be sortable/filterable.
+- Learning is knowledge-only; Skills is a standalone page with view/edit,
+  activate/deactivate, and runtime-profile assignment.
+- Settings profile editor must render a skill checklist.
+- Tools must distinguish active health-checked services from blueprint/no-probe
+  modules.
+- Setup must not show the removed Runtime Handoff or Generated Setup Plan
+  panels.
+- Audit must render compact expandable rows, not giant always-open JSON cards.
 - Ops Chat Element proof can log in through Keycloak, open the Agentic Ops Agent
   profile, send a direct message, and show a dashboard ticket or no-ticket
   answer according to the request.
@@ -121,6 +133,10 @@ Required assertions:
 The 2026-05-20 deploy evidence is documented in:
 
 `docs/AGENTIC_OPS_UI_DEPLOYMENT_2026-05-20.md`
+
+The broad search/filter/sort console overhaul is documented in:
+
+`docs/UI_OVERHAUL_2026-05-21.md`
 
 Ops Chat and global-search readiness are documented in:
 

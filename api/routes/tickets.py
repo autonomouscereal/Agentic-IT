@@ -123,6 +123,9 @@ async def list_tickets(
     status: str = Query(None, description="Filter by status"),
     priority: str = Query(None, description="Filter by priority"),
     assignee: str = Query(None, description="Filter by assignee"),
+    provider: str = Query(None, description="Filter by ticket provider"),
+    q: str = Query(None, description="Search title, description, requester, team, provider ref"),
+    agent_state: str = Query(None, description="Filter by agent assignment/state"),
     agent_only: bool = Query(False, description="Only tickets with agents"),
     sort_by: str = Query("updated_at", description="Sort field"),
     sort_dir: str = Query("desc", description="Sort direction"),
@@ -146,8 +149,32 @@ async def list_tickets(
         where_clauses.append(f"t.assignee ILIKE ${param_idx}")
         params.append(f"%{assignee}%")
         param_idx += 1
+    if provider:
+        where_clauses.append(f"lower(COALESCE(t.provider, '')) = lower(${param_idx})")
+        params.append(provider)
+        param_idx += 1
+    if q:
+        where_clauses.append(
+            f"""(
+                t.title ILIKE ${param_idx} OR t.description ILIKE ${param_idx}
+                OR t.assignee ILIKE ${param_idx} OR t.assignee_team ILIKE ${param_idx}
+                OR t.requester_name ILIKE ${param_idx} OR t.requester_email ILIKE ${param_idx}
+                OR t.affected_user_name ILIKE ${param_idx} OR t.affected_user_email ILIKE ${param_idx}
+                OR t.provider_ref ILIKE ${param_idx} OR t.itop_ref ILIKE ${param_idx}
+            )"""
+        )
+        params.append(f"%{q}%")
+        param_idx += 1
     if agent_only:
         where_clauses.append("t.agent_id IS NOT NULL")
+    if agent_state == "assigned":
+        where_clauses.append("t.agent_id IS NOT NULL")
+    elif agent_state == "unassigned":
+        where_clauses.append("t.agent_id IS NULL")
+    elif agent_state == "running":
+        where_clauses.append("a.status IN ('spawned', 'running', 'working')")
+    elif agent_state == "completed":
+        where_clauses.append("a.status IN ('completed', 'finished', 'terminated')")
 
     subject = access_control.subject_from_request(request)
     scope_sql, scope_params, next_idx = access_control.ticket_filter_clause(subject, "t", param_idx)
@@ -172,8 +199,9 @@ async def list_tickets(
     sort_sql = sort_columns.get(sort_by, "t.updated_at")
     direction = "ASC" if (sort_dir or "").lower() == "asc" else "DESC"
 
+    count_from = "tickets t LEFT JOIN agents a ON t.agent_id = a.id" if "a." in where_sql else "tickets t"
     count = await fetchval(
-        f"SELECT COUNT(*) FROM tickets t{where_sql}", *params
+        f"SELECT COUNT(*) FROM {count_from}{where_sql}", *params
     )
 
     rows = await fetchall(
