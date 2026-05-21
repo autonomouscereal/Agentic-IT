@@ -190,12 +190,37 @@ DASHBOARD_URL=https://<host>:25443 \
 DASHBOARD_USER=demo_account_1 \
 DASHBOARD_PASSWORD=<from vault> \
 OPS_CHAT_URL=https://<host>:3303 \
-OPS_CHAT_USER=demo_chat_alice \
+OPS_CHAT_USER=demo_account_1 \
 OPS_CHAT_PASSWORD=<from vault> \
 OPS_CHAT_SEND_MESSAGE=true \
+OPS_CHAT_ALLOW_IDENTITY_RESET=false \
 PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
 node scripts/smoke_ops_chat_playwright.js
 ```
+
+For a demo account that already has a bot DM, prefer the deterministic room
+path so Element does not detour through the profile/invite screens:
+
+```powershell
+$env:OPS_CHAT_ROOM_ID="!zSTElAvfSUDmAKZSWm:agentic-ops.local"
+```
+
+The smoke test intentionally skips/cancels Element device-verification and
+encryption setup prompts. Ops Chat demo messages do not need end-to-end Matrix
+encryption; the test goal is Keycloak login, same-origin Matrix health, bridge
+delivery, dashboard ticket linkage, and agent response. Do not choose "confirm"
+or reset digital identity during demo smoke unless explicitly testing Matrix
+E2EE.
+
+Latest live proof on 2026-05-21:
+
+- Settings quick controls set `codex-primary`, fast mode on, low reasoning,
+  and `max_concurrent_agents=5`.
+- Element Playwright smoke logged in as `demo_account_1`, skipped verification,
+  used the existing bot room, sent marker `demo-reliability-1779401709`, and
+  received a ticket-linked agent response on ticket `1444`.
+- The bridge and dashboard recorded the user message and outbound agent notes;
+  final runner health showed no stuck active agents.
 
 End-user UX proof through Element:
 

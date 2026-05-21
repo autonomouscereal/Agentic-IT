@@ -334,6 +334,34 @@
                     <div class="metric-card"><div class="metric-label">Default Timeout</div><div class="metric-value compact" id="settings-timeout-label">-</div><div class="metric-sub">Per-profile values can override</div></div>
                     <div class="metric-card"><div class="metric-label">Harnesses</div><div class="metric-value compact" id="settings-harness-label">-</div><div class="metric-sub">Codex / Hermes / Claude Code</div></div>
                 </div>
+                <div class="demo-controls-panel">
+                    <div class="demo-controls-heading">
+                        <div>
+                            <div class="setup-section-title">Demo Agent Controls</div>
+                            <div class="learning-meta">Fast switches for the live demo. Applies to newly spawned chat and ticket agents.</div>
+                        </div>
+                        <div class="demo-preset-buttons">
+                            <button class="btn btn-sm btn-success" onclick="applyDemoRuntimePreset('codex-primary', 'balanced')">Codex Balanced</button>
+                            <button class="btn btn-sm" onclick="applyDemoRuntimePreset('codex-primary', 'fast')">Codex Fast</button>
+                            <button class="btn btn-sm" onclick="applyDemoRuntimePreset('local-only', 'local')">Local Only</button>
+                            <button class="btn btn-sm" onclick="applyDemoRuntimePreset('hermes-external', 'external')">Hermes External</button>
+                        </div>
+                    </div>
+                    <div class="demo-controls-grid">
+                        <label class="setup-label">Active agents</label>
+                        <input id="settings-quick-max-concurrent" class="filter-input" type="number" min="1" max="50">
+                        <label class="setup-label">Codex reasoning</label>
+                        <select id="settings-quick-reasoning" class="filter-select">
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="extra-high">Extra high</option>
+                        </select>
+                        <label class="setup-check inline-check"><input type="checkbox" id="settings-quick-fast"><span>Fast mode</span></label>
+                        <button class="btn btn-sm btn-success" onclick="saveQuickDemoSettings()">Apply Now</button>
+                    </div>
+                    <div class="setup-help agent-config-status" id="agent-demo-config-status"></div>
+                </div>
                 <div class="settings-layout">
                     <div class="setup-panel settings-panel">
                         <div class="setup-section-title">Runtime Defaults</div>

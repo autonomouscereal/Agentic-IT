@@ -3020,6 +3020,13 @@ function setAgentConfigStatus(message, kind = "") {
     el.className = `setup-help agent-config-status ${kind}`.trim();
 }
 
+function setDemoConfigStatus(message, kind = "") {
+    const el = document.getElementById("agent-demo-config-status");
+    if (!el) return;
+    el.textContent = message || "";
+    el.className = `setup-help agent-config-status ${kind}`.trim();
+}
+
 function selectedAgentHarness() {
     const active = activeRuntimeProfile();
     return document.getElementById("setup-harness")?.value
@@ -3065,6 +3072,12 @@ function renderSettings() {
     if (maxInput) maxInput.value = agentRuntimeConfig.max_concurrent_agents || 1;
     const timeoutInput = document.getElementById("settings-default-timeout");
     if (timeoutInput) timeoutInput.value = agentRuntimeConfig.default_timeout_minutes || 10;
+    const quickMax = document.getElementById("settings-quick-max-concurrent");
+    if (quickMax) quickMax.value = agentRuntimeConfig.max_concurrent_agents || 5;
+    const quickReasoning = document.getElementById("settings-quick-reasoning");
+    if (quickReasoning) quickReasoning.value = active?.reasoning_effort || "high";
+    const quickFast = document.getElementById("settings-quick-fast");
+    if (quickFast) quickFast.checked = Boolean(active?.fast_mode);
     applySettingsProfileSelection();
     renderRuntimeAssignments();
 }
@@ -3080,6 +3093,61 @@ function activateRuntimePreset(profileId) {
     if (select) select.value = profileId;
     agentRuntimeConfig.active_profile = profileId;
     renderSettings();
+}
+
+function updateRuntimeProfile(profileId, patch) {
+    const profiles = agentRuntimeConfig.profiles || [];
+    agentRuntimeConfig.profiles = profiles.map(profile => profile.id === profileId ? { ...profile, ...patch } : profile);
+}
+
+function applyDemoRuntimePreset(profileId, mode = "balanced") {
+    const profile = (agentRuntimeConfig.profiles || []).find(p => p.id === profileId);
+    if (!profile) {
+        setDemoConfigStatus(`Profile ${profileId} is not available.`, "warning");
+        return;
+    }
+    const patch = { max_concurrent_agents: 5 };
+    agentRuntimeConfig.active_profile = profileId;
+    agentRuntimeConfig.max_concurrent_agents = 5;
+    if (mode === "fast") {
+        patch.reasoning_effort = "low";
+        patch.fast_mode = true;
+        patch.timeout_minutes = 10;
+    } else if (mode === "local") {
+        patch.reasoning_effort = "medium";
+        patch.fast_mode = false;
+        patch.timeout_minutes = 60;
+    } else if (mode === "external") {
+        patch.reasoning_effort = "medium";
+        patch.fast_mode = false;
+        patch.timeout_minutes = 10;
+    } else {
+        patch.reasoning_effort = profileId === "codex-primary" ? "high" : (profile.reasoning_effort || "medium");
+        patch.fast_mode = false;
+        patch.timeout_minutes = profileId === "local-only" ? 60 : 10;
+    }
+    updateRuntimeProfile(profileId, patch);
+    renderSettings();
+    setDemoConfigStatus("Preset staged. Click Apply Now to save and use it for new agents.");
+}
+
+async function saveQuickDemoSettings() {
+    const activeProfile = document.getElementById("settings-active-profile")?.value || agentRuntimeConfig.active_profile;
+    const quickMax = Math.max(1, Math.min(50, Number(document.getElementById("settings-quick-max-concurrent")?.value || 5)));
+    const reasoning = document.getElementById("settings-quick-reasoning")?.value || "high";
+    const fast = Boolean(document.getElementById("settings-quick-fast")?.checked);
+    agentRuntimeConfig.active_profile = activeProfile;
+    agentRuntimeConfig.max_concurrent_agents = quickMax;
+    updateRuntimeProfile(activeProfile, {
+        max_concurrent_agents: quickMax,
+        reasoning_effort: reasoning,
+        fast_mode: fast,
+        timeout_minutes: activeProfile === "local-only" ? 60 : 10,
+    });
+    const maxInput = document.getElementById("settings-max-concurrent");
+    if (maxInput) maxInput.value = quickMax;
+    await saveRuntimeSettings();
+    setDemoConfigStatus(`Applied ${activeProfile}: ${quickMax} active agents, ${reasoning} reasoning, fast mode ${fast ? "on" : "off"}.`);
 }
 
 function applySettingsProfileSelection() {

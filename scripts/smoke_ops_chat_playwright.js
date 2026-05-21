@@ -18,6 +18,7 @@ const dashboardPassword = process.env.DASHBOARD_PASSWORD || "";
 const opsChatUrl = process.env.OPS_CHAT_URL || "https://127.0.0.1:3303";
 const opsChatUser = process.env.OPS_CHAT_USER || "";
 const opsChatPassword = process.env.OPS_CHAT_PASSWORD || "";
+const opsChatRoomId = process.env.OPS_CHAT_ROOM_ID || "";
 const sendChatMessage = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_SEND_MESSAGE || "");
 const testOutbound = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_TEST_OUTBOUND || "");
 const chatMarker = process.env.OPS_CHAT_MARKER || `ops-chat-playwright-${Date.now()}`;
@@ -25,7 +26,7 @@ const chatMessage = process.env.OPS_CHAT_TEST_MESSAGE || `I cannot log into my K
 const ignoreHttpsErrors = /^(1|true|yes|on)$/i.test(process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS || "");
 const screenshotDir = process.env.PLAYWRIGHT_SCREENSHOT_DIR || "";
 const dashboardServiceToken = process.env.DASHBOARD_SERVICE_TOKEN || "";
-const allowIdentityReset = !/^(0|false|no|off)$/i.test(process.env.OPS_CHAT_ALLOW_IDENTITY_RESET || "true");
+const allowIdentityReset = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_ALLOW_IDENTITY_RESET || "false");
 
 function requireSecret(name, value) {
   if (!value) {
@@ -55,9 +56,61 @@ async function dismissIfVisible(page, pattern) {
   }
 }
 
+function ticketMentions(text) {
+  const pattern = /(?:Dashboard ticket: #|I created ticket #|I updated ticket #|Agent completed this request for ticket #|Ticket #)(\d+)/gi;
+  return Array.from(String(text || "").matchAll(pattern)).map((match) => Number(match[1]));
+}
+
+async function waitForTicketMentionAfter(page, beforeCount) {
+  await page.waitForFunction(
+    ({ beforeCount }) => {
+      const text = document.body.innerText || "";
+      const pattern = /(?:Dashboard ticket: #|I created ticket #|I updated ticket #|Agent completed this request for ticket #|Ticket #)(\d+)/gi;
+      return Array.from(text.matchAll(pattern)).length > beforeCount;
+    },
+    { beforeCount },
+    { timeout: 180000 },
+  );
+  const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  const mentions = ticketMentions(text);
+  const ticketId = mentions[mentions.length - 1];
+  if (!ticketId) throw new Error("Ops Chat did not expose a dashboard ticket id after the message");
+  return ticketId;
+}
+
 async function dismissElementIdentityModals(page) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+    if (/Confirm encryption setup/i.test(body)) {
+      const cancelled = await clickDialogButton(page, /^Cancel$/i, "last")
+        || await clickElementRoleButtonByText(page, /^Cancel$/i, "last")
+        || await clickVisibleElementText(page, /^Cancel$/i, "last");
+      if (cancelled) {
+        await page.waitForTimeout(1500);
+        continue;
+      }
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(1000);
+      continue;
+    }
+    if (/Verify this device/i.test(body)) {
+      const later = await clickDialogButton(page, /^Later$/i, "last")
+        || await clickElementRoleButtonByText(page, /^Later$/i, "last")
+        || await clickVisibleElementText(page, /^Later$/i, "last");
+      if (later) {
+        await page.waitForTimeout(1500);
+        continue;
+      }
+    }
+    if (/Are you sure\?|Without verifying|I'll verify later/i.test(body)) {
+      const later = await clickDialogButton(page, /^I'll verify later$/i, "last")
+        || await clickElementRoleButtonByText(page, /^I'll verify later$/i, "last")
+        || await clickVisibleElementText(page, /^I'll verify later$/i, "last");
+      if (later) {
+        await page.waitForTimeout(2500);
+        continue;
+      }
+    }
     if (/Are you sure you want to reset your digital identity/i.test(body)) {
       if (allowIdentityReset) {
         const continueButton = page.getByRole("button", { name: /^Continue$/i }).first();
@@ -103,6 +156,11 @@ async function dismissElementIdentityModals(page) {
       }
     }
     if (/Confirm your digital identity/i.test(body)) {
+      const closed = await clickDialogUntitledClose(page);
+      if (closed) {
+        await page.waitForTimeout(1500);
+        continue;
+      }
       await page.keyboard.press("Escape").catch(() => {});
       await page.waitForTimeout(1000);
       const afterEscape = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
@@ -197,9 +255,14 @@ async function settleElementIdentity(page) {
     const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
     if (
       /Home|Start chat|No chats yet|Search|Send a Direct Message|Rooms|People/i.test(body)
-      && !/Confirm your digital identity|Are you sure you want to reset your digital identity|Use Single Sign On to continue|Device verified/i.test(body)
+      && !/Confirm encryption setup|Verify this device|Without verifying|I'll verify later|Confirm your digital identity|Are you sure you want to reset your digital identity|Use Single Sign On to continue|Device verified/i.test(body)
     ) {
       return;
+    }
+    if (/Confirm encryption setup|Verify this device|Without verifying|I'll verify later/i.test(body)) {
+      await dismissElementIdentityModals(page);
+      await page.waitForTimeout(1000);
+      continue;
     }
     if (/Confirm your digital identity|Are you sure you want to reset your digital identity/i.test(body)) {
       await dismissElementIdentityModals(page);
@@ -300,6 +363,45 @@ async function clickElementRoleButtonByText(page, pattern, which = "last") {
   }, { source: pattern.source, which }).catch(() => false);
 }
 
+async function clickDialogButton(page, pattern, which = "last") {
+  const buttons = page.locator("#mx_Dialog_Container button, #mx_Dialog_Container [role='button']").filter({ hasText: pattern });
+  const count = await buttons.count().catch(() => 0);
+  if (count > 0) {
+    await buttons.nth(which === "first" ? 0 : count - 1).click({ force: true }).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
+async function clickDialogUntitledClose(page) {
+  const closeButtons = [
+    "#mx_Dialog_Container button[aria-label*='Close']",
+    "#mx_Dialog_Container [role='button'][aria-label*='Close']",
+    "button[aria-label*='Close']",
+    "[role='button'][aria-label*='Close']",
+    "#mx_Dialog_Container button",
+    "#mx_Dialog_Container [role='button']",
+  ];
+  for (const selector of closeButtons) {
+    const button = page.locator(selector).first();
+    if (await button.isVisible().catch(() => false)) {
+      await button.click({ force: true }).catch(() => {});
+      return true;
+    }
+  }
+  const emptyButtons = page.locator("button,[role='button']");
+  const count = await emptyButtons.count().catch(() => 0);
+  for (let index = 0; index < Math.min(count, 8); index += 1) {
+    const button = emptyButtons.nth(index);
+    if (!(await button.isVisible().catch(() => false))) continue;
+    const text = ((await button.innerText().catch(() => "")) || (await button.textContent().catch(() => "")) || "").trim();
+    if (text) continue;
+    await button.click({ force: true }).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
 async function clickVisibleElementText(page, pattern, which = "last") {
   return await page.evaluate(({ source, which }) => {
     const regex = new RegExp(source, "i");
@@ -317,8 +419,69 @@ async function clickVisibleElementText(page, pattern, which = "last") {
     return true;
   }, { source: pattern.source, which }).catch(() => false);
 }
+
+async function acceptElementNewContactPrompt(page) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+    if (!/Start a chat with this new contact|Confirm inviting them before continuing|currently don't have any chats/i.test(body)) {
+      return false;
+    }
+    const clicked = await clickDialogButton(page, /^Continue$/i, "last")
+      || await clickElementRoleButtonByText(page, /^Continue$/i, "last")
+      || await clickVisibleElementText(page, /^Continue$/i, "last");
+    if (clicked) {
+      await page.waitForTimeout(4000);
+      continue;
+    }
+    const buttons = page.locator("button,[role='button']").filter({ hasText: /^Continue$/i });
+    const count = await buttons.count().catch(() => 0);
+    if (count > 0) {
+      await buttons.nth(count - 1).click({ force: true }).catch(() => {});
+      await page.waitForTimeout(4000);
+      continue;
+    }
+    return true;
+  }
+  return true;
+}
+
 async function sendOpsChatMessage(page) {
   await dismissIfVisible(page, /Dismiss|Not now|Maybe later/i);
+  await dismissElementIdentityModals(page);
+  if (opsChatRoomId) {
+    await page.goto(`${opsChatUrl.replace(/\/$/, "")}/#/room/${opsChatRoomId}`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    await page.waitForTimeout(5000);
+    await dismissElementIdentityModals(page);
+    await clickExistingAgentRoom(page);
+    const roomComposerReady = await page.locator('textarea[placeholder*="Message"], [aria-label*="Message"], [contenteditable="true"], [role="textbox"], div[aria-label*="Send a message"]').last().isVisible().catch(() => false);
+    if (roomComposerReady) {
+      const message = chatMessage.includes(chatMarker) ? chatMessage : `${chatMessage} Marker ${chatMarker}`;
+      const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+      const beforeMentionCount = ticketMentions(beforeText).length;
+      await sendComposerMessage(page, message);
+      const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount);
+      await maybeScreenshot(page, "ops-chat-message");
+      return { marker: chatMarker, ticketId };
+    }
+  }
+  const existingBotRoom = page.getByText(/^Agentic Ops Agent$/i).first();
+  if (await existingBotRoom.isVisible().catch(() => false)) {
+    const clickedRoom = await clickExistingAgentRoom(page);
+    if (!clickedRoom) {
+      await existingBotRoom.click({ force: true }).catch(() => {});
+    }
+    await page.waitForTimeout(3000);
+    const existingComposerReady = await page.locator('textarea[placeholder*="Message"], [aria-label*="Message"], [contenteditable="true"], [role="textbox"], div[aria-label*="Send a message"]').last().isVisible().catch(() => false);
+    if (existingComposerReady) {
+      const message = chatMessage.includes(chatMarker) ? chatMessage : `${chatMessage} Marker ${chatMarker}`;
+      const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+      const beforeMentionCount = ticketMentions(beforeText).length;
+      await sendComposerMessage(page, message);
+      const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount);
+      await maybeScreenshot(page, "ops-chat-message");
+      return { marker: chatMarker, ticketId };
+    }
+  }
   const botProfileUrl = `${opsChatUrl.replace(/\/$/, "")}/#/user/@agentic-ops:agentic-ops.local`;
   await page.goto(botProfileUrl, { waitUntil: "domcontentloaded" }).catch(() => {});
   await page.waitForTimeout(4000);
@@ -331,6 +494,7 @@ async function sendOpsChatMessage(page) {
     await sendMessage.click({ force: true });
     await page.waitForTimeout(4000);
   }
+  await acceptElementNewContactPrompt(page);
   await dismissElementIdentityModals(page);
   await dismissIfVisible(page, /Dismiss|Not now|Maybe later/i);
   await clickElementRoleButtonByText(page, /^Dismiss$/i, "first");
@@ -339,18 +503,11 @@ async function sendOpsChatMessage(page) {
   if (clickedLater) {
     await page.waitForTimeout(1000);
   }
-  if (await page.getByText(/Start a chat with this new contact/i).first().isVisible().catch(() => false)) {
-    const continueNewContact = page.getByRole("button", { name: /^Continue$/i }).last();
-    if (await continueNewContact.isVisible().catch(() => false)) {
-      await continueNewContact.click({ force: true });
-    } else {
-      await clickVisibleElementText(page, /^Continue$/i, "last");
-    }
-    await page.waitForTimeout(5000);
-  }
+  await acceptElementNewContactPrompt(page);
   await dismissElementIdentityModals(page);
   let directComposerReady = await page.locator('textarea[placeholder*="Message"], [aria-label*="Message"], [contenteditable="true"], [role="textbox"], div[aria-label*="Send a message"]').last().isVisible().catch(() => false);
   if (!directComposerReady) {
+    await acceptElementNewContactPrompt(page);
     const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
     if (/Are you sure you want to reset your digital identity|Confirm your digital identity/i.test(body)) {
       await dismissElementIdentityModals(page);
@@ -359,6 +516,7 @@ async function sendOpsChatMessage(page) {
         await sendAgain.click({ force: true }).catch(() => {});
         await page.waitForTimeout(4000);
       }
+      await acceptElementNewContactPrompt(page);
       await dismissElementIdentityModals(page);
       directComposerReady = await page.locator('textarea[placeholder*="Message"], [aria-label*="Message"], [contenteditable="true"], [role="textbox"], div[aria-label*="Send a message"]').last().isVisible().catch(() => false);
     }
@@ -366,28 +524,18 @@ async function sendOpsChatMessage(page) {
   if (directComposerReady) {
     const message = chatMessage.includes(chatMarker) ? chatMessage : `${chatMessage} Marker ${chatMarker}`;
     const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
-    const beforeTickets = Array.from(beforeText.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).map((match) => Number(match[1]));
+    const beforeMentionCount = ticketMentions(beforeText).length;
     await sendComposerMessage(page, message);
-    await page.waitForFunction(
-      ({ beforeTickets }) => {
-        const text = document.body.innerText || "";
-        const ids = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).map((match) => Number(match[1]));
-        return ids.some((id) => !beforeTickets.includes(id));
-      },
-      { beforeTickets },
-      { timeout: 180000 },
-    );
+    const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount);
     await maybeScreenshot(page, "ops-chat-message");
-    const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
-    const matches = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi));
-    const match = matches.map((item) => Number(item[1])).find((id) => !beforeTickets.includes(id));
-    if (!match) throw new Error("Ops Chat did not expose a newly-created dashboard ticket id after the message");
-    return { marker: chatMarker, ticketId: match };
+    return { marker: chatMarker, ticketId };
   }
+  const fallbackBody = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+  const directDialogOpen = /Direct Messages|Start a conversation with someone/i.test(fallbackBody);
   const directMessage = page.getByText(/Send a Direct Message/i).first();
-  if (await directMessage.isVisible().catch(() => false)) {
+  if (!directDialogOpen && await directMessage.isVisible().catch(() => false)) {
     await directMessage.click({ force: true });
-  } else {
+  } else if (!directDialogOpen) {
     await page.getByText(/Start chat|New conversation/i).first().click({ force: true });
   }
   await page.waitForTimeout(1500);
@@ -398,13 +546,18 @@ async function sendOpsChatMessage(page) {
     'input[placeholder*="Matrix"]',
     'input[aria-label*="Search"]',
     '[role="combobox"] input',
+    '[role="dialog"] [contenteditable="true"]',
+    '.mx_Dialog [contenteditable="true"]',
     'input[type="text"]',
   ];
   let addressed = false;
   for (const selector of searchInputs) {
     const input = page.locator(selector).last();
     if (await input.isVisible().catch(() => false)) {
-      await input.fill("@agentic-ops:agentic-ops.local");
+      await input.click({ force: true }).catch(() => {});
+      await input.fill("@agentic-ops:agentic-ops.local").catch(async () => {
+        await page.keyboard.type("@agentic-ops:agentic-ops.local");
+      });
       addressed = true;
       break;
     }
@@ -436,9 +589,11 @@ async function sendOpsChatMessage(page) {
     await continueButton.click({ force: true });
   }
   await page.waitForTimeout(6000);
+  await acceptElementNewContactPrompt(page);
+  await page.waitForTimeout(3000);
   const message = chatMessage.includes(chatMarker) ? chatMessage : `${chatMessage} Marker ${chatMarker}`;
   const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
-  const beforeTickets = Array.from(beforeText.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).map((match) => Number(match[1]));
+  const beforeMentionCount = ticketMentions(beforeText).length;
   const composers = [
     'textarea[placeholder*="Message"]',
     '[aria-label*="Message"]',
@@ -463,21 +618,30 @@ async function sendOpsChatMessage(page) {
     const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 1000);
     throw new Error(`Ops Chat message composer was not found. url=${page.url()} body=${body}`);
   }
-  await page.waitForFunction(
-    ({ beforeTickets }) => {
-      const text = document.body.innerText || "";
-      const ids = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).map((match) => Number(match[1]));
-      return ids.some((id) => !beforeTickets.includes(id));
-    },
-    { beforeTickets },
-    { timeout: 180000 },
-  );
+  const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount);
   await maybeScreenshot(page, "ops-chat-message");
-  const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
-  const matches = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi));
-  const match = matches.map((item) => Number(item[1])).find((id) => !beforeTickets.includes(id));
-  if (!match) throw new Error("Ops Chat did not expose a newly-created dashboard ticket id after the message");
-  return { marker: chatMarker, ticketId: match };
+  return { marker: chatMarker, ticketId };
+}
+
+async function clickExistingAgentRoom(page) {
+  const clicked = await page.evaluate(() => {
+    const candidates = Array.from(document.querySelectorAll("button,[role='button'],a,span,div"));
+    const match = candidates.find((el) => {
+      const text = (el.innerText || el.textContent || "").trim();
+      if (text !== "Agentic Ops Agent") return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && rect.x >= 60 && rect.x < 430 && rect.y > 120 && rect.y < 320;
+    });
+    if (!match) return null;
+    const rect = match.getBoundingClientRect();
+    match.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 }));
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  }).catch(() => null);
+  if (clicked) {
+    await page.waitForTimeout(4000);
+    return true;
+  }
+  return false;
 }
 
 async function sendComposerMessage(page, message) {

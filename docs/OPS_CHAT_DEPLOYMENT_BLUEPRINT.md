@@ -98,11 +98,20 @@ $env:DASHBOARD_URL="https://192.168.50.222:25443"
 $env:DASHBOARD_USER="demo_account_1"
 $env:DASHBOARD_PASSWORD="<from vault>"
 $env:OPS_CHAT_URL="https://192.168.50.222:3303"
-$env:OPS_CHAT_USER="demo_chat_live11"
+$env:OPS_CHAT_USER="demo_account_1"
 $env:OPS_CHAT_PASSWORD="<from vault>"
 $env:OPS_CHAT_SEND_MESSAGE="true"
+$env:OPS_CHAT_ALLOW_IDENTITY_RESET="false"
+$env:OPS_CHAT_ROOM_ID="!zSTElAvfSUDmAKZSWm:agentic-ops.local"
 node scripts/smoke_ops_chat_playwright.js
 ```
+
+For demo smoke tests, cancel or skip Element verification/encryption prompts.
+Matrix E2EE is not part of the Ops Chat demo proof; the important path is
+Keycloak login, Matrix reachability, bridge handoff, dashboard ticket linkage,
+and agent response. The Playwright smoke now treats "Confirm encryption setup",
+"Verify this device", and "Confirm your digital identity" as prompts to skip,
+not prompts to complete.
 
 Expected:
 

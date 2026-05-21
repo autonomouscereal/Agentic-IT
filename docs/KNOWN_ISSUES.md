@@ -85,7 +85,7 @@ and long transaction waits.
 
 ### Latest full Element marathon was not rerun after the final bridge/closure fixes
 
-Status: documented gap.
+Status: mitigated by targeted live Element smoke; broad marathon still backlog.
 
 Focused checks passed after the final stabilization:
 
@@ -102,6 +102,18 @@ However, the full real Element UI marathon and 50-ish mixed-use-case run were
 not rerun after the last-minute bridge transaction and Matrix note-formatting
 patches because the live demo deadline was near. Older marathon and broad
 matrix proofs remain useful, but they predate the final two fixes.
+
+2026-05-21 targeted mitigation:
+
+- Playwright logged into Element through Keycloak as `demo_account_1`.
+- The smoke skipped Matrix encryption/device verification prompts instead of
+  trying to confirm or reset identity.
+- It opened the existing bot room
+  `!zSTElAvfSUDmAKZSWm:agentic-ops.local`, sent marker
+  `demo-reliability-1779401709`, and observed a ticket-linked agent response on
+  ticket `1444`.
+- Dashboard runner health remained healthy with `max_concurrent_agents=5`,
+  `worker_count=5`, Codex OAuth `logged_in`, and no stuck active agents.
 
 ### Ops Chat progress-note live verification was source-and-synthetic, not full UI
 
@@ -128,7 +140,7 @@ complete. Treat this as a post-demo UI hardening pass.
 
 ### Agent runtime Settings and Skills assignment UX needs another product pass
 
-Status: backlog item.
+Status: demo path mitigated; full product pass still backlog.
 
 The platform supports Codex, Hermes, and Claude-style harness profiles through
 settings/config, but the complete product UX requested by the user is not fully
@@ -141,8 +153,27 @@ validated end-to-end:
 - skill activation/deactivation and assignment to saved agent profiles
 - removal of conflicting model controls from the Agents plane
 
-Do not present this as finished product polish until the Settings and Skills
-planes receive a dedicated Playwright crawl and operator-flow test.
+2026-05-21 mitigation:
+
+- Added a top-level Settings "Demo Agent Controls" panel for the operator path:
+  Codex Balanced, Codex Fast, Local Only, Hermes External, active-agent count,
+  Codex reasoning, fast mode, and Apply Now.
+- Playwright verified the panel as `demo_account_1`, set `codex-primary`,
+  `max_concurrent_agents=5`, low reasoning, and fast mode on, then confirmed
+  `/api/agents/runner-health` reflected the saved values.
+
+Do not present the advanced profile/skill assignment editor as finished product
+polish until the Settings and Skills planes receive a dedicated product pass.
+
+### Harness startup `/init` overhead
+
+Status: checked; no demo blocker found.
+
+Source review on 2026-05-21 found no Codex, Hermes, or Claude Code harness spawn
+path running `/init` or an equivalent initialization command before each agent
+task. The only `init` references found in the demo-critical path were internal
+checkpoint labels and unrelated repository setup commands. Current harness
+commands go directly to `codex exec`, `hermes chat`, or `claude -p`.
 
 ### Server-manager skill documentation still has legacy path examples
 

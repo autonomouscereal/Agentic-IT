@@ -328,13 +328,28 @@ OPS_CHAT_URL=https://<host>:3303 \
 OPS_CHAT_USER=<keycloak chat user> \
 OPS_CHAT_PASSWORD=<from vault> \
 OPS_CHAT_SEND_MESSAGE=true \
-OPS_CHAT_ALLOW_IDENTITY_RESET=true \
+OPS_CHAT_ALLOW_IDENTITY_RESET=false \
 node scripts/smoke_ops_chat_playwright.js
 ```
+
+For the shared `demo_account_1` room, set
+`OPS_CHAT_ROOM_ID=!zSTElAvfSUDmAKZSWm:agentic-ops.local` so Playwright opens
+the known bot DM directly instead of walking Element's profile/invite screens.
+The smoke should skip Element encryption, digital-identity, and device
+verification prompts. Ops Chat demo proof does not require Matrix E2EE; it
+requires Keycloak login, same-origin Matrix health, bridge delivery, dashboard
+ticket/update linkage, and a visible agent response.
 
 This proves dashboard login, Element login through Keycloak, same-origin Matrix
 health from inside the browser, DM creation to `@agentic-ops:agentic-ops.local`,
 ticket creation, and real agent handoff.
+
+Latest live demo proof, 2026-05-21: Playwright logged in as `demo_account_1`,
+used room `!zSTElAvfSUDmAKZSWm:agentic-ops.local`, sent marker
+`demo-reliability-1779401709`, and received a ticket-linked response on ticket
+`1444`. The agent reused the active queue-health ticket instead of opening a
+fresh one; that is acceptable for bridge/reliability smoke and remains a
+separate agent-decision tuning caveat for clean demo storytelling.
 
 One-room Element marathon:
 

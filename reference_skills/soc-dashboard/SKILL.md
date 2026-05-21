@@ -60,6 +60,23 @@ Agent runtime configuration lives in the dashboard `Settings` page and
 profile, max active agents, default timeout, Codex reasoning effort, Codex fast
 mode, fallback order, and scoped routing assignments.
 
+For live demos, use the top `Settings -> Demo Agent Controls` panel first. It
+is intentionally simpler than the full profile editor:
+
+- `Codex Balanced`: Codex primary, fast mode off, default reasoning.
+- `Codex Fast`: Codex primary, fast mode on, low reasoning.
+- `Local Only`: Hermes with `local/agent-default`, one-hour local timeout.
+- `Hermes External`: Hermes external/default provider route.
+- `Active agents`: adjusts the runner semaphore immediately; demo default is
+  `5`.
+- `Apply Now`: persists the active profile, max active agents, Codex reasoning,
+  fast mode, and timeout.
+
+Use `/api/agents/runner-health` after saving. It should show matching
+`max_concurrent_agents`, `queue_health.worker_count`, active profile, Codex
+login status, and proxy health. If those values disagree, recycle only the API
+service and recheck before a demo.
+
 Saved profiles can also pin enabled skills. Empty profile skill lists inherit
 all enabled global/default skills; selected skill lists add explicit pinned
 skills to that profile's spawned agent context. Manage this from Settings and

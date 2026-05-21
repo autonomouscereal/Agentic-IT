@@ -2269,7 +2269,7 @@ async def get_agent_runtime_config():
 
 async def update_agent_runtime_config(payload):
     """Update non-secret agent defaults and named harness/model setups."""
-    global _semaphore
+    global _semaphore, _semaphore_limit
     payload = payload or {}
     config = _normalize_model_config(_load_model_config())
     models = list(config.get("models") or ["deepseek/deepseek-v4-flash"])
@@ -2344,6 +2344,7 @@ async def update_agent_runtime_config(payload):
         try:
             config["max_concurrent_agents"] = max(1, min(int(payload.get("max_concurrent_agents")), 50))
             _semaphore = asyncio.Semaphore(config["max_concurrent_agents"])
+            _semaphore_limit = config["max_concurrent_agents"]
         except (TypeError, ValueError):
             pass
     if "default_timeout_minutes" in payload:

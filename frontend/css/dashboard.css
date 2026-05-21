@@ -2218,6 +2218,40 @@ body {
     margin-bottom: 16px;
 }
 
+.demo-controls-panel {
+    display: grid;
+    gap: 14px;
+    padding: 14px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(69, 183, 209, 0.28);
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(69, 183, 209, 0.10), rgba(38, 194, 129, 0.06));
+}
+
+.demo-controls-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.demo-preset-buttons,
+.demo-controls-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.demo-controls-grid {
+    display: grid;
+    grid-template-columns: max-content minmax(90px, 140px) max-content minmax(150px, 190px) minmax(140px, auto) auto;
+}
+
+.demo-controls-grid .setup-label {
+    margin: 0;
+}
+
 .metric-value.compact {
     font-size: 20px;
     line-height: 1.2;
@@ -2549,6 +2583,7 @@ body {
     }
 
     .settings-summary-grid,
+    .demo-controls-grid,
     .settings-profile-grid,
     .settings-assignment-editor,
     .deployment-shape-panel {
