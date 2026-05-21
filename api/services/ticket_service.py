@@ -227,6 +227,19 @@ async def infer_access_raci_route(resource, permission, reason="", assignment_gr
     }
 
 
+MAX_PROVIDER_TITLE_LENGTH = 240
+
+
+def provider_safe_title(title, fallback="Untitled request"):
+    """Return a compact title that fits conservative ITSM provider limits."""
+    text = " ".join(str(title or "").split())
+    if not text:
+        text = fallback
+    if len(text) <= MAX_PROVIDER_TITLE_LENGTH:
+        return text
+    return text[:MAX_PROVIDER_TITLE_LENGTH - 3].rstrip() + "..."
+
+
 def _can_outbound_create(provider, ticket_class):
     return provider != "local"
 
@@ -259,6 +272,7 @@ async def create_ticket(
     """
     from services import provider_registry
 
+    title = provider_safe_title(title)
     ticket_class = normalize_ticket_class(ticket_class)
     provider_class = normalize_ticket_class(provider_class, ticket_class) if provider_class else ticket_class
     requested_provider = provider

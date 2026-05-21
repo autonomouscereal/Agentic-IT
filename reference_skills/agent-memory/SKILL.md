@@ -11,6 +11,19 @@ Shared long-term agent memory backed by raw PostgreSQL with pgvector. The bundle
 
 Set `AGENT_MEMORY_SKILL_DIR` to this skill folder when running manually:
 
+Inside Agentic Operations API/agent containers, prefer the container Python
+runtime because the API image already installs `asyncpg`:
+
+```bash
+AGENT_MEMORY_SKILL_DIR=/root/.agents/skills/agent-memory \
+python3 /root/.agents/skills/agent-memory/scripts/agent_memory.py --json status
+AGENT_MEMORY_SKILL_DIR=/root/.agents/skills/agent-memory \
+python3 /root/.agents/skills/agent-memory/scripts/agent_memory.py search "what happened with memory hooks" --space agent-memory/backend --limit 10
+```
+
+Use the skill-local venv for workstation or host-side management after it has
+been bootstrapped with `requirements.txt`:
+
 ```bash
 "${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json status
 "${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" "${AGENT_MEMORY_SKILL_DIR}/scripts/agent_memory.py" --json self-test
@@ -26,7 +39,7 @@ python -m venv "${AGENT_MEMORY_SKILL_DIR}/.venv"
 "${AGENT_MEMORY_SKILL_DIR}/.venv/Scripts/python.exe" -m pip install -r "${AGENT_MEMORY_SKILL_DIR}/requirements.txt"
 ```
 
-On Linux containers or servers, use `.venv/bin/python` instead of `.venv/Scripts/python.exe`.
+On Linux hosts outside the API container, use `.venv/bin/python` instead of `.venv/Scripts/python.exe`.
 `requirements.txt` includes `asyncpg` for PostgreSQL and `cryptography` for optional server-manager vault reads.
 
 Store a deliberate note:

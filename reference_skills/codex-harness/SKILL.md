@@ -12,8 +12,12 @@ addition to Hermes and Claude Code.
 
 - Harness name: `codex`
 - Runtime command: `codex exec --json`
-- Model route: dashboard AI proxy, usually `http://ai-proxy:4001/v1`
-- Provider config: `agentic_proxy` with `wire_api="responses"`
+- Model route:
+  - `CODEX_AUTH_MODE=proxy`: dashboard AI proxy, usually
+    `http://ai-proxy:4001/v1`
+  - `CODEX_AUTH_MODE=oauth`: Codex subscription/OAuth login stored in
+    `CODEX_HOME`
+- Provider config in proxy mode: `agentic_proxy` with `wire_api="responses"`
 - Auth source: mounted `CODEX_HOME` login state or runtime/vault
   `CODEX_API_KEY`/`OPENAI_API_KEY`
 - Portable skills: mounted from `reference_skills` into `/root/.agents/skills`.
@@ -35,12 +39,36 @@ AGENT_LLM_AUTH_TOKEN=<runtime token when required>
 CODEX_BIN=codex
 CODEX_HOME=/root/.codex
 CODEX_HOME_DIR=./runtime/codex
+CODEX_AUTH_MODE=proxy
 CODEX_MODEL_PROVIDER=agentic_proxy
 CODEX_SANDBOX=danger-full-access
 CODEX_APPROVAL_POLICY=never
 CODEX_REASONING_EFFORT=medium
 CODEX_API_KEY=<vault/runtime secret, optional>
 ```
+
+Use `CODEX_AUTH_MODE=oauth` when a deployment should use a logged-in Codex
+subscription account instead of API/proxy billing. In that mode the harness does
+not inject `OPENAI_API_KEY` and does not force `agentic_proxy`; Codex reads the
+OAuth state from mounted `CODEX_HOME`.
+
+One-time enrollment:
+
+```bash
+cd /home/cereal/SOC_TESTING/soc-dashboard
+docker compose exec api codex login --device-auth
+docker compose exec api codex login status
+```
+
+The human operator completes the device-login URL/code once. Preserve and back
+up `${CODEX_HOME_DIR:-./runtime/codex}` as a secret runtime volume. Containers
+and agent workspaces can be destroyed freely as long as that directory is not
+deleted.
+
+Noninteractive Codex runs must close stdin. If stdin is inherited, Codex can
+print `Reading additional input from stdin...` and wait before starting the
+turn. The dashboard runner and Ops Chat harness use `stdin=subprocess.DEVNULL`
+for this reason.
 
 For Ops Chat smoke tests without changing the global runner default:
 
@@ -54,6 +82,7 @@ curl -sS -X POST "$DASHBOARD_URL/api/ops-chat/message" \
 The dashboard harness injects:
 
 ```bash
+# CODEX_AUTH_MODE=proxy
 codex exec --json --skip-git-repo-check \
   --sandbox "$CODEX_SANDBOX" \
   --model "$AGENT_DEFAULT_MODEL" \
@@ -62,6 +91,18 @@ codex exec --json --skip-git-repo-check \
   --config 'model_providers.agentic_proxy.base_url="http://ai-proxy:4001/v1"' \
   --config 'model_providers.agentic_proxy.env_key="OPENAI_API_KEY"' \
   --config 'model_providers.agentic_proxy.wire_api="responses"' \
+  "$PROMPT"
+```
+
+In OAuth mode the same command omits `model_provider` and
+`model_providers.agentic_proxy.*` overrides so Codex can use its signed-in
+account:
+
+```bash
+codex exec --json --skip-git-repo-check \
+  --sandbox "$CODEX_SANDBOX" \
+  --model "$CODEX_SUBSCRIPTION_MODEL" \
+  --config "approval_policy=\"$CODEX_APPROVAL_POLICY\"" \
   "$PROMPT"
 ```
 
@@ -90,6 +131,20 @@ Expected result:
 - The agent task writes a note/checkpoint or clearly fails with a missing
   `CODEX_HOME`/`CODEX_API_KEY` reason.
 
+OAuth/live proof from 2026-05-21:
+
+- `runner-health` reported `codex_auth_mode=oauth` and
+  `codex_login_status.status=logged_in`.
+- Direct `codex exec --json --output-last-message` with `gpt-5.5` high
+  reasoning created `/tmp/codex_oauth_file_probe.txt` containing exactly
+  `CODEX_FILE_OK`.
+- Dashboard ticket `1399` spawned Codex agent `369` / task `366`, synced to
+  iTop ref `817`, wrote `CODEX_HARNESS_SYNC_OK`, resolved the ticket, and
+  finished the task.
+- Dashboard ticket `1400` spawned Codex agent `370` / task `367`, used the
+  agent-memory skill through container `python3`, wrote `CODEX_MEMORY_OK`, and
+  resolved synced iTop ref `818`.
+
 ## Ops Chat Status
 
 Codex is a peer harness in the Ops Chat bridge, but it is not automatically the
@@ -98,8 +153,10 @@ best chat-intake engine. The 2026-05-21 lab retest proved:
 - `codex-cli 0.132.0` is installed.
 - The API reports Codex in `available_harnesses`.
 - Codex requests reach the AI proxy via `/v1/responses`.
-- The tested local/external lab model routes did not emit the required Codex
-  tool call for `ops_chat_tool.py` within the one-hour local-agent window.
+- Proxy/local lab model routes did not emit the required Codex tool call for
+  `ops_chat_tool.py` within the one-hour local-agent window.
+- OAuth mode is now enrolled and verified with ChatGPT auth. A closed-stdin
+  `gpt-5.5` high-reasoning proof created a marker file successfully.
 
 Until a dedicated Codex account or tool-capable Codex model route passes the
 Ops Chat smoke, keep `OPS_CHAT_AGENT_HARNESS` blank or `hermes` for demos.

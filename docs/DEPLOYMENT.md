@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-Last updated: 2026-05-20.
+Last updated: 2026-05-21.
 
 ## Requirements
 
@@ -60,6 +60,7 @@ AI_PROXY_EXTERNAL_ENABLED=false
 AGENT_DEFAULT_MODEL=local/agent-default
 HERMES_DEFAULT_PROVIDER=dashboard-proxy
 CODEX_HOME_DIR=./runtime/codex
+CODEX_AUTH_MODE=proxy
 CODEX_MODEL_PROVIDER=agentic_proxy
 CODEX_SANDBOX=danger-full-access
 CODEX_APPROVAL_POLICY=never
@@ -81,6 +82,38 @@ python scripts/switch_model_route.py --route local --restart
 
 The switch updates `.env`, `runtime/proxy_config.json`, and
 `agent_models.json`. Provider keys remain in the vault/runtime environment.
+
+For Codex subscription/OAuth mode, set `CODEX_AUTH_MODE=oauth`, preserve
+`CODEX_HOME_DIR`, and enroll once with:
+
+```bash
+docker compose exec api codex login --device-auth
+docker compose exec api codex login status
+```
+
+The OAuth/device-login approval is a human approval gate, but the platform owns
+the lifecycle around it: detect missing login, open a setup/access ticket, show
+the device URL/code, poll status, and smoke-test the harness. Treat
+`CODEX_HOME_DIR` as secret runtime state, similar to a vault-backed credential
+lease. Do not commit it or bake it into images.
+
+In OAuth mode, debug with Codex's own JSONL stream rather than the AI proxy:
+`codex exec --json --output-last-message ...`. Subscription/OAuth runs use the
+mounted ChatGPT login in `CODEX_HOME`; proxy mode remains available through
+`CODEX_AUTH_MODE=proxy` for local/API-compatible model routes.
+
+Agent-memory is mounted from `reference_skills` into read-only container paths.
+Inside API/agent containers, use the container runtime:
+
+```bash
+AGENT_MEMORY_SKILL_DIR=/root/.agents/skills/agent-memory \
+python3 /root/.agents/skills/agent-memory/scripts/agent_memory.py --json status
+```
+
+Use the skill-local `.venv` only for host/workstation management after
+installing `reference_skills/agent-memory/requirements.txt`. Set
+`AGENT_MEMORY_LOG_DIR` to a writable path such as `/tmp/agent-memory/logs` if
+running the CLI in a read-only mounted skill tree.
 
 Current lab route switch, for operators or agents using the `server-manager`
 skill:

@@ -157,6 +157,7 @@ services:
       HERMES_ACCEPT_HOOKS: "1"
       CODEX_BIN: ${CODEX_BIN:-codex}
       CODEX_HOME: ${CODEX_HOME:-/root/.codex}
+      CODEX_AUTH_MODE: ${CODEX_AUTH_MODE:-proxy}
       CODEX_MODEL_PROVIDER: ${CODEX_MODEL_PROVIDER:-agentic_proxy}
       CODEX_SANDBOX: ${CODEX_SANDBOX:-workspace-write}
       CODEX_APPROVAL_POLICY: ${CODEX_APPROVAL_POLICY:-never}

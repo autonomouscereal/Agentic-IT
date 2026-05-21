@@ -27,6 +27,25 @@ Last updated: 2026-05-21.
   within the one-hour local-agent window. Treat Codex as registered and
   proxy-connected, but not the demo Ops Chat engine until a tool-capable Codex
   account/model route is available.
+- Codex OAuth/subscription mode uses `CODEX_AUTH_MODE=oauth`; verify
+  `/api/agents/runner-health` reports `codex_login_status.status=logged_in`
+  after `codex login --device-auth` completes. In OAuth mode the harness must
+  not inject `model_provider="agentic_proxy"` or `OPENAI_API_KEY`.
+- Codex noninteractive subprocesses must close stdin. If stdin is inherited,
+  Codex can print `Reading additional input from stdin...` and wait instead of
+  starting the task. The runner and Ops Chat harness launch Codex with
+  `stdin=subprocess.DEVNULL`.
+- OAuth proof after enrollment: `codex exec --json --output-last-message ...`
+  with `--model gpt-5.5 --config reasoning_effort="high"` created
+  `/tmp/codex_oauth_file_probe.txt` containing exactly `CODEX_FILE_OK`.
+- Dashboard-spawned OAuth proof passed on ticket `1399`: agent `369`, task
+  `366`, model `gpt-5.5`, harness `codex`, iTop ref `817`, provider sync
+  `synced`, title length `240`, marker `CODEX_HARNESS_SYNC_OK`, ticket
+  `resolved`, task `completed`, agent `finished`.
+- Agent-memory proof passed on ticket `1400`: agent `370`, task `367`, iTop
+  ref `818`, marker `CODEX_MEMORY_OK`; the spawned Codex agent used the
+  container `python3` memory path, reported `driver=asyncpg`, and resolved the
+  synced ticket.
 - The API container mounts `/root/.agents/skills` from deployable
   `reference_skills`; Codex skill frontmatter loads cleanly.
 - Containerized Codex uses `CODEX_SANDBOX=danger-full-access` because hardened

@@ -670,19 +670,33 @@ async def _update_ticket_status(
     terminal_status = normalized in {"resolved", "closed", "closed/resolved", "implemented"}
     if close_provider and terminal_status:
         provider_name = ticket.get("provider") or "local"
-        provider_result = await provider_registry.close_ticket(
-            provider_name,
-            ticket_id,
-            reason or f"Ticket marked {normalized} by {actor}.",
-        )
-        if provider_result.get("error"):
-            await log_event("sync", "warning", actor, "provider_close_failed",
-                            f"ticket_{ticket_id}", {
-                                "status": normalized,
-                                "provider": provider_name,
-                                "error": provider_result.get("error"),
-                            })
-            return {"error": "provider_close_failed", "provider_result": provider_result}
+        provider_ref = str(ticket.get("provider_ref") or "")
+        provider_sync_status = ticket.get("provider_sync_status") or ""
+        if (
+            provider_name == "local"
+            or provider_sync_status in {"create_failed", "local_only", "pending_create"}
+            or provider_ref.startswith("LOCAL-")
+        ):
+            provider_result = {
+                "status": "skipped",
+                "reason": "provider_not_synced",
+                "provider": provider_name,
+                "provider_sync_status": provider_sync_status,
+            }
+        else:
+            provider_result = await provider_registry.close_ticket(
+                provider_name,
+                ticket_id,
+                reason or f"Ticket marked {normalized} by {actor}.",
+            )
+            if provider_result.get("error"):
+                await log_event("sync", "warning", actor, "provider_close_failed",
+                                f"ticket_{ticket_id}", {
+                                    "status": normalized,
+                                    "provider": provider_name,
+                                    "error": provider_result.get("error"),
+                                })
+                return {"error": "provider_close_failed", "provider_result": provider_result}
 
     await execute(
         "UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2",

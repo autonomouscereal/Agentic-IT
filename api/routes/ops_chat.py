@@ -9,6 +9,7 @@ import re
 import shutil
 import tempfile
 import time
+import subprocess
 import urllib.parse
 from pathlib import Path
 
@@ -2109,6 +2110,7 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
+                stdin=subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(work_dir),

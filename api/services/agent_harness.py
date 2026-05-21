@@ -121,17 +121,21 @@ class HermesHarness:
 class CodexHarness:
     name = "codex"
 
+    def _auth_mode(self):
+        return (os.getenv("CODEX_AUTH_MODE") or "proxy").strip().lower()
+
     def build_env(self, base_env, llm_base_url=None, llm_auth_token=None, dashboard_api_base=None):
         env = dict(base_env)
         env["PYTHONIOENCODING"] = "utf-8"
         env.setdefault("CODEX_HOME", os.getenv("CODEX_HOME", "/root/.codex"))
+        auth_mode = self._auth_mode()
         if dashboard_api_base:
             env["DASHBOARD_API_BASE"] = dashboard_api_base
-        if llm_base_url:
+        if auth_mode == "proxy" and llm_base_url:
             base = llm_base_url.rstrip("/")
             env.setdefault("OPENAI_BASE_URL", f"{base}/v1")
             env.setdefault("CODEX_PROXY_BASE_URL", base)
-        if llm_auth_token:
+        if auth_mode in ("proxy", "api") and llm_auth_token:
             # Codex reads the provider key from OPENAI_API_KEY by default.
             # CODEX_API_KEY is kept for deployments that prefer a separate
             # secret name, but the config below points at OPENAI_API_KEY.
@@ -144,13 +148,17 @@ class CodexHarness:
         sandbox = os.getenv("CODEX_SANDBOX", "danger-full-access").strip() or "danger-full-access"
         approval = os.getenv("CODEX_APPROVAL_POLICY", "never").strip() or "never"
         profile = os.getenv("CODEX_PROFILE", "").strip()
-        provider = os.getenv("CODEX_MODEL_PROVIDER", "agentic_proxy").strip() or "agentic_proxy"
-        proxy_base = (
-            os.getenv("CODEX_PROXY_BASE_URL")
-            or os.getenv("AGENT_LLM_BASE_URL")
-            or ""
-        ).rstrip("/")
-        proxy_v1 = f"{proxy_base}/v1" if proxy_base else ""
+        auth_mode = self._auth_mode()
+        provider = ""
+        proxy_v1 = ""
+        if auth_mode == "proxy":
+            provider = os.getenv("CODEX_MODEL_PROVIDER", "agentic_proxy").strip() or "agentic_proxy"
+            proxy_base = (
+                os.getenv("CODEX_PROXY_BASE_URL")
+                or os.getenv("AGENT_LLM_BASE_URL")
+                or ""
+            ).rstrip("/")
+            proxy_v1 = f"{proxy_base}/v1" if proxy_base else ""
         effort = os.getenv("CODEX_REASONING_EFFORT", "").strip()
 
         cmd = [

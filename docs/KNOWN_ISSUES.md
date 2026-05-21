@@ -4,6 +4,90 @@ Last updated: 2026-05-21.
 
 ## Found During 2026-05-21 Harness-Agnostic Ops Chat Retest
 
+### Codex OAuth exec waited on inherited stdin
+
+Status: fixed locally and live-verified on 2026-05-21.
+
+Problem:
+
+- After device-code enrollment, `codex login status` reported
+  `Logged in using ChatGPT`, but simple `codex exec` smokes appeared stuck.
+- The JSONL output showed `Reading additional input from stdin...`, meaning the
+  noninteractive subprocess inherited an open stdin stream and waited before
+  starting the turn.
+
+Fix:
+
+- Dashboard task runner and Ops Chat harness now launch harness subprocesses
+  with `stdin=subprocess.DEVNULL`.
+- Codex OAuth mode still uses the mounted `CODEX_HOME` ChatGPT login and does
+  not force API/proxy credentials.
+
+Verification:
+
+- `codex doctor` reported stored auth mode `chatgpt`, no API key, stored
+  ChatGPT tokens, and websocket connectivity.
+- Closed-stdin file proof using `gpt-5.5` high reasoning completed with `RC=0`
+  and created `/tmp/codex_oauth_file_probe.txt` containing exactly
+  `CODEX_FILE_OK`.
+- Real dashboard proof ticket `1399` completed through Codex OAuth with iTop
+  provider sync `synced`, iTop ref `817`, task `366`, agent `369`, and marker
+  `CODEX_HARNESS_SYNC_OK`.
+
+### Prompt-derived ticket titles exceeded iTop provider limits
+
+Status: fixed and live-verified on 2026-05-21.
+
+Problem:
+
+- `/api/agents/create-from-prompt` used long prompts as ticket titles.
+- iTop rejected a Codex smoke ticket with `String too long ... limited to 255`,
+  leaving the dashboard ticket in `provider_sync_status=create_failed`.
+- A later close-provider attempt against that local fallback reference produced
+  an ugly provider/OQL error even though the dashboard ticket could be resolved.
+
+Fix:
+
+- Ticket creation now normalizes provider-facing titles through
+  `provider_safe_title()` with a conservative 240-character limit.
+- Agent prompt tickets derive the title from the first prompt line but keep the
+  full instructions in the description and agent prompt.
+- Ticket close skips provider closure when the provider record was never
+  created or still has a local fallback reference.
+
+Verification:
+
+- Ticket `1399` used an intentionally long first line, stored a 240-character
+  safe title, synced to iTop ref `817`, resolved cleanly, and left
+  `provider_last_error` empty.
+
+### Agent-memory skill venv and logs failed inside read-only skill mount
+
+Status: fixed and live-verified on 2026-05-21.
+
+Problem:
+
+- A spawned Codex ticket agent followed the agent-memory skill's host-venv
+  examples and hit `ModuleNotFoundError: No module named 'asyncpg'`.
+- When memory output was piped during verification, the script attempted to log
+  a broken-pipe error under the read-only `/root/.agents/skills` mount.
+
+Fix:
+
+- The agent-memory skill now tells API/agent containers to use the container
+  `python3` runtime, which already has `asyncpg`.
+- The memory CLI now honors `AGENT_MEMORY_LOG_DIR` and falls back to
+  `/tmp/agent-memory/logs` or the working directory for error logs.
+- The live host-side skill venv was repaired by installing
+  `reference_skills/agent-memory/requirements.txt`.
+
+Verification:
+
+- Container memory status returned `ok=true`, `driver=asyncpg`.
+- Ticket `1400`, agent `370`, task `367`, iTop ref `818` completed with
+  `CODEX_MEMORY_OK` after the spawned Codex agent used the corrected memory
+  path.
+
 ### Codex reaches the proxy but does not yet complete Ops Chat tool turns on current routes
 
 Status: documented; Hermes remains the demo-default chat harness.

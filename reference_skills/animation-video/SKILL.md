@@ -1,4 +1,4 @@
-﻿---
+---
 name: animation-video
 description: Create, render, and validate code-driven animation videos such as motion graphics, explainers, animated text, shape systems, UI mockups, data visualizations, and MP4/GIF/WebM outputs. Use when Codex needs to turn a written idea into a local video artifact using Remotion, HTML/CSS/Playwright capture, Pillow frame generation, or adjacent deterministic animation tools.
 ---

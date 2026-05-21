@@ -279,6 +279,9 @@ Returns:
 
 - selected harness availability
 - Hermes, Claude Code, and Codex diagnostics when configured
+- Codex `codex_auth_mode` and `codex_login_status`; OAuth/subscription
+  deployments should show `codex_login_status.status=logged_in` after the
+  device-auth enrollment gate completes
 - credentials mount status
 - configured harness
 - default model

@@ -116,12 +116,13 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertEqual(env["XDG_CACHE_HOME"], "/home/cereal/.cache")
 
     def test_codex_env_configures_proxy_without_logging_secret(self):
-        env = CodexHarness().build_env(
-            {},
-            llm_base_url="http://proxy.local:4001",
-            llm_auth_token="redacted-token",
-            dashboard_api_base="http://localhost:8000",
-        )
+        with mock.patch.dict(os.environ, {"CODEX_AUTH_MODE": "proxy"}, clear=False):
+            env = CodexHarness().build_env(
+                {},
+                llm_base_url="http://proxy.local:4001",
+                llm_auth_token="redacted-token",
+                dashboard_api_base="http://localhost:8000",
+            )
 
         self.assertEqual(env["CODEX_HOME"], "/root/.codex")
         self.assertEqual(env["OPENAI_BASE_URL"], "http://proxy.local:4001/v1")
@@ -130,9 +131,26 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertEqual(env["CODEX_API_KEY"], "redacted-token")
         self.assertEqual(env["DASHBOARD_API_BASE"], "http://localhost:8000")
 
+    def test_codex_oauth_env_does_not_force_proxy_or_api_key(self):
+        with mock.patch.dict(os.environ, {"CODEX_AUTH_MODE": "oauth"}, clear=False):
+            env = CodexHarness().build_env(
+                {},
+                llm_base_url="http://proxy.local:4001",
+                llm_auth_token="redacted-token",
+                dashboard_api_base="http://localhost:8000",
+            )
+
+        self.assertEqual(env["CODEX_HOME"], "/root/.codex")
+        self.assertEqual(env["DASHBOARD_API_BASE"], "http://localhost:8000")
+        self.assertNotIn("OPENAI_BASE_URL", env)
+        self.assertNotIn("CODEX_PROXY_BASE_URL", env)
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("CODEX_API_KEY", env)
+
     def test_codex_command_uses_exec_json_and_proxy_chat_provider(self):
         with mock.patch.dict(os.environ, {
             "CODEX_BIN": "/usr/local/bin/codex",
+            "CODEX_AUTH_MODE": "proxy",
             "AGENT_LLM_BASE_URL": "http://ai-proxy:4001",
             "CODEX_SANDBOX": "danger-full-access",
             "CODEX_APPROVAL_POLICY": "never",
@@ -155,6 +173,30 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertIn('model_provider="agentic_proxy"', cmd)
         self.assertIn('model_providers.agentic_proxy.base_url="http://ai-proxy:4001/v1"', cmd)
         self.assertIn('model_providers.agentic_proxy.wire_api="responses"', cmd)
+        self.assertEqual(cmd[-1], "resolve ticket")
+
+    def test_codex_oauth_command_uses_subscription_login_without_proxy_provider(self):
+        with mock.patch.dict(os.environ, {
+            "CODEX_BIN": "/usr/local/bin/codex",
+            "CODEX_AUTH_MODE": "oauth",
+            "AGENT_LLM_BASE_URL": "http://ai-proxy:4001",
+            "CODEX_SANDBOX": "danger-full-access",
+            "CODEX_APPROVAL_POLICY": "never",
+        }, clear=False):
+            cmd = CodexHarness().build_command(
+                "resolve ticket",
+                "/work/.claude/settings.json",
+                "gpt-5.5-high",
+                "acceptEdits",
+                None,
+            )
+
+        self.assertEqual(cmd[:3], ["/usr/local/bin/codex", "exec", "--json"])
+        self.assertIn("--model", cmd)
+        self.assertEqual(cmd[cmd.index("--model") + 1], "gpt-5.5-high")
+        self.assertIn('approval_policy="never"', cmd)
+        self.assertNotIn('model_provider="agentic_proxy"', cmd)
+        self.assertFalse(any("model_providers.agentic_proxy" in part for part in cmd))
         self.assertEqual(cmd[-1], "resolve ticket")
 
 

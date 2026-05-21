@@ -2263,6 +2263,7 @@ async def _run_agent(work_dir, prompt, task_id, selected_harness=None):
     try:
         process = await asyncio.create_subprocess_exec(
             *cmd,
+            stdin=subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -3013,6 +3014,30 @@ async def get_runner_health():
     codex_home = os.getenv("CODEX_HOME", os.path.expanduser("~/.codex"))
     codex_config_path = os.path.join(codex_home, "config.toml")
     codex_auth_path = os.path.join(codex_home, "auth.json")
+    codex_login_status = {"status": "unknown", "detail": "codex not found"}
+    codex_path = shutil.which("codex") or os.getenv("CODEX_BIN")
+    if codex_path:
+        try:
+            proc = subprocess.run(
+                [codex_path, "login", "status"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5,
+                env={**os.environ, "CODEX_HOME": codex_home},
+            )
+            output = "\n".join(part.strip() for part in (proc.stdout, proc.stderr) if part.strip())
+            logged_in = proc.returncode == 0 and "not logged in" not in output.lower()
+            codex_login_status = {
+                "status": "logged_in" if logged_in else "not_logged_in",
+                "exit_code": proc.returncode,
+                "detail": output[-500:],
+            }
+        except Exception as exc:
+            codex_login_status = {
+                "status": "error",
+                "detail": f"{type(exc).__name__}: {exc}",
+            }
     settings = {}
     if os.path.exists(settings_path):
         try:
@@ -3041,7 +3066,7 @@ async def get_runner_health():
 
     return {
         "claude_path": shutil.which("claude"),
-        "codex_path": shutil.which("codex") or os.getenv("CODEX_BIN"),
+        "codex_path": codex_path,
         "hermes_path": shutil.which("hermes") or os.getenv("HERMES_BIN"),
         "settings_path": settings_path,
         "settings_exists": os.path.exists(settings_path),
@@ -3053,6 +3078,8 @@ async def get_runner_health():
         "codex_home": codex_home,
         "codex_config_exists": os.path.exists(codex_config_path),
         "codex_auth_exists": os.path.exists(codex_auth_path),
+        "codex_auth_mode": os.getenv("CODEX_AUTH_MODE", "proxy"),
+        "codex_login_status": codex_login_status,
         "codex_model_provider": os.getenv("CODEX_MODEL_PROVIDER", "agentic_proxy"),
         "codex_sandbox": os.getenv("CODEX_SANDBOX", "workspace-write"),
         "codex_approval_policy": os.getenv("CODEX_APPROVAL_POLICY", "never"),

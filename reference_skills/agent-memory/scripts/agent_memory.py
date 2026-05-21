@@ -34,7 +34,7 @@ DEFAULT_DB = {
     "user": "agent_memory",
 }
 BACKEND_DIR = Path(__file__).resolve().parent
-LOG_DIR = BACKEND_DIR / "logs"
+LOG_DIR = Path(os.getenv("AGENT_MEMORY_LOG_DIR", str(BACKEND_DIR / "logs")))
 SERVER_MANAGER_DIR = Path(
     os.getenv("SERVER_MANAGER_SKILL_DIR", r"C:\Users\cereal\.agents\skills\server-manager")
 )
@@ -90,6 +90,22 @@ def db_config() -> dict[str, Any]:
         "password": password,
         "timeout": float(os.getenv("MEMORY_DB_CONNECT_TIMEOUT", "10")),
     }
+
+
+def write_error_log(exc: Exception) -> None:
+    record = {
+        "created_at": datetime.now(UTC).isoformat(),
+        "error": str(exc),
+        "argv": sys.argv,
+    }
+    for directory in (LOG_DIR, Path("/tmp/agent-memory/logs"), Path.cwd() / "logs"):
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            with (directory / "agent_memory_errors.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, ensure_ascii=False, default=json_default) + "\n")
+            return
+        except Exception:
+            continue
 
 
 async def connect() -> asyncpg.Connection:
@@ -1207,21 +1223,10 @@ def main() -> int:
     args = build_parser().parse_args()
     try:
         return asyncio.run(run_cli(args))
+    except BrokenPipeError:
+        return 1
     except Exception as exc:
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-        with (LOG_DIR / "agent_memory_errors.jsonl").open("a", encoding="utf-8") as handle:
-            handle.write(
-                json.dumps(
-                    {
-                        "created_at": datetime.now(UTC).isoformat(),
-                        "error": str(exc),
-                        "argv": sys.argv,
-                    },
-                    ensure_ascii=False,
-                    default=json_default,
-                )
-                + "\n"
-            )
+        write_error_log(exc)
         if args.json:
             print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
         else:

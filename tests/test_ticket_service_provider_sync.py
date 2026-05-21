@@ -192,6 +192,23 @@ class TicketServiceProviderSyncTests(unittest.TestCase):
         ))
         self.assertFalse([call for call in calls if call[0] == "provider_create_ticket"])
 
+    def test_create_ticket_truncates_provider_unsafe_titles(self):
+        calls = []
+        module = load_ticket_service(calls)
+        long_title = "Codex smoke " + ("marker file verification " * 20)
+        ticket = asyncio.run(module.create_ticket(
+            title=long_title,
+            description="Long prompts should not break iTop create.",
+            ticket_class="UserRequest",
+            created_by="unit-test",
+            auto_assign=False,
+        ))
+        provider_call = [call for call in calls if call[0] == "provider_create_ticket"][0]
+        provider_title = provider_call[3]["title"]
+        self.assertLessEqual(len(ticket["title"]), module.MAX_PROVIDER_TITLE_LENGTH)
+        self.assertLessEqual(len(provider_title), module.MAX_PROVIDER_TITLE_LENGTH)
+        self.assertTrue(provider_title.endswith("..."))
+
 
 if __name__ == "__main__":
     unittest.main()

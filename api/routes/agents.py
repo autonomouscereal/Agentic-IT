@@ -260,8 +260,12 @@ async def create_from_prompt(
 ):
     """Create a ticket from a prompt and spawn an agent to work it."""
     from services import ticket_service
+    prompt_title = ticket_service.provider_safe_title(
+        prompt.strip().splitlines()[0] if prompt.strip() else "",
+        fallback="Ad hoc agent request",
+    )
     ticket = await ticket_service.create_ticket(
-        title=prompt[:500],
+        title=prompt_title,
         description=prompt[:2000],
         ticket_class="UserRequest",
         status="in_progress",
