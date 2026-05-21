@@ -206,6 +206,21 @@ classifier. Risky actions still require real downstream barriers: access
 requests, scoped credential leases, provider permission failures, workflow
 policy, and approval gates.
 
+Harness selection is deployment-configurable. Leave `OPS_CHAT_AGENT_HARNESS`
+blank to follow the global `AGENT_HARNESS` default, or set it to `hermes`,
+`claude-code`, or `codex` for an entire bridge instance. Targeted tests can also
+send `harness` / `agent_harness` and `model` / `agent_model` directly to
+`POST /api/ops-chat/message`. This is intentionally a small selector over the
+same bridge contract; do not fork the chat bridge for Codex.
+
+Local agent chat turns are allowed to run for one hour by default:
+`OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS=3600`,
+`OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS=3600`, and
+`OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS=3600`. Element users see Matrix typing plus
+the working acknowledgement while the harness runs. Short demo/client timeouts
+make local agents look broken and can strand child processes, so keep these
+values at one hour unless the deployment has a separate supervisor policy.
+
 Matrix file/image/video/audio uploads are part of the reference deployment.
 The bridge downloads the Matrix upload and sends it to the dashboard; the
 dashboard stores it under `OPS_CHAT_UPLOAD_DIR`, copies it into the harness

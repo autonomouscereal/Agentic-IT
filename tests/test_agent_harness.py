@@ -25,6 +25,19 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertLess(cmd.index("--allowedTools"), cmd.index("-p"))
         self.assertEqual(cmd[-1], "resolve ticket")
 
+    def test_claude_env_sets_api_key_for_proxy_auth(self):
+        env = ClaudeCodeHarness().build_env(
+            {},
+            llm_base_url="http://proxy.local:4001",
+            llm_auth_token="redacted-token",
+            dashboard_api_base="http://localhost:8000",
+        )
+
+        self.assertEqual(env["ANTHROPIC_BASE_URL"], "http://proxy.local:4001")
+        self.assertEqual(env["ANTHROPIC_AUTH_TOKEN"], "redacted-token")
+        self.assertEqual(env["ANTHROPIC_API_KEY"], "redacted-token")
+        self.assertEqual(env["DASHBOARD_API_BASE"], "http://localhost:8000")
+
     def test_hermes_external_route_uses_nous_provider_and_oneshot(self):
         with mock.patch.dict(os.environ, {
             "AI_MODEL_ROUTE": "external",

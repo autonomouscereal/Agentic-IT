@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 import asyncio
 import base64
 import hashlib
@@ -15,21 +15,21 @@ from pathlib import Path
 from database import fetchall, fetchrow, fetchval, execute, json_dumps
 from services import ticket_service
 from services.event_logger import log_event
-from services.agent_harness import get_harness
+from services.agent_harness import get_harness, list_harnesses
 from services.task_prompts import build_auto_assignment_prompt, build_ticket_resolution_prompt
 
 router = APIRouter(prefix="/api/ops-chat", tags=["ops-chat"])
 
 OPS_CHAT_MODEL = "agentic-ops-intake"
 DEFAULT_AGENT_MODEL = os.getenv("OPS_CHAT_AGENT_MODEL") or os.getenv("AGENT_DEFAULT_MODEL") or "local/agent-default"
-GENERAL_CHAT_TIMEOUT_SECONDS = int(os.getenv("OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS", "120"))
+GENERAL_CHAT_TIMEOUT_SECONDS = int(os.getenv("OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS", "3600"))
 GENERAL_CHAT_MAX_OUTPUT_CHARS = int(os.getenv("OPS_CHAT_GENERAL_AGENT_MAX_OUTPUT_CHARS", "1800"))
 OPS_CHAT_UPLOAD_DIR = Path(os.getenv("OPS_CHAT_UPLOAD_DIR", "/app/data/ops_chat_uploads"))
 OPS_CHAT_ARTIFACT_DIR = Path(os.getenv("OPS_CHAT_ARTIFACT_DIR", "/app/data/ops_chat_artifacts"))
 OPS_CHAT_MAX_ATTACHMENT_BYTES = int(os.getenv("OPS_CHAT_MAX_ATTACHMENT_BYTES", str(10 * 1024 * 1024)))
 OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES = int(os.getenv("OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES", str(8 * 1024 * 1024)))
 
-INTAKE_TIMEOUT_SECONDS = int(os.getenv("OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS", "120"))
+INTAKE_TIMEOUT_SECONDS = int(os.getenv("OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS", "3600"))
 OUTBOUND_CHAT_NOTE_SOURCES = {"user-info-request", "ticket-status"}
 OUTBOUND_CHAT_MAX_BODY_CHARS = int(os.getenv("OPS_CHAT_OUTBOUND_MAX_BODY_CHARS", "1400"))
 INTAKE_ALLOWED_TICKET_CLASSES = {"UserRequest", "Incident", "NormalChange"}
@@ -60,7 +60,21 @@ def _shell_bool(value, default=True):
     return str(value).strip().lower() not in ("0", "false", "no", "off")
 
 
-def _chat_agent_model(classification=None):
+def _supported_harness_names():
+    return {item["name"] for item in list_harnesses()}
+
+
+def _chat_agent_harness_name(value=None):
+    requested = str(value or os.getenv("OPS_CHAT_AGENT_HARNESS") or os.getenv("AGENT_HARNESS") or "hermes").strip()
+    if not requested:
+        requested = "hermes"
+    supported = _supported_harness_names()
+    if requested not in supported:
+        raise ValueError(f"Unsupported Ops Chat harness: {requested}")
+    return requested
+
+
+def _chat_agent_model(classification=None, model_override=None):
     """Return the model for chat-originated agent work.
 
     Ops Chat is a demo/customer entrypoint, so it should follow the active route
@@ -69,7 +83,8 @@ def _chat_agent_model(classification=None):
     first so stale per-rule values cannot silently route chat to the wrong lane.
     """
     return (
-        os.getenv("OPS_CHAT_AGENT_MODEL")
+        (str(model_override).strip() if model_override else "")
+        or os.getenv("OPS_CHAT_AGENT_MODEL")
         or os.getenv("AGENT_DEFAULT_MODEL")
         or ((classification or {}).get("auto_agent_model"))
         or DEFAULT_AGENT_MODEL
@@ -1978,10 +1993,31 @@ def _last_structured_tool_action(actions_path):
         return None
 
 
+async def _terminate_harness_process(proc):
+    if not proc:
+        return
+    try:
+        if proc.returncode is not None:
+            return
+        proc.terminate()
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5)
+            return
+        except asyncio.TimeoutError:
+            pass
+        proc.kill()
+        await proc.wait()
+    except ProcessLookupError:
+        return
+    except Exception:
+        return
+
+
 async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpose="general_chat",
-                            timeout_seconds=None, tool_context=None):
-    harness_name = os.getenv("AGENT_HARNESS", "hermes")
-    model = _chat_agent_model()
+                            timeout_seconds=None, tool_context=None, harness_name=None,
+                            model_override=None):
+    harness_name = _chat_agent_harness_name(harness_name)
+    model = _chat_agent_model(model_override=model_override)
     harness = get_harness(harness_name)
     timeout_seconds = int(timeout_seconds or GENERAL_CHAT_TIMEOUT_SECONDS)
     with tempfile.TemporaryDirectory(prefix=f"ops-chat-{purpose}-{session_id or 'adhoc'}-") as tmp:
@@ -2069,6 +2105,7 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
                             "model": model,
                             "requester": requester_name,
                         })
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -2078,13 +2115,19 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
                 env=env,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
+        except asyncio.CancelledError:
+            await _terminate_harness_process(proc)
+            await log_event("ops-chat", "warning", "ops-chat-agent", f"{purpose}_harness_cancelled",
+                            f"chat_session_{session_id}", {
+                                "timeout_seconds": timeout_seconds,
+                                "harness": harness.name,
+                                "model": model,
+                            })
+            raise
         except asyncio.TimeoutError:
             tool_result = _read_ops_chat_tool_result(tool_paths)
             if isinstance(tool_result, dict) and tool_result.get("mode"):
-                try:
-                    proc.terminate()
-                except Exception:
-                    pass
+                await _terminate_harness_process(proc)
                 tool_result = _persist_agent_artifact(work_dir, session_id, tool_result)
                 await log_event("ops-chat", "warning", "ops-chat-agent", f"{purpose}_harness_timeout_after_tool",
                                 f"chat_session_{session_id}", {
@@ -2101,10 +2144,7 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
                     "model": model,
                     "tool_result": tool_result,
                 }
-            try:
-                proc.terminate()
-            except Exception:
-                pass
+            await _terminate_harness_process(proc)
             await log_event("ops-chat", "warning", "ops-chat-agent", f"{purpose}_harness_timeout",
                             f"chat_session_{session_id}", {
                                 "timeout_seconds": timeout_seconds,
@@ -2172,7 +2212,7 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
         }
 
 
-async def _general_reply(message, session_id=None, requester_name=None):
+async def _general_reply(message, session_id=None, requester_name=None, harness_name=None, model_override=None):
     history = await _recent_chat_history(session_id) if session_id else []
     history_text = _format_chat_history(history)
     prompt = "\n".join([
@@ -2194,6 +2234,8 @@ async def _general_reply(message, session_id=None, requester_name=None):
         session_id=session_id,
         requester_name=requester_name,
         purpose="general_chat",
+        harness_name=harness_name,
+        model_override=model_override,
     )
     return result.get("text") or "I could not produce a clean chat response."
 
@@ -2223,7 +2265,8 @@ def _format_chat_history(rows):
 
 
 async def _chat_agent_turn(message, session_id=None, requester_name=None, requester_email=None,
-                           channel="matrix", spawn_agent=True, attachments=None):
+                           channel="matrix", spawn_agent=True, attachments=None,
+                           harness_name=None, model_override=None):
     history = await _recent_chat_history(session_id) if session_id else []
     history_text = _format_chat_history(history)
     ticket_context = await _session_ticket_context(session_id) if session_id else []
@@ -2265,7 +2308,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- For current-information answers, preserve numbers, units, dates, and currency magnitudes exactly from the web-search snippets. If snippets disagree or look abbreviated, say so instead of guessing or dropping digits.",
         "- For answers with currency symbols, code, quotes, or multiple lines, write answer.md with the file tool and call --reply-file. Do not pass US$0.65 or similar dollar amounts through a shell argument because shells can expand $0.",
         "- For dev one-off code/artifact asks such as Python, HTML, Markdown, JavaScript, shell scripts, or JSON, write the artifact file, validate it with validate-artifact, and return that tool output. Do not paste untested code through answer.",
-        "- For animation or video artifact asks, use the animation-video skill pattern, create a short deterministic MP4/WebM artifact, validate it with validate-artifact --kind video, and return it as an artifact.",
+        "- For animation or video artifact asks, use the bundled text-and-shapes helper: python /root/.agents/skills/animation-video/scripts/render_text_shapes_animation.py --output animation.mp4 --title \"...\" --subtitle \"...\" --marker \"...\". Then validate it with validate-artifact --kind video and return it as an artifact.",
         "",
         "Decision guidance:",
         "- General chat: use the answer tool.",
@@ -2400,6 +2443,8 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
             requester_name=requester_name,
             purpose=f"chat_agent_turn_{attempt}",
             timeout_seconds=INTAKE_TIMEOUT_SECONDS,
+            harness_name=harness_name,
+            model_override=model_override,
             tool_context={
                 "message": message,
                 "requester_name": requester_name,
@@ -2416,6 +2461,8 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         last_result = result
         tool_result = result.get("tool_result")
         if isinstance(tool_result, dict) and tool_result.get("mode"):
+            tool_result.setdefault("harness", result.get("harness"))
+            tool_result.setdefault("model", result.get("model"))
             if requires_artifact and tool_result.get("mode") != "artifact":
                 await log_event("ops-chat", "warning", "ops-chat-agent", "chat_agent_artifact_tool_required",
                                 f"chat_session_{session_id}", {
@@ -2570,7 +2617,10 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
 
 async def _handle_chat_message(message, requester_name=None, requester_email=None, session_id=None,
                                channel="matrix", external_thread_id=None, spawn_agent=True,
-                               force_new_ticket=False, attachments=None):
+                               force_new_ticket=False, attachments=None, harness_name=None,
+                               model_override=None):
+    harness_name = _chat_agent_harness_name(harness_name)
+    model_override = str(model_override or "").strip() or None
     session_id = await _ensure_session(session_id, requester_name, requester_email, channel, external_thread_id)
     existing_ticket_id = await _session_ticket_id(session_id)
     saved_attachments = await _persist_chat_attachments(session_id, attachments or [])
@@ -2589,6 +2639,8 @@ async def _handle_chat_message(message, requester_name=None, requester_email=Non
         channel=channel,
         spawn_agent=spawn_agent,
         attachments=saved_attachments,
+        harness_name=harness_name,
+        model_override=model_override,
     )
     classification = turn.get("classification") or {}
 
@@ -2617,10 +2669,18 @@ async def _handle_chat_message(message, requester_name=None, requester_email=Non
             "status_update": turn.get("status_update"),
             "response": turn.get("response"),
             "attachments": turn.get("attachments") or [],
+            "harness": turn.get("harness") or harness_name,
+            "model": turn.get("model") or _chat_agent_model(model_override=model_override),
         }
 
     if turn.get("mode") != "ticket":
-        reply = turn.get("reply") or await _general_reply(message, session_id=session_id, requester_name=requester_name)
+        reply = turn.get("reply") or await _general_reply(
+            message,
+            session_id=session_id,
+            requester_name=requester_name,
+            harness_name=harness_name,
+            model_override=model_override,
+        )
         await _record_message(session_id, "assistant", reply, {
             "classification": classification,
             "agent_turn": turn,
@@ -2628,8 +2688,8 @@ async def _handle_chat_message(message, requester_name=None, requester_email=Non
         await log_event("ops-chat", "info", "ops-chat-agent", "general_chat_answered",
                         f"chat_session_{session_id}", {
                             "intent": classification.get("intent"),
-                            "harness": os.getenv("AGENT_HARNESS", "hermes"),
-                            "model": _chat_agent_model(),
+                            "harness": turn.get("harness") or harness_name,
+                            "model": turn.get("model") or _chat_agent_model(model_override=model_override),
                         })
         return {
             "session_id": session_id,
@@ -2638,6 +2698,8 @@ async def _handle_chat_message(message, requester_name=None, requester_email=Non
             "ticket_id": None,
             "created_ticket": False,
             "attachments": turn.get("attachments") or [],
+            "harness": turn.get("harness") or harness_name,
+            "model": turn.get("model") or _chat_agent_model(model_override=model_override),
         }
 
     ticket_id = turn.get("ticket_id")
@@ -2651,6 +2713,8 @@ async def _handle_chat_message(message, requester_name=None, requester_email=Non
             "created_ticket": False,
             "agent": turn.get("agent"),
             "error": "agent_tool_missing_ticket",
+            "harness": turn.get("harness") or harness_name,
+            "model": turn.get("model") or _chat_agent_model(model_override=model_override),
         }
     reply = turn.get("reply") or (
         f"I created ticket #{ticket_id}. Any access, credential, approval, or change gates "
@@ -2691,6 +2755,8 @@ async def _handle_chat_message(message, requester_name=None, requester_email=Non
         "change_id": None,
         "agent": turn.get("agent"),
         "attachments": turn.get("attachments") or [],
+        "harness": turn.get("harness") or harness_name,
+        "model": turn.get("model") or _chat_agent_model(model_override=model_override),
     }
 
 
@@ -2833,17 +2899,22 @@ async def send_chat_message(body: dict = Body({})):
     message = str(body.get("message") or "").strip()
     if not message:
         return {"error": "message is required"}
-    return await _handle_chat_message(
-        message,
-        requester_name=body.get("requester_name") or body.get("sender_name") or "Chat User",
-        requester_email=body.get("requester_email") or body.get("sender_email"),
-        session_id=body.get("session_id"),
-        channel=body.get("channel") or "matrix",
-        external_thread_id=body.get("external_thread_id") or body.get("matrix_room_id"),
-        spawn_agent=bool(body.get("spawn_agent", True)),
-        force_new_ticket=bool(body.get("force_new_ticket", False)),
-        attachments=body.get("attachments") or [],
-    )
+    try:
+        return await _handle_chat_message(
+            message,
+            requester_name=body.get("requester_name") or body.get("sender_name") or "Chat User",
+            requester_email=body.get("requester_email") or body.get("sender_email"),
+            session_id=body.get("session_id"),
+            channel=body.get("channel") or "matrix",
+            external_thread_id=body.get("external_thread_id") or body.get("matrix_room_id"),
+            spawn_agent=bool(body.get("spawn_agent", True)),
+            force_new_ticket=bool(body.get("force_new_ticket", False)),
+            attachments=body.get("attachments") or [],
+            harness_name=body.get("harness") or body.get("agent_harness"),
+            model_override=body.get("model") or body.get("agent_model"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/matrix/health")
@@ -2853,7 +2924,8 @@ async def matrix_health():
         "client": "Matrix Synapse + Element",
         "bridge": "ops-chat-bridge",
         "identity": "Keycloak OIDC",
-        "agent_harness": os.getenv("AGENT_HARNESS", "hermes"),
+        "agent_harness": _chat_agent_harness_name(),
+        "available_harnesses": sorted(_supported_harness_names()),
         "agent_model": _chat_agent_model(),
     }
 

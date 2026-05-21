@@ -1,7 +1,7 @@
 ---
 name: web_research
 description: Perform general web searches and deep research using local SearXNG + curl_cffi + trafilatura. Supports categories, time filters, and engine selection. Use this for all non-torrent web research tasks. Can fetch full clean markdown content from any URL.
-allowed-tools: Bash("C:/Users/me/.agents/skills/web_research/venv/Scripts/python.exe" "C:/Users/me/.agents/skills/web_research/web_research.py" "*" "--cat *" "--time *" "--url *")
+allowed-tools: Bash("C:/Users/cereal/.agents/skills/web_research/venv/Scripts/python.exe" "C:/Users/cereal/.agents/skills/web_research/web_research.py" "*" "--cat *" "--time *" "--url *")
 ---
 
 # Web Research Skill
@@ -22,7 +22,7 @@ The skill is executed through a dedicated virtual environment located in the ski
 ### 1. General Web Search
 Perform a standard search with optional category and time filters.
 ```bash
-"C:/Users/me/.agents/skills/web_research/venv/Scripts/python.exe" "C:/Users/me/.agents/skills/web_research/web_research.py" "your search query" --cat general --time month
+"C:/Users/cereal/.agents/skills/web_research/venv/Scripts/python.exe" "C:/Users/cereal/.agents/skills/web_research/web_research.py" "your search query" --cat general --time month
 ```
 
 **Arguments:**
@@ -35,7 +35,7 @@ Perform a standard search with optional category and time filters.
 ### 2. Deep Content Extraction (URL Fetch)
 Extract the full, clean Markdown content of a specific webpage.
 ```bash
-"C:/Users/me/.agents/skills/web_research/venv/Scripts/python.exe" "C:/Users/me/.agents/skills/web_research/web_research.py" --url "https://example.com"
+"C:/Users/cereal/.agents/skills/web_research/venv/Scripts/python.exe" "C:/Users/cereal/.agents/skills/web_research/web_research.py" --url "https://example.com"
 ```
 
 **Arguments:**

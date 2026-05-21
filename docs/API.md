@@ -497,7 +497,7 @@ Ops Chat:
 
 - `GET /api/ops-chat/sessions`
 - `GET /api/ops-chat/sessions/{session_id}/messages`
-- `POST /api/ops-chat/message` - Matrix/Element chat intake that creates or continues traceable tickets for operational work and queues real Hermes/Claude Code/Codex agent harness tasks. Optional `attachments` entries can include `filename`, `content_type`, `size_bytes`, `storage_ref`, and bounded `data_base64` for Matrix-uploaded files.
+- `POST /api/ops-chat/message` - Matrix/Element chat intake that creates or continues traceable tickets for operational work and queues real Hermes/Claude Code/Codex agent harness tasks. Optional `attachments` entries can include `filename`, `content_type`, `size_bytes`, `storage_ref`, and bounded `data_base64` for Matrix-uploaded files. Optional `harness` / `agent_harness` and `model` / `agent_model` fields can override the chat-intake harness for a targeted room, smoke, or demo request; otherwise the endpoint follows `OPS_CHAT_AGENT_HARNESS` / `AGENT_HARNESS` and `OPS_CHAT_AGENT_MODEL` / `AGENT_DEFAULT_MODEL`.
 - `GET /api/ops-chat/outbound/pending` - Matrix bridge poll endpoint for user-facing ticket questions/status updates created by ticket agents
 - `POST /api/ops-chat/outbound/ack` - idempotently acknowledges outbound Matrix delivery so bridge restarts do not duplicate ticket updates
 - `GET /api/ops-chat/matrix/health` - Matrix/Element/Keycloak bridge readiness metadata
@@ -512,6 +512,21 @@ creation when the answer changes routing/scope/urgency. Approval gates are not
 created by the chat intake turn; they are created later by real ticket execution
 barriers such as access requests, scoped vault leases, workflow policy, or
 provider permission failures.
+
+The harness override is validation-only and modular. The endpoint rejects
+unknown harness names and accepts only the names registered in
+`services.agent_harness` (`hermes`, `claude-code`, `codex` in the current
+deployment). Codex does not bypass the bridge; it is invoked through the same
+toolbelt and dashboard runner contract as Hermes and Claude Code.
+
+Claude Code uses the proxy's Anthropic Messages route. Runtime env must provide
+the proxy token as `ANTHROPIC_API_KEY` as well as `ANTHROPIC_AUTH_TOKEN`, because
+newer Claude Code builds report `apiKeySource: none` and retry indefinitely
+when only the legacy token variable is present.
+
+Ops Chat harness calls default to one-hour local-agent windows. The endpoint
+cleans up child processes on server-side timeout or client cancellation, but
+operators should not use short HTTP client timeouts for local model tests.
 
 For chat uploads, the dashboard stores bounded file payloads under
 `OPS_CHAT_UPLOAD_DIR`, links them to operational tickets as attachment metadata,

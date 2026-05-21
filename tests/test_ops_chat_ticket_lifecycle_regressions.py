@@ -88,3 +88,38 @@ def test_ticket_route_suppresses_duplicate_ops_chat_create():
     assert "access_scope->>'message_hash'" in source
     assert "ops_chat_duplicate_create_suppressed" in source
     assert 'existing["_idempotent_replay"] = True' in source
+
+
+def test_ops_chat_bridge_accepts_harness_override_without_redesigning_for_codex():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    bridge = (ROOT / "deploy" / "ops-chat" / "bridge" / "bridge.py").read_text(encoding="utf-8")
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert "from services.agent_harness import get_harness, list_harnesses" in source
+    assert "def _chat_agent_harness_name" in source
+    assert 'body.get("harness") or body.get("agent_harness")' in source
+    assert 'body.get("model") or body.get("agent_model")' in source
+    assert '"available_harnesses": sorted(_supported_harness_names())' in source
+    assert 'OPS_CHAT_AGENT_HARNESS = os.getenv("OPS_CHAT_AGENT_HARNESS", "").strip()' in bridge
+    assert 'payload["harness"] = OPS_CHAT_AGENT_HARNESS' in bridge
+    assert "OPS_CHAT_AGENT_HARNESS: ${OPS_CHAT_AGENT_HARNESS:-}" in compose
+    assert "OPS_CHAT_AGENT_HARNESS=" in env_example
+
+
+def test_ops_chat_local_agent_timeouts_default_to_one_hour_and_cleanup_cancelled_processes():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    bridge = (ROOT / "deploy" / "ops-chat" / "bridge" / "bridge.py").read_text(encoding="utf-8")
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert 'OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS", "3600"' in source
+    assert 'OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS", "3600"' in source
+    assert 'OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS", "3600"' in bridge
+    assert "async def _terminate_harness_process" in source
+    assert "except asyncio.CancelledError:" in source
+    assert "await _terminate_harness_process(proc)" in source
+    assert "OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS=3600" in env_example
+    assert "OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS=3600" in env_example
+    assert "OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS=3600" in env_example
+    assert "OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS: ${OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS:-3600}" in compose

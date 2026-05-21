@@ -1,6 +1,6 @@
 # Testing Runbook
 
-Last updated: 2026-05-20.
+Last updated: 2026-05-21.
 
 ## Agent Harness Validation
 
@@ -12,6 +12,21 @@ Last updated: 2026-05-20.
 - Dashboard-spawned Codex proof passed on ticket `1393`: agent `365`, task
   `362`, harness `codex`, model `local/agent-default`, note marker
   `CODEX_HARNESS_CLEAN_PASS`, ticket status `resolved`.
+- Ops Chat remains harness-agnostic. `/api/ops-chat/message` accepts optional
+  `harness` / `agent_harness` and `model` / `agent_model` fields for targeted
+  smokes, while the Matrix bridge follows `OPS_CHAT_AGENT_HARNESS` when set or
+  the global `AGENT_HARNESS` default when blank. After harness changes, verify
+  Hermes default, explicit Codex, and Claude Code still execute through the
+  same bridge contract.
+- 2026-05-21 Ops Chat harness retest: health reported
+  `available_harnesses=["claude-code","codex","hermes"]`, `codex-cli 0.132.0`,
+  Claude Code `2.1.146`, and `ffmpeg 7.1.4`. Hermes remains the live default.
+  Codex reaches the AI proxy through `/v1/responses` for both
+  `qwen/qwen3.6-27b` and `deepseek/deepseek-v4-flash`, but those test model
+  routes did not produce the required Codex tool call for `ops_chat_tool.py`
+  within the one-hour local-agent window. Treat Codex as registered and
+  proxy-connected, but not the demo Ops Chat engine until a tool-capable Codex
+  account/model route is available.
 - The API container mounts `/root/.agents/skills` from deployable
   `reference_skills`; Codex skill frontmatter loads cleanly.
 - Containerized Codex uses `CODEX_SANDBOX=danger-full-access` because hardened
@@ -169,6 +184,7 @@ broad enterprise matrix: marker ops-chat-enterprise-matrix-1779334693, tickets 1
 focused enterprise rerun: marker ops-chat-enterprise-matrix-1779336161, tickets 1369-1373, 5/5 passed with iTop sync and cleanup
 scenario lifecycle smoke: marker ops-chat-scenarios-1779336984, tickets 1378-1382, general chat/current-info/cat memory/account/software/VPN/phishing/delivery gate passed with cleanup
 developer artifact UI: marker ops-chat-dev-artifact-1779337398804, Python/HTML/Markdown/Bash validated and rendered in Element; ticket delta 0
+extended artifact/upload UI: marker hermes-ui-artifacts-1779355887, Python/HTML/Markdown/Bash validated, MP4 animation returned via animation-video helper, Matrix file upload returned as validated Markdown summary; ticket delta 0
 multi-ticket lifecycle: marker ops-chat-multiticket-1779338352, watermelon 1384 cancelled, pizza 1385 created separately, account 1386 created and updated, summary answered with no new ticket
 active agents after cleanup: 0
 active processes after cleanup: 0

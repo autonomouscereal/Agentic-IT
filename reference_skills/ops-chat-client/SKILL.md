@@ -24,6 +24,9 @@ Reference stack:
 - Dashboard endpoint: `/api/ops-chat/message`
 - Agent execution: dashboard `agent_runner.spawn_agent()` using Hermes,
   Claude Code, or Codex through the configured AI proxy
+- Harness selector: leave `OPS_CHAT_AGENT_HARNESS` blank to follow
+  `AGENT_HARNESS`, or set/pass `hermes`, `claude-code`, or `codex` for a
+  bridge-wide or per-request smoke/demo override.
 
 ## Contract
 
@@ -32,6 +35,8 @@ Reference stack:
 - The bridge receives Matrix room messages and calls the dashboard Ops Chat API.
 - The dashboard hands each new chat message to the configured Hermes/Claude/Codex
   harness with an `ops_chat_tool.py` toolbelt.
+- Codex is a peer harness, not a bridge redesign. Ops Chat must call the same
+  dashboard harness abstraction for Hermes, Claude Code, and Codex.
 - General harmless chat can be answered without a ticket.
 - The chat agent may ask one concise pre-ticket clarification when the answer
   changes routing, scope, urgency, or whether a ticket is needed.
@@ -143,10 +148,20 @@ Important environment:
 - `MATRIX_BOT_LOCALPART=agentic-ops`
 - `MATRIX_BOT_DISPLAY_NAME=Agentic Ops Agent`
 - `OPS_CHAT_AGENT_MODEL=<active chat handoff model>`
+- `OPS_CHAT_AGENT_HARNESS=<blank|hermes|claude-code|codex>`; blank follows
+  `AGENT_HARNESS`. Use this for bridge-level demo rooms only when needed.
 - `OPS_CHAT_SEARCH_URL=<private SearXNG base URL, default http://host.docker.internal:7999>`
 - `OPS_CHAT_OUTBOUND_ENABLED=true`
 - `OPS_CHAT_OUTBOUND_POLL_SECONDS=5`
+- `OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS=3600`
+- `OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS=3600`
+- `OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS=3600`
 - `DASHBOARD_SERVICE_TOKEN=<vault/runtime secret>`
+
+Keep local-agent chat/intake and bridge HTTP windows at one hour by default.
+Short 120-180 second timeouts are treated as a regression for local model
+testing; rely on typing state and the working acknowledgement while the harness
+runs.
 
 `OPS_CHAT_AGENT_MODEL` must follow the active route profile. Use:
 
@@ -373,6 +388,23 @@ Latest Element artifact proof:
 - User `demo_account_1`
 - Python, HTML, Markdown, and Bash all returned validated code blocks
 - Ticket count delta was zero for every artifact request
+- Extended artifact/upload proof:
+  - Marker `hermes-ui-artifacts-1779355887`
+  - Python, HTML, Markdown, Bash, MP4 animation, and Matrix file upload all
+    passed through the real Element UI
+  - Animation used `/root/.agents/skills/animation-video`
+  - Upload was treated as untrusted input and returned as a validated Markdown
+    artifact
+  - Ticket count delta remained zero
+
+Harness note:
+
+- Health can show Hermes, Claude Code, and Codex at once. Codex is selected
+  with the same `OPS_CHAT_AGENT_HARNESS` / request `harness` selector as the
+  other harnesses.
+- On 2026-05-21, Codex reached the AI proxy but the tested lab routes did not
+  emit the required `ops_chat_tool.py` tool call within the one-hour window.
+  Leave Hermes as the demo default until a tool-capable Codex route passes.
 
 ## Demo Prompt
 

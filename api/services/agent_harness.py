@@ -19,6 +19,7 @@ class ClaudeCodeHarness:
             env["ANTHROPIC_BASE_URL"] = llm_base_url
         if llm_auth_token:
             env["ANTHROPIC_AUTH_TOKEN"] = llm_auth_token
+            env.setdefault("ANTHROPIC_API_KEY", llm_auth_token)
         return env
 
     def build_command(self, prompt, settings_path, model, permission_mode, allowed_tools=None):

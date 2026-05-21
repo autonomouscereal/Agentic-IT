@@ -1,6 +1,42 @@
 ﻿# Known Issues And Fix Log
 
-Last updated: 2026-05-20.
+Last updated: 2026-05-21.
+
+## Found During 2026-05-21 Harness-Agnostic Ops Chat Retest
+
+### Codex reaches the proxy but does not yet complete Ops Chat tool turns on current routes
+
+Status: documented; Hermes remains the demo-default chat harness.
+
+Problem:
+
+- The dashboard registers all three harnesses and `/api/ops-chat/matrix/health`
+  reports `available_harnesses=["claude-code","codex","hermes"]`.
+- `codex-cli 0.132.0` is installed in the API container and routes through the
+  AI proxy at `http://ai-proxy:4001/v1`.
+- During 2026-05-21 Ops Chat retesting, explicit Codex chat turns reached the
+  proxy through `/v1/responses` with both `qwen/qwen3.6-27b` and
+  `deepseek/deepseek-v4-flash`, but the tested model routes did not emit the
+  Codex tool call needed to run `ops_chat_tool.py answer`.
+- The process respected the one-hour local-agent window but never produced a
+  clean final tool result, so the smoke-owned processes were terminated by exact
+  marker after verification.
+
+Impact:
+
+- Codex remains a first-class registered harness for worker tickets and future
+  tool-capable model routes, but it is not demo-ready as the Matrix/Element
+  chat-intake engine with the current lab routes.
+- Do not set `OPS_CHAT_AGENT_HARNESS=codex` for the audience demo until a
+  dedicated Codex account or tool-capable route passes the Ops Chat tool smoke.
+
+Verification:
+
+- Live health after cleanup showed no active dashboard agents or harness
+  processes.
+- Hermes default Element proof `hermes-ui-artifacts-1779355887` passed Python,
+  HTML, Markdown, Bash, MP4 animation, and Matrix upload cases with zero ticket
+  delta.
 
 ## Found During 2026-05-20 Ops Chat UI Retest
 

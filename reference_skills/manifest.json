@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-21T06:43:13.873808+00:00",
+  "generated_at": "2026-05-21T07:57:00.340489+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -56,17 +56,230 @@
           "sha256": "15daa16e1ad1761162ab0c53be7c49920981bf540894912a515e558d000b83df"
         },
         {
+          "path": "scripts/render_simple_animation.py",
+          "size": 3414,
+          "sha256": "4f9dcba256c94e40ecd66a5dd5f7cb79b1cf5c4c1cf4f3340ff934746911541d"
+        },
+        {
+          "path": "scripts/render_text_shapes_animation.py",
+          "size": 201,
+          "sha256": "35804f1375f87abbb90c51d5a9ab22f917ef010e81feb73a1cb11ef4f5bba6ba"
+        },
+        {
           "path": "scripts/verify_video.py",
           "size": 3588,
           "sha256": "87e52a9e8a85ea0e7e70e15697935b0227bec4c34d7054e15e48ba00f2a90792"
         },
         {
           "path": "SKILL.md",
-          "size": 2948,
-          "sha256": "5d0dc17c5c4fb0862dbd7682028d3ff33b3fba80cc8daf682da2d28c9a5f91f1"
+          "size": 4029,
+          "sha256": "2a6f63b3223a6dd69b2cee7738d96ff686d5120b8d0ced69fdddd6da7faadfec"
         }
       ],
-      "copied_files": 4,
+      "copied_files": 6,
+      "skipped_paths": 2
+    },
+    {
+      "name": "remotion-best-practices",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\remotion-best-practices",
+      "files": [
+        {
+          "path": "rules/3d.md",
+          "size": 2292,
+          "sha256": "42cef6d68fb4a266ab495d35df0c60e03672b0d85c043f9b567f6aa7ff00dd0d"
+        },
+        {
+          "path": "rules/assets/charts-bar-chart.tsx",
+          "size": 3602,
+          "sha256": "17cd31ff098e6ac784c06480d6d3a126f6f72365654f76fa6e9b2526daab88f0"
+        },
+        {
+          "path": "rules/assets/text-animations-typewriter.tsx",
+          "size": 2283,
+          "sha256": "fc710c71560df2837463dc0816cd0bd6459add1178ec7f031950a57eed9b94f1"
+        },
+        {
+          "path": "rules/assets/text-animations-word-highlight.tsx",
+          "size": 2483,
+          "sha256": "162a9ad6f76b13ba01c2ffe9e344c6e4f1498cef48f6d7365571e60b2f0ac0e9"
+        },
+        {
+          "path": "rules/audio-visualization.md",
+          "size": 4892,
+          "sha256": "0f4043de86639b6390e5ab888eaa66a24a10a8bd540f1443327cb88107eae1e9"
+        },
+        {
+          "path": "rules/audio.md",
+          "size": 3625,
+          "sha256": "e931664ac23bc4acfa137d8b415702bb4860b4fbabd6caed0042c0902d3bec90"
+        },
+        {
+          "path": "rules/calculate-metadata.md",
+          "size": 3254,
+          "sha256": "7d6217deed7425c6662e8d112b933be162a99a9f26a5c10b7c0b2ba62329a269"
+        },
+        {
+          "path": "rules/compositions.md",
+          "size": 3358,
+          "sha256": "49fb12d1bb9e9fc68823625e83d43d5f36904593ad738a9d7e5ef97a1230627b"
+        },
+        {
+          "path": "rules/display-captions.md",
+          "size": 5471,
+          "sha256": "20b8898a90536fa427a5a39571fc7deac7bde96c4c7bfdf413eee1ef4ef85530"
+        },
+        {
+          "path": "rules/ffmpeg.md",
+          "size": 1093,
+          "sha256": "b67ff4e3ce01c48241ef92fa165398d427e9f676ae8e17d1ed19d5584bff5002"
+        },
+        {
+          "path": "rules/get-audio-duration.md",
+          "size": 1357,
+          "sha256": "720a5346ae79555e933498995d5cb04d1bfbeeee7232436d8835c3ec17d46281"
+        },
+        {
+          "path": "rules/get-video-dimensions.md",
+          "size": 1626,
+          "sha256": "ed1bb6e0ae742e4bfcb18e7c50af23fc782a9d699b90d367250437c7f6da7304"
+        },
+        {
+          "path": "rules/get-video-duration.md",
+          "size": 1377,
+          "sha256": "ed594a0d73a5274483f21c30e612aba57089d5bbc5437041aa32d07a8e789fd9"
+        },
+        {
+          "path": "rules/gifs.md",
+          "size": 3707,
+          "sha256": "db5d84bb8da4c52c133cdc9820a5b6995db94a548df5f9838efb8d1224065787"
+        },
+        {
+          "path": "rules/google-fonts.md",
+          "size": 1692,
+          "sha256": "c0860213dfde60dd188a8b7cb1368e2e92fe960584b9ca6340c6cd555fcbd141"
+        },
+        {
+          "path": "rules/html-in-canvas.md",
+          "size": 3629,
+          "sha256": "503c125bc9532b12ebfa8c37e35558e9059228c322a65675f0bdbd05d4a5ffa3"
+        },
+        {
+          "path": "rules/images.md",
+          "size": 1464,
+          "sha256": "6a93c05858a842ea380e4a92491fa2ef6e205b184e0d22cd32ae3692f2e27333"
+        },
+        {
+          "path": "rules/import-srt-captions.md",
+          "size": 2247,
+          "sha256": "ad89cc1834dcd63ff225593f699611a1a20b57eff4ed8e587f429b36516ec82c"
+        },
+        {
+          "path": "rules/light-leaks.md",
+          "size": 2297,
+          "sha256": "6bd3a61b70af153124fe7312da9bab114fa2af48642028667834b40faaabd1da"
+        },
+        {
+          "path": "rules/local-fonts.md",
+          "size": 1511,
+          "sha256": "51597b528837c3fda45a61241ecb87124dd8b72c191bd06986bfc967bb380f8c"
+        },
+        {
+          "path": "rules/lottie.md",
+          "size": 1796,
+          "sha256": "6dd0a845f5cea9c0f3d2465b5678a16076f5778ad1a628abbf387dba0b929cbb"
+        },
+        {
+          "path": "rules/maplibre.md",
+          "size": 12468,
+          "sha256": "36bfaa77f345e272837d827c6e99160a573ab609b27b44c604bec06eae3daa7e"
+        },
+        {
+          "path": "rules/measuring-dom-nodes.md",
+          "size": 973,
+          "sha256": "4017103b03f14a041ac433be78c521ec2e9961629fae419c8b196d349637585b"
+        },
+        {
+          "path": "rules/measuring-text.md",
+          "size": 2783,
+          "sha256": "5cab1807b9ae9f5be3fc0e1cb0e0513a69451e31e32657d6a665573331db6807"
+        },
+        {
+          "path": "rules/parameters.md",
+          "size": 2387,
+          "sha256": "9de38837a07dc406052dfbb759c58ca5298ca331d86d9aa0f4e177b339e288b5"
+        },
+        {
+          "path": "rules/sequencing.md",
+          "size": 3295,
+          "sha256": "a3c448bfd99a5e7b6c838dab30c8aaf449d4f0732152203b65cf1b49977abb72"
+        },
+        {
+          "path": "rules/sfx.md",
+          "size": 867,
+          "sha256": "96fcc4f0973b5ed5cd9cd0d4d0479c642984cfacd8010fc7d6186c468296626b"
+        },
+        {
+          "path": "rules/silence-detection.md",
+          "size": 2542,
+          "sha256": "4c96acc76044007221cc738bbc2d990dfe521d9af706576be800bae9ed0e571f"
+        },
+        {
+          "path": "rules/subtitles.md",
+          "size": 922,
+          "sha256": "9f18ec4a9c88adf35d51b44aaf344442443fd687a4dc948366ebb683fc3ecd30"
+        },
+        {
+          "path": "rules/tailwind.md",
+          "size": 420,
+          "sha256": "6212ce72abe5eaee0eb41822b2cdf944b77ad9b082426909beb2da07151e1788"
+        },
+        {
+          "path": "rules/text-animations.md",
+          "size": 700,
+          "sha256": "40ac6b1bccf1c57d9edd46c74e847ec6e86fe775d3ef4fd14e1338f4a2606171"
+        },
+        {
+          "path": "rules/timing.md",
+          "size": 4452,
+          "sha256": "d1465480da41cd8b71e64010fae7dd381976d2b7544bcd864f851da40bf7a5d9"
+        },
+        {
+          "path": "rules/transcribe-captions.md",
+          "size": 1897,
+          "sha256": "ad1a62af35fe176b37ac4d98f796451ca66bcc9983207a9710ec3eca6e847738"
+        },
+        {
+          "path": "rules/transitions.md",
+          "size": 5804,
+          "sha256": "66d70b62269370f3a00af23ff4c3042fa0987b9fe628edafc044f75253bd63ed"
+        },
+        {
+          "path": "rules/transparent-videos.md",
+          "size": 2267,
+          "sha256": "394ccda476e084522d544471fee92d7c65672e2cbaf2201a785c3dd5c74f31a4"
+        },
+        {
+          "path": "rules/trimming.md",
+          "size": 1209,
+          "sha256": "ae00948f6a903e384c7c312896adba9b50ed592f24a5a090699b7345849b36b9"
+        },
+        {
+          "path": "rules/videos.md",
+          "size": 3509,
+          "sha256": "d9d3032a57f92c759daf0bd60b3282f6810ecc9958e9093a6b828de623b05328"
+        },
+        {
+          "path": "rules/voiceover.md",
+          "size": 3318,
+          "sha256": "60340034cf422052007183d031171b3c88422dd3fe85f0d915283dd8ec5df3e8"
+        },
+        {
+          "path": "SKILL.md",
+          "size": 9676,
+          "sha256": "829d9e0b1c5a73699f527ba1d3e4e10edb5bf66052a83d488617d9ebf255a332"
+        }
+      ],
+      "copied_files": 39,
       "skipped_paths": 0
     },
     {
@@ -88,8 +301,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 3071,
-          "sha256": "32139966c3bcdce983f63ad777da91e7707cc2c9273d0f3c7af7192a9308cdcc"
+          "size": 3677,
+          "sha256": "62eade4ae9cabaef9ffd259b814644e192701a95d215a463e22ebfa6015b04f1"
         }
       ],
       "copied_files": 1,
@@ -643,8 +856,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 29217,
-          "sha256": "f051570d77b71d8bab9bff9fdf3c0a1f8dd4af1d600fa5c2f31c238cedbeec7c"
+          "size": 30079,
+          "sha256": "dc1fe7aade431338f9a442159cce1d37f1395572144c3a9bc7848136d11c6c61"
         }
       ],
       "copied_files": 1,

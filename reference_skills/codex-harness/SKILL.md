@@ -16,8 +16,11 @@ addition to Hermes and Claude Code.
 - Provider config: `agentic_proxy` with `wire_api="responses"`
 - Auth source: mounted `CODEX_HOME` login state or runtime/vault
   `CODEX_API_KEY`/`OPENAI_API_KEY`
-- Skills: mounted from `reference_skills` into `/root/.codex/skills` and
-  `/root/.agents/skills`
+- Portable skills: mounted from `reference_skills` into `/root/.agents/skills`.
+  Keep `CODEX_HOME` writable for Codex's own auth/config/system state.
+- Ops Chat: Codex is selected with the same `harness=codex` selector used for
+  Hermes and Claude Code. Do not fork Matrix/Element or `ops_chat_tool.py` for
+  Codex-only behavior.
 
 Never commit Codex auth files, API keys, or copied desktop credentials. If a
 dedicated Codex account is not ready yet, wire the harness and report that
@@ -37,6 +40,15 @@ CODEX_SANDBOX=danger-full-access
 CODEX_APPROVAL_POLICY=never
 CODEX_REASONING_EFFORT=medium
 CODEX_API_KEY=<vault/runtime secret, optional>
+```
+
+For Ops Chat smoke tests without changing the global runner default:
+
+```bash
+curl -sS -X POST "$DASHBOARD_URL/api/ops-chat/message" \
+  -H "Content-Type: application/json" \
+  -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
+  -d '{"message":"Reply exactly CODEX_CHAT_OK through the tool.","harness":"codex","model":"qwen/qwen3.6-27b","spawn_agent":false}'
 ```
 
 The dashboard harness injects:
@@ -77,6 +89,20 @@ Expected result:
 - `codex_path` is nonempty.
 - The agent task writes a note/checkpoint or clearly fails with a missing
   `CODEX_HOME`/`CODEX_API_KEY` reason.
+
+## Ops Chat Status
+
+Codex is a peer harness in the Ops Chat bridge, but it is not automatically the
+best chat-intake engine. The 2026-05-21 lab retest proved:
+
+- `codex-cli 0.132.0` is installed.
+- The API reports Codex in `available_harnesses`.
+- Codex requests reach the AI proxy via `/v1/responses`.
+- The tested local/external lab model routes did not emit the required Codex
+  tool call for `ops_chat_tool.py` within the one-hour local-agent window.
+
+Until a dedicated Codex account or tool-capable Codex model route passes the
+Ops Chat smoke, keep `OPS_CHAT_AGENT_HARNESS` blank or `hermes` for demos.
 
 ## Security Notes
 

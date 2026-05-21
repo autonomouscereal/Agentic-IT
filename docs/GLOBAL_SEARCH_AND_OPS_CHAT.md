@@ -49,6 +49,25 @@ a dashboard widget and not an OpenAI chat shim. The reference deployment uses:
 - the dashboard Ops Chat API as the canonical control-plane intake endpoint
 - Hermes, Claude Code, or Codex agent harnesses through the configured AI proxy
 
+Harness selection is deliberately modular:
+
+- Default chat intake follows `OPS_CHAT_AGENT_HARNESS` when set, otherwise
+  `AGENT_HARNESS` (Hermes in the live lab).
+- The Matrix bridge can pass an optional `harness` field to
+  `/api/ops-chat/message` for targeted smoke tests or demo rooms. Supported
+  values are `hermes`, `claude-code`, and `codex`.
+- The same optional request body can pass `model` / `agent_model`. If omitted,
+  chat follows `OPS_CHAT_AGENT_MODEL` / `AGENT_DEFAULT_MODEL`.
+- Codex is not a separate bridge architecture. The bridge remains
+  harness-agnostic and calls the same dashboard `services.agent_harness`
+  contract used by Hermes and Claude Code.
+- Local-model chat and ticket-intake turns default to a one-hour execution
+  window (`OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS=3600`,
+  `OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS=3600`, and
+  `OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS=3600`). Do not reintroduce short
+  120-180 second timeouts for local agents; use working acknowledgements and
+  typing state to keep the user informed while the harness works.
+
 Operational path:
 
 1. A user signs in through Element / Synapse / Keycloak.
@@ -80,6 +99,27 @@ ticket, the recent chat history is copied into both the ticket description and
 the Ops Chat-created ticket note. Harmless/general requests such as a text cat,
 basic advice, or benign current-information questions can be answered without a
 ticket; operational work must become a ticket.
+
+Harness override smoke example:
+
+```bash
+curl -sS -X POST "$DASHBOARD_URL/api/ops-chat/message" \
+  -H "Content-Type: application/json" \
+  -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
+  -d '{
+    "message": "Reply through the configured harness with HARNESSES_OK.",
+    "channel": "matrix-smoke",
+    "external_thread_id": "harness-smoke-room",
+    "spawn_agent": false,
+    "harness": "codex",
+    "model": "qwen/qwen3.6-27b"
+  }'
+```
+
+Use the same payload shape with `"harness": "hermes"` or
+`"harness": "claude-code"` to prove all three harnesses still use the same
+Ops Chat bridge. The health endpoint reports both the selected default and the
+available harness list.
 
 Chat-created tickets also carry canonical contact metadata:
 
@@ -276,10 +316,19 @@ Lifecycle hardening review on 2026-05-21:
 - Element artifact marker `ops-chat-dev-artifact-1779337398804` validated and
   rendered Python, HTML, Markdown, and Bash artifacts as code blocks with zero
   tickets.
+- Extended Element artifact marker `hermes-ui-artifacts-1779355887` validated
+  Python, HTML, Markdown, Bash, MP4 animation via `animation-video`, and Matrix
+  file upload/summary return through the real Element UI. Ticket delta remained
+  zero for all harmless artifact cases.
 - Multi-ticket marker `ops-chat-multiticket-1779338352` proved one room can
   create watermelon ticket `1384`, cancel it, create separate pizza ticket
   `1385`, create urgent account ticket `1386`, update `1386`, and answer a
   room summary without adding another ticket.
+
+Harness note from the same retest: Codex is registered and proxy-connected, but
+the current lab routes did not produce Codex tool calls for Ops Chat within the
+one-hour local-agent window. Keep Hermes as the bridge default for demos until a
+tool-capable Codex route passes the `ops_chat_tool.py` smoke.
 
 Scenario smoke:
 

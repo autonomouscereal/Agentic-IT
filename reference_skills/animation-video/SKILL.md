@@ -1,4 +1,4 @@
----
+﻿---
 name: animation-video
 description: Create, render, and validate code-driven animation videos such as motion graphics, explainers, animated text, shape systems, UI mockups, data visualizations, and MP4/GIF/WebM outputs. Use when Codex needs to turn a written idea into a local video artifact using Remotion, HTML/CSS/Playwright capture, Pillow frame generation, or adjacent deterministic animation tools.
 ---
@@ -38,7 +38,7 @@ Typical checks:
 npm run lint
 npx remotion still src/index.ts MyComp out/frame-75.png --frame=75
 npx remotion render src/index.ts MyComp out/video.mp4 --codec=h264 --crf=18
-python C:/Users/me/.agents/skills/animation-video/scripts/verify_video.py out/video.mp4 --min-size 100000 --expect-duration 5
+python C:/Users/cereal/.agents/skills/animation-video/scripts/verify_video.py out/video.mp4 --min-size 100000 --expect-duration 5
 ```
 
 ## HTML Capture
@@ -56,3 +56,27 @@ Always validate:
 - Text fits inside its containers at the target resolution.
 
 Use `references/research-summary.md` for the 2026 capability notes and source trail.
+
+## Agentic Ops Chat Helper
+
+The Agentic Operations API image includes `ffmpeg` and mounts this skill under
+`/root/.agents/skills/animation-video`. For lightweight chat requests, agents
+can create a deterministic text-and-shapes MP4 without installing packages:
+
+```bash
+python /root/.agents/skills/animation-video/scripts/render_text_shapes_animation.py \
+  --output animation.mp4 \
+  --title "Agentic Operations" \
+  --subtitle "Validated animation artifact" \
+  --marker "demo-marker"
+python /root/.agents/skills/animation-video/scripts/verify_video.py animation.mp4 --min-size 1024
+python ops_chat_tool.py validate-artifact --path animation.mp4 --kind video --title "Animation artifact"
+```
+
+Use this helper for demo-safe motion graphics. Do not fetch remote assets or
+install packages from a chat turn.
+
+For richer React motion graphics, use the bundled `remotion-best-practices`
+skill. It is included in the deployable `reference_skills` bundle so Hermes,
+Claude Code, and Codex can all read the same Remotion rules when a task calls
+for a more complex text/shape animation.

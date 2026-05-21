@@ -5,7 +5,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ENV NODE_PATH=/usr/lib/node_modules
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git gnupg procps \
+    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg git gnupg procps \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g @anthropic-ai/claude-code @openai/codex@0.132.0 playwright@1.60.0 \

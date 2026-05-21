@@ -15,6 +15,8 @@ const opsChatPassword = process.env.OPS_CHAT_PASSWORD || "";
 const ignoreHttpsErrors = /^(1|true|yes|on)$/i.test(process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS || "");
 const marker = process.env.OPS_CHAT_DEV_ARTIFACT_MARKER || `ops-chat-dev-artifact-${Date.now()}`;
 const screenshotDir = process.env.PLAYWRIGHT_SCREENSHOT_DIR || "";
+const includeAnimation = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_TEST_ANIMATION || "");
+const includeUpload = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_TEST_UPLOAD || "");
 
 function requireSecret(name, value) {
   if (!value) throw new Error(`${name} is required`);
@@ -280,23 +282,25 @@ async function sendArtifactRequest(page, label, message, expected) {
   await page.keyboard.press("Enter");
   await page.getByText(/working on that now|agent finishes/i).first().isVisible({ timeout: 10000 }).catch(() => false);
   await page.waitForFunction(
-    ({ expectedMarker, expectedText, beforeTicketCount, beforeBlockCount }) => {
+    ({ expectedMarker, expectedText, expectedRequireCodeBlock, beforeTicketCount, beforeBlockCount }) => {
       const text = document.body.innerText || "";
       const blocks = document.querySelectorAll("pre code, pre").length;
       const tickets = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).length;
+      const codeOk = expectedRequireCodeBlock ? blocks > beforeBlockCount : true;
       return text.includes("Validation: passed")
         && text.includes(expectedMarker)
         && text.includes(expectedText)
-        && blocks > beforeBlockCount
+        && codeOk
         && tickets === beforeTicketCount;
     },
     {
       expectedMarker: expected.marker,
-      expectedText: expected.text,
+      expectedText: expected.text || "",
+      expectedRequireCodeBlock: expected.requireCodeBlock !== false,
       beforeTicketCount: beforeTickets,
       beforeBlockCount: beforeBlocks,
     },
-    { timeout: 240000 },
+    { timeout: Number(process.env.OPS_CHAT_UI_CASE_TIMEOUT_MS || 3600000) },
   );
   await page.waitForTimeout(1000);
   const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
@@ -305,6 +309,85 @@ async function sendArtifactRequest(page, label, message, expected) {
   }
   return {
     label,
+    code_blocks_added: (await codeBlockCount(page)) - beforeBlocks,
+    ticket_count_delta: ticketCount(body) - beforeTickets,
+  };
+}
+
+async function uploadFileForAgent(page) {
+  const fs = require("fs");
+  const os = require("os");
+  const path = require("path");
+  const uploadPath = path.join(os.tmpdir(), `${marker}_upload_request.md`);
+  fs.writeFileSync(
+    uploadPath,
+    [
+      `# Uploaded Codex Harness File Test`,
+      ``,
+      `Marker: ${marker}-upload-source`,
+      ``,
+      `Please create a validated Markdown summary artifact named ${marker}_upload_summary.md.`,
+      `The returned artifact must include marker ${marker}-upload-summary.`,
+    ].join("\n"),
+    "utf8",
+  );
+  await settleElement(page);
+  await clearDialogs(page);
+  const beforeText = await page.locator("body").innerText().catch(() => "");
+  const beforeTickets = ticketCount(beforeText);
+  const beforeBlocks = await codeBlockCount(page);
+  let uploaded = false;
+  const chooserPromise = page.waitForEvent("filechooser", { timeout: 5000 }).catch(() => null);
+  for (const pattern of [/Attach/i, /Upload/i, /Send file/i, /^\+$/i]) {
+    if (await clickText(page, pattern, "last")) {
+      const chooser = await chooserPromise;
+      if (chooser) {
+        await chooser.setFiles(uploadPath);
+        uploaded = true;
+        break;
+      }
+    }
+  }
+  if (!uploaded) {
+    const fileInput = page.locator('input[type="file"]').last();
+    await fileInput.setInputFiles(uploadPath, { timeout: 10000 });
+    uploaded = true;
+  }
+  await page.waitForTimeout(1500);
+  const dialogBox = page.locator("#mx_Dialog_Container textarea, #mx_Dialog_Container [contenteditable='true'], #mx_Dialog_Container [role='textbox']").last();
+  if (await dialogBox.isVisible().catch(() => false)) {
+    await dialogBox.fill(`Please read this uploaded file and return the requested validated Markdown artifact with marker ${marker}-upload-summary.`).catch(async () => {
+      await dialogBox.type(`Please read this uploaded file and return the requested validated Markdown artifact with marker ${marker}-upload-summary.`);
+    });
+  }
+  let sent = false;
+  for (const pattern of [/^Send$/i, /^Upload$/i, /Send file/i]) {
+    const button = page.locator("#mx_Dialog_Container button, #mx_Dialog_Container [role='button'], button, [role='button']").filter({ hasText: pattern }).last();
+    if (await button.isVisible().catch(() => false)) {
+      await button.click({ force: true }).catch(() => {});
+      sent = true;
+      break;
+    }
+  }
+  if (!sent) {
+    await page.keyboard.press("Enter").catch(() => {});
+  }
+  await page.waitForFunction(
+    ({ markerValue, beforeTicketCount, beforeBlockCount }) => {
+      const text = document.body.innerText || "";
+      const blocks = document.querySelectorAll("pre code, pre").length;
+      const tickets = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).length;
+      return text.includes("Validation: passed")
+        && text.includes(`${markerValue}-upload-summary`)
+        && blocks > beforeBlockCount
+        && tickets === beforeTicketCount;
+    },
+    { markerValue: marker, beforeTicketCount: beforeTickets, beforeBlockCount: beforeBlocks },
+    { timeout: Number(process.env.OPS_CHAT_UI_CASE_TIMEOUT_MS || 3600000) },
+  );
+  const body = await page.locator("body").innerText();
+  return {
+    label: "upload-markdown",
     code_blocks_added: (await codeBlockCount(page)) - beforeBlocks,
     ticket_count_delta: ticketCount(body) - beforeTickets,
   };
@@ -342,6 +425,17 @@ async function sendArtifactRequest(page, label, message, expected) {
       `Create a bash script named ${marker}_check_port.sh that checks whether a host and port are reachable using nc if available. Include marker ${marker}-bash in a comment. Validate syntax and return the full script.`,
       { marker: `${marker}-bash`, text: "#!/usr/bin/env bash" },
     ));
+    if (includeAnimation) {
+      proof.cases.push(await sendArtifactRequest(
+        page,
+        "animation",
+        `Create a short MP4 animation artifact named ${marker}_ops_motion.mp4 using the bundled animation-video helper. Include marker ${marker}-animation in the title, subtitle, or validation notes. Validate it as video and return it as a downloadable artifact. Do not create a ticket.`,
+        { marker: `${marker}-animation`, text: "binary video artifact", requireCodeBlock: false },
+      ));
+    }
+    if (includeUpload) {
+      proof.cases.push(await uploadFileForAgent(page));
+    }
     await maybeScreenshot(page, "ops-chat-dev-artifacts-complete");
     await browser.close();
     proof.status = "passed";
