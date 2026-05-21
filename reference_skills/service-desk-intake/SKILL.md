@@ -107,6 +107,28 @@ same ticket." Treat explicit "same ticket", "keep this request", "cancel ticket
 #123", and "ticket #123 is actually..." as existing-ticket updates. Treat
 "instead put in a new ticket/request" as replacement work.
 
+Detailed evidence lives in
+`docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`.
+
+Broad enterprise matrix proof:
+
+- Initial marker `ops-chat-enterprise-matrix-1779334693` ran 50 cases with iTop
+  sync and exposed five narrow route misses.
+- Focused marker `ops-chat-enterprise-matrix-1779336161` reran those misses:
+  offboarding, restore-file, Nuclei finding, policy exception, and SLA report.
+  All five passed with synced iTop refs and cleanup.
+
+Service desk intake implication:
+
+- Account/login/onboarding/offboarding belongs to Identity & Access unless
+  executive/VIP impact moves it to Executive Support.
+- Restore-from-backup belongs to Infrastructure Operations.
+- CI/CD scanner findings, including Nuclei, belong to DevSecOps.
+- SLA reports, policy exceptions, risk acceptance, audit reports, and evidence
+  exports belong to Compliance & Audit.
+- The chat agent may ask a clarifying question before opening a ticket when the
+  answer materially changes one of those routes.
+
 When a chat session already has linked tickets, obvious follow-up/update/cancel
 or reassignment text must use `continue-ticket`. The `create-ticket` tool
 enforces this guard so a user confirmation or scope update cannot open a second

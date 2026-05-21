@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-21T04:44:02.552894+00:00",
+  "generated_at": "2026-05-21T04:48:29.532437+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -566,8 +566,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 26641,
-          "sha256": "2d87dd1bab4ca0a39a61bb701b851d44e0e94e63fce69858ae4adf5fcdb1dab3"
+          "size": 27678,
+          "sha256": "aa550155f43fa4f9f6d67e3182a0cb1cb9216e8c55547c8ef40fb6a89b173b4b"
         }
       ]
     },
@@ -1090,8 +1090,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 13598,
-          "sha256": "9c265d6a037e5d42362ba78a19cb7fd3180d4f6356477c3af06b8857a279a5b8"
+          "size": 14583,
+          "sha256": "2d0c7f5146adc80d0a1986a779adb53ef624b6ff2f280edb649dee364846fc30"
         }
       ]
     },

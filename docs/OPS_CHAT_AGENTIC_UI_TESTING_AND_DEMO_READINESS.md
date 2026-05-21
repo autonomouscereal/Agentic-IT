@@ -7,6 +7,9 @@ UI, Matrix/Synapse, Keycloak login, chat-to-agent routing, ticket sync,
 reassignment/escalation, and user-facing ticket updates. It exists so future
 agents do not have to reconstruct the intended behavior from old smoke runs.
 
+For the detailed 2026-05-21 hardening evidence, see
+`docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`.
+
 ## Product Goal
 
 Ops Chat is the human front door for Agentic Operations. It should feel like a

@@ -190,6 +190,13 @@ Ticket lifecycle guard:
 - Replacement work after cancellation creates a new ticket only for the new
   operational ask. Example: watermelon purchase + cancel + pizza replacement
   should leave one cancelled watermelon ticket and one active pizza ticket.
+- Bare `instead` is not an automatic same-ticket update. If the user says
+  "instead put in a new ticket/request", create replacement work. Continue only
+  when the user explicitly names a ticket or says to keep the same request.
+- If the harness fails to call its final tool after retries, the dashboard may
+  apply a bounded fallback only for obvious existing-ticket updates in a
+  one-ticket room or when the user explicitly named a linked ticket id. This is
+  a safety net, not a parser-first routing layer.
 
 Developer artifact proof:
 
@@ -236,6 +243,26 @@ Duplicate/clutter review on 2026-05-20:
   Hermes chat intake: general price questions created no tickets, watermelon
   purchase created `1286`, cancellation continued/cancelled `1286`, pizza
   replacement created `1287`, and the session contained exactly two tickets.
+
+Lifecycle hardening review on 2026-05-21:
+
+- Detailed report: `docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`.
+- Broad enterprise matrix marker `ops-chat-enterprise-matrix-1779334693`
+  initially passed 45/50 with iTop sync. The five misses were offboarding,
+  restore-file, Nuclei finding, policy exception, and SLA report.
+- Focused repair marker `ops-chat-enterprise-matrix-1779336161` passed 5/5
+  after route guardrail updates; tickets `1369`-`1373` synced to iTop and were
+  cancelled during cleanup.
+- Scenario marker `ops-chat-scenarios-1779336984` passed general chat, current
+  info, cat memory, account, software, VPN, phishing follow-up, and delivery
+  gate coverage; tickets `1378`-`1382` were cleaned up.
+- Element artifact marker `ops-chat-dev-artifact-1779337398804` validated and
+  rendered Python, HTML, Markdown, and Bash artifacts as code blocks with zero
+  tickets.
+- Multi-ticket marker `ops-chat-multiticket-1779338352` proved one room can
+  create watermelon ticket `1384`, cancel it, create separate pizza ticket
+  `1385`, create urgent account ticket `1386`, update `1386`, and answer a
+  room summary without adding another ticket.
 
 Scenario smoke:
 

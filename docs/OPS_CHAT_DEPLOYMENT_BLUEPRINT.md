@@ -184,6 +184,20 @@ Latest UX proof:
   a mentioned ticket id only when the current user message explicitly referenced
   that ticket, so replacement work cannot accidentally revive a cancelled
   request because a model sentence claimed the old id.
+- 2026-05-21 lifecycle hardening is documented in
+  `docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`. Key live proofs:
+  `ops-chat-enterprise-matrix-1779336161` fixed the five broad-routing misses,
+  `ops-chat-scenarios-1779336984` passed lifecycle follow-ups,
+  `ops-chat-dev-artifact-1779337398804` passed Element code-rendering checks,
+  and `ops-chat-multiticket-1779338352` proved cancellation plus replacement
+  work without ticket clutter.
+- Bare `instead` no longer marks a message as an existing-ticket update. A user
+  saying "instead put in a new ticket" creates replacement work; a user saying
+  "same ticket" or explicitly naming `ticket #N` continues the existing ticket.
+- A bounded no-tool fallback exists only for clear existing-ticket updates
+  where the room has one linked ticket or the user explicitly names a linked
+  ticket. This prevents a harness hiccup from forcing the user to repeat a
+  cancellation/update while still avoiding parser-first routing.
 
 Run the full one-room UX marathon:
 

@@ -294,6 +294,28 @@ Latest API-level multi-ticket proof:
 - Room summary answered without creating another ticket
 - All synthetic tickets were cleaned up after proof
 
+Detailed report for this hardening pass:
+
+- `docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`
+- Broad matrix: `ops-chat-enterprise-matrix-1779334693`, then focused repair
+  `ops-chat-enterprise-matrix-1779336161`
+- Scenario lifecycle: `ops-chat-scenarios-1779336984`
+- Element dev artifacts: `ops-chat-dev-artifact-1779337398804`
+- Multi-ticket lifecycle: `ops-chat-multiticket-1779338352`
+
+Operational takeaways:
+
+- Do not route by app-side structured parsing; the harness/toolbelt owns the
+  decision.
+- Do enforce bounded guardrails when the harness chooses an impossible/generic
+  assignment for obvious enterprise domains.
+- Do not treat a busy Matrix room as one ticket. Use explicit ticket ids,
+  same-ticket language, or one-ticket room context for updates.
+- Do not treat `instead` alone as a continuation signal. Replacement language
+  should create replacement work.
+- Use a fresh demo room/user for long UI marathon tests when the shared DM has
+  heavy scrollback, or the Playwright harness can parse historical messages.
+
 Requester/affected-user proof, latest live lab:
 
 - Ticket `1284`

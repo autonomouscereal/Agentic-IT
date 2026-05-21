@@ -43,7 +43,9 @@ and network controls to Network Operations.
 
 The full deployment and demo-readiness checkpoint lives in
 `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`. Treat this section as
-the quick runbook and the checkpoint doc as the evidence catalog.
+the quick runbook and the checkpoint doc as the evidence catalog. The detailed
+2026-05-21 lifecycle hardening report lives in
+`docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`.
 
 ```bash
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
@@ -141,6 +143,18 @@ direct watermelon UX: session !ux-watermelon2-1779308718, tickets 1259 cancelled
 Element watermelon UX: marker ops-chat-ux-live-1779314587, tickets 1266 cancelled and 1267 pizza replacement, passed
 Element one-room marathon: marker ops-chat-marathon-1779299559, tickets 1276 cancelled, 1277 in_progress, 1278 in_progress, 1279 in_progress, 1280 cancelled; iTop refs 695-699; real agents 350-352 spawned and then smoke-cleaned; active agents after cleanup 0
 Element dev artifacts: marker ops-chat-dev-artifact-1780000005, Python/HTML/Markdown/Bash validated and rendered as code blocks; ticket delta 0 for all four cases
+```
+
+Latest verified result on 2026-05-21:
+
+```text
+broad enterprise matrix: marker ops-chat-enterprise-matrix-1779334693, tickets 1320-1368, 45/50 initial pass with iTop sync; misses documented and fixed
+focused enterprise rerun: marker ops-chat-enterprise-matrix-1779336161, tickets 1369-1373, 5/5 passed with iTop sync and cleanup
+scenario lifecycle smoke: marker ops-chat-scenarios-1779336984, tickets 1378-1382, general chat/current-info/cat memory/account/software/VPN/phishing/delivery gate passed with cleanup
+developer artifact UI: marker ops-chat-dev-artifact-1779337398804, Python/HTML/Markdown/Bash validated and rendered in Element; ticket delta 0
+multi-ticket lifecycle: marker ops-chat-multiticket-1779338352, watermelon 1384 cancelled, pizza 1385 created separately, account 1386 created and updated, summary answered with no new ticket
+active agents after cleanup: 0
+active processes after cleanup: 0
 ```
 
 ## Server Health
