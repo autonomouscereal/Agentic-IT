@@ -362,6 +362,12 @@ Element, the Matrix bridge, dashboard Ops Chat, and real Codex worker agent
 `external_ref=ops-chat-closure` note, resolved ticket `1444`, and the active
 agent count returned to `0`.
 
+Expanded same-day intake proof: one Element room handled direct general chat,
+developer Markdown output, tracked ticket creation, dashboard-to-chat requester
+response, and mixed answer-plus-ticket intake. Tickets `1447` / iTop `859` and
+`1448` / iTop `860` both resolved through real Codex workers, preserved the
+Matrix requester/affected user, and returned the queue to idle.
+
 One-room Element marathon:
 
 ```powershell

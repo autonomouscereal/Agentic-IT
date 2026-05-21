@@ -107,6 +107,25 @@ Additional bulletproofing pass, same day:
   `external_ref=ops-chat-closure` note, resolved the ticket, and left active
   agents at `0`.
 
+Additional intake-focused pass:
+
+- One Element room handled a no-ticket general answer, a no-ticket developer
+  Markdown checklist, and a tracked operational intake request.
+- General answer marker `demo-general-1779402811321` returned directly in chat.
+- Developer artifact marker `demo-dev-1779402811321` returned a validated
+  Markdown checklist without opening a ticket.
+- Tracked work marker `demo-ticket-1779402811321` created ticket `1447`, synced
+  to iTop ref `859`, spawned Codex agent `407`, wrote a public
+  `ops-chat-closure` note, resolved, and returned active agents to `0`.
+- Dashboard-to-chat requester-response proof marker
+  `demo-outbound-1779403016817` delivered a `/request-info` prompt into
+  Element; the user replied from the UI; ticket `1447` received a
+  `user-response` note; continuation agent `408` processed it and resolved.
+- Mixed intake marker `demo-intake-1779403347387` answered a central-intake
+  question in chat and opened ticket `1448`; ticket `1448` synced to iTop ref
+  `860`, preserved requester/affected user as
+  `@demo_account_1:agentic-ops.local`, resolved, and left active agents at `0`.
+
 ## Do Not Regress
 
 - Do not click **Confirm** for encryption setup in demo smoke tests.

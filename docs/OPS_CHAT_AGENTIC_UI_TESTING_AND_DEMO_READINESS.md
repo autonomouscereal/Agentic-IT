@@ -60,6 +60,15 @@ Semgrep, or the dashboard API. They should just ask for help.
   worker agent `406`.
 - Agent `406` completed task `403`, wrote a public `ops-chat-closure` note,
   resolved ticket `1444`, and active agents returned to `0`.
+- Additional UI-intake pass proved the demo-critical paths:
+  - general no-ticket answer marker `demo-general-1779402811321`;
+  - no-ticket developer checklist marker `demo-dev-1779402811321`;
+  - tracked work ticket `1447` / iTop `859` marker
+    `demo-ticket-1779402811321`, completed by Codex agent `407`;
+  - dashboard-to-chat requester-response marker
+    `demo-outbound-1779403016817`, processed by continuation agent `408`;
+  - mixed answer-plus-ticket intake ticket `1448` / iTop `860` marker
+    `demo-intake-1779403347387`, completed by Codex agent `409`.
 
 Known live-demo caveat: the long-lived `demo_account_1` room may continue the
 existing queue-health ticket instead of opening a fresh one. That is acceptable

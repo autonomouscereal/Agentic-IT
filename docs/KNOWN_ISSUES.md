@@ -165,6 +165,11 @@ validated end-to-end:
 - Playwright verified the panel as `demo_account_1`, set `codex-primary`,
   `max_concurrent_agents=5`, low reasoning, and fast mode on, then confirmed
   `/api/agents/runner-health` reflected the saved values.
+- A follow-up selector bug was found and fixed: preset changes could stage a
+  new active profile, but the active-profile select was repopulated from its
+  stale value before save. The Settings renderer now treats the active-profile
+  select as authoritative from `agentRuntimeConfig.active_profile`, which keeps
+  Codex Fast, Local Only, and Hermes External from saving the previous profile.
 
 Do not present the advanced profile/skill assignment editor as finished product
 polish until the Settings and Skills planes receive a dedicated product pass.

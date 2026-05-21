@@ -3064,7 +3064,7 @@ function renderSettings() {
     const profileOptions = profiles.map(p => `<option value="${escAttr(p.id)}">${escHtml(p.name || p.id)} (${escHtml(p.harness)} / ${escHtml(p.model)})</option>`).join("");
     [activeSelect, profileSelect, assignmentProfile].forEach(select => {
         if (!select) return;
-        const current = select.value || agentRuntimeConfig.active_profile;
+        const current = select === activeSelect ? agentRuntimeConfig.active_profile : (select.value || agentRuntimeConfig.active_profile);
         select.innerHTML = profileOptions;
         select.value = profiles.some(p => p.id === current) ? current : (agentRuntimeConfig.active_profile || profiles[0]?.id || "");
     });
