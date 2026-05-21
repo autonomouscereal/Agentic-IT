@@ -126,6 +126,25 @@ Additional intake-focused pass:
   `860`, preserved requester/affected user as
   `@demo_account_1:agentic-ops.local`, resolved, and left active agents at `0`.
 
+Extreme intake stress pass:
+
+- Artifact marker `demo-extreme-artifacts-1779382600` validated Python, HTML,
+  Markdown, Bash, MP4 animation, and uploaded-file handling through Element.
+- Combined marker `demo-combined-artifacts-1779383444` validated one chat turn
+  that returned both a Python ASCII chart script and an MP4 animation artifact.
+- Concurrent browser jobs created tickets `1453`, `1454`, and `1455` for
+  procurement, password reset rehearsal, and SIEM alert work. The platform
+  spawned separate Codex workers and returned the queue to idle.
+- Because a long-lived Element room can show interleaved ticket mentions during
+  concurrent tests, `scripts/smoke_ops_chat_playwright.js` now optionally uses
+  `/api/search/global` with `DASHBOARD_SERVICE_TOKEN` to resolve the exact
+  ticket associated with each marker. Without the token, the script still
+  verifies UI delivery but may report the first visible ticket mention from an
+  interleaved burst.
+- Triple-ingress proof: chat ticket `1458`, report-phish ticket `1463`, and
+  iTop-origin alert ticket `1464` were exercised together. The iTop alert came
+  from provider ref `874` and created access child ticket `1465`.
+
 ## Do Not Regress
 
 - Do not click **Confirm** for encryption setup in demo smoke tests.

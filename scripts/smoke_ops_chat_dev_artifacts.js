@@ -17,6 +17,7 @@ const marker = process.env.OPS_CHAT_DEV_ARTIFACT_MARKER || `ops-chat-dev-artifac
 const screenshotDir = process.env.PLAYWRIGHT_SCREENSHOT_DIR || "";
 const includeAnimation = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_TEST_ANIMATION || "");
 const includeUpload = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_TEST_UPLOAD || "");
+const includeCombinedAnimationPython = /^(1|true|yes|on)$/i.test(process.env.OPS_CHAT_TEST_COMBINED_ANIMATION_PYTHON || "");
 
 function requireSecret(name, value) {
   if (!value) throw new Error(`${name} is required`);
@@ -282,13 +283,15 @@ async function sendArtifactRequest(page, label, message, expected) {
   await page.keyboard.press("Enter");
   await page.getByText(/working on that now|agent finishes/i).first().isVisible({ timeout: 10000 }).catch(() => false);
   await page.waitForFunction(
-    ({ expectedMarker, expectedText, expectedRequireCodeBlock, beforeTicketCount, beforeBlockCount }) => {
+    ({ expectedMarker, expectedText, expectedMarkers, expectedRequireCodeBlock, beforeTicketCount, beforeBlockCount }) => {
       const text = document.body.innerText || "";
       const blocks = document.querySelectorAll("pre code, pre").length;
       const tickets = Array.from(text.matchAll(/(?:Dashboard ticket: #|I created ticket #)(\d+)/gi)).length;
       const codeOk = expectedRequireCodeBlock ? blocks > beforeBlockCount : true;
+      const markersOk = (expectedMarkers || []).every((marker) => text.includes(marker));
       return text.includes("Validation: passed")
         && text.includes(expectedMarker)
+        && markersOk
         && text.includes(expectedText)
         && codeOk
         && tickets === beforeTicketCount;
@@ -296,6 +299,7 @@ async function sendArtifactRequest(page, label, message, expected) {
     {
       expectedMarker: expected.marker,
       expectedText: expected.text || "",
+      expectedMarkers: expected.extraMarkers || [],
       expectedRequireCodeBlock: expected.requireCodeBlock !== false,
       beforeTicketCount: beforeTickets,
       beforeBlockCount: beforeBlocks,
@@ -431,6 +435,18 @@ async function uploadFileForAgent(page) {
         "animation",
         `Create a short MP4 animation artifact named ${marker}_ops_motion.mp4 using the bundled animation-video helper. Include marker ${marker}-animation in the title, subtitle, or validation notes. Validate it as video and return it as a downloadable artifact. Do not create a ticket.`,
         { marker: `${marker}-animation`, text: "binary video artifact", requireCodeBlock: false },
+      ));
+    }
+    if (includeCombinedAnimationPython) {
+      proof.cases.push(await sendArtifactRequest(
+        page,
+        "combined-animation-python",
+        `In one no-ticket response, create two validated artifacts: (1) a Python script named ${marker}_ascii_cost.py that prints an ASCII bar chart for demo tea prices over time and includes marker ${marker}-python-ascii in a comment; (2) a short MP4 animation named ${marker}_cost_motion.mp4 using the bundled animation-video helper and include marker ${marker}-animation-combined in the title, subtitle, or validation notes. Validate the Python script and the video, return the script as a code block, and return the video as a downloadable artifact. Do not create a ticket.`,
+        {
+          marker: `${marker}-python-ascii`,
+          extraMarkers: [`${marker}-animation-combined`],
+          text: "binary video artifact",
+        },
       ));
     }
     if (includeUpload) {

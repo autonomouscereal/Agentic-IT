@@ -70,6 +70,35 @@ Semgrep, or the dashboard API. They should just ask for help.
   - mixed answer-plus-ticket intake ticket `1448` / iTop `860` marker
     `demo-intake-1779403347387`, completed by Codex agent `409`.
 
+2026-05-21 extreme intake stress pass:
+
+- Real Element artifact run marker `demo-extreme-artifacts-1779382600`
+  created and validated Python, HTML, Markdown, Bash, MP4 animation, and
+  uploaded-file Markdown summary artifacts through Codex fast/low with zero
+  ticket creation.
+- Combined single-message artifact run marker
+  `demo-combined-artifacts-1779383444` created a Python ASCII chart script and
+  an MP4 animation in one no-ticket chat turn; both validated and rendered in
+  Element without code-block mangling.
+- Three simultaneous Element browser jobs created separate tracked work:
+  ticket `1453` for demo flowers/procurement, ticket `1454` for a safe
+  password reset rehearsal, and ticket `1455` for a synthetic Wazuh SIEM alert.
+  The queue handled concurrent Codex workers and returned to idle.
+- The procurement ticket intentionally blocked on missing real purchase/vendor
+  details; password reset reached the guarded approval path; SIEM stopped at a
+  real Wazuh access wall. These are acceptable demo outcomes because the
+  platform did not invent approvals or bypass access.
+- Triple-ingress test ran chat intake, report-phish, and iTop-origin alert
+  ingestion together. Chat created ticket `1458` and stopped at access for CEO
+  SSO support; report-phish ticket `1463` resolved with four completed
+  approval-gated containment actions; direct iTop alert `874` synced into
+  dashboard ticket `1464`, auto-assigned Codex agent `420`, and created access
+  child ticket `1465`.
+- A prompt/runtime gap was fixed during the stress pass: agents now explicitly
+  complete approved access changes before requesting `/api/agents/{id}/vault/lease`,
+  because completion activates the per-agent scoped lease. Approval alone is
+  not enough.
+
 Known live-demo caveat: the long-lived `demo_account_1` room may continue the
 existing queue-health ticket instead of opening a fresh one. That is acceptable
 for bridge/agent reliability proof. For a pristine story, use a fresh Matrix

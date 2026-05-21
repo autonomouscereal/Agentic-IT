@@ -368,6 +368,15 @@ response, and mixed answer-plus-ticket intake. Tickets `1447` / iTop `859` and
 `1448` / iTop `860` both resolved through real Codex workers, preserved the
 Matrix requester/affected user, and returned the queue to idle.
 
+Extreme same-day stress proof: Codex fast/low handled Python, HTML, Markdown,
+Bash, MP4 animation, uploaded-file summary, and a combined Python ASCII script
+plus MP4 animation request through Element with no ticket noise. Concurrent
+same-room browser jobs created separate tickets `1453`, `1454`, and `1455`
+for procurement, password reset rehearsal, and SIEM alert work; the queue
+returned to idle. Triple-ingress testing exercised Element intake ticket
+`1458`, report-phish ticket `1463`, and iTop-origin alert ticket `1464` /
+iTop `874` together.
+
 One-room Element marathon:
 
 ```powershell

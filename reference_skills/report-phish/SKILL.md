@@ -32,6 +32,19 @@ Phishing email reporting system that delivers reports via internal Mailcow SMTP 
 
 ## Current Validation Notes
 
+Latest extreme intake stress proof, verified 2026-05-21:
+
+- Report-phish ticket `1463` was run with the demo-default Codex fast/low
+  harness while Ops Chat and iTop-origin alert ingestion were also active.
+- The agent completed approval-gated lab-safe URL block, mailbox
+  search/quarantine, password/session review, and endpoint scan evidence
+  changes.
+- The validation script now accepts the current agent wording and semantic
+  containment action names instead of brittle legacy phrases.
+- Access-gated Wazuh/SIEM work must complete the approved access change before
+  requesting `/api/agents/{id}/vault/lease`; approval alone does not activate
+  the per-agent scoped lease.
+
 Latest platform bridge rerun, verified 2026-05-13 UTC:
 
 - Summary file on AI server:

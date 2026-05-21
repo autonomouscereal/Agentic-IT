@@ -130,6 +130,44 @@ auto-marked `external_ref=ops-chat-agent-note`, and
 the dashboard/API contract. A full Element browser proof that watches the
 progress note arrive in the room is still pending.
 
+### Concurrent Element room ticket extraction can misread interleaved responses
+
+Status: test harness fixed; product path passed.
+
+During the 2026-05-21 extreme intake stress pass, three simultaneous Playwright
+browser jobs in the same long-lived Matrix room created three correct backend
+tickets, but the generic smoke output initially reported the same visible
+ticket id for all three because Element room history interleaved user markers
+and bot replies. Backend verification showed separate tickets `1453`, `1454`,
+and `1455`, each synced and assigned correctly.
+
+Fix:
+
+- `scripts/smoke_ops_chat_playwright.js` now anchors ticket lookup to the
+  unique message marker and, when `DASHBOARD_SERVICE_TOKEN` is supplied, checks
+  `/api/search/global` to resolve the exact marker-linked ticket.
+- Without the token, the script still proves UI delivery but can misattribute
+  ticket ids during simultaneous same-room bursts. Use the token-backed mode
+  for concurrency assertions.
+
+### Access approval does not itself activate per-agent vault leases
+
+Status: prompt/runtime guidance fixed; behavior is by design.
+
+The report-phish stress run showed an agent attempting
+`/api/agents/{id}/vault/lease` immediately after an access gate was approved.
+The platform correctly denied it with `missing_agent_vault_lease`, because the
+approved access change still had to be completed before the per-agent lease
+row was activated.
+
+Fix:
+
+- Ticket prompts and the agent runner credential-vault guidance now explicitly
+  require agents to complete the approved access change with evidence before
+  retrying the scoped vault lease.
+- Post-fix report-phish ticket `1463` completed four approval-gated containment
+  actions and resolved successfully.
+
 ### Dashboard-wide UI overhaul remains partially unverified
 
 Status: backlog item; not part of the last demo stabilization.

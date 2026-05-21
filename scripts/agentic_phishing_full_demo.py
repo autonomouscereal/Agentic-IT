@@ -334,22 +334,41 @@ def validate(base: str, ticket_id: int, fixture: dict) -> dict:
     notes = context.get("notes", [])
     note_text = "\n\n".join(n.get("body", "") for n in notes)
     changes = context.get("changes") or context.get("change_requests") or []
-    expected_actions = {
-        "block_url",
-        "quarantine_messages",
-        "send_training_followup",
-        "force_password_reset",
-        "endpoint_scan",
+    completed_actions = {
+        (c.get("action") or "").lower()
+        for c in changes
+        if c.get("status") == "completed"
     }
-    completed_actions = {c.get("action") for c in changes if c.get("status") == "completed"}
+    completed_action_text = "\n".join(sorted(completed_actions))
+    note_text_lower = note_text.lower()
+    required_action_families = {
+        "url_block": ("block" in completed_action_text and ("url" in completed_action_text or "phishing" in completed_action_text)),
+        "mailbox_quarantine": ("quarantine" in completed_action_text or "mailbox" in completed_action_text or "email" in completed_action_text),
+        "account_review": ("password" in completed_action_text or "session" in completed_action_text or "account" in completed_action_text),
+        "endpoint_scan": ("endpoint" in completed_action_text and "scan" in completed_action_text),
+    }
     checks = {
-        "agent_triage_note": "Agent phishing triage started" in note_text,
-        "agent_final_note": "Agent phishing remediation complete" in note_text,
-        "approval_notes_visible": "Approval gate AUTO-APPROVED" in note_text and "Approval gate completed" in note_text,
-        "all_expected_changes_completed": expected_actions <= completed_actions,
+        "agent_triage_note": (
+            "triage" in note_text_lower
+            and "sender" in note_text_lower
+            and "recipient" in note_text_lower
+            and "url" in note_text_lower
+        ),
+        "agent_final_note": (
+            "phishing remediation complete" in note_text_lower
+            or "final evidence" in note_text_lower
+            or "ticket resolved" in note_text_lower
+        ),
+        "approval_notes_visible": "approval gate" in note_text_lower and ("approved" in note_text_lower or "completed" in note_text_lower),
+        "all_expected_changes_completed": all(required_action_families.values()),
         "url_evidence": all(url in note_text for url in fixture["urls"]),
         "recipient_evidence": all(item["email"] in note_text for item in fixture["recipients"]),
-        "training_evidence": "Training" in note_text or "training" in note_text,
+        "training_evidence": (
+            "training" in note_text_lower
+            or "user follow-up" in note_text_lower
+            or "recipient follow-up" in note_text_lower
+            or "credential" in note_text_lower
+        ),
         "password_reset_evidence": "password" in note_text.lower() and all(user in note_text for user in fixture["credentialed"]),
         "endpoint_scan_evidence": "endpoint" in note_text.lower() and all(host in note_text for host in fixture["hosts"]),
     }

@@ -2502,6 +2502,10 @@ from the dashboard with `POST /api/agents/<agent_id>/vault/lease` using
 ticket note explaining the blocked system/resource/action, create
 `POST /api/tickets/{ticket.get('id', '{ticket_id}')}/access-request`, write a
 `waiting_for_access` checkpoint below 100%, and stop until the gate is approved.
+When an access gate is approved, complete the approved access change with
+`POST /api/changes/<change_id>/complete` and evidence before retrying
+`/api/agents/<agent_id>/vault/lease`; completion is what activates the
+per-agent scoped lease. Approval alone is not enough.
 
 Treat iTop, ServiceNow, Jira, and local-only tickets as providers behind the dashboard API. Do not call provider-specific APIs unless the ticket context or a skill explicitly requires it.
 Do not fetch broad schema, docs, or tool inventory endpoints such as `/openapi.json`, `/api/tools`, `/api/tools/status`, `/docs`, or `/redoc`. The runner blocks those calls because they have caused local models to stall on oversized context. Use the bounded ticket/evidence endpoints above.

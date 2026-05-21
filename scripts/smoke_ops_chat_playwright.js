@@ -61,18 +61,45 @@ function ticketMentions(text) {
   return Array.from(String(text || "").matchAll(pattern)).map((match) => Number(match[1]));
 }
 
-async function waitForTicketMentionAfter(page, beforeCount) {
+function ticketMentionsAfterMarker(text, marker) {
+  const fullText = String(text || "");
+  const markerIndex = marker ? fullText.lastIndexOf(marker) : -1;
+  if (markerIndex < 0) return [];
+  return ticketMentions(fullText.slice(markerIndex));
+}
+
+async function lookupTicketByMarker(marker) {
+  if (!dashboardServiceToken || !marker) return null;
+  const baseUrl = dashboardUrl.replace(/\/$/, "");
+  const response = await fetch(`${baseUrl}/api/search/global?q=${encodeURIComponent(marker)}&limit=10`, {
+    headers: { "X-Dashboard-Service-Token": dashboardServiceToken },
+  }).catch(() => null);
+  if (!response || !response.ok) return null;
+  const payload = await response.json().catch(() => null);
+  const result = (payload?.results || []).find((item) => item.type === "ticket" && Number(item.id));
+  return result ? Number(result.id) : null;
+}
+
+async function waitForTicketMentionAfter(page, beforeCount, marker = "") {
   await page.waitForFunction(
-    ({ beforeCount }) => {
+    ({ beforeCount, marker }) => {
       const text = document.body.innerText || "";
+      if (marker && text.includes(marker)) {
+        const segment = text.slice(text.lastIndexOf(marker));
+        const pattern = /(?:Dashboard ticket: #|I created ticket #|I updated ticket #|Agent completed this request for ticket #|Ticket #)(\d+)/gi;
+        if (Array.from(segment.matchAll(pattern)).length > 0) return true;
+      }
       const pattern = /(?:Dashboard ticket: #|I created ticket #|I updated ticket #|Agent completed this request for ticket #|Ticket #)(\d+)/gi;
       return Array.from(text.matchAll(pattern)).length > beforeCount;
     },
-    { beforeCount },
+    { beforeCount, marker },
     { timeout: 180000 },
   );
   const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
-  const mentions = ticketMentions(text);
+  const markerTicketId = await lookupTicketByMarker(marker);
+  if (markerTicketId) return markerTicketId;
+  const markerMentions = ticketMentionsAfterMarker(text, marker);
+  const mentions = markerMentions.length ? markerMentions : ticketMentions(text);
   const ticketId = mentions[mentions.length - 1];
   if (!ticketId) throw new Error("Ops Chat did not expose a dashboard ticket id after the message");
   return ticketId;
@@ -459,7 +486,7 @@ async function sendOpsChatMessage(page) {
       const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
       const beforeMentionCount = ticketMentions(beforeText).length;
       await sendComposerMessage(page, message);
-      const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount);
+      const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount, chatMarker);
       await maybeScreenshot(page, "ops-chat-message");
       return { marker: chatMarker, ticketId };
     }
@@ -477,7 +504,7 @@ async function sendOpsChatMessage(page) {
       const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
       const beforeMentionCount = ticketMentions(beforeText).length;
       await sendComposerMessage(page, message);
-      const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount);
+      const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount, chatMarker);
       await maybeScreenshot(page, "ops-chat-message");
       return { marker: chatMarker, ticketId };
     }
@@ -526,7 +553,7 @@ async function sendOpsChatMessage(page) {
     const beforeText = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
     const beforeMentionCount = ticketMentions(beforeText).length;
     await sendComposerMessage(page, message);
-    const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount);
+    const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount, chatMarker);
     await maybeScreenshot(page, "ops-chat-message");
     return { marker: chatMarker, ticketId };
   }
@@ -618,7 +645,7 @@ async function sendOpsChatMessage(page) {
     const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 1000);
     throw new Error(`Ops Chat message composer was not found. url=${page.url()} body=${body}`);
   }
-  const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount);
+  const ticketId = await waitForTicketMentionAfter(page, beforeMentionCount, chatMarker);
   await maybeScreenshot(page, "ops-chat-message");
   return { marker: chatMarker, ticketId };
 }
