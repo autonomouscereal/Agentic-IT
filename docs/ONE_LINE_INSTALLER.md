@@ -65,7 +65,7 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
   memory database, default `25490`. Use this when reinstalling on a host that
   already has a separate memory service or another lab stack bound to `25490`.
 - `--project-name NAME`: Docker Compose project name. Defaults to a sanitized name from the target directory.
-- `--harness auto|hermes|claude-code`: selected agent harness. `auto` prefers Hermes when a host Hermes install is available, otherwise Claude Code.
+- `--harness auto|hermes|claude-code|codex`: selected agent harness. `auto` prefers Hermes when a host Hermes install is available, then Codex or Claude Code when configured.
 - `--proxy-mode deploy|external`: deploy the built-in proxy or point the dashboard at an existing proxy.
 - `--proxy-port PORT`: host port for the built-in proxy, default `4001`.
   Hardened installs bind the proxy to `127.0.0.1`; the installer checks
@@ -105,6 +105,7 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
 - `docker-compose.override.yml`: reserved for site-specific overrides.
 - `runtime/empty_credentials.json`: empty placeholder so the control plane can start before Claude Code OAuth credentials are configured.
 - `runtime/claude_settings.json`: generated model/proxy settings for Claude Code fallback runs.
+- `runtime/codex/`: optional mounted Codex home for CLI auth/config. Alternatively set `CODEX_API_KEY` from the vault/runtime environment. Do not copy desktop auth files into source.
 - `runtime/proxy_config.json`: generated provider/model routing config for the built-in AI proxy. It contains aliases and base URLs, not secrets.
 - Hermes auth state is mounted from the operator/host runtime when Hermes is selected; the installer does not write Nous Portal tokens into source-controlled files.
 - `install_state/install-log.jsonl`: installer events.

@@ -1,10 +1,11 @@
 import asyncio
+import base64
 import html
 import json
 import os
 import re
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from aiohttp import ClientSession, web
 
@@ -110,7 +111,7 @@ async def ensure_bot_profile():
                 print(f"Matrix bot profile update failed {response.status}: {body[:400]}", flush=True)
 
 
-async def dashboard_chat(message, room_id, event_id, sender):
+async def dashboard_chat(message, room_id, event_id, sender, attachments=None):
     payload = {
         "message": message,
         "requester_name": sender,
@@ -120,6 +121,7 @@ async def dashboard_chat(message, room_id, event_id, sender):
         "external_thread_id": room_id,
         "matrix_event_id": event_id,
         "spawn_agent": True,
+        "attachments": attachments or [],
     }
     headers = {
         "Content-Type": "application/json",
@@ -201,6 +203,92 @@ async def send_matrix_message(room_id, text):
             return True
 
 
+def matrix_msgtype_for_attachment(content_type):
+    value = (content_type or "").lower()
+    if value.startswith("image/"):
+        return "m.image"
+    if value.startswith("video/"):
+        return "m.video"
+    if value.startswith("audio/"):
+        return "m.audio"
+    return "m.file"
+
+
+async def upload_matrix_media(attachment):
+    data = attachment.get("data_base64") or ""
+    if not data:
+        return None
+    raw = base64.b64decode(data)
+    filename = attachment.get("filename") or "artifact.bin"
+    content_type = attachment.get("content_type") or "application/octet-stream"
+    url = f"{MATRIX_HOMESERVER_URL}/_matrix/media/v3/upload?filename={quote(filename)}"
+    params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID}
+    headers = {"Content-Type": content_type}
+    async with ClientSession() as session:
+        async with session.post(url, params=params, data=raw, headers=headers, timeout=60) as response:
+            text = await response.text()
+            if response.status >= 400:
+                print(f"Matrix media upload failed {response.status}: {text[:400]}", flush=True)
+                return None
+            try:
+                return json.loads(text).get("content_uri")
+            except json.JSONDecodeError:
+                return None
+
+
+async def send_matrix_attachment(room_id, attachment):
+    content_uri = await upload_matrix_media(attachment)
+    if not content_uri:
+        return False
+    filename = attachment.get("filename") or "artifact.bin"
+    content_type = attachment.get("content_type") or "application/octet-stream"
+    txn_id = f"ops-file-{int(time.time() * 1000)}"
+    url = (
+        f"{MATRIX_HOMESERVER_URL}/_matrix/client/v3/rooms/"
+        f"{quote(room_id, safe='')}/send/m.room.message/{txn_id}"
+    )
+    payload = {
+        "msgtype": matrix_msgtype_for_attachment(content_type),
+        "body": filename,
+        "url": content_uri,
+        "info": {
+            "mimetype": content_type,
+            "size": int(attachment.get("size_bytes") or 0),
+        },
+    }
+    params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID}
+    async with ClientSession() as session:
+        async with session.put(url, params=params, json=payload, timeout=30) as response:
+            if response.status >= 400:
+                body = await response.text()
+                print(f"Matrix attachment send failed {response.status}: {body[:400]}", flush=True)
+                return False
+            return True
+
+
+def mxc_parts(mxc_url):
+    parsed = urlparse(mxc_url or "")
+    if parsed.scheme != "mxc" or not parsed.netloc or not parsed.path:
+        return None
+    return parsed.netloc, parsed.path.lstrip("/")
+
+
+async def download_matrix_media(mxc_url):
+    parts = mxc_parts(mxc_url)
+    if not parts:
+        return b""
+    server, media_id = parts
+    url = f"{MATRIX_HOMESERVER_URL}/_matrix/client/v1/media/download/{quote(server)}/{quote(media_id)}"
+    params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID}
+    async with ClientSession() as session:
+        async with session.get(url, params=params, timeout=60) as response:
+            if response.status >= 400:
+                body = await response.text()
+                print(f"Matrix media download failed {response.status}: {body[:300]}", flush=True)
+                return b""
+            return await response.read()
+
+
 async def set_matrix_typing(room_id, typing=True, timeout_ms=None):
     if not room_id:
         return False
@@ -238,17 +326,43 @@ def event_text(event):
     return str(content.get("body") or "").strip()
 
 
+async def event_attachments(event):
+    content = event.get("content") or {}
+    msgtype = content.get("msgtype")
+    if msgtype not in ("m.file", "m.image", "m.video", "m.audio"):
+        return []
+    filename = content.get("body") or content.get("filename") or "matrix-upload.bin"
+    mxc_url = content.get("url") or ((content.get("file") or {}).get("url"))
+    info = content.get("info") or {}
+    content_type = info.get("mimetype") or "application/octet-stream"
+    raw = await download_matrix_media(mxc_url)
+    attachment = {
+        "filename": filename,
+        "content_type": content_type,
+        "size_bytes": len(raw) or info.get("size") or 0,
+        "matrix_url": mxc_url,
+        "matrix_event_id": event.get("event_id"),
+        "matrix_room_id": event.get("room_id"),
+    }
+    if raw:
+        attachment["data_base64"] = base64.b64encode(raw).decode("ascii")
+    return [attachment]
+
+
 async def process_user_message_event(event):
     sender = event.get("sender") or ""
     room_id = event.get("room_id")
     event_id = event.get("event_id")
     text = event_text(event)
+    attachments = await event_attachments(event)
+    if attachments and not text:
+        text = "Uploaded file for the agent to review: " + ", ".join(a.get("filename", "attachment") for a in attachments)
     if sender == BOT_USER_ID or sender.startswith(f"@{MATRIX_BOT_LOCALPART}:"):
         return False
     if not room_id or not text:
         return False
     await set_matrix_typing(room_id, True)
-    task = asyncio.create_task(dashboard_chat(text, room_id, event_id, sender))
+    task = asyncio.create_task(dashboard_chat(text, room_id, event_id, sender, attachments=attachments))
     try:
         if WORKING_ACK_ENABLED:
             try:
@@ -266,6 +380,9 @@ async def process_user_message_event(event):
             if agent.get("agent_id"):
                 reply += f"\nAgent: #{agent.get('agent_id')} / task #{agent.get('task_id')}"
         await send_matrix_message(room_id, reply)
+        for attachment in result.get("attachments") or []:
+            if attachment.get("data_base64"):
+                await send_matrix_attachment(room_id, attachment)
         return True
     finally:
         await set_matrix_typing(room_id, False, timeout_ms=1)

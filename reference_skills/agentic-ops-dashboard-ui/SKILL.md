@@ -6,18 +6,18 @@ description: Validate and safely deploy Agentic Operations dashboard UI changes 
 # Agentic Ops Dashboard UI
 
 Use this skill when changing, deploying, or testing the Agentic Operations
-dashboard UI at `https://192.168.50.222:25443/`.
+dashboard UI at `https://127.0.0.1:25443/`.
 
 ## Rules
 
 - Work from `D:\IT AGENT PROJECT`.
 - Use server-manager for all AI server work. Do not use raw SSH.
 - Use the dashboard HTTPS edge for browser/Playwright validation:
-  `https://192.168.50.222:25443/`.
+  `https://127.0.0.1:25443/`.
 - Login at `/login` as `demo_account_1`; retrieve the password from the
   server-manager vault key `demo_account_1`.
 - For chat/intake UI proof, use Element at
-  `https://192.168.50.222:3303/#/user/@agentic-ops:agentic-ops.local` with a
+  `https://127.0.0.1:3303/#/user/@agentic-ops:agentic-ops.local` with a
   demo chat account such as `demo_chat_alice`, `demo_chat_jeff`, or
   `demo_chat_exec` from the same vault.
 - Never print or commit secrets.
@@ -34,7 +34,7 @@ dashboard UI at `https://192.168.50.222:25443/`.
 From the AI server deployment directory:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 docker compose ps
 curl -k -fsS https://127.0.0.1:25443/nginx-health
 docker compose exec -T api python - <<'PY'
@@ -62,7 +62,7 @@ approval before API recreation.
 
 ## Static-Only Deploy
 
-Sync these files to `/home/cereal/SOC_TESTING/soc-dashboard`:
+Sync these files to `/opt/agentic-it/SOC_TESTING/soc-dashboard`:
 
 - `frontend/index.html`
 - `frontend/js/dashboard.js`
@@ -78,7 +78,7 @@ No restart is needed for mounted static files.
 Only when agent interruption is acceptable or no active tasks exist:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 -m py_compile api/services/agent_runner.py api/routes/agents.py api/routes/tickets.py api/routes/setup.py
 docker compose build api
 docker compose up -d --no-deps --force-recreate api
@@ -104,7 +104,7 @@ Required assertions:
   `580`, `525`, `539`, `531`, `422`, `575`, `530`, `118`, `363`, `430`,
   `578`.
 - Setup page module search/filter is visible and returns a sensible count.
-- Agents page shows harness options `hermes` and `claude-code`.
+- Agents page shows harness options `hermes`, `claude-code`, and `codex`.
 - Saving default harness/model returns `Saved server default.`
 - `/api/agents/config` readback matches the selected default.
 - Global search is visible above every dashboard page and can find a unique

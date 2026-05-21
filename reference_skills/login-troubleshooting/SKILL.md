@@ -1,4 +1,4 @@
-﻿---
+---
 name: login-troubleshooting
 description: >
   Current demo login status and regression guide for demo_account_1 across AI Server platforms.

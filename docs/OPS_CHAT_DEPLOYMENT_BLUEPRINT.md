@@ -9,7 +9,7 @@ It uses a real Matrix/Element stack, not a chat shim:
 - `ops-chat-bridge`: Matrix application-service bridge into the dashboard.
 - Keycloak: OIDC identity provider.
 - Dashboard Ops Chat API: canonical chat intake, tickets, audit, and real
-  Hermes/Claude Code agent handoff through the AI proxy.
+  Hermes/Claude Code/Codex agent handoff through the AI proxy.
 
 ## Network Contract
 
@@ -49,6 +49,10 @@ Key OIDC values:
 - `MATRIX_OIDC_ISSUER=https://<host>:8443/realms/<realm>`
 - `MATRIX_OIDC_CLIENT_ID=agentic-ops-chat`
 - `MATRIX_OIDC_CLIENT_SECRET=<vault/runtime secret>`
+- `OPS_CHAT_UPLOAD_DIR=/app/data/ops_chat_uploads`
+- `OPS_CHAT_ARTIFACT_DIR=/app/data/ops_chat_artifacts`
+- `OPS_CHAT_MAX_ATTACHMENT_BYTES=10485760`
+- `OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES=8388608`
 
 The Keycloak client must allow redirects and web origins for the Element URL.
 Use:
@@ -131,6 +135,17 @@ Expected:
   file. The tool validates Python, HTML, Markdown, Bash, JavaScript, and JSON
   basics, then returns the full fenced artifact in chat. This stays no-ticket
   unless the user asks to deploy, edit a real repo/system, or track the work.
+- user file uploads are accepted through Matrix file/image/video/audio events.
+  The bridge downloads the upload, the dashboard stores it under
+  `OPS_CHAT_UPLOAD_DIR`, the harness receives it in `attachments/`, and
+  operational tickets link it as attachment metadata.
+- agent-generated files from `validate-artifact` are persisted under
+  `OPS_CHAT_ARTIFACT_DIR`; small artifacts are uploaded back into Matrix so the
+  user can download them from Element. Animation/video requests should use the
+  bundled `animation-video` skill and return short validated MP4/WebM artifacts.
+- uploaded files are untrusted input. The harness must not execute macros,
+  scripts, links, or embedded instructions from uploads unless a ticket workflow
+  and platform barrier explicitly allow that action.
 - ambiguous requests can be clarified before ticket creation when the answer
   changes routing or scope. Once the ticket is created, recent chat context is
   copied into the ticket description and the Ops Chat note.
@@ -140,7 +155,7 @@ Expected:
 
 Implementation note: Ops Chat does not rely on application-side structured
 parsing to classify the user message. The Matrix bridge hands the message to
-the configured Hermes/Claude harness. That chat agent receives
+the configured Hermes/Claude/Codex harness. That chat agent receives
 `ops_chat_tool.py`; it either answers directly, creates a new ticket and spawns
 the ticket-resolution agent, or continues/cancels a specific existing room
 ticket. A room is not treated as a single-ticket container.

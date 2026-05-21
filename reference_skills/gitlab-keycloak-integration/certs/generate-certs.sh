@@ -6,7 +6,7 @@ set -euo pipefail
 
 CERT_DIR="${1:-/opt/agentic-it/gitlab-keycloak-integration/certs}"
 DOMAIN="${DOMAIN:-keycloak.internal}"
-PUBLIC_IP="${PUBLIC_IP:-192.168.50.222}"
+PUBLIC_IP="${PUBLIC_IP:-127.0.0.1}"
 
 mkdir -p "$CERT_DIR"
 

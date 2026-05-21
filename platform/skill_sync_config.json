@@ -1,11 +1,13 @@
 {
   "version": "2026.05.11",
-  "description": "Production-relevant skills that belong in the portable platform bundle. Media, torrenting, ComfyUI, and unrelated creative skills are intentionally excluded.",
+  "description": "Production-relevant skills that belong in the portable platform bundle. Unrelated media/torrenting/ComfyUI skills are excluded; animation-video is intentionally included for Ops Chat demo artifact generation.",
   "skills": [
     "ai-proxy",
     "account-access-workflow",
     "agentic-ops-dashboard-ui",
+    "animation-video",
     "cicd-security-pipeline",
+    "codex-harness",
     "credential-vault",
     "dashboard-tls",
     "gitlab-keycloak-integration",

@@ -49,21 +49,21 @@ deployment directory:
 ```powershell
 @'
 set -euo pipefail
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/switch_model_route.py --route external --restart
 curl -sS http://127.0.0.1:4001/health
 curl -sS -X POST http://127.0.0.1:4001/api/route \
   -H 'Content-Type: application/json' \
   -d '{"model":"deepseek/deepseek-v4-flash"}'
 '@ | Set-Content -Path "$env:TEMP\switch_agentic_ops_route.sh" -Encoding ascii
-python "C:\Users\cereal\.agents\skills\server-manager\ssh_client.py" --server ai --command-file "$env:TEMP\switch_agentic_ops_route.sh"
+python "C:\Users\me\.agents\skills\server-manager\ssh_client.py" --server ai --command-file "$env:TEMP\switch_agentic_ops_route.sh"
 ```
 
 Use `--route local --restart` to return to local/on-prem routing. Do not run
 the restart from `D:\IT AGENT PROJECT` unless that directory is an installed
 deployment with a complete runtime `.env`; the live deployment is
-`/home/cereal/SOC_TESTING/soc-dashboard`. The live proxy is
-`http://ai-proxy:4001` inside Docker and `http://192.168.50.222:4001` from
+`/opt/agentic-it/SOC_TESTING/soc-dashboard`. The live proxy is
+`http://ai-proxy:4001` inside Docker and `http://127.0.0.1:4001` from
 the LAN. Host `4401` should not be listening in this lab.
 
 ## Stable Credential Access After Skill Sync

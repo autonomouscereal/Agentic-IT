@@ -1,4 +1,4 @@
-﻿---
+---
 name: platform-credentials
 description: >
   Multi-platform credential management for all AI Server services (Agentic Operations, iTop, Wazuh, GitLab, Keycloak, Mailcow).

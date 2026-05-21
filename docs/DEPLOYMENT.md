@@ -10,7 +10,7 @@ Last updated: 2026-05-20.
 - OpenSSL is available on the target host for first-start local CA and server
   certificate generation, or pre-created cert/key files are placed in
   `runtime/tls`.
-- Hermes Agent host auth/mounts or Claude Code credentials are available when agent execution is enabled.
+- Hermes Agent host auth/mounts, Claude Code credentials, or Codex `CODEX_HOME`/runtime API key are available when agent execution is enabled.
 - A reachable model gateway in `AGENT_LLM_BASE_URL`; built-in installs use `http://ai-proxy:4001` inside Docker.
 - Server credentials stored in the server-manager vault.
 
@@ -25,7 +25,7 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | URL | `https://192.168.50.222:25443` |
 | Local API | `http://127.0.0.1:25480` |
 | Proxy | `http://ai-proxy:4001` inside Docker; `http://192.168.50.222:4001` from the LAN |
-| Default harness | Hermes Agent |
+| Default harness | Hermes Agent; Claude Code and Codex selectable |
 | Product default model | `local/agent-default` |
 | Lab external model | `deepseek/deepseek-v4-flash` |
 | Ops Chat | `https://192.168.50.222:3303` Element/Matrix client |
@@ -59,6 +59,11 @@ AI_PROXY_MODEL_ROUTE=local
 AI_PROXY_EXTERNAL_ENABLED=false
 AGENT_DEFAULT_MODEL=local/agent-default
 HERMES_DEFAULT_PROVIDER=dashboard-proxy
+CODEX_HOME_DIR=./runtime/codex
+CODEX_MODEL_PROVIDER=agentic_proxy
+CODEX_SANDBOX=danger-full-access
+CODEX_APPROVAL_POLICY=never
+CODEX_API_KEY=<optional vault/runtime secret>
 DASHBOARD_BIND=127.0.0.1
 DASHBOARD_HTTPS_BIND=0.0.0.0
 DASHBOARD_HTTPS_PORT=25443
@@ -170,6 +175,10 @@ MATRIX_AS_TOKEN=<from vault/runtime secret>
 MATRIX_HS_TOKEN=<from vault/runtime secret>
 OPS_CHAT_AGENT_MODEL=<active route model>
 OPS_CHAT_OUTBOUND_ENABLED=true
+OPS_CHAT_UPLOAD_DIR=/app/data/ops_chat_uploads
+OPS_CHAT_ARTIFACT_DIR=/app/data/ops_chat_artifacts
+OPS_CHAT_MAX_ATTACHMENT_BYTES=10485760
+OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES=8388608
 ```
 
 Deployment:
@@ -190,12 +199,22 @@ curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
 ```
 
 The chat intake turn is harness-driven. The Matrix bridge sends messages to
-`/api/ops-chat/message`, the dashboard invokes Hermes or Claude Code with the
+`/api/ops-chat/message`, the dashboard invokes Hermes, Claude Code, or Codex with the
 `ops_chat_tool.py` toolbelt, and the chat agent either answers directly or uses
 the tool to create a traceable ticket. Do not replace this with an app-side JSON
 classifier. Risky actions still require real downstream barriers: access
 requests, scoped credential leases, provider permission failures, workflow
 policy, and approval gates.
+
+Matrix file/image/video/audio uploads are part of the reference deployment.
+The bridge downloads the Matrix upload and sends it to the dashboard; the
+dashboard stores it under `OPS_CHAT_UPLOAD_DIR`, copies it into the harness
+workspace under `attachments/`, and links it to created/continued tickets as
+attachment metadata. Agent-generated artifacts from `validate-artifact` are
+persisted under `OPS_CHAT_ARTIFACT_DIR` and small files are uploaded back into
+Element. Uploaded files are untrusted input; agents must not execute embedded
+macros, links, shell snippets, or instructions unless a workflow and platform
+gate explicitly allow that action.
 
 Current lab proof is documented in
 `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`. The most recent

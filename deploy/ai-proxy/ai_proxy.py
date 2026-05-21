@@ -4,6 +4,7 @@ Reference AI proxy for the enterprise operations platform.
 It exposes one routable endpoint for both current harness families:
 - Claude Code / Anthropic Messages: /v1/messages
 - Hermes / OpenAI-compatible clients: /v1/chat/completions
+- Codex / OpenAI Responses clients: /v1/responses
 
 Secrets are supplied by the caller or runtime environment. Do not hardcode
 provider tokens in this file.
@@ -12,6 +13,7 @@ import json
 import logging
 import os
 import time
+import uuid
 
 from aiohttp import web
 import httpx
@@ -568,6 +570,188 @@ async def proxy_openai_compatible_chat(request, body, token, provider):
     return web.json_response({"error": error}, status=error.get("status", 503))
 
 
+def responses_text_from_content(content):
+    if isinstance(content, str):
+        return content
+    parts = []
+    for item in content or []:
+        if isinstance(item, str):
+            parts.append(item)
+        elif isinstance(item, dict):
+            parts.append(str(item.get("text") or item.get("input_text") or item.get("output_text") or ""))
+    return "\n".join(part for part in parts if part)
+
+
+def responses_input_to_chat_messages(body):
+    messages = []
+    instructions = str(body.get("instructions") or "").strip()
+    if instructions:
+        messages.append({"role": "system", "content": instructions})
+    payload = body.get("input")
+    if isinstance(payload, str):
+        messages.append({"role": "user", "content": payload})
+    elif isinstance(payload, list):
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("type")
+            if item_type == "function_call_output":
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": item.get("call_id") or item.get("id") or f"call_{uuid.uuid4().hex[:12]}",
+                    "content": str(item.get("output") or ""),
+                })
+                continue
+            role = item.get("role") or ("assistant" if item_type in ("message", "output_text") else "user")
+            text = responses_text_from_content(item.get("content") or item.get("text") or item.get("input_text"))
+            if text:
+                messages.append({"role": role, "content": text})
+    if not messages:
+        messages.append({"role": "user", "content": ""})
+    return messages
+
+
+def responses_tools_to_chat_tools(tools):
+    chat_tools = []
+    for tool in tools or []:
+        if not isinstance(tool, dict):
+            continue
+        if tool.get("type") != "function":
+            continue
+        function = tool.get("function") or {}
+        name = tool.get("name") or function.get("name")
+        if not name:
+            continue
+        chat_tools.append({
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": tool.get("description") or function.get("description") or "",
+                "parameters": tool.get("parameters") or function.get("parameters") or {"type": "object", "properties": {}},
+            },
+        })
+    return chat_tools
+
+
+def response_usage_from_chat(chat_payload):
+    usage = chat_payload.get("usage") or {}
+    input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+    output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+    total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
+    normalized = {
+        "input_tokens": input_tokens or 0,
+        "output_tokens": output_tokens or 0,
+        "total_tokens": total_tokens or 0,
+    }
+    if usage.get("output_tokens_details"):
+        normalized["output_tokens_details"] = usage.get("output_tokens_details")
+    elif usage.get("completion_tokens_details"):
+        normalized["output_tokens_details"] = usage.get("completion_tokens_details")
+    if usage.get("input_tokens_details"):
+        normalized["input_tokens_details"] = usage.get("input_tokens_details")
+    elif usage.get("prompt_tokens_details"):
+        normalized["input_tokens_details"] = usage.get("prompt_tokens_details")
+    return normalized
+
+
+def response_payload_from_chat(chat_payload, model):
+    choice = (chat_payload.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    text = message.get("content") or ""
+    output = []
+    for call in message.get("tool_calls") or []:
+        function = call.get("function") or {}
+        output.append({
+            "type": "function_call",
+            "id": f"fc_{uuid.uuid4().hex[:24]}",
+            "call_id": call.get("id") or f"call_{uuid.uuid4().hex[:24]}",
+            "name": function.get("name"),
+            "arguments": function.get("arguments") or "{}",
+            "status": "completed",
+        })
+    if text or not output:
+        output.append({
+            "type": "message",
+            "id": f"msg_{uuid.uuid4().hex[:24]}",
+            "status": "completed",
+            "role": "assistant",
+            "content": [{
+                "type": "output_text",
+                "text": text,
+                "annotations": [],
+            }],
+        })
+    return {
+        "id": f"resp_{uuid.uuid4().hex}",
+        "object": "response",
+        "created_at": int(time.time()),
+        "status": "completed",
+        "model": model,
+        "output": output,
+        "output_text": text,
+        "usage": response_usage_from_chat(chat_payload),
+    }
+
+
+async def sse_response_payload(request, payload):
+    response = web.StreamResponse(
+        status=200,
+        headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"},
+    )
+    await response.prepare(request)
+
+    async def send(data):
+        event_type = data.get("type") if isinstance(data, dict) else ""
+        prefix = f"event: {event_type}\n" if event_type else ""
+        await response.write(f"{prefix}data: {json.dumps(data)}\n\n".encode("utf-8"))
+
+    await send({"type": "response.created", "response": payload})
+    for output_index, item in enumerate(payload.get("output") or []):
+        await send({"type": "response.output_item.added", "output_index": output_index, "item": item})
+        if item.get("type") == "message":
+            for idx, part in enumerate(item.get("content") or []):
+                await send({"type": "response.content_part.added", "item_id": item.get("id"), "output_index": output_index, "content_index": idx, "part": part})
+                if part.get("type") == "output_text" and part.get("text"):
+                    await send({"type": "response.output_text.delta", "item_id": item.get("id"), "output_index": output_index, "content_index": idx, "delta": part.get("text")})
+                    await send({"type": "response.output_text.done", "item_id": item.get("id"), "output_index": output_index, "content_index": idx, "text": part.get("text")})
+                await send({"type": "response.content_part.done", "item_id": item.get("id"), "output_index": output_index, "content_index": idx, "part": part})
+        await send({"type": "response.output_item.done", "output_index": output_index, "item": item})
+    await send({"type": "response.completed", "response": payload})
+    await response.write(b"data: [DONE]\n\n")
+    await response.write_eof()
+    return response
+
+
+async def proxy_responses(request, body, token):
+    requested_model = body.get("model", "")
+    provider, routed_model = route_for_chat_model(requested_model)
+    chat_body = {
+        "model": routed_model,
+        "messages": responses_input_to_chat_messages(body),
+        "temperature": body.get("temperature", 0),
+        "stream": False,
+    }
+    chat_tools = responses_tools_to_chat_tools(body.get("tools"))
+    if chat_tools:
+        chat_body["tools"] = chat_tools
+    if token == LM_STUDIO_TOKEN or provider == "lmstudio":
+        chat_response = await proxy_lmstudio_chat(request, chat_body, token)
+    elif provider in ("nous", "openrouter"):
+        chat_response = await proxy_chat_with_fallbacks(request, chat_body, token, provider)
+    else:
+        chat_response = await proxy_openai_compatible_chat(request, chat_body, token, provider)
+    if getattr(chat_response, "status", 500) >= 400:
+        return chat_response
+    try:
+        chat_payload = json.loads((chat_response.body or b"{}").decode("utf-8"))
+    except Exception as exc:
+        return web.json_response({"error": f"Invalid upstream chat response: {exc}"}, status=502)
+    payload = response_payload_from_chat(chat_payload, requested_model or routed_model)
+    if body.get("stream"):
+        return await sse_response_payload(request, payload)
+    return web.json_response(payload)
+
+
 async def handler(request):
     path = request.match_info.get("path", request.path)
     if path == "health" and request.method == "GET":
@@ -656,6 +840,12 @@ async def handler(request):
         if provider in ("nous", "openrouter"):
             return await proxy_chat_with_fallbacks(request, body, token, provider)
         return await proxy_openai_compatible_chat(request, body, token, provider)
+    if path == "v1/responses" and request.method == "POST":
+        body = await request.json()
+        model = body.get("model", "")
+        token = get_client_auth(request)
+        log.info("responses -> model=%s auth=%s ua=%s", model, auth_preview(token), request.headers.get("user-agent", ""))
+        return await proxy_responses(request, body, token)
     return web.json_response({"error": f"Not found: {path}"}, status=404)
 
 

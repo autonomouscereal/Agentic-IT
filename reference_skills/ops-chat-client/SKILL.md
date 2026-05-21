@@ -22,15 +22,15 @@ Reference stack:
 - Matrix application-service bridge: `ops-chat-bridge`
 - Identity provider: Keycloak OIDC
 - Dashboard endpoint: `/api/ops-chat/message`
-- Agent execution: dashboard `agent_runner.spawn_agent()` using Hermes or
-  Claude Code through the configured AI proxy
+- Agent execution: dashboard `agent_runner.spawn_agent()` using Hermes,
+  Claude Code, or Codex through the configured AI proxy
 
 ## Contract
 
 - Matrix/Element is the user-facing chat surface.
 - Synapse owns rooms, events, and OIDC login.
 - The bridge receives Matrix room messages and calls the dashboard Ops Chat API.
-- The dashboard hands each new chat message to the configured Hermes/Claude
+- The dashboard hands each new chat message to the configured Hermes/Claude/Codex
   harness with an `ops_chat_tool.py` toolbelt.
 - General harmless chat can be answered without a ticket.
 - The chat agent may ask one concise pre-ticket clarification when the answer
@@ -99,6 +99,15 @@ Reference stack:
 - The bridge sends fenced code with safe Matrix `formatted_body` HTML, so
   Element renders code blocks for developer one-off scripts without executing
   user HTML.
+- The bridge handles Matrix file/image/video/audio uploads. Uploaded files are
+  stored in the dashboard runtime upload directory, copied into the chat
+  harness workspace under `attachments/`, linked to operational tickets as
+  attachment metadata, and treated as untrusted input. Agent-generated
+  artifacts from `validate-artifact` can be returned to Element as downloadable
+  Matrix files when small enough for the demo bridge.
+- Animation/video requests use the bundled `animation-video` skill. Agents
+  should create short deterministic MP4/WebM artifacts, validate them, and send
+  the artifact back through Ops Chat instead of pasting binary data.
 - Never perform hidden work outside tickets. If the user asks for account,
   system, email, deployment, security, access, change, research, or repair work,
   create or continue a ticket.
@@ -272,7 +281,7 @@ ticket creation, and real agent handoff.
 One-room Element marathon:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://127.0.0.1:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
@@ -346,7 +355,7 @@ Requester/affected-user proof, latest live lab:
 Developer artifact proof:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://127.0.0.1:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
@@ -480,10 +489,10 @@ queue or tier. It writes a `ticket-assignment` note for auditability.
     `spawn_agent_disabled_by_caller` and leaving zero active agents.
 - Do not replace this with app-side JSON parsing. If the model fails to call
   the tool, fix the harness prompt/tool contract and retry through the harness.
-- Element Web is served on `https://192.168.50.222:3303`; the old
-  `http://192.168.50.222:3301` URL redirects there. Matrix client and OIDC
-  callback traffic also work same-origin under `https://192.168.50.222:3303`;
-  `https://192.168.50.222:3302` remains available for direct Synapse
+- Element Web is served on `https://127.0.0.1:3303`; the old
+  `http://127.0.0.1:3301` URL redirects there. Matrix client and OIDC
+  callback traffic also work same-origin under `https://127.0.0.1:3303`;
+  `https://127.0.0.1:3302` remains available for direct Synapse
   diagnostics.
 - Playwright no-bypass browser proof passed as `demo_chat_live11`, including
   dashboard login, Element/Keycloak login, browser Matrix health, and Matrix DM
@@ -493,7 +502,7 @@ queue or tier. It writes a `ticket-assignment` note for auditability.
   and stopped cleanly in `awaiting_user_response` with no active process left.
 - The direct bot-profile flow passed with marker
   `element-direct-agent-ui-1779283071`: open
-  `https://192.168.50.222:3303/#/user/@agentic-ops:agentic-ops.local`, click
+  `https://127.0.0.1:3303/#/user/@agentic-ops:agentic-ops.local`, click
   **Send message**, send the request, receive ticket `909`, and spawn Hermes
   agent `308` / task `305`.
 - Playwright login proof passed as `demo_chat_alice`, landing at `#/home`.

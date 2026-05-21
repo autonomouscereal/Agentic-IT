@@ -1,3 +1,8 @@
+---
+name: mempalace-mcp
+description: Use the legacy MemPalace MCP integration for targeted memory lookup or compatibility checks when the PostgreSQL agent-memory backend is not the right source.
+---
+
 # MemPalace MCP Skill
 
 This skill allows Codex to interact with the MemPalace memory system via its MCP server. Use this to store, search, and manage your long-term verbatim memories.

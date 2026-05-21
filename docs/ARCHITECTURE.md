@@ -35,7 +35,7 @@ permanent center of the architecture.
 | Database | PostgreSQL 16 | PostgreSQL is mandatory |
 | Frontend | Vanilla HTML/CSS/JS | Can be rebuilt as long as API contract remains |
 | Ticket provider | iTop plus local provider | `services/ticket_provider.py` and `services/provider_registry.py` |
-| Agent harness | Hermes Agent by default; Claude Code fallback | `services/agent_harness.py` |
+| Agent harness | Hermes Agent by default; Claude Code and Codex fallback/selectable | `services/agent_harness.py` |
 | Model access | Built-in `ai-proxy` at `AGENT_LLM_BASE_URL` | Any OpenAI/Anthropic-compatible proxy/harness bridge |
 | Approval system | Dashboard `change_requests` table/API | Can later sync to external CAB/change platforms |
 | Memory/learning | Skills, KB, workflows, postmortems | Can later ingest external KB/tickets/docs |
@@ -51,7 +51,7 @@ Core tables:
 
 - `tickets`: canonical ticket record plus provider metadata.
 - `ticket_notes`: internal/user-visible notes from dashboard, agents, sync jobs, and future providers.
-- `ticket_attachments`: metadata for attachments; binary storage is intentionally external.
+- `ticket_attachments`: metadata for attachments. Ops Chat reference uploads are stored under runtime `data/ops_chat_uploads`; enterprise binary storage can be replaced by object storage/DMS.
 - `agents`: agent instance lifecycle.
 - `agent_tasks`: runnable unit of work, prompt, status, checkpoints, output, PID, work directory.
 - `change_requests`: approval gate for potentially destructive actions.
@@ -124,6 +124,12 @@ Claude Code remains available with:
 
 ```bash
 claude --allowedTools "Read,Write,Bash(curl *)" -p --settings <settings> --model <model> --permission-mode acceptEdits --no-session-persistence --output-format stream-json --verbose "<prompt>"
+```
+
+Codex remains available with:
+
+```bash
+codex exec --json --skip-git-repo-check --sandbox danger-full-access --model <model> --config 'approval_policy="never"' --config 'model_provider="agentic_proxy"' --config 'model_providers.agentic_proxy.base_url="<proxy>/v1"' --config 'model_providers.agentic_proxy.env_key="OPENAI_API_KEY"' --config 'model_providers.agentic_proxy.wire_api="responses"' "<prompt>"
 ```
 
 8. Runner streams stdout/stderr into `output.log` and mirrors tails into `agent_tasks.output`.

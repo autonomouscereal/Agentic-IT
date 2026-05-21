@@ -2,6 +2,23 @@
 
 Last updated: 2026-05-20.
 
+## Agent Harness Validation
+
+2026-05-21 Codex harness checkpoint:
+
+- Direct Codex CLI proof passed inside the API container with
+  `codex-cli 0.132.0`, model `local/agent-default`, proxy
+  `http://ai-proxy:4001/v1`, and marker `CODEX_SKILLS_OK`.
+- Dashboard-spawned Codex proof passed on ticket `1393`: agent `365`, task
+  `362`, harness `codex`, model `local/agent-default`, note marker
+  `CODEX_HARNESS_CLEAN_PASS`, ticket status `resolved`.
+- The API container mounts `/root/.agents/skills` from deployable
+  `reference_skills`; Codex skill frontmatter loads cleanly.
+- Containerized Codex uses `CODEX_SANDBOX=danger-full-access` because hardened
+  Docker hosts commonly disable the unprivileged user namespaces required by
+  `workspace-write`. The enforceable boundary remains dashboard RBAC, scoped
+  vault leases, approval gates, and the API container.
+
 ## Local Source Validation
 
 From the workspace root:

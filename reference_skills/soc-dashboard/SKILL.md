@@ -1,4 +1,4 @@
-﻿---
+---
 name: soc-dashboard
 description: >
   Agentic Operations control plane - FastAPI + PostgreSQL + vanilla JS
@@ -235,7 +235,7 @@ Validation evidence from 2026-05-19:
   reachability passed for GitLab, iTop, Keycloak, Mailcow UI, Roundcube route,
   and SearXNG. The AI proxy remains local-only by design.
 - Source regression passed: `147 passed`, JS syntax checks, text hygiene, and
-  HTTPS smoke against `https://192.168.50.222:25443`.
+  HTTPS smoke against `https://127.0.0.1:25443`.
 - Setup fan-out regression passed: source tests `147 passed`; live hardened API
   smoke created parent setup ticket `624` with `7` scoped child module tickets;
   authenticated Chrome verified the Setup page per-module actions and no

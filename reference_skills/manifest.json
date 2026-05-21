@@ -1,54 +1,103 @@
 {
-  "generated_at": "2026-05-21T05:31:43.413741+00:00",
+  "generated_at": "2026-05-21T06:43:13.873808+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
       "name": "ai-proxy",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\ai-proxy",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 5810,
-          "sha256": "11bbd7a88f1e29e4b28afad5ac1a94e64abcbbba6210d079c395f4baa1af746c"
+          "size": 6095,
+          "sha256": "9f84c388dd2cb2925968e69fddbdbaeeb6806870539670b7836f4f627e285c82"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "account-access-workflow",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\account-access-workflow",
       "files": [
         {
           "path": "SKILL.md",
           "size": 8813,
           "sha256": "dfbba8b81c61be15ede7b3a88d850caa13d6df134554bf2376004d3ae09bcc59"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "agentic-ops-dashboard-ui",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\agentic-ops-dashboard-ui",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 5845,
-          "sha256": "80206cc071449ef265e0c0cbdd38949bd580e8027286b8ff1b919144eddf5212"
+          "size": 5717,
+          "sha256": "3e88a91653cdec5caab4ac85c3ffd5dde6524e7c277e7a2e4311a2747b8f10c4"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
+    },
+    {
+      "name": "animation-video",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\animation-video",
+      "files": [
+        {
+          "path": "agents/openai.yaml",
+          "size": 236,
+          "sha256": "90b21e47142118cbb2ad219fa1cabd7c5792d8fd8772f457d95d4483b8e8aab1"
+        },
+        {
+          "path": "references/research-summary.md",
+          "size": 1471,
+          "sha256": "15daa16e1ad1761162ab0c53be7c49920981bf540894912a515e558d000b83df"
+        },
+        {
+          "path": "scripts/verify_video.py",
+          "size": 3588,
+          "sha256": "87e52a9e8a85ea0e7e70e15697935b0227bec4c34d7054e15e48ba00f2a90792"
+        },
+        {
+          "path": "SKILL.md",
+          "size": 2948,
+          "sha256": "5d0dc17c5c4fb0862dbd7682028d3ff33b3fba80cc8daf682da2d28c9a5f91f1"
+        }
+      ],
+      "copied_files": 4,
+      "skipped_paths": 0
     },
     {
       "name": "cicd-security-pipeline",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\cicd-security-pipeline",
       "files": [
         {
           "path": "SKILL.md",
           "size": 8919,
           "sha256": "9e65a23c1fc6a47536bee2233d58946dace04e4c8b56d8b4ac697ac95360010a"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
+    },
+    {
+      "name": "codex-harness",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\codex-harness",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 3071,
+          "sha256": "32139966c3bcdce983f63ad777da91e7707cc2c9273d0f3c7af7192a9308cdcc"
+        }
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "credential-vault",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\credential-vault",
       "files": [
         {
           "path": "scripts/load_secret.sh",
@@ -60,26 +109,30 @@
           "size": 2122,
           "sha256": "c5af33c73379841ad8ba53e5b4ef2a91316eb3a778c9f2917edfa712547472e8"
         }
-      ]
+      ],
+      "copied_files": 2,
+      "skipped_paths": 0
     },
     {
       "name": "dashboard-tls",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\dashboard-tls",
       "files": [
         {
           "path": "SKILL.md",
           "size": 3327,
           "sha256": "1191a6268efe64bc436ae6a86db32a617ecab82637e9574f3ebd1b68b89690f9"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "gitlab-keycloak-integration",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\gitlab-keycloak-integration",
       "files": [
         {
           "path": "certs/generate-certs.sh",
-          "size": 2420,
+          "size": 2415,
           "sha256": "7460750fece88a1cd337d699da20255a5072d5aced43b589515ae9622d9a7728"
         },
         {
@@ -152,11 +205,13 @@
           "size": 16818,
           "sha256": "3229b7bd7bd7cf3c86b36e0fc044c17c2b18250a33caba009c5dce4c735ba27d"
         }
-      ]
+      ],
+      "copied_files": 15,
+      "skipped_paths": 0
     },
     {
       "name": "gitlab-manager",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\gitlab-manager",
       "files": [
         {
           "path": ".env.example",
@@ -223,22 +278,26 @@
           "size": 12695,
           "sha256": "3f4711568186672660bbf0d852e95d95c9cbae117b3d89cdb55767de55d4466c"
         }
-      ]
+      ],
+      "copied_files": 13,
+      "skipped_paths": 0
     },
     {
       "name": "hermes-harness",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\hermes-harness",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 8685,
+          "size": 8686,
           "sha256": "72d13aa0beb0762ee3d3a90ca21fcb0ae4606cdad5398a24ea4c08c0040535d3"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "iam-bridge",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\iam-bridge",
       "files": [
         {
           "path": ".env.example",
@@ -285,11 +344,13 @@
           "size": 4746,
           "sha256": "737a45f474350eef2cecdc287996406291908c2547518aabb98721a92be0178e"
         }
-      ]
+      ],
+      "copied_files": 9,
+      "skipped_paths": 0
     },
     {
       "name": "itop-manager",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\itop-manager",
       "files": [
         {
           "path": "DEPLOYMENT.md",
@@ -306,11 +367,13 @@
           "size": 11350,
           "sha256": "e301d64c0ff8c9baed53b9949ecfc25955fdd4865fd67f95b024e21ab27c4935"
         }
-      ]
+      ],
+      "copied_files": 3,
+      "skipped_paths": 0
     },
     {
       "name": "keycloak-mailcow-bridge",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\keycloak-mailcow-bridge",
       "files": [
         {
           "path": ".env.example",
@@ -417,11 +480,13 @@
           "size": 5633,
           "sha256": "da2a37cd89f42163f1878bb09576a4cfbe4c82687353b3a86f22d5502d660bd8"
         }
-      ]
+      ],
+      "copied_files": 21,
+      "skipped_paths": 0
     },
     {
       "name": "keycloak-manager",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\keycloak-manager",
       "files": [
         {
           "path": ".env.example",
@@ -468,44 +533,52 @@
           "size": 5912,
           "sha256": "5f9c5530edf3e2dada7d44a069f126ab82cdd18041c290c15d676d96675b78f6"
         }
-      ]
+      ],
+      "copied_files": 9,
+      "skipped_paths": 0
     },
     {
       "name": "login-troubleshooting",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\login-troubleshooting",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 17922,
-          "sha256": "dd60394aa131de6d7e96b71ee2cfd34c9bddc81d6fd6ca63797c018d8ce031dd"
+          "size": 17919,
+          "sha256": "82552d1c3d465fb20a0d15d9099d00e25f931ae5f1a59f5026756c278edd72cf"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "mailcow",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\mailcow",
       "files": [
         {
           "path": "SKILL.md",
           "size": 42983,
           "sha256": "6f76ea3539e9c736c946829d7c918774d91a690ec4724010e155606c6d144fe3"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "mailcow-wazuh-integration",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\mailcow-wazuh-integration",
       "files": [
         {
           "path": "SKILL.md",
           "size": 20999,
           "sha256": "19580725e9e7736cfae2b9033e794c82bfd036a46b2d160e9846e3217ff47c54"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "mempalace-mcp",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\mempalace-mcp",
       "files": [
         {
           "path": "auto_ingest.py",
@@ -539,85 +612,99 @@
         },
         {
           "path": "SKILL.md",
-          "size": 3548,
-          "sha256": "e69cd9975428ed4d6603962f1eac79f9239528ff4d35ef5dc6f9402141315e81"
+          "size": 3748,
+          "sha256": "6546cdeb3a2bddaa5cb46d4bdc13a28701ad38798a4611b33782217858fa0418"
         },
         {
           "path": "write_drawer.py",
           "size": 2318,
           "sha256": "ca34a0d51060e0d5a7c6aef15d50410ac2692b245d30ec9857e07ce1f1e8364d"
         }
-      ]
+      ],
+      "copied_files": 8,
+      "skipped_paths": 0
     },
     {
       "name": "nuclei-scanner",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\nuclei-scanner",
       "files": [
         {
           "path": "SKILL.md",
           "size": 939,
           "sha256": "7093cab39ad4603bc4019d0b748ed5ed54acd1108ff1f3aa7f5cca5d1cc1325f"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "ops-chat-client",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\ops-chat-client",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 28582,
-          "sha256": "ae948d996b1ac85cca72f6698ab77847192d01bcd4aea79677b6680527f7e5a7"
+          "size": 29217,
+          "sha256": "f051570d77b71d8bab9bff9fdf3c0a1f8dd4af1d600fa5c2f31c238cedbeec7c"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "owasp-zap-scanner",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\owasp-zap-scanner",
       "files": [
         {
           "path": "SKILL.md",
           "size": 1012,
           "sha256": "5d8ac8b348698bbbf5c669d554bd3351683149ca1edac8b04c9002530be28c2e"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "platform-credentials",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\platform-credentials",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 6919,
-          "sha256": "fab8ce21a5f5fe212813fb8c6ad9282bced37d503f2afe5392713f1145b80c42"
+          "size": 6916,
+          "sha256": "efad7157be16a349d22fc5c1528af17e9b868ecdb3e32ea769a1c932e7be4944"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "report-phish",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\report-phish",
       "files": [
         {
           "path": "SKILL.md",
           "size": 8887,
           "sha256": "627ea64693b2490c390662a6bbf1daa69dd7ae8ac75b6293257f4a8ef9b5c00c"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "roundcube-webmail",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\roundcube-webmail",
       "files": [
         {
           "path": "SKILL.md",
           "size": 5354,
           "sha256": "877b8c2dedba15c2b0a4e727dfb108f0a78bf9712711fa4e02c44a89b41776a1"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "server-manager",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\server-manager",
       "files": [
         {
           "path": ".env.template",
@@ -696,7 +783,7 @@
         },
         {
           "path": "SKILL.md",
-          "size": 12565,
+          "size": 12562,
           "sha256": "773672714f1e8fadb9dc089d1ee1f9bf6f9ef25519b0894ea67989ef3bdff55b"
         },
         {
@@ -709,22 +796,26 @@
           "size": 1570,
           "sha256": "ca9980ba9533e336e23b1c22e3940db406dd539fd9eec1bf4613e419e905cee2"
         }
-      ]
+      ],
+      "copied_files": 18,
+      "skipped_paths": 6
     },
     {
       "name": "semgrep-scanner",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\semgrep-scanner",
       "files": [
         {
           "path": "SKILL.md",
           "size": 1725,
           "sha256": "994c5b5ca2679705f771271652f445548d03bec278f71f8fbcb49a012f18ec95"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "siem-ticket-bridge",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\siem-ticket-bridge",
       "files": [
         {
           "path": ".env.example",
@@ -826,11 +917,13 @@
           "size": 3347,
           "sha256": "d3c5c56de0be7064e71f6d97178f8127319c1d97ab32e575609d15fa1a7fc816"
         }
-      ]
+      ],
+      "copied_files": 20,
+      "skipped_paths": 0
     },
     {
       "name": "soc-bridge",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\soc-bridge",
       "files": [
         {
           "path": "DEPLOYMENT.md",
@@ -842,11 +935,13 @@
           "size": 5207,
           "sha256": "3fc2ab7660b75d1125440ae4424f87ee47fb793eb2d531c1eeb93b224b051a55"
         }
-      ]
+      ],
+      "copied_files": 2,
+      "skipped_paths": 0
     },
     {
       "name": "soc-dashboard",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\soc-dashboard",
       "files": [
         {
           "path": "architecture.md",
@@ -855,58 +950,68 @@
         },
         {
           "path": "SKILL.md",
-          "size": 48019,
-          "sha256": "17681b25ba3b4422c2da65840d10dba0b81dff2a969e864b0b9be4b6b2acd47d"
+          "size": 47180,
+          "sha256": "03663ee8fdf351d264b14a240056fd66923340582d3892f1d3c748f39895b686"
         }
-      ]
+      ],
+      "copied_files": 2,
+      "skipped_paths": 0
     },
     {
       "name": "soc-suricata",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\soc-suricata",
       "files": [
         {
           "path": "SKILL.md",
           "size": 2987,
           "sha256": "d84cf356cdd80d7b5f1e3545ab18303c19385eff355e51d67629b6c2fea76a2f"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "soc-testing",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\soc-testing",
       "files": [
         {
           "path": "SKILL.md",
           "size": 1281,
           "sha256": "dfe27db5edde7199f0a1b1bb2b6216f96efb307fdb204d6b68d467c8856051ca"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "soc-zeek",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\soc-zeek",
       "files": [
         {
           "path": "SKILL.md",
           "size": 2625,
           "sha256": "a569a03bacf5580f420a568dcbbe0e5f5b87d92a51e3cd7e9df5dc83be0f1439"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "trivy-scanner",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\trivy-scanner",
       "files": [
         {
           "path": "SKILL.md",
           "size": 1033,
           "sha256": "45cd8a46151e68656b9013e20f3fa811675254544b1745ff8193944be45fe51c"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "vault-backup",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\vault-backup",
       "files": [
         {
           "path": "backup.py",
@@ -918,11 +1023,13 @@
           "size": 1940,
           "sha256": "35110583c54b1e7165015c70369772cd95decf1c0648cacf4f68723db6c1b190"
         }
-      ]
+      ],
+      "copied_files": 2,
+      "skipped_paths": 13
     },
     {
       "name": "wazuh-bridge",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\wazuh-bridge",
       "files": [
         {
           "path": ".env.example",
@@ -969,11 +1076,13 @@
           "size": 4566,
           "sha256": "625bac4b0d77cacafe579ce7403eceed514cf11ebf34882ffd28ed60c1a5f4fc"
         }
-      ]
+      ],
+      "copied_files": 9,
+      "skipped_paths": 0
     },
     {
       "name": "wazuh-edr-sysmon",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\wazuh-edr-sysmon",
       "files": [
         {
           "path": ".env.example",
@@ -1060,55 +1169,65 @@
           "size": 8088,
           "sha256": "94e96a6b87501e39ef0a999f04a924c59b637fc8cb1109475a0548bc9b0a836f"
         }
-      ]
+      ],
+      "copied_files": 17,
+      "skipped_paths": 0
     },
     {
       "name": "wazuh-manager",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\wazuh-manager",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 13743,
-          "sha256": "965a300342969c83e72563f366d54a6bd6673f13a840ae1d2c9b75cf0bc1e9d0"
+          "size": 13943,
+          "sha256": "80ae475b3e304dfc780408675b191c7c679ac69c2f07f2821dbd3b61552c059e"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "searxng-deployment",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\searxng-deployment",
       "files": [
         {
           "path": "SKILL.md",
           "size": 1805,
           "sha256": "eb8ed6466f1e0d0477c312af73f1f4e07507a846589aba1ac59ba530fe5485b2"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "service-desk-intake",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\service-desk-intake",
       "files": [
         {
           "path": "SKILL.md",
           "size": 14583,
           "sha256": "2d0c7f5146adc80d0a1986a779adb53ef624b6ff2f280edb649dee364846fc30"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "ticket-provider-adapters",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\ticket-provider-adapters",
       "files": [
         {
           "path": "SKILL.md",
           "size": 5092,
           "sha256": "1e75c3361245c305a2315b9ece4b0b40502d0b0ce63043e2967a54a4a8b6e5f3"
         }
-      ]
+      ],
+      "copied_files": 1,
+      "skipped_paths": 0
     },
     {
       "name": "web_research",
-      "source": "bundle",
+      "source": "C:\\Users\\cereal\\.agents\\skills\\web_research",
       "files": [
         {
           "path": "SKILL.md",
@@ -1120,7 +1239,9 @@
           "size": 5408,
           "sha256": "6b3a7951e753750a74a595c1d68cd15946780807c116a2c2e532bf3b3d3813e7"
         }
-      ]
+      ],
+      "copied_files": 2,
+      "skipped_paths": 6675
     }
   ]
 }

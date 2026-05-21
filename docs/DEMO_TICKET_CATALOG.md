@@ -21,6 +21,7 @@ for this curation pass.
 
 | Story | Dashboard Ticket | Provider | Evidence |
 | --- | --- | --- | --- |
+| Codex harness proof through the AI proxy and scoped dashboard session | `1393` | iTop `812` | Codex agent `365` / task `362`, model `local/agent-default`, wrote `CODEX_HARNESS_CLEAN_PASS` note through `dashboard_api.py`, updated ticket to resolved |
 | Same chat room creates a procurement ticket, then the user cancels it when scope changes | `1384` | iTop `803` | requester `Demo User`, affected user `Alice`, cancellation note says Alice is allergic to watermelon, ticket status changed by `ops-chat-agent` |
 | Replacement request from the same chat becomes a distinct new ticket instead of mutating the cancelled ticket | `1385` | iTop `804` | requester `Demo User`, affected user `Alice`, routed to Procurement & Vendor Management with a separate Ops Chat message hash |
 | Urgent account-access request from the same chat becomes a separate P1 identity ticket, then receives clarification that the issue is Keycloak SSO/MFA | `1386` | iTop `805` | requester/affected user `Demo User`, owning group Identity & Access, user-response note records the Keycloak SSO/MFA clarification |
@@ -58,24 +59,27 @@ For the polished demo, use this order in the `Demo Proofs` filter:
 1. `1384`, `1385`, `1386` - opening intake proof: one chat room can create,
    cancel, replace, and separately route multiple work items without treating
    the room as one ticket forever.
-2. `1309` - DevSecOps intake proof: chat-created delivery-gate ticket, iTop
+2. `1393` - harness proof: Codex is selectable beside Hermes and Claude Code,
+   runs through the same `4001` AI proxy, uses a scoped dashboard session, and
+   resolves a ticket without exposing service-token secrets.
+3. `1309` - DevSecOps intake proof: chat-created delivery-gate ticket, iTop
    sync, urgency follow-up, and no implicit production approval.
-3. `1282` - requester/affected-user proof: agent-created software-install
+4. `1282` - requester/affected-user proof: agent-created software-install
    ticket with clean contact metadata.
-4. `1176` - reassignment proof: scope changed to Tier 2 Endpoint Support with
+5. `1176` - reassignment proof: scope changed to Tier 2 Endpoint Support with
    priority escalation.
-5. `695` - lead deep-work proof: URL-safe phishing plus EDR with requester response,
+6. `695` - lead deep-work proof: URL-safe phishing plus EDR with requester response,
    steering, Wazuh-style access wall, containment approval, postmortem, and
    provider close recovery.
-6. `690` - cleaner learning proof: same phishing/EDR pattern with promoted
+7. `690` - cleaner learning proof: same phishing/EDR pattern with promoted
    workflow evidence.
-7. `83` - CI/CD proof: GitLab runner gate fails, agent remediates, MR opens,
+8. `83` - CI/CD proof: GitLab runner gate fails, agent remediates, MR opens,
    final pipeline passes, deployment gate completes.
-8. `580` - Mailcow/Roundcube proof: Report Phish button creates ticket,
+9. `580` - Mailcow/Roundcube proof: Report Phish button creates ticket,
    quarantine evidence, and postmortem.
-9. `525` and `539` - least-privilege proof: agents hit real permission walls,
+10. `525` and `539` - least-privilege proof: agents hit real permission walls,
    create access requests, and resume only after approval/scoped lease.
-10. `531` - older enterprise proof that still tells the full approval/access
+11. `531` - older enterprise proof that still tells the full approval/access
    story, useful if you want a second complete incident.
 
 ## Live Demo Path
@@ -84,26 +88,29 @@ For the polished demo, use this order in the `Demo Proofs` filter:
 2. Start with tickets `1384`, `1385`, and `1386` for the newer intake proof:
    cancellation, replacement, urgent account access, and Keycloak SSO/MFA
    clarification from one chat workspace without duplicate ticket bloat.
-3. Use ticket `1309` to show chat-created DevSecOps work synced to iTop.
-4. Use ticket `1282` to show requester and affected-user metadata.
-5. Use ticket `1176` to show reassignment/escalation from the ticket trail.
-6. Move to ticket `695` for the newest URL-safe 621/531 hybrid proof:
+3. Use ticket `1393` if the audience asks whether Codex itself can be used as
+   a worker harness: it proves Codex behind the proxy, scoped dashboard auth,
+   ticket note, and ticket resolution.
+4. Use ticket `1309` to show chat-created DevSecOps work synced to iTop.
+5. Use ticket `1282` to show requester and affected-user metadata.
+6. Use ticket `1176` to show reassignment/escalation from the ticket trail.
+7. Move to ticket `695` for the newest URL-safe 621/531 hybrid proof:
    requester response, dashboard/iTop steering, safe sandbox/reputation
    handling with no direct suspicious URL fetch, Wazuh-style access wall,
    approval gates, containment, postmortem, and the recovered provider close.
-7. Use ticket `690` for the cleaner promoted-workflow version of the same
+8. Use ticket `690` for the cleaner promoted-workflow version of the same
    story:
    user clarification, dashboard/iTop steering, sandbox evidence with
    `direct_fetch_performed=false`, Wazuh access wall, approval gates,
    containment, postmortem, and workflow learning.
-8. Use ticket `531` as the older full enterprise story: user clarification,
+9. Use ticket `531` as the older full enterprise story: user clarification,
    access wall, approval gate, scoped lease, containment, and promoted learning.
-9. Use ticket `83` to show real GitLab/CI/CD proof: failed scanner gate,
+10. Use ticket `83` to show real GitLab/CI/CD proof: failed scanner gate,
    agent remediation, MR, final passing pipeline, and deployment approval.
-10. Use ticket `580` with Mailcow/Roundcube open beside it to show email
+11. Use ticket `580` with Mailcow/Roundcube open beside it to show email
    quarantine evidence.
-11. Use ticket `525` or `539` to explain least-privilege credential leases.
-12. Use the ticket modal's `Full Audit Trail` button when you need raw evidence;
+12. Use ticket `525` or `539` to explain least-privilege credential leases.
+13. Use the ticket modal's `Full Audit Trail` button when you need raw evidence;
    otherwise `Evidence Trail -> Sequence of Events` is the best
    audience-facing view.
 
@@ -158,6 +165,10 @@ Current cleanup target state:
   `Sequence of Events`, includes model-turn start markers, includes final
   resolution evidence, and trims duplicate audit/event rows from the main
   human narrative.
+- On 2026-05-21, ticket `1393` was added as the clean Codex harness proof:
+  Codex CLI `0.132.0` ran as agent `365` through the `4001` AI proxy, used the
+  scoped workspace dashboard session, wrote a ticket note, and resolved the
+  ticket.
 
 ## Regression Cases Not For Lead Demo
 

@@ -58,12 +58,12 @@ python scripts/switch_model_route.py --route local --restart
 ```
 
 For the current live lab, switch route profiles on server `ai` from
-`/home/cereal/SOC_TESTING/soc-dashboard` through the `server-manager` skill.
+`/opt/agentic-it/SOC_TESTING/soc-dashboard` through the `server-manager` skill.
 The live proxy is `http://ai-proxy:4001` inside Docker and
-`http://192.168.50.222:4001` from the LAN:
+`http://127.0.0.1:4001` from the LAN:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/switch_model_route.py --route external --restart
 curl -sS -X POST http://127.0.0.1:4001/api/route \
   -H 'Content-Type: application/json' \

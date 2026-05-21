@@ -1,3 +1,8 @@
+---
+name: wazuh-manager
+description: Manage and troubleshoot the Wazuh SIEM manager, including service health, alerts, rules, and dashboard validation for the Agentic Operations reference stack.
+---
+
 # Wazuh Manager Skill - SOC SIEM Management
 
 **Version:** 1.0 | **Wazuh Version:** 4.14.4 | **Last Updated:** 2026-04-23

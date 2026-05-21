@@ -5826,3 +5826,40 @@ Verification:
   urgent account ticket `1386` created and updated, room summary answered
   without creating another ticket, and all synthetic tickets were cancelled
   during cleanup.
+
+### Codex dashboard harness failed command execution in container sandbox
+
+Status: fixed and live-verified on 2026-05-21.
+
+Problem:
+
+- Direct Codex CLI invocation through the AI proxy succeeded, but a real
+  dashboard-spawned Codex ticket agent hit `bwrap: No permissions to create a
+  new namespace` when trying to run commands from inside the API container.
+- The failing synthetic proof was stopped as agent `362` on ticket `1390`.
+- After the sandbox fix, agent `363` on ticket `1391` could execute commands,
+  but service-token-spawned workers did not receive a usable scoped
+  `dashboard_session` because service-token identities are intentionally not
+  convertible to user cookies.
+
+Fix:
+
+- Containerized Codex workers now default to
+  `CODEX_SANDBOX=danger-full-access`; the enforceable boundary is the API
+  container, dashboard RBAC, scoped vault leases, tool prompts, and approval
+  gates.
+- `workspace-write` remains available for environments where unprivileged user
+  namespaces are explicitly enabled.
+- Service-token initiated agent spawns now mint a scoped `agent-session`
+  workspace cookie for the worker instead of attempting to reuse service-token
+  identity. The worker still receives only its ticket/session scope and does not
+  receive the dashboard service token.
+
+Verification:
+
+- Direct Codex proxy proof completed with `CODEX_SKILLS_OK` and no skill
+  frontmatter warnings after remounting `/root/.agents/skills` to the
+  deployable `reference_skills` bundle.
+- Dashboard-spawned Codex ticket `1393` completed cleanly with agent `365`,
+  task `362`, model `local/agent-default`, note marker
+  `CODEX_HARNESS_CLEAN_PASS`, and resolved ticket status.

@@ -59,6 +59,8 @@ The deployable reference proxy source is tracked at
 
 - Claude Code: `POST /v1/messages`
 - Hermes: `POST /v1/chat/completions`
+- Codex: OpenAI Responses-compatible provider routed to `POST /v1/responses`,
+  translated by the proxy into the active chat-completions route
 - Discovery: `GET /v1/models`
 
 ## Health Checks
@@ -98,9 +100,9 @@ python scripts/switch_model_route.py --route local --restart
 Current live lab route switch:
 
 - Server-manager server: `ai`
-- Deployment directory: `/home/cereal/SOC_TESTING/soc-dashboard`
+- Deployment directory: `/opt/agentic-it/SOC_TESTING/soc-dashboard`
 - Container proxy URL: `http://ai-proxy:4001`
-- Deployment-host/LAN proxy URL: `http://192.168.50.222:4001`
+- Deployment-host/LAN proxy URL: `http://127.0.0.1:4001`
 - Host port `4001` is owned by the Compose-managed
   `soc-dashboard-ai-proxy-1`. There should be no standalone `ai-proxy`
   container and no host `4401` listener in this lab.
@@ -109,7 +111,7 @@ When the user asks to switch or restart model routing for the live demo, use
 the `server-manager` skill and run the switch from the deployment directory:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd /opt/agentic-it/SOC_TESTING/soc-dashboard
 python3 scripts/switch_model_route.py --route external --restart
 # or
 python3 scripts/switch_model_route.py --route local --restart
@@ -128,7 +130,7 @@ Do not run `--restart` from a source checkout without the deployment `.env`.
 The script now checks for required runtime env values before editing/restarting,
 but agents should still use the installed deployment path for live changes.
 For live dashboard work, use the managed proxy on the AI server host at
-`127.0.0.1:4001`, the LAN URL `http://192.168.50.222:4001`, or the container
+`127.0.0.1:4001`, the LAN URL `http://127.0.0.1:4001`, or the container
 URL `http://ai-proxy:4001`. Do not recreate a separate standalone proxy.
 
 ## Test Expectations
@@ -143,6 +145,8 @@ URL `http://ai-proxy:4001`. Do not recreate a separate standalone proxy.
 - In external lab mode, a simple tool schema sent to `openrouter/free` returns
   a tool-call response when the upstream free route has capacity.
 - A short Claude Code request completes through the proxy using Anthropic Messages when Claude Code remains enabled.
+- A short Codex request completes through the proxy using the `agentic_proxy`
+  chat provider when `CODEX_HOME` or `CODEX_API_KEY` is configured.
 - A missing or invalid auth token fails clearly.
 - Agent spawn logs show the selected model and proxy URL without leaking secrets.
 - Long-running local model tasks do not trip arbitrary model-level heartbeat timeouts.

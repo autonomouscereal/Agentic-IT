@@ -117,8 +117,73 @@ class HermesHarness:
         return cmd
 
 
+class CodexHarness:
+    name = "codex"
+
+    def build_env(self, base_env, llm_base_url=None, llm_auth_token=None, dashboard_api_base=None):
+        env = dict(base_env)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env.setdefault("CODEX_HOME", os.getenv("CODEX_HOME", "/root/.codex"))
+        if dashboard_api_base:
+            env["DASHBOARD_API_BASE"] = dashboard_api_base
+        if llm_base_url:
+            base = llm_base_url.rstrip("/")
+            env.setdefault("OPENAI_BASE_URL", f"{base}/v1")
+            env.setdefault("CODEX_PROXY_BASE_URL", base)
+        if llm_auth_token:
+            # Codex reads the provider key from OPENAI_API_KEY by default.
+            # CODEX_API_KEY is kept for deployments that prefer a separate
+            # secret name, but the config below points at OPENAI_API_KEY.
+            env.setdefault("OPENAI_API_KEY", llm_auth_token)
+            env.setdefault("CODEX_API_KEY", llm_auth_token)
+        return env
+
+    def build_command(self, prompt, settings_path, model, permission_mode, allowed_tools=None):
+        codex_bin = os.getenv("CODEX_BIN") or shutil.which("codex") or "codex"
+        sandbox = os.getenv("CODEX_SANDBOX", "danger-full-access").strip() or "danger-full-access"
+        approval = os.getenv("CODEX_APPROVAL_POLICY", "never").strip() or "never"
+        profile = os.getenv("CODEX_PROFILE", "").strip()
+        provider = os.getenv("CODEX_MODEL_PROVIDER", "agentic_proxy").strip() or "agentic_proxy"
+        proxy_base = (
+            os.getenv("CODEX_PROXY_BASE_URL")
+            or os.getenv("AGENT_LLM_BASE_URL")
+            or ""
+        ).rstrip("/")
+        proxy_v1 = f"{proxy_base}/v1" if proxy_base else ""
+        effort = os.getenv("CODEX_REASONING_EFFORT", "").strip()
+
+        cmd = [
+            codex_bin,
+            "exec",
+            "--json",
+            "--skip-git-repo-check",
+            "--sandbox",
+            sandbox,
+            "--model",
+            model,
+        ]
+        if profile:
+            cmd.extend(["--profile", profile])
+        if provider:
+            cmd.extend(["--config", f'model_provider="{provider}"'])
+        if approval:
+            cmd.extend(["--config", f'approval_policy="{approval}"'])
+        if proxy_v1:
+            cmd.extend([
+                "--config", f'model_providers.{provider}.name="Agentic Operations Proxy"',
+                "--config", f'model_providers.{provider}.base_url="{proxy_v1}"',
+                "--config", f'model_providers.{provider}.env_key="OPENAI_API_KEY"',
+                "--config", f'model_providers.{provider}.wire_api="responses"',
+            ])
+        if effort:
+            cmd.extend(["--config", f'reasoning_effort="{effort}"'])
+        cmd.append(prompt)
+        return cmd
+
+
 _HARNESS_FACTORIES = {
     "claude-code": ClaudeCodeHarness,
+    "codex": CodexHarness,
     "hermes": HermesHarness,
 }
 

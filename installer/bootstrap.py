@@ -41,7 +41,7 @@ def parse_args():
     parser.add_argument("--memory-db-port", default=os.getenv("AGENT_MEMORY_DB_PORT", "25490"))
     parser.add_argument("--project-name", default=os.getenv("COMPOSE_PROJECT_NAME", ""))
     parser.add_argument("--ai-base-url", default=os.getenv("AGENT_LLM_BASE_URL", ""))
-    parser.add_argument("--harness", choices=["auto", "hermes", "claude-code"], default=os.getenv("AGENT_HARNESS", "auto"))
+    parser.add_argument("--harness", choices=["auto", "hermes", "claude-code", "codex"], default=os.getenv("AGENT_HARNESS", "auto"))
     parser.add_argument("--proxy-mode", choices=["deploy", "external"], default=os.getenv("AI_PROXY_MODE", "deploy"))
     parser.add_argument("--proxy-port", default=os.getenv("AI_PROXY_PORT", "4001"))
     parser.add_argument("--model-route", choices=["local", "external"], default=os.getenv("AI_MODEL_ROUTE", "local"),
@@ -99,7 +99,7 @@ def configure_interactive(args):
     if args.non_interactive or args.dry_run:
         return args
     args.proxy_mode = prompt_default("Proxy mode", args.proxy_mode, ["deploy", "external"])
-    args.harness = prompt_default("Agent harness", args.harness, ["auto", "hermes", "claude-code"])
+    args.harness = prompt_default("Agent harness", args.harness, ["auto", "hermes", "claude-code", "codex"])
     args.model_route = prompt_default("Model route posture", args.model_route, ["local", "external"])
     args.provider = prompt_default("Default provider", args.provider, ["openai", "anthropic", "nous", "openrouter", "lmstudio", "custom"])
     args.model = prompt_default("Default model", args.model)
@@ -133,10 +133,18 @@ def hermes_available():
     return Path(hermes_bin).exists() or bool(shutil.which("hermes"))
 
 
+def codex_available():
+    return bool(os.getenv("CODEX_API_KEY")) or Path(os.getenv("CODEX_HOME_DIR", "./runtime/codex")).exists() or bool(shutil.which("codex"))
+
+
 def selected_harness(args):
     if args.harness != "auto":
         return args.harness
-    return "hermes" if hermes_available() else "claude-code"
+    if hermes_available():
+        return "hermes"
+    if codex_available():
+        return "codex"
+    return "claude-code"
 
 
 def agent_base_url(args):
@@ -320,6 +328,19 @@ def write_env(target, args, dry_run=False):
         "CLAUDE_SETTINGS_FILE": os.getenv("CLAUDE_SETTINGS_FILE", "./runtime/claude_settings.json"),
         "CLAUDE_SKILLS_DIR": os.getenv("CLAUDE_SKILLS_DIR", "./reference_skills"),
         "AGENTS_SKILLS_DIR": os.getenv("AGENTS_SKILLS_DIR", "./reference_skills"),
+        "CODEX_BIN": os.getenv("CODEX_BIN", "codex"),
+        "CODEX_HOME": os.getenv("CODEX_HOME", "/root/.codex"),
+        "CODEX_HOME_DIR": os.getenv("CODEX_HOME_DIR", "./runtime/codex"),
+        "CODEX_SKILLS_DIR": os.getenv("CODEX_SKILLS_DIR", "./reference_skills"),
+        "CODEX_MODEL_PROVIDER": os.getenv("CODEX_MODEL_PROVIDER", "agentic_proxy"),
+        "CODEX_SANDBOX": os.getenv("CODEX_SANDBOX", "workspace-write"),
+        "CODEX_APPROVAL_POLICY": os.getenv("CODEX_APPROVAL_POLICY", "never"),
+        "CODEX_REASONING_EFFORT": os.getenv("CODEX_REASONING_EFFORT", "medium"),
+        "CODEX_API_KEY": "",
+        "OPS_CHAT_UPLOAD_DIR": os.getenv("OPS_CHAT_UPLOAD_DIR", "/app/data/ops_chat_uploads"),
+        "OPS_CHAT_ARTIFACT_DIR": os.getenv("OPS_CHAT_ARTIFACT_DIR", "/app/data/ops_chat_artifacts"),
+        "OPS_CHAT_MAX_ATTACHMENT_BYTES": os.getenv("OPS_CHAT_MAX_ATTACHMENT_BYTES", str(10 * 1024 * 1024)),
+        "OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES": os.getenv("OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES", str(8 * 1024 * 1024)),
     }
     if dry_run:
         return "would_create"
@@ -470,6 +491,18 @@ def write_agent_models(target, args, dry_run=False):
         models.insert(0, args.model)
     data["models"] = models
     data["default"] = args.model
+    data["default_harness"] = selected_harness(args)
+    setups = data.get("setups") or []
+    wanted = {
+        ("Hermes local default", "hermes", "local/agent-default"),
+        ("Codex local proxy", "codex", "local/agent-default"),
+        ("Claude external fallback", "claude-code", "deepseek/deepseek-v4-flash"),
+    }
+    existing = {(item.get("name"), item.get("harness"), item.get("model")) for item in setups if isinstance(item, dict)}
+    for name, harness, model in sorted(wanted):
+        if (name, harness, model) not in existing:
+            setups.append({"name": name, "harness": harness, "model": model})
+    data["setups"] = setups
     if dry_run:
         print("DRY RUN: update agent_models.json default", args.model)
         return data

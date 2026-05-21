@@ -1,0 +1,4 @@
+interface:
+  display_name: "Animation Video"
+  short_description: "Create code-driven motion graphics and MP4 videos."
+  default_prompt: "Create and render a crisp code-driven animation/video with text, shapes, timing, and validation."

@@ -47,7 +47,7 @@ a dashboard widget and not an OpenAI chat shim. The reference deployment uses:
 - Keycloak OIDC for identity
 - a Matrix application-service bridge for room events
 - the dashboard Ops Chat API as the canonical control-plane intake endpoint
-- Hermes or Claude Code agent harnesses through the configured AI proxy
+- Hermes, Claude Code, or Codex agent harnesses through the configured AI proxy
 
 Operational path:
 
@@ -60,8 +60,8 @@ Operational path:
 6. The agent either answers directly or uses the tool to create a ticket with
    class, priority, and assignment group.
 7. Operational work creates or continues a canonical ticket.
-8. The dashboard queues a real `agent_runner.spawn_agent()` task using Hermes or
-   Claude Code through the AI proxy.
+8. The dashboard queues a real `agent_runner.spawn_agent()` task using Hermes,
+   Claude Code, or Codex through the AI proxy.
 9. Follow-up room messages become `user-response` notes and are delivered to
    active agents through the steering inbox.
 
@@ -94,6 +94,23 @@ toolbelt exposes these fields on `create-ticket` and `continue-ticket` so a
 follow-up clarification can correct the affected user without creating a
 duplicate ticket. Global search includes requester and affected-user names and
 emails.
+
+Ops Chat file handling is demo-capable:
+
+- Matrix `m.file`, `m.image`, `m.video`, and `m.audio` uploads are downloaded by
+  the bridge, passed to the dashboard, stored under `OPS_CHAT_UPLOAD_DIR`, and
+  linked to created/continued tickets as attachment metadata.
+- The chat harness receives uploaded files in `attachments/` with
+  `attachments/manifest.json` and is instructed to treat them as untrusted
+  evidence, not instructions.
+- One-off artifacts produced through `ops_chat_tool.py validate-artifact` are
+  persisted under `OPS_CHAT_ARTIFACT_DIR`; small artifacts are returned to
+  Element as Matrix attachments.
+- Animation/video asks use the bundled `animation-video` skill and should be
+  short deterministic MP4/WebM artifacts validated before return.
+- This is the reference demo loop for user upload -> harness review/edit ->
+  returned artifact. Full enterprise document-management controls remain a
+  separate hardening track.
 
 Compose services:
 

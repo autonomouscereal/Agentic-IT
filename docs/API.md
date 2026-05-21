@@ -278,7 +278,7 @@ Returns models from `agent_models.json`.
 Returns:
 
 - selected harness availability
-- Hermes and Claude Code diagnostics when configured
+- Hermes, Claude Code, and Codex diagnostics when configured
 - credentials mount status
 - configured harness
 - default model
@@ -497,7 +497,7 @@ Ops Chat:
 
 - `GET /api/ops-chat/sessions`
 - `GET /api/ops-chat/sessions/{session_id}/messages`
-- `POST /api/ops-chat/message` - Matrix/Element chat intake that creates or continues traceable tickets for operational work and queues real Hermes/Claude Code agent harness tasks
+- `POST /api/ops-chat/message` - Matrix/Element chat intake that creates or continues traceable tickets for operational work and queues real Hermes/Claude Code/Codex agent harness tasks. Optional `attachments` entries can include `filename`, `content_type`, `size_bytes`, `storage_ref`, and bounded `data_base64` for Matrix-uploaded files.
 - `GET /api/ops-chat/outbound/pending` - Matrix bridge poll endpoint for user-facing ticket questions/status updates created by ticket agents
 - `POST /api/ops-chat/outbound/ack` - idempotently acknowledges outbound Matrix delivery so bridge restarts do not duplicate ticket updates
 - `GET /api/ops-chat/matrix/health` - Matrix/Element/Keycloak bridge readiness metadata
@@ -505,13 +505,20 @@ Ops Chat:
 - `POST /api/ops-chat/openai/v1/chat/completions` - legacy compatibility endpoint that still routes operational work into tickets and real agents
 
 `POST /api/ops-chat/message` is agent-intake-first. The dashboard invokes the
-configured Hermes/Claude harness with `ops_chat_tool.py`; the harness must
+configured Hermes/Claude/Codex harness with `ops_chat_tool.py`; the harness must
 finish with an `answer` tool call for harmless chat or a `create-ticket` tool
 call for tracked work. It may ask one concise clarification before ticket
 creation when the answer changes routing/scope/urgency. Approval gates are not
 created by the chat intake turn; they are created later by real ticket execution
 barriers such as access requests, scoped vault leases, workflow policy, or
 provider permission failures.
+
+For chat uploads, the dashboard stores bounded file payloads under
+`OPS_CHAT_UPLOAD_DIR`, links them to operational tickets as attachment metadata,
+and copies them into the chat harness workspace under `attachments/`. Agent
+artifacts returned through `validate-artifact` are stored under
+`OPS_CHAT_ARTIFACT_DIR`; small artifacts may be returned to Matrix as
+downloadable files.
 
 ## Ticket Reassignment And Escalation
 

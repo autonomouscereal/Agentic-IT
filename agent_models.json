@@ -17,6 +17,16 @@
       "model": "local/agent-default"
     },
     {
+      "name": "Codex local proxy",
+      "harness": "codex",
+      "model": "local/agent-default"
+    },
+    {
+      "name": "Codex external lab",
+      "harness": "codex",
+      "model": "deepseek/deepseek-v4-flash"
+    },
+    {
       "name": "Claude external fallback",
       "harness": "claude-code",
       "model": "deepseek/deepseek-v4-flash"
