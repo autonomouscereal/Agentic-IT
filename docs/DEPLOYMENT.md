@@ -25,8 +25,8 @@ Do not hardcode secrets in compose, docs, or source. Use environment variables o
 | URL | `https://192.168.50.222:25443` |
 | Local API | `http://127.0.0.1:25480` |
 | Proxy | `http://ai-proxy:4001` inside Docker; `http://192.168.50.222:4001` from the LAN |
-| Default harness | Hermes Agent; Claude Code and Codex selectable |
-| Product default model | `local/agent-default` |
+| Default harness | Codex through the active Settings profile; Hermes Agent and Claude Code selectable |
+| Product default model | `gpt-5.5` in the lab Codex profile; `local/agent-default` in local-only deployments |
 | Lab external model | `deepseek/deepseek-v4-flash` |
 | Ops Chat | `https://192.168.50.222:3303` Element/Matrix client |
 
@@ -53,23 +53,30 @@ Create `.env` from `.env.example` on the server. Required for any deployment:
 SOC_DB_USER=<from vault or deployment secret>
 SOC_DB_PASSWORD=<from vault or deployment secret>
 AGENT_LLM_BASE_URL=http://<proxy-host>:4001
-AGENT_HARNESS=hermes
+AGENT_HARNESS=codex
 AI_MODEL_ROUTE=local
 AI_PROXY_MODEL_ROUTE=local
 AI_PROXY_EXTERNAL_ENABLED=false
-AGENT_DEFAULT_MODEL=local/agent-default
+AGENT_DEFAULT_MODEL=gpt-5.5
 HERMES_DEFAULT_PROVIDER=dashboard-proxy
 CODEX_HOME_DIR=./runtime/codex
 CODEX_AUTH_MODE=proxy
 CODEX_MODEL_PROVIDER=agentic_proxy
 CODEX_SANDBOX=danger-full-access
 CODEX_APPROVAL_POLICY=never
+CODEX_REASONING_EFFORT=high
+CODEX_FAST_MODE=false
 CODEX_API_KEY=<optional vault/runtime secret>
 DASHBOARD_BIND=127.0.0.1
 DASHBOARD_HTTPS_BIND=0.0.0.0
 DASHBOARD_HTTPS_PORT=25443
 DASHBOARD_TLS_DIR=./runtime/tls
 ```
+
+Use the dashboard `Settings` page to choose runtime profiles, scoped routing,
+max active agents, reasoning effort, fast mode, and timeout policy. The current
+demo default is `codex-primary`; the production/government posture should switch
+to `local-only` unless an external provider has been explicitly approved.
 
 Keep production and regulated deployments local/on-prem first unless an
 external model route is explicitly approved. The demo/lab route can be toggled
@@ -206,7 +213,7 @@ MATRIX_OIDC_CLIENT_SECRET=<from vault/runtime secret>
 MATRIX_OIDC_CA_CERT_PATH=./runtime/tls/dashboard-ca.crt
 MATRIX_AS_TOKEN=<from vault/runtime secret>
 MATRIX_HS_TOKEN=<from vault/runtime secret>
-OPS_CHAT_AGENT_MODEL=<active route model>
+OPS_CHAT_AGENT_MODEL=<blank to follow Settings profile, or targeted test model>
 OPS_CHAT_OUTBOUND_ENABLED=true
 OPS_CHAT_UPLOAD_DIR=/app/data/ops_chat_uploads
 OPS_CHAT_ARTIFACT_DIR=/app/data/ops_chat_artifacts
@@ -232,7 +239,7 @@ curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
 ```
 
 The chat intake turn is harness-driven. The Matrix bridge sends messages to
-`/api/ops-chat/message`, the dashboard invokes Hermes, Claude Code, or Codex with the
+`/api/ops-chat/message`, the dashboard invokes Codex, Hermes, or Claude Code with the
 `ops_chat_tool.py` toolbelt, and the chat agent either answers directly or uses
 the tool to create a traceable ticket. Do not replace this with an app-side JSON
 classifier. Risky actions still require real downstream barriers: access
@@ -240,8 +247,9 @@ requests, scoped credential leases, provider permission failures, workflow
 policy, and approval gates.
 
 Harness selection is deployment-configurable. Leave `OPS_CHAT_AGENT_HARNESS`
-blank to follow the global `AGENT_HARNESS` default, or set it to `hermes`,
-`claude-code`, or `codex` for an entire bridge instance. Targeted tests can also
+and `OPS_CHAT_AGENT_MODEL` blank to follow the active Settings profile, or set
+them to `hermes`, `claude-code`, `codex`, and a model for an entire bridge
+instance. Targeted tests can also
 send `harness` / `agent_harness` and `model` / `agent_model` directly to
 `POST /api/ops-chat/message`. This is intentionally a small selector over the
 same bridge contract; do not fork the chat bridge for Codex.

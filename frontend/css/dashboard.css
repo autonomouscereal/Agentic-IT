@@ -787,6 +787,7 @@ body {
 .status-built-in,
 .status-already-active { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
 .status-configured { background: rgba(0, 212, 255, 0.15); color: #00d4ff; }
+.status-info { background: rgba(0, 212, 255, 0.15); color: #00d4ff; }
 .status-not-configured { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
 .status-undeploy,
 .status-redeploy { background: rgba(255, 215, 0, 0.15); color: #ffd700; }
@@ -1974,67 +1975,68 @@ body {
     border-radius: 8px;
 }
 
-.agent-config-panel {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    margin: 8px 0 10px;
-}
-
-.agent-config-defaults {
-    display: grid;
-    gap: 8px;
-    align-items: center;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.025);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-}
-
-.agent-defaults-row {
-    grid-template-columns: max-content minmax(170px, 230px) max-content minmax(260px, 1fr) auto minmax(150px, 0.6fr);
-}
-
-.agent-custom-row {
-    grid-template-columns: max-content minmax(180px, 240px) minmax(150px, 1fr) minmax(150px, 220px) minmax(260px, 1fr) auto auto;
-}
-
-.agent-config-defaults .setup-label {
-    margin: 0;
-    align-self: center;
-    white-space: nowrap;
-}
-
-.agent-config-defaults input,
-.agent-config-defaults select {
-    min-width: 0;
-    width: 100%;
-    height: 32px;
-    padding-top: 5px;
-    padding-bottom: 5px;
-}
-
-.agent-config-defaults .btn {
-    min-width: 88px;
-    height: 32px;
-    padding: 5px 10px;
-    white-space: nowrap;
-}
-
-.agent-config-defaults .btn-danger {
-    min-width: 72px;
-    background: transparent;
-    border-color: rgba(255, 71, 87, 0.45);
-    color: var(--accent-danger);
-}
-
 .agent-config-status {
-    grid-column: 1 / -1;
     min-height: 18px;
+    margin-top: 10px;
 }
 
 .agent-config-status.warning {
     color: var(--accent-warning);
+}
+
+.settings-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.metric-value.compact {
+    font-size: 20px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.settings-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.settings-panel {
+    min-width: 0;
+}
+
+.settings-profile-grid {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+}
+
+.settings-profile-grid .setup-label {
+    margin: 0;
+    white-space: nowrap;
+}
+
+.inline-check {
+    margin: 0;
+}
+
+.settings-assignment-editor {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.2fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.settings-route-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
 }
 
 /* Animations */
@@ -2284,13 +2286,13 @@ body {
 }
 
 @media (max-width: 1280px) {
-    .agent-defaults-row,
-    .agent-custom-row {
+    .settings-summary-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .agent-config-defaults .setup-label {
-        align-self: end;
+    .settings-profile-grid,
+    .settings-assignment-editor {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -2301,13 +2303,14 @@ body {
         grid-template-columns: 1fr;
     }
 
-    .agent-config-panel,
+    .settings-layout,
     .module-toolbar {
         grid-template-columns: 1fr;
     }
 
-    .agent-defaults-row,
-    .agent-custom-row,
+    .settings-summary-grid,
+    .settings-profile-grid,
+    .settings-assignment-editor,
     .deployment-shape-panel {
         grid-template-columns: 1fr;
     }

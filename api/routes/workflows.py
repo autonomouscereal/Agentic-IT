@@ -334,7 +334,9 @@ async def review_workflow(
 async def rerun_workflow(
     workflow_id: int,
     ticket_id: int = Body(...),
-    model: str = Body("deepseek/deepseek-v4-flash"),
+    model: str = Body(None),
+    harness: str = Body(None),
+    profile_id: str = Body(None),
     created_by: str = Body("dashboard"),
 ):
     workflow = await fetchrow("SELECT * FROM agent_workflows WHERE id = $1", workflow_id)
@@ -357,7 +359,18 @@ async def rerun_workflow(
         f"Record workflow run {run_id} completion with POST /api/workflows/runs/{run_id}/complete."
     )
     from services import agent_runner
-    result = await agent_runner.spawn_agent(ticket_id, model, prompt, "workflow_rerun")
+    if not profile_id:
+        route = agent_runner.resolve_agent_runtime_profile(
+            task_type="workflow_rerun",
+            workflow_key=workflow.get("workflow_key"),
+            assignment_group=ticket.get("assignee_team") or ticket.get("owning_group"),
+            requested_harness=harness,
+            requested_model=model,
+        )
+        profile_id = route.get("profile_id") or route.get("id")
+        model = model or route.get("model")
+        harness = harness or route.get("harness")
+    result = await agent_runner.spawn_agent(ticket_id, model, prompt, "workflow_rerun", harness=harness, profile_id=profile_id)
     await execute(
         "UPDATE workflow_runs SET agent_id = $1, task_id = $2 WHERE id = $3",
         result.get("agent_id"), result.get("task_id"), run_id,

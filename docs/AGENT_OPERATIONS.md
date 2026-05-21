@@ -594,7 +594,12 @@ The reference AI server runs slow local models. Treat output/activity, process
 state, checkpoints, notes, and audit findings as the source of truth. Do not use
 short wall-clock timeouts to judge local agent work.
 
-Current reference defaults:
+Current reference defaults are managed from the dashboard `Settings` page and
+persisted in `agent_models.json`. Use that page to change max active agents,
+per-profile timeouts, Codex reasoning effort, Codex fast mode, and scoped
+routing by platform area, workflow key, ticket class, or RACI group.
+
+Current local-model reference defaults:
 
 ```text
 MAX_CONCURRENT_AGENTS=1
@@ -610,6 +615,19 @@ checkpoints, or writing notes should continue.
 `AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE=1` keeps RACI-driven auto-assignment from
 queueing several same-rule local agents while one Security Operations/EDR agent
 is already active. Set it higher, or `0` for unlimited, in faster environments.
+
+Runtime profile timeout guidance:
+
+- `local-only`: Hermes/local model, 60 minute timeout, max active agents usually
+  `1`.
+- `codex-primary`: Codex subscription/OAuth route, 10 minute timeout, high
+  reasoning by default, fast mode off unless an operator enables it for a demo.
+- `hermes-external`: Hermes external lab provider route, 10 minute timeout,
+  with OpenRouter/local fallbacks.
+
+`local-only` and `hermes-external` are whole-platform mode switches: when one
+is active, it overrides seeded scoped assignments such as chat/demo defaults
+unless a caller explicitly passes a profile, harness, or model.
 
 Model-backed smoke and acceptance scripts must serialize against the live local
 model lane. Before spawning a smoke agent, wait for `/api/agents/active` to

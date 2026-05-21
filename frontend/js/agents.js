@@ -130,6 +130,7 @@ function renderAgentCard(a, isStalled) {
         </div>
         <div class="agent-ticket">${renderAgentTicketLink(a)}</div>
         <div class="agent-meta">
+            <span>Harness: ${escHtml(a.harness || "-")}</span>
             <span>Model: ${a.model || "-"}</span>
             <span>Ticket: ${a.ticket_status || "-"}</span>
             <span>Total work time: ${workTime}</span>
@@ -291,10 +292,10 @@ async function createAgentFromPrompt() {
     if (!prompt) return;
     const model = typeof selectedAgentModel === "function"
         ? selectedAgentModel()
-        : (document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b");
+        : "gpt-5.5";
     const harness = typeof selectedAgentHarness === "function"
         ? selectedAgentHarness()
-        : (document.getElementById("agent-default-harness")?.value || "hermes");
+        : "codex";
     const result = await apiPost("/api/agents/create-from-prompt", { prompt, model, harness });
     if (result && !result.error) {
         input.value = "";

@@ -100,7 +100,11 @@ print(mod.route_for_chat_model("deepseek/deepseek-v4-flash"))
         self.assertIn("local/agent-default", script)
         self.assertIn("dashboard-proxy", script)
         self.assertIn("AI_MODEL_ROUTE=local", env_example)
-        self.assertIn("AGENT_DEFAULT_MODEL=local/agent-default", env_example)
+        self.assertIn("AGENT_DEFAULT_MODEL=gpt-5.5", env_example)
+        model_config = json.loads((ROOT / "agent_models.json").read_text(encoding="utf-8"))
+        local_profile = next(p for p in model_config["profiles"] if p["id"] == "local-only")
+        self.assertEqual(local_profile["model"], "local/agent-default")
+        self.assertEqual(local_profile["timeout_minutes"], 60)
         self.assertIn('env.setdefault("HERMES_DEFAULT_PROVIDER", "dashboard-proxy")', harness)
 
     def test_model_route_switcher_updates_temp_deployment(self):

@@ -156,6 +156,12 @@ async def list_models():
         "default_harness": config["default_harness"],
         "setups": config["setups"],
         "available_harnesses": config["available_harnesses"],
+        "active_profile": config.get("active_profile"),
+        "profiles": config.get("profiles", []),
+        "route_assignments": config.get("route_assignments", []),
+        "max_concurrent_agents": config.get("max_concurrent_agents"),
+        "default_timeout_minutes": config.get("default_timeout_minutes"),
+        "reasoning_efforts": config.get("reasoning_efforts", []),
     }
 
 
@@ -208,8 +214,9 @@ async def get_ws_info():
 @router.post("/spawn")
 async def spawn_agent(
     ticket_id: int = Body(...),
-    model: str = Body("deepseek/deepseek-v4-flash"),
+    model: str = Body(None),
     harness: str = Body(None),
+    profile_id: str = Body(None),
     prompt: str = Body(None),
     task_type: str = Body("ticket_resolution"),
     requested_permissions: list = Body(None),
@@ -239,6 +246,8 @@ async def spawn_agent(
     }
     if harness:
         spawn_kwargs["harness"] = harness
+    if profile_id:
+        spawn_kwargs["profile_id"] = profile_id
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
@@ -254,8 +263,9 @@ async def spawn_agent(
 @router.post("/create-from-prompt")
 async def create_from_prompt(
     prompt: str = Body(...),
-    model: str = Body("deepseek/deepseek-v4-flash"),
+    model: str = Body(None),
     harness: str = Body(None),
+    profile_id: str = Body(None),
     request: Request = None,
 ):
     """Create a ticket from a prompt and spawn an agent to work it."""
@@ -280,6 +290,8 @@ async def create_from_prompt(
     spawn_kwargs = {"actor_context": access_control.subject_from_request(request)}
     if harness:
         spawn_kwargs["harness"] = harness
+    if profile_id:
+        spawn_kwargs["profile_id"] = profile_id
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
@@ -288,7 +300,12 @@ async def create_from_prompt(
         **spawn_kwargs,
     )
     await log_event("agent", "info", "dashboard", "create_from_prompt",
-                    f"ticket_{ticket_id}", {"prompt_preview": prompt[:200]})
+                    f"ticket_{ticket_id}", {
+                        "prompt_preview": prompt[:200],
+                        "model": result.get("model"),
+                        "harness": result.get("harness"),
+                        "profile_id": result.get("profile_id"),
+                    })
     return result
 
 

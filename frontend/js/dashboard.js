@@ -107,6 +107,7 @@ function navigateTo(page) {
         case "tools": loadTools(); break;
         case "setup": loadSetup(); break;
         case "access": loadAccess(); break;
+        case "settings": loadSettings(); break;
         case "audit": loadAudit(); break;
     }
 }
@@ -940,7 +941,7 @@ async function createRaciRule() {
         informed: [],
         approval_required,
         auto_assign_agent,
-        auto_agent_model: document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b",
+        auto_agent_model: selectedAgentModel(),
         auto_agent_prompt: auto_assign_agent ? `Auto-work ${assignment_group || "assigned group"} tickets that match ${intent || "this route"} using compact ticket evidence, approval gates, notes, and final closure.` : null,
         risk_level: approval_required ? "medium" : "low",
         knowledge_tags: [intent || "general"],
@@ -2099,7 +2100,7 @@ async function viewWorkflow(id) {
 async function rerunWorkflow(id) {
     const ticketId = prompt("Ticket id to rerun this workflow on:");
     if (!ticketId) return;
-    const model = document.getElementById("agent-model-select")?.value || "qwen/qwen3.6-27b";
+    const model = selectedAgentModel();
     const result = await apiPost(`/api/workflows/${id}/rerun`, { ticket_id: Number(ticketId), model, created_by: "dashboard" });
     if (result?.error) alert(result.error);
     else {
@@ -2325,30 +2326,37 @@ async function createSkill() {
 
 async function loadAgentModels() {
     const data = await apiGet("/api/agents/models");
-    const selects = document.querySelectorAll("[data-agent-model-select]");
-    let localDefaults = {};
-    try {
-        localDefaults = JSON.parse(localStorage.getItem("agentRuntimeDefaults") || "{}");
-    } catch {
-        localDefaults = {};
-    }
-    agentRuntimeConfig = {
-        models: data?.models || ["qwen/qwen3.6-27b"],
-        default_model: localDefaults.default_model || data?.default_model || data?.default || "qwen/qwen3.6-27b",
-        default_harness: localDefaults.default_harness || data?.default_harness || "hermes",
-        setups: data?.setups || [],
-        available_harnesses: data?.available_harnesses || [{ name: "hermes" }, { name: "claude-code" }],
-    };
-    const models = agentRuntimeConfig.models;
-    selects.forEach(select => {
-        select.innerHTML = models.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join("");
-        const preferred = select.id === "agent-model-select" || select.id === "setup-model"
-            ? agentRuntimeConfig.default_model
-            : select.value || agentRuntimeConfig.default_model;
-        if (preferred && models.includes(preferred)) select.value = preferred;
-    });
+    agentRuntimeConfig = normalizeRuntimeConfig(data || {});
+    renderAgentModelSelectors();
     renderAgentHarnessSelectors();
-    renderAgentSetupSelector();
+    renderSettings();
+}
+
+function normalizeRuntimeConfig(data) {
+    const models = data?.models || ["gpt-5.5", "local/agent-default", "qwen/qwen3.6-27b"];
+    const profiles = data?.profiles || [];
+    return {
+        models,
+        default_model: data?.default_model || data?.default || profiles[0]?.model || "gpt-5.5",
+        default_harness: data?.default_harness || profiles[0]?.harness || "codex",
+        active_profile: data?.active_profile || profiles[0]?.id || "codex-primary",
+        profiles,
+        route_assignments: data?.route_assignments || [],
+        setups: data?.setups || [],
+        available_harnesses: data?.available_harnesses || [{ name: "codex" }, { name: "hermes" }, { name: "claude-code" }],
+        max_concurrent_agents: Number(data?.max_concurrent_agents || 1),
+        default_timeout_minutes: Number(data?.default_timeout_minutes || 10),
+        reasoning_efforts: data?.reasoning_efforts || ["low", "medium", "high", "extra-high"],
+    };
+}
+
+function renderAgentModelSelectors() {
+    const models = agentRuntimeConfig.models || [];
+    document.querySelectorAll("[data-agent-model-select]").forEach(select => {
+        const current = select.value || agentRuntimeConfig.default_model;
+        select.innerHTML = models.map(m => `<option value="${escAttr(m)}">${escHtml(m)}</option>`).join("");
+        select.value = models.includes(current) ? current : (agentRuntimeConfig.default_model || models[0] || "");
+    });
 }
 
 function renderAgentHarnessSelectors() {
@@ -2362,21 +2370,6 @@ function renderAgentHarnessSelectors() {
     });
     const setupHarness = document.getElementById("setup-harness");
     if (setupHarness && agentRuntimeConfig.default_harness) setupHarness.value = agentRuntimeConfig.default_harness;
-    const defaultHarness = document.getElementById("agent-default-harness");
-    if (defaultHarness) defaultHarness.value = agentRuntimeConfig.default_harness || "hermes";
-    const defaultModel = document.getElementById("agent-default-model");
-    if (defaultModel && agentRuntimeConfig.default_model) defaultModel.value = agentRuntimeConfig.default_model;
-}
-
-function renderAgentSetupSelector() {
-    const select = document.getElementById("agent-setup-select");
-    if (!select) return;
-    const setups = agentRuntimeConfig.setups || [];
-    const current = select.value;
-    select.innerHTML = '<option value="">Default setup</option>' + setups.map((setup, idx) => (
-        `<option value="${idx}">${escHtml(setup.name)} - ${escHtml(setup.harness)} / ${escHtml(setup.model)}</option>`
-    )).join("");
-    if (current && setups[Number(current)]) select.value = current;
 }
 
 function setAgentConfigStatus(message, kind = "") {
@@ -2387,109 +2380,205 @@ function setAgentConfigStatus(message, kind = "") {
 }
 
 function selectedAgentHarness() {
-    return document.getElementById("agent-default-harness")?.value
-        || document.getElementById("setup-harness")?.value
+    const active = activeRuntimeProfile();
+    return document.getElementById("setup-harness")?.value
+        || active?.harness
         || agentRuntimeConfig.default_harness
-        || "hermes";
+        || "codex";
 }
 
 function selectedAgentModel() {
-    return document.getElementById("agent-model-select")?.value
-        || document.getElementById("agent-default-model")?.value
+    const active = activeRuntimeProfile();
+    return active?.model
         || agentRuntimeConfig.default_model
-        || "qwen/qwen3.6-27b";
+        || "gpt-5.5";
 }
 
-async function saveAgentDefaults() {
-    const defaultHarness = document.getElementById("agent-default-harness")?.value || agentRuntimeConfig.default_harness || "hermes";
-    const defaultModel = document.getElementById("agent-default-model")?.value || agentRuntimeConfig.default_model || selectedAgentModel();
+function activeRuntimeProfile() {
+    return (agentRuntimeConfig.profiles || []).find(p => p.id === agentRuntimeConfig.active_profile)
+        || (agentRuntimeConfig.profiles || [])[0]
+        || null;
+}
+
+function renderSettings() {
+    const page = document.getElementById("page-settings");
+    if (!page) return;
+    const profiles = agentRuntimeConfig.profiles || [];
+    const active = activeRuntimeProfile();
+    setText("settings-active-profile-label", active?.name || "-");
+    setText("settings-active-profile-sub", active ? `${active.harness} / ${active.model}` : "Harness routing");
+    setText("settings-concurrency-label", String(agentRuntimeConfig.max_concurrent_agents || 1));
+    setText("settings-timeout-label", `${agentRuntimeConfig.default_timeout_minutes || 10}m`);
+    setText("settings-harness-label", (agentRuntimeConfig.available_harnesses || []).map(h => h.name || h).join(", ") || "-");
+    const activeSelect = document.getElementById("settings-active-profile");
+    const profileSelect = document.getElementById("settings-profile-select");
+    const assignmentProfile = document.getElementById("settings-assignment-profile");
+    const profileOptions = profiles.map(p => `<option value="${escAttr(p.id)}">${escHtml(p.name || p.id)} (${escHtml(p.harness)} / ${escHtml(p.model)})</option>`).join("");
+    [activeSelect, profileSelect, assignmentProfile].forEach(select => {
+        if (!select) return;
+        const current = select.value || agentRuntimeConfig.active_profile;
+        select.innerHTML = profileOptions;
+        select.value = profiles.some(p => p.id === current) ? current : (agentRuntimeConfig.active_profile || profiles[0]?.id || "");
+    });
+    const maxInput = document.getElementById("settings-max-concurrent");
+    if (maxInput) maxInput.value = agentRuntimeConfig.max_concurrent_agents || 1;
+    const timeoutInput = document.getElementById("settings-default-timeout");
+    if (timeoutInput) timeoutInput.value = agentRuntimeConfig.default_timeout_minutes || 10;
+    applySettingsProfileSelection();
+    renderRuntimeAssignments();
+}
+
+async function loadSettings() {
+    await loadAgentModels();
+    loadRunnerHealth();
+}
+
+function activateRuntimePreset(profileId) {
+    const select = document.getElementById("settings-active-profile");
+    if (select) select.value = profileId;
+    agentRuntimeConfig.active_profile = profileId;
+    renderSettings();
+}
+
+function applySettingsProfileSelection() {
+    const profileId = document.getElementById("settings-profile-select")?.value || agentRuntimeConfig.active_profile;
+    const profile = (agentRuntimeConfig.profiles || []).find(p => p.id === profileId);
+    if (!profile) return;
+    setInputValue("settings-profile-name", profile.name || "");
+    setSelectValue("settings-profile-harness", profile.harness || agentRuntimeConfig.default_harness);
+    setSelectValue("settings-profile-model", profile.model || agentRuntimeConfig.default_model);
+    setSelectValue("settings-profile-reasoning", profile.reasoning_effort || "medium");
+    const fast = document.getElementById("settings-profile-fast");
+    if (fast) fast.checked = Boolean(profile.fast_mode);
+    setInputValue("settings-profile-timeout", profile.timeout_minutes || 10);
+    setInputValue("settings-profile-concurrent", profile.max_concurrent_agents || 1);
+    setInputValue("settings-profile-fallbacks", (profile.fallbacks || []).map(f => `${f.harness},${f.model},${f.route || ""}`).join("\n"));
+    setInputValue("settings-profile-notes", profile.notes || "");
+}
+
+function setInputValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value ?? "";
+}
+
+function setSelectValue(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value;
+}
+
+function profileFromEditor(existingId) {
+    const name = document.getElementById("settings-profile-name")?.value.trim() || "Custom profile";
+    const id = existingId || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || `profile-${Date.now()}`;
+    const fallbackLines = (document.getElementById("settings-profile-fallbacks")?.value || "").split(/\r?\n/);
+    const fallbacks = fallbackLines.map(line => {
+        const [harness, model, route] = line.split(",").map(v => (v || "").trim());
+        return harness && model ? { harness, model, route: route || "" } : null;
+    }).filter(Boolean);
+    return {
+        id,
+        name,
+        description: "",
+        harness: document.getElementById("settings-profile-harness")?.value || selectedAgentHarness(),
+        model: document.getElementById("settings-profile-model")?.value || selectedAgentModel(),
+        reasoning_effort: document.getElementById("settings-profile-reasoning")?.value || "medium",
+        fast_mode: Boolean(document.getElementById("settings-profile-fast")?.checked),
+        timeout_minutes: Number(document.getElementById("settings-profile-timeout")?.value || 10),
+        max_concurrent_agents: Number(document.getElementById("settings-profile-concurrent")?.value || 1),
+        fallbacks,
+        notes: document.getElementById("settings-profile-notes")?.value || "",
+    };
+}
+
+function saveProfileFromEditor() {
+    const profileId = document.getElementById("settings-profile-select")?.value || agentRuntimeConfig.active_profile;
+    const profile = profileFromEditor(profileId);
+    const profiles = (agentRuntimeConfig.profiles || []).map(p => p.id === profileId ? profile : p);
+    agentRuntimeConfig.profiles = profiles;
+    renderSettings();
+}
+
+function createProfileFromEditor() {
+    const profile = profileFromEditor("");
+    const profiles = (agentRuntimeConfig.profiles || []).filter(p => p.id !== profile.id);
+    profiles.push(profile);
+    agentRuntimeConfig.profiles = profiles;
+    agentRuntimeConfig.active_profile = profile.id;
+    renderSettings();
+}
+
+function renderRuntimeAssignments() {
+    const list = document.getElementById("settings-assignments-list");
+    if (!list) return;
+    const profilesById = Object.fromEntries((agentRuntimeConfig.profiles || []).map(p => [p.id, p]));
+    const rows = agentRuntimeConfig.route_assignments || [];
+    if (!rows.length) {
+        list.innerHTML = '<div class="learning-meta">No scoped routing assignments yet.</div>';
+        return;
+    }
+    list.innerHTML = rows.map((row, idx) => {
+        const profile = profilesById[row.profile_id];
+        return `
+            <div class="learning-item settings-route-row">
+                <div>
+                    <strong>${escHtml(row.scope_type)}: ${escHtml(row.scope_value)}</strong>
+                    <div class="learning-meta">${escHtml(row.notes || "No notes")}</div>
+                </div>
+                <div>
+                    <span class="status-badge status-info">${escHtml(profile?.name || row.profile_id)}</span>
+                    <button class="btn btn-sm btn-danger" onclick="removeRuntimeAssignment(${idx})">Remove</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+function addRuntimeAssignment() {
+    const row = {
+        scope_type: document.getElementById("settings-assignment-scope-type")?.value || "platform_area",
+        scope_value: document.getElementById("settings-assignment-scope-value")?.value.trim() || "",
+        profile_id: document.getElementById("settings-assignment-profile")?.value || agentRuntimeConfig.active_profile,
+        enabled: true,
+        notes: document.getElementById("settings-assignment-notes")?.value.trim() || "",
+    };
+    if (!row.scope_value) {
+        alert("Add a scope value first.");
+        return;
+    }
+    agentRuntimeConfig.route_assignments = [...(agentRuntimeConfig.route_assignments || []), row];
+    setInputValue("settings-assignment-scope-value", "");
+    setInputValue("settings-assignment-notes", "");
+    renderRuntimeAssignments();
+}
+
+function removeRuntimeAssignment(idx) {
+    agentRuntimeConfig.route_assignments = (agentRuntimeConfig.route_assignments || []).filter((_, rowIdx) => rowIdx !== idx);
+    renderRuntimeAssignments();
+}
+
+async function saveRuntimeSettings() {
+    const activeProfile = document.getElementById("settings-active-profile")?.value || agentRuntimeConfig.active_profile;
     const payload = {
-        default_harness: defaultHarness,
-        default_model: defaultModel,
+        active_profile: activeProfile,
+        default_harness: (agentRuntimeConfig.profiles || []).find(p => p.id === activeProfile)?.harness || agentRuntimeConfig.default_harness,
+        default_model: (agentRuntimeConfig.profiles || []).find(p => p.id === activeProfile)?.model || agentRuntimeConfig.default_model,
+        models: agentRuntimeConfig.models || [],
+        profiles: agentRuntimeConfig.profiles || [],
+        route_assignments: agentRuntimeConfig.route_assignments || [],
+        max_concurrent_agents: Number(document.getElementById("settings-max-concurrent")?.value || agentRuntimeConfig.max_concurrent_agents || 1),
+        default_timeout_minutes: Number(document.getElementById("settings-default-timeout")?.value || agentRuntimeConfig.default_timeout_minutes || 10),
         setups: agentRuntimeConfig.setups || [],
     };
-    const updated = await apiPut("/api/agents/config", {
-        ...payload,
-    });
-    if (updated?.default_harness && !updated.error) {
-        agentRuntimeConfig = updated;
-        try { localStorage.removeItem("agentRuntimeDefaults"); } catch {}
-        await loadAgentModels();
+    const updated = await apiPut("/api/agents/config", payload);
+    if (updated && !updated.error) {
+        agentRuntimeConfig = normalizeRuntimeConfig(updated);
+        renderAgentModelSelectors();
+        renderAgentHarnessSelectors();
+        renderSettings();
         loadRunnerHealth();
-        setAgentConfigStatus("Saved server default.");
-    } else if (updated?.error) {
-        try { localStorage.setItem("agentRuntimeDefaults", JSON.stringify(payload)); } catch {}
-        agentRuntimeConfig.default_harness = defaultHarness;
-        agentRuntimeConfig.default_model = defaultModel;
-        setAgentConfigStatus("Saved in this browser; server persistence waits for the next safe API recycle.", "warning");
+        setAgentConfigStatus("Saved runtime settings.");
     } else {
-        try { localStorage.setItem("agentRuntimeDefaults", JSON.stringify(payload)); } catch {}
-        agentRuntimeConfig.default_harness = defaultHarness;
-        agentRuntimeConfig.default_model = defaultModel;
-        setAgentConfigStatus("Saved in this browser; server persistence waits for the next safe API recycle.", "warning");
-    }
-}
-
-function applyAgentSetupSelection() {
-    const idx = document.getElementById("agent-setup-select")?.value;
-    const setup = idx === "" ? null : (agentRuntimeConfig.setups || [])[Number(idx)];
-    if (!setup) {
-        const name = document.getElementById("agent-setup-name");
-        if (name) name.value = "";
-        return;
-    }
-    const name = document.getElementById("agent-setup-name");
-    const harness = document.getElementById("agent-setup-harness");
-    const model = document.getElementById("agent-setup-model");
-    if (name) name.value = setup.name || "";
-    if (harness) harness.value = setup.harness || agentRuntimeConfig.default_harness || "hermes";
-    if (model) model.value = setup.model || agentRuntimeConfig.default_model || selectedAgentModel();
-    const defaultHarness = document.getElementById("agent-default-harness");
-    const defaultModel = document.getElementById("agent-default-model");
-    if (defaultHarness) defaultHarness.value = setup.harness || defaultHarness.value;
-    if (defaultModel) defaultModel.value = setup.model || defaultModel.value;
-}
-
-async function saveAgentSetup() {
-    const name = document.getElementById("agent-setup-name")?.value.trim();
-    if (!name) {
-        alert("Name the setup first.");
-        return;
-    }
-    const setup = {
-        name,
-        harness: document.getElementById("agent-setup-harness")?.value || selectedAgentHarness(),
-        model: document.getElementById("agent-setup-model")?.value || selectedAgentModel(),
-    };
-    const setups = (agentRuntimeConfig.setups || []).filter(s => String(s.name || "").toLowerCase() !== name.toLowerCase());
-    setups.push(setup);
-    const updated = await apiPut("/api/agents/config", {
-        default_harness: agentRuntimeConfig.default_harness || setup.harness,
-        default_model: agentRuntimeConfig.default_model || setup.model,
-        setups,
-    });
-    if (updated && !updated.error) {
-        agentRuntimeConfig = updated;
-        await loadAgentModels();
-        const select = document.getElementById("agent-setup-select");
-        if (select) select.value = String((agentRuntimeConfig.setups || []).findIndex(s => s.name === setup.name));
-    } else if (updated?.error) {
-        alert(updated.error);
-    }
-}
-
-async function deleteAgentSetup() {
-    const idx = document.getElementById("agent-setup-select")?.value;
-    if (idx === "") return;
-    const setups = (agentRuntimeConfig.setups || []).filter((_, rowIdx) => rowIdx !== Number(idx));
-    const updated = await apiPut("/api/agents/config", {
-        default_harness: agentRuntimeConfig.default_harness,
-        default_model: agentRuntimeConfig.default_model,
-        setups,
-    });
-    if (updated && !updated.error) {
-        agentRuntimeConfig = updated;
-        await loadAgentModels();
+        setAgentConfigStatus(updated?.error || "Settings save failed.", "warning");
     }
 }
 
@@ -2774,7 +2863,7 @@ async function createSetupTicket(spawnAgent) {
     const result = await apiPost("/api/setup/ticket", {
         ...choices,
         ai_base_url: document.getElementById("setup-ai-base-url")?.value || null,
-        model: document.getElementById("setup-model")?.value || document.getElementById("agent-model-select")?.value || "deepseek/deepseek-v4-flash",
+        model: document.getElementById("setup-model")?.value || selectedAgentModel(),
         proxy_mode: document.getElementById("setup-proxy-mode")?.value || "deploy",
         proxy_url: document.getElementById("setup-ai-base-url")?.value || null,
         harness: document.getElementById("setup-harness")?.value || setupRuntime?.harness || "auto",
@@ -2807,7 +2896,7 @@ async function createModuleSetupTicket(moduleId, operation, spawnAgent) {
         module_id: moduleId,
         action,
         ai_base_url: document.getElementById("setup-ai-base-url")?.value || null,
-        model: document.getElementById("setup-model")?.value || document.getElementById("agent-model-select")?.value || "deepseek/deepseek-v4-flash",
+        model: document.getElementById("setup-model")?.value || selectedAgentModel(),
         proxy_mode: document.getElementById("setup-proxy-mode")?.value || "deploy",
         proxy_url: document.getElementById("setup-ai-base-url")?.value || null,
         harness: document.getElementById("setup-harness")?.value || setupRuntime?.harness || "auto",

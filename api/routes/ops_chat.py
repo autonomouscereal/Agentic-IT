@@ -66,9 +66,15 @@ def _supported_harness_names():
 
 
 def _chat_agent_harness_name(value=None):
-    requested = str(value or os.getenv("OPS_CHAT_AGENT_HARNESS") or os.getenv("AGENT_HARNESS") or "hermes").strip()
+    requested = str(value or os.getenv("OPS_CHAT_AGENT_HARNESS") or "").strip()
     if not requested:
-        requested = "hermes"
+        try:
+            from services.agent_runner import resolve_agent_runtime_profile
+            requested = resolve_agent_runtime_profile(task_type="ops_chat").get("harness") or ""
+        except Exception:
+            requested = ""
+    if not requested:
+        requested = os.getenv("AGENT_HARNESS") or "codex"
     supported = _supported_harness_names()
     if requested not in supported:
         raise ValueError(f"Unsupported Ops Chat harness: {requested}")
@@ -83,13 +89,14 @@ def _chat_agent_model(classification=None, model_override=None):
     auto-assignment, but chat handoff uses OPS_CHAT_AGENT_MODEL/AGENT_DEFAULT_MODEL
     first so stale per-rule values cannot silently route chat to the wrong lane.
     """
-    return (
-        (str(model_override).strip() if model_override else "")
-        or os.getenv("OPS_CHAT_AGENT_MODEL")
-        or os.getenv("AGENT_DEFAULT_MODEL")
-        or ((classification or {}).get("auto_agent_model"))
-        or DEFAULT_AGENT_MODEL
-    )
+    explicit = (str(model_override).strip() if model_override else "") or os.getenv("OPS_CHAT_AGENT_MODEL")
+    if explicit:
+        return explicit
+    try:
+        from services.agent_runner import resolve_agent_runtime_profile
+        return resolve_agent_runtime_profile(task_type="ops_chat").get("model") or DEFAULT_AGENT_MODEL
+    except Exception:
+        return os.getenv("AGENT_DEFAULT_MODEL") or ((classification or {}).get("auto_agent_model")) or DEFAULT_AGENT_MODEL
 
 
 def _json(value, default):
@@ -498,7 +505,7 @@ async def _create_routed_ticket(message, requester_name, requester_email, channe
             f"- Ticket class: {classification.get('ticket_class')}",
             "- Approval/access/change gates: enforced later by platform policy, scoped credential leases, provider permissions, workflow rules, and real execution barriers.",
             "- Intake agent authority: routing and assignment only; it cannot approve risky action or grant access.",
-            "- Agent harness: dashboard queue via Hermes or Claude Code, routed through the configured AI proxy.",
+            "- Agent harness: dashboard queue via Codex, Hermes, or Claude Code, routed through the configured AI proxy.",
             "",
             "The ticket was created from a Matrix/Element chat request so the work is traceable.",
         ]),
@@ -2020,6 +2027,16 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
     harness_name = _chat_agent_harness_name(harness_name)
     model = _chat_agent_model(model_override=model_override)
     harness = get_harness(harness_name)
+    runtime_profile = {}
+    try:
+        from services.agent_runner import resolve_agent_runtime_profile
+        runtime_profile = resolve_agent_runtime_profile(
+            task_type="ops_chat",
+            requested_harness=harness_name,
+            requested_model=model,
+        )
+    except Exception:
+        runtime_profile = {}
     timeout_seconds = int(timeout_seconds or GENERAL_CHAT_TIMEOUT_SECONDS)
     with tempfile.TemporaryDirectory(prefix=f"ops-chat-{purpose}-{session_id or 'adhoc'}-") as tmp:
         work_dir = Path(tmp)
@@ -2075,6 +2092,10 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
             dashboard_api_base=os.getenv("DASHBOARD_API_BASE", "http://localhost:8000").strip(),
         )
         env["HERMES_MAX_TURNS"] = os.getenv("OPS_CHAT_GENERAL_AGENT_MAX_TURNS", "6")
+        if runtime_profile:
+            env["AGENT_RUNTIME_PROFILE"] = runtime_profile.get("profile_id") or runtime_profile.get("id") or ""
+            env["CODEX_REASONING_EFFORT"] = runtime_profile.get("reasoning_effort") or os.getenv("CODEX_REASONING_EFFORT", "medium")
+            env["CODEX_FAST_MODE"] = "1" if runtime_profile.get("fast_mode") else "0"
         env["DASHBOARD_SERVICE_TOKEN"] = os.getenv("DASHBOARD_SERVICE_TOKEN", "")
         env["DASHBOARD_API_BASE"] = os.getenv("DASHBOARD_API_BASE", "http://localhost:8000").strip()
         if tool_paths:
@@ -2087,13 +2108,25 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
             env["OPS_CHAT_REQUESTER_EMAIL"] = str(tool_context.get("requester_email") or "")
             env["OPS_CHAT_CHANNEL"] = str(tool_context.get("channel") or "matrix")
             env["OPS_CHAT_ALLOWED_TICKET_IDS"] = ",".join(str(value) for value in tool_context.get("allowed_ticket_ids") or [])
-        cmd = harness.build_command(
-            prompt,
-            str(settings_path),
-            model,
-            os.getenv("AGENT_PERMISSION_MODE", "acceptEdits"),
-            os.getenv("OPS_CHAT_ALLOWED_TOOLS", "Read,Write,Bash(python *),Bash(python3 *)" if tool_context else "Read"),
-        )
+        try:
+            from services.agent_runner import _build_command_with_runtime_env
+            cmd = _build_command_with_runtime_env(
+                harness,
+                prompt,
+                str(settings_path),
+                model,
+                os.getenv("AGENT_PERMISSION_MODE", "acceptEdits"),
+                os.getenv("OPS_CHAT_ALLOWED_TOOLS", "Read,Write,Bash(python *),Bash(python3 *)" if tool_context else "Read"),
+                env,
+            )
+        except Exception:
+            cmd = harness.build_command(
+                prompt,
+                str(settings_path),
+                model,
+                os.getenv("AGENT_PERMISSION_MODE", "acceptEdits"),
+                os.getenv("OPS_CHAT_ALLOWED_TOOLS", "Read,Write,Bash(python *),Bash(python3 *)" if tool_context else "Read"),
+            )
         if harness.name == "hermes" and "--toolsets" in cmd:
             toolset_index = cmd.index("--toolsets") + 1
             if toolset_index < len(cmd):

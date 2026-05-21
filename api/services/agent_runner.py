@@ -76,6 +76,63 @@ _queue_workers = set()
 _active_processes = {}
 _model_config = None
 
+AGENT_RUNTIME_PRESETS = [
+    {
+        "id": "codex-primary",
+        "name": "Codex primary demo",
+        "description": "Codex OAuth/subscription first, then Hermes external, then Hermes local.",
+        "harness": "codex",
+        "model": "gpt-5.5",
+        "reasoning_effort": "high",
+        "fast_mode": False,
+        "timeout_minutes": 10,
+        "max_concurrent_agents": 1,
+        "fallbacks": [
+            {"harness": "hermes", "model": "deepseek/deepseek-v4-flash", "route": "external"},
+            {"harness": "hermes", "model": "local/agent-default", "route": "local"},
+        ],
+        "notes": "Default lab/demo profile. Keep Codex auth in runtime CODEX_HOME, never source.",
+    },
+    {
+        "id": "local-only",
+        "name": "Local only",
+        "description": "Hermes against local/on-prem model routes only.",
+        "harness": "hermes",
+        "model": "local/agent-default",
+        "reasoning_effort": "medium",
+        "fast_mode": False,
+        "timeout_minutes": 60,
+        "max_concurrent_agents": 1,
+        "fallbacks": [
+            {"harness": "hermes", "model": "qwen/qwen3.6-27b", "route": "local"},
+        ],
+        "notes": "Customer/government-safe posture: no external provider route unless explicitly approved.",
+    },
+    {
+        "id": "hermes-external",
+        "name": "Hermes external lab",
+        "description": "Hermes through Nous/OpenRouter lab providers, then local fallback.",
+        "harness": "hermes",
+        "model": "deepseek/deepseek-v4-flash",
+        "reasoning_effort": "medium",
+        "fast_mode": False,
+        "timeout_minutes": 10,
+        "max_concurrent_agents": 1,
+        "fallbacks": [
+            {"harness": "hermes", "model": "openrouter/free", "route": "external"},
+            {"harness": "hermes", "model": "local/agent-default", "route": "local"},
+        ],
+        "notes": "Lab profile for Hermes external-provider testing and fallback demos.",
+    },
+]
+
+DEFAULT_ROUTE_ASSIGNMENTS = [
+    {"scope_type": "platform_area", "scope_value": "ops_chat", "profile_id": "codex-primary", "enabled": True, "notes": "User-facing chat intake and general answers."},
+    {"scope_type": "platform_area", "scope_value": "ticket_resolution", "profile_id": "codex-primary", "enabled": True, "notes": "Default operational ticket work."},
+    {"scope_type": "platform_area", "scope_value": "platform_setup", "profile_id": "local-only", "enabled": True, "notes": "Setup/onboarding can run local-first in regulated environments."},
+    {"scope_type": "raci_group", "scope_value": "Security Operations", "profile_id": "hermes-external", "enabled": True, "notes": "External lab model for long-form security demo tickets."},
+]
+
 
 def _is_transient_model_capacity_error(text):
     """Return true for upstream/provider failures that should be retried."""
@@ -1732,8 +1789,10 @@ def _load_model_config():
                 _model_config = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             _model_config = {
-                "models": ["deepseek/deepseek-v4-flash"],
-                "default": "deepseek/deepseek-v4-flash",
+                "models": ["gpt-5.5", "local/agent-default", "deepseek/deepseek-v4-flash", "qwen/qwen3.6-27b"],
+                "default": "gpt-5.5",
+                "default_harness": "codex",
+                "active_profile": "codex-primary",
             }
     return _model_config
 
@@ -1789,9 +1848,221 @@ def _normalize_harness_name(value=None, config=None):
     return "claude-code" if "claude-code" in available else next(iter(available), "claude-code")
 
 
+def _normalize_reasoning_effort(value):
+    text = str(value or "").strip().lower().replace("_", "-")
+    mapping = {
+        "": "medium",
+        "none": "medium",
+        "minimal": "low",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "extra-high": "extra-high",
+        "extra_high": "extra-high",
+        "xhigh": "extra-high",
+    }
+    return mapping.get(text, "medium")
+
+
+def _profile_timeout(profile):
+    try:
+        timeout = int(profile.get("timeout_minutes"))
+    except (TypeError, ValueError):
+        timeout = 60 if str(profile.get("model") or "").startswith(("local/", "qwen/", "lmstudio/")) else 10
+    return max(1, min(timeout, 24 * 60))
+
+
+def _profile_concurrency(profile):
+    try:
+        value = int(profile.get("max_concurrent_agents"))
+    except (TypeError, ValueError):
+        value = MAX_CONCURRENT_AGENTS
+    return max(1, min(value, 50))
+
+
+def _normalize_profile(row, config=None):
+    config = config or _load_model_config()
+    profile_id = str(row.get("id") or row.get("name") or "").strip().lower().replace(" ", "-")[:80]
+    if not profile_id:
+        profile_id = "profile"
+    model = str(row.get("model") or config.get("default") or "local/agent-default").strip()
+    fallback_rows = row.get("fallbacks") if isinstance(row.get("fallbacks"), list) else []
+    fallbacks = []
+    for item in fallback_rows[:6]:
+        if not isinstance(item, dict):
+            continue
+        fb_model = str(item.get("model") or "").strip()
+        fb_harness = _normalize_harness_name(item.get("harness"), config)
+        if fb_model:
+            fallbacks.append({
+                "harness": fb_harness,
+                "model": fb_model,
+                "route": str(item.get("route") or "").strip()[:40],
+            })
+    return {
+        "id": profile_id,
+        "name": str(row.get("name") or profile_id).strip()[:120],
+        "description": str(row.get("description") or "").strip()[:500],
+        "harness": _normalize_harness_name(row.get("harness"), config),
+        "model": model,
+        "reasoning_effort": _normalize_reasoning_effort(row.get("reasoning_effort")),
+        "fast_mode": bool(row.get("fast_mode")),
+        "timeout_minutes": _profile_timeout({"timeout_minutes": row.get("timeout_minutes"), "model": model}),
+        "max_concurrent_agents": _profile_concurrency(row),
+        "fallbacks": fallbacks,
+        "skills": [str(v).strip() for v in (row.get("skills") or []) if str(v).strip()][:40] if isinstance(row.get("skills"), list) else [],
+        "notes": str(row.get("notes") or "").strip()[:1000],
+    }
+
+
+def _normalize_assignment(row, profile_ids):
+    if not isinstance(row, dict):
+        return None
+    scope_type = str(row.get("scope_type") or "").strip().lower().replace(" ", "_")
+    scope_value = str(row.get("scope_value") or "").strip()[:160]
+    profile_id = str(row.get("profile_id") or "").strip()
+    if scope_type not in {"platform_area", "workflow_key", "raci_group", "ticket_class", "condition"}:
+        return None
+    if not scope_value or profile_id not in profile_ids:
+        return None
+    return {
+        "scope_type": scope_type,
+        "scope_value": scope_value,
+        "profile_id": profile_id,
+        "enabled": bool(row.get("enabled", True)),
+        "notes": str(row.get("notes") or "").strip()[:500],
+    }
+
+
+def _normalize_model_config(config):
+    """Return a backward-compatible, non-secret runtime config."""
+    config = dict(config or {})
+    models = [str(m).strip() for m in (config.get("models") or []) if str(m).strip()]
+    for model in ("gpt-5.5", "local/agent-default", "deepseek/deepseek-v4-flash", "openrouter/free", "qwen/qwen3.6-27b"):
+        if model not in models:
+            models.append(model)
+    preset_by_id = {row["id"]: row for row in AGENT_RUNTIME_PRESETS}
+    profiles = []
+    seen = set()
+    for row in (config.get("profiles") if isinstance(config.get("profiles"), list) else []):
+        if not isinstance(row, dict):
+            continue
+        profile = _normalize_profile(row, config)
+        if profile["id"] in seen:
+            continue
+        profiles.append(profile)
+        seen.add(profile["id"])
+    for preset in AGENT_RUNTIME_PRESETS:
+        if preset["id"] not in seen:
+            profiles.append(_normalize_profile(preset, config))
+            seen.add(preset["id"])
+    profile_ids = {p["id"] for p in profiles}
+    active_profile = str(config.get("active_profile") or config.get("default_profile") or "codex-primary").strip()
+    if active_profile not in profile_ids:
+        active_profile = "codex-primary" if "codex-primary" in profile_ids else profiles[0]["id"]
+    active = next((p for p in profiles if p["id"] == active_profile), profiles[0])
+    default_model = str(config.get("default") or config.get("default_model") or active["model"]).strip()
+    default_harness = _normalize_harness_name(config.get("default_harness") or active["harness"], config)
+    if default_model not in models:
+        models.append(default_model)
+    for profile in profiles:
+        if profile["model"] not in models:
+            models.append(profile["model"])
+        for fallback in profile.get("fallbacks") or []:
+            if fallback["model"] not in models:
+                models.append(fallback["model"])
+    assignments = []
+    for row in (config.get("route_assignments") if isinstance(config.get("route_assignments"), list) else DEFAULT_ROUTE_ASSIGNMENTS):
+        assignment = _normalize_assignment(row, profile_ids)
+        if assignment:
+            assignments.append(assignment)
+    try:
+        max_concurrent = max(1, min(int(config.get("max_concurrent_agents") or MAX_CONCURRENT_AGENTS), 50))
+    except (TypeError, ValueError):
+        max_concurrent = max(1, min(MAX_CONCURRENT_AGENTS, 50))
+    return {
+        **config,
+        "models": models,
+        "default": default_model,
+        "default_harness": default_harness,
+        "active_profile": active_profile,
+        "profiles": profiles[:30],
+        "route_assignments": assignments[:100],
+        "max_concurrent_agents": max_concurrent,
+        "default_timeout_minutes": _profile_timeout({
+            "timeout_minutes": config.get("default_timeout_minutes") or AGENT_TIMEOUT_MINUTES or active["timeout_minutes"],
+            "model": active["model"],
+        }),
+    }
+
+
+def resolve_agent_runtime_profile(scope_type=None, scope_value=None, task_type=None, assignment_group=None,
+                                  workflow_key=None, requested_profile=None, requested_harness=None,
+                                  requested_model=None):
+    """Resolve the profile/harness/model for a spawn without storing secrets."""
+    config = _normalize_model_config(_load_model_config())
+    profile_id = str(requested_profile or "").strip()
+    candidates = []
+    if workflow_key:
+        candidates.append(("workflow_key", str(workflow_key)))
+    if assignment_group:
+        candidates.append(("raci_group", str(assignment_group)))
+    if task_type:
+        candidates.append(("platform_area", str(task_type)))
+    if scope_type and scope_value:
+        candidates.append((str(scope_type), str(scope_value)))
+    if not profile_id:
+        for candidate_type, candidate_value in candidates:
+            for row in config.get("route_assignments") or []:
+                if not row.get("enabled", True):
+                    continue
+                if row.get("scope_type") == candidate_type and row.get("scope_value", "").lower() == candidate_value.lower():
+                    profile_id = row.get("profile_id")
+                    break
+            if profile_id:
+                break
+    if not profile_id:
+        profile_id = config.get("active_profile")
+    profile = next((p for p in config.get("profiles") or [] if p.get("id") == profile_id), None)
+    active_profile = next((p for p in config.get("profiles") or [] if p.get("id") == config.get("active_profile")), None)
+    # The local-only and Hermes-external presets are operator "whole platform"
+    # switches for demos and customer posture changes. Let them override scoped
+    # seed assignments unless the caller explicitly requests a profile/model.
+    if not requested_profile and not requested_model and not requested_harness and config.get("active_profile") in ("local-only", "hermes-external"):
+        profile = active_profile or profile
+    if not profile:
+        profile = active_profile
+    if not profile:
+        profile = _normalize_profile(AGENT_RUNTIME_PRESETS[0], config)
+    resolved = dict(profile)
+    if requested_harness:
+        resolved["harness"] = _normalize_harness_name(requested_harness, config)
+    if requested_model:
+        resolved["model"] = str(requested_model).strip()
+    resolved["profile_id"] = profile.get("id")
+    return resolved
+
+
+def _build_command_with_runtime_env(harness, prompt, settings_path, model, permission_mode, allowed_tools, runtime_env):
+    """Build a harness command while exposing non-secret runtime toggles."""
+    override_keys = ("CODEX_REASONING_EFFORT", "CODEX_FAST_MODE", "AGENT_RUNTIME_PROFILE")
+    previous = {key: os.environ.get(key) for key in override_keys}
+    try:
+        for key in override_keys:
+            if key in runtime_env:
+                os.environ[key] = str(runtime_env.get(key) or "")
+        return harness.build_command(prompt, settings_path, model, permission_mode, allowed_tools)
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 async def get_agent_runtime_config():
     """Return model, harness, and operator-defined runtime setups."""
-    config = _load_model_config()
+    config = _normalize_model_config(_load_model_config())
     models = config.get("models") or ["deepseek/deepseek-v4-flash"]
     default_model = config.get("default") or models[0]
     setups = config.get("setups") if isinstance(config.get("setups"), list) else []
@@ -1801,13 +2072,20 @@ async def get_agent_runtime_config():
         "default_harness": _normalize_harness_name(config.get("default_harness"), config),
         "setups": setups,
         "available_harnesses": list_harnesses(),
+        "active_profile": config.get("active_profile"),
+        "profiles": config.get("profiles") or [],
+        "route_assignments": config.get("route_assignments") or [],
+        "max_concurrent_agents": config.get("max_concurrent_agents"),
+        "default_timeout_minutes": config.get("default_timeout_minutes"),
+        "reasoning_efforts": ["low", "medium", "high", "extra-high"],
     }
 
 
 async def update_agent_runtime_config(payload):
     """Update non-secret agent defaults and named harness/model setups."""
+    global _semaphore
     payload = payload or {}
-    config = dict(_load_model_config())
+    config = _normalize_model_config(_load_model_config())
     models = list(config.get("models") or ["deepseek/deepseek-v4-flash"])
     if payload.get("models"):
         models = [str(m).strip() for m in payload.get("models") if str(m).strip()]
@@ -1839,12 +2117,66 @@ async def update_agent_runtime_config(payload):
             seen.add(name.lower())
         config["models"] = models
         config["setups"] = clean_setups[:24]
+    if "profiles" in payload:
+        clean_profiles = []
+        seen = set()
+        for row in payload.get("profiles") or []:
+            if not isinstance(row, dict):
+                continue
+            profile = _normalize_profile(row, config)
+            if profile["id"] in seen:
+                continue
+            if profile["model"] not in models:
+                models.append(profile["model"])
+            for fallback in profile.get("fallbacks") or []:
+                if fallback["model"] not in models:
+                    models.append(fallback["model"])
+            clean_profiles.append(profile)
+            seen.add(profile["id"])
+        if not clean_profiles:
+            clean_profiles = [_normalize_profile(row, config) for row in AGENT_RUNTIME_PRESETS]
+        config["models"] = models
+        config["profiles"] = clean_profiles[:30]
+    if "active_profile" in payload:
+        profile_ids = {p.get("id") for p in config.get("profiles") or []}
+        requested_profile = str(payload.get("active_profile") or "").strip()
+        if requested_profile in profile_ids:
+            config["active_profile"] = requested_profile
+            active = next((p for p in config.get("profiles") or [] if p.get("id") == requested_profile), None)
+            if active:
+                config["default_harness"] = _normalize_harness_name(active.get("harness"), config)
+                config["default"] = active.get("model") or config.get("default")
+    if "route_assignments" in payload:
+        profile_ids = {p.get("id") for p in config.get("profiles") or []}
+        clean_assignments = []
+        for row in payload.get("route_assignments") or []:
+            assignment = _normalize_assignment(row, profile_ids)
+            if assignment:
+                clean_assignments.append(assignment)
+        config["route_assignments"] = clean_assignments[:100]
+    if "max_concurrent_agents" in payload:
+        try:
+            config["max_concurrent_agents"] = max(1, min(int(payload.get("max_concurrent_agents")), 50))
+            _semaphore = asyncio.Semaphore(config["max_concurrent_agents"])
+        except (TypeError, ValueError):
+            pass
+    if "default_timeout_minutes" in payload:
+        try:
+            config["default_timeout_minutes"] = max(1, min(int(payload.get("default_timeout_minutes")), 24 * 60))
+        except (TypeError, ValueError):
+            pass
+    config = _normalize_model_config(config)
     saved = _save_model_config(config)
     await log_event("agent", "info", "dashboard", "agent_runtime_config_updated",
                     "agent_models", {
                         "default_model": saved.get("default"),
                         "default_harness": saved.get("default_harness"),
+                        "active_profile": saved.get("active_profile"),
+                        "max_concurrent_agents": saved.get("max_concurrent_agents"),
+                        "default_timeout_minutes": saved.get("default_timeout_minutes"),
                         "setup_count": len(saved.get("setups") or []),
+                        "profile_count": len(saved.get("profiles") or []),
+                        "assignment_count": len(saved.get("route_assignments") or []),
                     })
     return await get_agent_runtime_config()
 
@@ -2246,16 +2578,39 @@ async def _run_agent(work_dir, prompt, task_id, selected_harness=None):
     env = _apply_agent_path_guards(env, work_dir)
 
     settings_path = os.path.join(work_dir, ".claude", "settings.json")
-    config = _load_model_config()
+    config = _normalize_model_config(_load_model_config())
     model = config.get("default", "deepseek/deepseek-v4-flash")
+    runtime_config = {}
     task = await fetchrow("SELECT agent_id FROM agent_tasks WHERE id = $1", task_id)
     agent_id = task["agent_id"] if task else None
     if task:
-        agent = await fetchrow("SELECT selected_model, model FROM agents WHERE id = $1", task["agent_id"])
+        agent = await fetchrow(
+            "SELECT selected_model, model, runtime_config FROM agents WHERE id = $1",
+            task["agent_id"],
+        )
         if agent:
             model = agent.get("selected_model") or agent.get("model") or model
+            runtime_config = agent.get("runtime_config") or {}
+    if isinstance(runtime_config, str):
+        try:
+            runtime_config = json.loads(runtime_config)
+        except json.JSONDecodeError:
+            runtime_config = {}
+    if runtime_config:
+        env["AGENT_RUNTIME_PROFILE"] = runtime_config.get("profile_id") or ""
+        env["AGENT_TIMEOUT_MINUTES"] = str(runtime_config.get("timeout_minutes") or "")
+        env["CODEX_REASONING_EFFORT"] = _normalize_reasoning_effort(runtime_config.get("reasoning_effort"))
+        env["CODEX_FAST_MODE"] = "1" if runtime_config.get("fast_mode") else "0"
 
-    cmd = harness.build_command(prompt, settings_path, model, AGENT_PERMISSION_MODE, AGENT_ALLOWED_TOOLS)
+    cmd = _build_command_with_runtime_env(
+        harness,
+        prompt,
+        settings_path,
+        model,
+        AGENT_PERMISSION_MODE,
+        AGENT_ALLOWED_TOOLS,
+        env,
+    )
     output_path = os.path.join(work_dir, "output.log")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(f"[runner] starting task {task_id} with harness {harness.name} and model {model}\n")
@@ -2321,8 +2676,9 @@ async def _run_agent(work_dir, prompt, task_id, selected_harness=None):
             _stream_reader(process.stderr, "stderr", output_path, task_id, agent_id, chunks, activity)
         )
         try:
-            if AGENT_TIMEOUT_MINUTES > 0:
-                timeout = timedelta(minutes=AGENT_TIMEOUT_MINUTES).total_seconds()
+            timeout_minutes = int(runtime_config.get("timeout_minutes") or AGENT_TIMEOUT_MINUTES or 0)
+            if timeout_minutes > 0:
+                timeout = timedelta(minutes=timeout_minutes).total_seconds()
                 await asyncio.wait_for(process.wait(), timeout=timeout)
             else:
                 await process.wait()
@@ -2349,7 +2705,7 @@ async def _run_agent(work_dir, prompt, task_id, selected_harness=None):
             return {
                 "exit_code": -1,
                 "stdout": _tail_text("".join(chunks)),
-                "stderr": f"Agent timed out after {AGENT_TIMEOUT_MINUTES} minutes",
+                "stderr": f"Agent timed out after {timeout_minutes} minutes",
                 "timed_out": True,
             }
 
@@ -2361,14 +2717,14 @@ async def _run_agent(work_dir, prompt, task_id, selected_harness=None):
         }
 
 
-async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", actor_context=None, requested_permissions=None, harness=None):
+async def spawn_agent(ticket_id, model=None, prompt=None, task_type="ticket_resolution", actor_context=None, requested_permissions=None, harness=None, profile_id=None):
     """Spawn the selected agent harness to work on a ticket.
 
     Returns task_id on success.
     """
     # Get ticket context
     ticket = await fetchrow(
-        "SELECT id, title, description, itop_class, priority, status, itop_ref FROM tickets WHERE id = $1",
+        "SELECT id, title, description, itop_class, priority, status, itop_ref, assignee_team, owning_group FROM tickets WHERE id = $1",
         ticket_id,
     )
     if not ticket:
@@ -2381,14 +2737,27 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
     )
     skills.extend(row or [])
 
-    selected_harness = _normalize_harness_name(harness)
+    runtime_profile = resolve_agent_runtime_profile(
+        task_type=task_type,
+        assignment_group=ticket.get("assignee_team"),
+        requested_profile=profile_id,
+        requested_harness=harness,
+        requested_model=model,
+    )
+    selected_harness = runtime_profile["harness"]
+    selected_model = runtime_profile["model"]
 
     # Create agent record first (agent_tasks has FK to agents)
     agent_id = await fetchval(
-        "INSERT INTO agents (ticket_id, model, selected_model, status, started_at, heartbeat, assigned_by) "
-        "VALUES ($1, $2, $3, 'spawned', NOW(), NOW(), 'dashboard') "
+        "INSERT INTO agents (ticket_id, model, selected_model, harness, runtime_profile_id, runtime_config, status, started_at, heartbeat, assigned_by) "
+        "VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'spawned', NOW(), NOW(), 'dashboard') "
         "RETURNING id",
-        ticket_id, model, model,
+        ticket_id,
+        selected_model,
+        selected_model,
+        selected_harness,
+        runtime_profile.get("profile_id") or runtime_profile.get("id"),
+        json_dumps(runtime_profile),
     )
 
     # Create task record with real agent_id
@@ -2461,7 +2830,7 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
     work_dir = await _provision_work_dir(
         agent_id,
         task_id,
-        model,
+        selected_model,
         ticket,
         skills,
         prompt,
@@ -2477,7 +2846,9 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
     await log_event("agent", "info", f"agent_{agent_id}", "spawn_requested",
                     f"ticket_{ticket_id}", {
                         "model": model,
+                        "selected_model": selected_model,
                         "harness": selected_harness,
+                        "profile_id": runtime_profile.get("profile_id") or runtime_profile.get("id"),
                         "task_id": task_id,
                         "priority": ticket.get("priority"),
                         "priority_rank": priority_rank,
@@ -2488,8 +2859,9 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
         task_id,
         "Agent assigned",
         (
-            f"Agent `{agent_id}` was assigned with model `{model}` for `{task_type}`. "
-            f"The runner provisioned an isolated workspace and queued the task with harness `{selected_harness}` and priority rank `{priority_rank}`."
+            f"Agent `{agent_id}` was assigned with profile `{runtime_profile.get('profile_id') or runtime_profile.get('id')}` "
+            f"using harness `{selected_harness}` and model `{selected_model}` for `{task_type}`. "
+            f"The runner provisioned an isolated workspace and queued the task with priority rank `{priority_rank}`."
         ),
     )
 
@@ -2509,8 +2881,9 @@ async def spawn_agent(ticket_id, model, prompt, task_type="ticket_resolution", a
         "agent_id": agent_id,
         "task_id": task_id,
         "ticket_id": ticket_id,
-        "model": model,
+        "model": selected_model,
         "harness": selected_harness,
+        "profile_id": runtime_profile.get("profile_id") or runtime_profile.get("id"),
         "priority_rank": priority_rank,
     }
 
@@ -3005,7 +3378,7 @@ async def get_available_models():
 
 async def get_runner_health():
     """Return local runner diagnostics without making an LLM request."""
-    config = _load_model_config()
+    config = _normalize_model_config(_load_model_config())
     settings_path = os.path.expanduser("~/.claude/settings.json")
     creds_path = os.path.expanduser("~/.claude/.credentials.json")
     hermes_home = os.getenv("HERMES_HOME", os.path.expanduser("~/.hermes"))
@@ -3089,8 +3462,8 @@ async def get_runner_health():
         "models": config.get("models", []),
         "default_model": config.get("default"),
         "work_base": AGENT_WORK_BASE,
-        "max_concurrent_agents": MAX_CONCURRENT_AGENTS,
-        "timeout_minutes": AGENT_TIMEOUT_MINUTES,
+        "max_concurrent_agents": config.get("max_concurrent_agents") or MAX_CONCURRENT_AGENTS,
+        "timeout_minutes": config.get("default_timeout_minutes") or AGENT_TIMEOUT_MINUTES,
         "no_output_stall_seconds": AGENT_NO_OUTPUT_STALL_SECONDS,
         "permission_mode": AGENT_PERMISSION_MODE,
         "allowed_tools": AGENT_ALLOWED_TOOLS,
@@ -3098,6 +3471,9 @@ async def get_runner_health():
         "env_harness": AGENT_HARNESS,
         "default_harness": _normalize_harness_name(config.get("default_harness")),
         "setups": config.get("setups") or [],
+        "active_profile": config.get("active_profile"),
+        "profiles": config.get("profiles") or [],
+        "route_assignments": config.get("route_assignments") or [],
         "available_harnesses": list_harnesses(),
         "ps_path": shutil.which("ps"),
         "dashboard_api_base": DASHBOARD_API_BASE,

@@ -77,6 +77,10 @@
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 11V7a4 4 0 0 0-8 0v4"/><rect x="5" y="11" width="14" height="10" rx="2"/></svg>
                     <span>Access</span>
                 </li>
+                <li class="nav-item" data-page="settings">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6V20a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.32.43.66.6 1H20a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-.5 1z"/></svg>
+                    <span>Settings</span>
+                </li>
                 <li class="nav-item" data-page="audit">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                     <span>Audit</span>
@@ -271,7 +275,7 @@
                 <div class="page-header">
                     <h2>AI Agents</h2>
                     <div class="header-actions">
-                        <select id="agent-model-select" class="filter-select" data-agent-model-select></select>
+                        <button class="btn btn-sm" onclick="navigateTo('settings')">Agent Settings</button>
                         <button class="btn btn-sm" onclick="loadAgents()">Refresh</button>
                     </div>
                 </div>
@@ -285,27 +289,6 @@
                         <span>Agent auditor loading...</span>
                         <button class="btn btn-sm" onclick="runAgentAuditOnce()">Run Audit</button>
                     </div>
-                    <div class="agent-config-panel">
-                        <div class="agent-config-defaults agent-defaults-row">
-                            <label class="setup-label">Default Harness</label>
-                            <select id="agent-default-harness" class="filter-select" data-agent-harness-select></select>
-                            <label class="setup-label">Default Model</label>
-                            <select id="agent-default-model" class="filter-select" data-agent-model-select></select>
-                            <button class="btn btn-sm" onclick="saveAgentDefaults()">Save Defaults</button>
-                            <div class="setup-help agent-config-status" id="agent-config-status"></div>
-                        </div>
-                        <div class="agent-config-defaults agent-custom-row">
-                            <label class="setup-label">Custom Setup</label>
-                            <select id="agent-setup-select" class="filter-select" onchange="applyAgentSetupSelection()">
-                                <option value="">Default setup</option>
-                            </select>
-                            <input id="agent-setup-name" class="filter-input" placeholder="Setup name">
-                            <select id="agent-setup-harness" class="filter-select" data-agent-harness-select></select>
-                            <select id="agent-setup-model" class="filter-select" data-agent-model-select></select>
-                            <button class="btn btn-sm" onclick="saveAgentSetup()">Save Setup</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteAgentSetup()">Remove</button>
-                        </div>
-                    </div>
                     <div class="agent-create-controls">
                         <textarea id="agent-prompt-input" placeholder="Create an agent from a prompt..." rows="3"></textarea>
                         <button class="btn" onclick="createAgentFromPrompt()">Spawn Agent</button>
@@ -313,6 +296,92 @@
                 </div>
                 <div class="agents-grid" id="agents-grid">
                     <div class="agent-empty">Loading agents...</div>
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div class="page" id="page-settings">
+                <div class="page-header">
+                    <h2>Platform Settings</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-sm" onclick="loadSettings()">Refresh</button>
+                        <button class="btn btn-sm btn-success" onclick="saveRuntimeSettings()">Save Settings</button>
+                    </div>
+                </div>
+                <div class="settings-summary-grid">
+                    <div class="metric-card"><div class="metric-label">Active Profile</div><div class="metric-value compact" id="settings-active-profile-label">-</div><div class="metric-sub" id="settings-active-profile-sub">Harness routing</div></div>
+                    <div class="metric-card"><div class="metric-label">Concurrency</div><div class="metric-value compact" id="settings-concurrency-label">-</div><div class="metric-sub">Max active agents</div></div>
+                    <div class="metric-card"><div class="metric-label">Default Timeout</div><div class="metric-value compact" id="settings-timeout-label">-</div><div class="metric-sub">Per-profile values can override</div></div>
+                    <div class="metric-card"><div class="metric-label">Harnesses</div><div class="metric-value compact" id="settings-harness-label">-</div><div class="metric-sub">Codex / Hermes / Claude Code</div></div>
+                </div>
+                <div class="settings-layout">
+                    <div class="setup-panel settings-panel">
+                        <div class="setup-section-title">Runtime Defaults</div>
+                        <label class="setup-label">Active profile</label>
+                        <select id="settings-active-profile" class="filter-select"></select>
+                        <label class="setup-label">Max active agents</label>
+                        <input id="settings-max-concurrent" class="filter-input" type="number" min="1" max="50">
+                        <label class="setup-label">Default timeout minutes</label>
+                        <input id="settings-default-timeout" class="filter-input" type="number" min="1" max="1440">
+                        <div class="setup-help">Local/on-prem profiles default to 60 minutes. External profiles default to 10 minutes. Saved changes are non-secret and apply to newly spawned agents.</div>
+                        <div class="modal-actions-bar inline-actions">
+                            <button class="btn btn-sm" onclick="activateRuntimePreset('codex-primary')">Codex Primary</button>
+                            <button class="btn btn-sm" onclick="activateRuntimePreset('local-only')">Local Only</button>
+                            <button class="btn btn-sm" onclick="activateRuntimePreset('hermes-external')">Hermes External</button>
+                        </div>
+                        <div class="setup-help agent-config-status" id="agent-config-status"></div>
+                    </div>
+                    <div class="setup-panel wide settings-panel">
+                        <div class="setup-section-title">Profile Editor</div>
+                        <div class="settings-profile-grid">
+                            <label class="setup-label">Profile</label>
+                            <select id="settings-profile-select" class="filter-select" onchange="applySettingsProfileSelection()"></select>
+                            <label class="setup-label">Name</label>
+                            <input id="settings-profile-name" class="filter-input">
+                            <label class="setup-label">Harness</label>
+                            <select id="settings-profile-harness" class="filter-select" data-agent-harness-select></select>
+                            <label class="setup-label">Model</label>
+                            <select id="settings-profile-model" class="filter-select" data-agent-model-select></select>
+                            <label class="setup-label">Reasoning</label>
+                            <select id="settings-profile-reasoning" class="filter-select">
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="extra-high">Extra high</option>
+                            </select>
+                            <label class="setup-label">Fast mode</label>
+                            <label class="setup-check inline-check"><input type="checkbox" id="settings-profile-fast"><span>Fast mode</span></label>
+                            <label class="setup-label">Timeout minutes</label>
+                            <input id="settings-profile-timeout" class="filter-input" type="number" min="1" max="1440">
+                            <label class="setup-label">Max active agents</label>
+                            <input id="settings-profile-concurrent" class="filter-input" type="number" min="1" max="50">
+                        </div>
+                        <label class="setup-label">Fallbacks</label>
+                        <textarea id="settings-profile-fallbacks" class="setup-textarea" rows="4" placeholder="One fallback per line: harness,model,route"></textarea>
+                        <label class="setup-label">Notes</label>
+                        <textarea id="settings-profile-notes" class="setup-textarea" rows="3"></textarea>
+                        <div class="modal-actions-bar inline-actions">
+                            <button class="btn btn-sm" onclick="saveProfileFromEditor()">Update Profile</button>
+                            <button class="btn btn-sm" onclick="createProfileFromEditor()">Save As New Profile</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-card wide">
+                    <div class="chart-header"><h3>Routing Assignments</h3></div>
+                    <div class="settings-assignment-editor">
+                        <select id="settings-assignment-scope-type" class="filter-select">
+                            <option value="platform_area">Platform area</option>
+                            <option value="workflow_key">Workflow key</option>
+                            <option value="raci_group">RACI group</option>
+                            <option value="ticket_class">Ticket class</option>
+                            <option value="condition">Condition</option>
+                        </select>
+                        <input id="settings-assignment-scope-value" class="filter-input" placeholder="ops_chat, Security Operations, workflow key...">
+                        <select id="settings-assignment-profile" class="filter-select"></select>
+                        <input id="settings-assignment-notes" class="filter-input" placeholder="Why this route exists">
+                        <button class="btn btn-sm" onclick="addRuntimeAssignment()">Add Route</button>
+                    </div>
+                    <div id="settings-assignments-list" class="learning-list">Loading assignments...</div>
                 </div>
             </div>
 

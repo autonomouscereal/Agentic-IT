@@ -82,10 +82,15 @@ AI_PROXY_MODEL_ROUTE=local
 AI_PROXY_EXTERNAL_ENABLED=false
 AGENT_DEFAULT_MODEL=local/agent-default
 OPENROUTER_API_KEY=<from vault/runtime, never source>
-AGENT_HARNESS=hermes
+AGENT_HARNESS=codex
 HERMES_DEFAULT_PROVIDER=dashboard-proxy
 HERMES_LOCAL_PROVIDER=dashboard-proxy
 ```
+
+The dashboard Settings page is the preferred operator control for harness/model
+selection. Keep `codex-primary` for the current demo, use `local-only` for
+customer/government local-first posture, and use `hermes-external` for Hermes
+external-provider lab testing.
 
 The dashboard can override the model per agent/task. Use this to keep the
 operator's current model separate from spawned worker agents.

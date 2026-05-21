@@ -128,7 +128,7 @@ services:
       AGENT_HEARTBEAT_INTERVAL: ${AGENT_HEARTBEAT_INTERVAL:-15}
       AGENT_STALLED_THRESHOLD: ${AGENT_STALLED_THRESHOLD:-120}
       AGENT_WORK_BASE: ${AGENT_WORK_BASE:-/app/agent_work}
-      AGENT_HARNESS: ${AGENT_HARNESS:-hermes}
+      AGENT_HARNESS: ${AGENT_HARNESS:-codex}
       AI_MODEL_ROUTE: ${AI_MODEL_ROUTE:-local}
       MAX_CONCURRENT_AGENTS: ${MAX_CONCURRENT_AGENTS:-1}
       AGENT_TIMEOUT_MINUTES: ${AGENT_TIMEOUT_MINUTES:-0}
@@ -144,7 +144,7 @@ services:
       AGENT_ALLOWED_TOOLS: ${AGENT_ALLOWED_TOOLS:-Read,Write,Bash(curl *),Bash(python *),Bash(python3 *),Bash(git *),Bash(rg *),Bash(ls *),Bash(pwd),Bash(node *),Bash(npm *),Bash(npx *),Bash(playwright *)}
       AGENT_LLM_BASE_URL: ${AGENT_LLM_BASE_URL:-http://ai-proxy:4001}
       AGENT_LLM_AUTH_TOKEN: ${AGENT_LLM_AUTH_TOKEN:-}
-      OPS_CHAT_AGENT_MODEL: ${OPS_CHAT_AGENT_MODEL:-local/agent-default}
+      OPS_CHAT_AGENT_MODEL: ${OPS_CHAT_AGENT_MODEL:-}
       OPS_CHAT_SEARCH_URL: ${OPS_CHAT_SEARCH_URL:-http://host.docker.internal:7999}
       HERMES_BIN: ${HERMES_BIN:-/home/cereal/.hermes/hermes-agent/venv/bin/hermes}
       HERMES_HOME: ${HERMES_HOME:-/home/cereal/.hermes}
@@ -161,7 +161,8 @@ services:
       CODEX_MODEL_PROVIDER: ${CODEX_MODEL_PROVIDER:-agentic_proxy}
       CODEX_SANDBOX: ${CODEX_SANDBOX:-workspace-write}
       CODEX_APPROVAL_POLICY: ${CODEX_APPROVAL_POLICY:-never}
-      CODEX_REASONING_EFFORT: ${CODEX_REASONING_EFFORT:-medium}
+      CODEX_REASONING_EFFORT: ${CODEX_REASONING_EFFORT:-high}
+      CODEX_FAST_MODE: ${CODEX_FAST_MODE:-false}
       CODEX_API_KEY: ${CODEX_API_KEY:-}
       SUDO_PASSWORD: ${HERMES_SUDO_PASSWORD:-}
       DASHBOARD_API_BASE: ${DASHBOARD_API_BASE:-http://localhost:8000}

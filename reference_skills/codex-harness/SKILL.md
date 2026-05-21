@@ -43,9 +43,15 @@ CODEX_AUTH_MODE=proxy
 CODEX_MODEL_PROVIDER=agentic_proxy
 CODEX_SANDBOX=danger-full-access
 CODEX_APPROVAL_POLICY=never
-CODEX_REASONING_EFFORT=medium
+CODEX_REASONING_EFFORT=high
+CODEX_FAST_MODE=false
 CODEX_API_KEY=<vault/runtime secret, optional>
 ```
+
+The dashboard Settings page can override Codex reasoning per runtime profile:
+`low`, `medium`, `high`, or `extra-high`. Fast mode is off by default; when an
+operator enables fast mode for a profile, new Codex tasks force low reasoning
+for speed. This is a demo/runtime control only and must not store secrets.
 
 Use `CODEX_AUTH_MODE=oauth` when a deployment should use a logged-in Codex
 subscription account instead of API/proxy billing. In that mode the harness does
@@ -158,8 +164,9 @@ best chat-intake engine. The 2026-05-21 lab retest proved:
 - OAuth mode is now enrolled and verified with ChatGPT auth. A closed-stdin
   `gpt-5.5` high-reasoning proof created a marker file successfully.
 
-Until a dedicated Codex account or tool-capable Codex model route passes the
-Ops Chat smoke, keep `OPS_CHAT_AGENT_HARNESS` blank or `hermes` for demos.
+The current demo profile is `codex-primary`: Codex with `gpt-5.5`, high
+reasoning, fast mode off, and Hermes fallback intent. Ops Chat follows this
+profile when `OPS_CHAT_AGENT_HARNESS` and `OPS_CHAT_AGENT_MODEL` are blank.
 
 ## Security Notes
 

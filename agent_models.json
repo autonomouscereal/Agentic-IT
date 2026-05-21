@@ -1,16 +1,81 @@
 {
   "models": [
+    "gpt-5.5",
     "local/agent-default",
     "deepseek/deepseek-v4-flash",
+    "openrouter/free",
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-27b2",
     "qwen/qwen3.6-27b3",
     "qwen/qwen3.6-27b4",
     "qwen/qwen3.6-27b5"
   ],
-  "default": "local/agent-default",
-  "default_harness": "hermes",
+  "default": "gpt-5.5",
+  "default_harness": "codex",
+  "active_profile": "codex-primary",
+  "max_concurrent_agents": 1,
+  "default_timeout_minutes": 10,
+  "profiles": [
+    {
+      "id": "codex-primary",
+      "name": "Codex primary demo",
+      "description": "Codex OAuth/subscription first, then Hermes external, then Hermes local.",
+      "harness": "codex",
+      "model": "gpt-5.5",
+      "reasoning_effort": "high",
+      "fast_mode": false,
+      "timeout_minutes": 10,
+      "max_concurrent_agents": 1,
+      "fallbacks": [
+        {"harness": "hermes", "model": "deepseek/deepseek-v4-flash", "route": "external"},
+        {"harness": "hermes", "model": "local/agent-default", "route": "local"}
+      ],
+      "notes": "Default lab/demo profile. Keep Codex auth in runtime CODEX_HOME, never source."
+    },
+    {
+      "id": "local-only",
+      "name": "Local only",
+      "description": "Hermes against local/on-prem model routes only.",
+      "harness": "hermes",
+      "model": "local/agent-default",
+      "reasoning_effort": "medium",
+      "fast_mode": false,
+      "timeout_minutes": 60,
+      "max_concurrent_agents": 1,
+      "fallbacks": [
+        {"harness": "hermes", "model": "qwen/qwen3.6-27b", "route": "local"}
+      ],
+      "notes": "Customer/government-safe posture: no external provider route unless explicitly approved."
+    },
+    {
+      "id": "hermes-external",
+      "name": "Hermes external lab",
+      "description": "Hermes through Nous/OpenRouter lab providers, then local fallback.",
+      "harness": "hermes",
+      "model": "deepseek/deepseek-v4-flash",
+      "reasoning_effort": "medium",
+      "fast_mode": false,
+      "timeout_minutes": 10,
+      "max_concurrent_agents": 1,
+      "fallbacks": [
+        {"harness": "hermes", "model": "openrouter/free", "route": "external"},
+        {"harness": "hermes", "model": "local/agent-default", "route": "local"}
+      ],
+      "notes": "Lab profile for Hermes external-provider testing and fallback demos."
+    }
+  ],
+  "route_assignments": [
+    {"scope_type": "platform_area", "scope_value": "ops_chat", "profile_id": "codex-primary", "enabled": true, "notes": "User-facing chat intake and general answers."},
+    {"scope_type": "platform_area", "scope_value": "ticket_resolution", "profile_id": "codex-primary", "enabled": true, "notes": "Default operational ticket work."},
+    {"scope_type": "platform_area", "scope_value": "platform_setup", "profile_id": "local-only", "enabled": true, "notes": "Setup/onboarding can run local-first in regulated environments."},
+    {"scope_type": "raci_group", "scope_value": "Security Operations", "profile_id": "hermes-external", "enabled": true, "notes": "External lab model for long-form security demo tickets."}
+  ],
   "setups": [
+    {
+      "name": "Codex primary demo",
+      "harness": "codex",
+      "model": "gpt-5.5"
+    },
     {
       "name": "Hermes local default",
       "harness": "hermes",

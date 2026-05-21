@@ -271,7 +271,20 @@ Returns aggregate counts and average duration.
 
 `GET /api/agents/models`
 
-Returns models from `agent_models.json`.
+Returns models and non-secret runtime settings from `agent_models.json`,
+including `active_profile`, `profiles`, `route_assignments`,
+`max_concurrent_agents`, `default_timeout_minutes`, and available harnesses.
+
+`GET /api/agents/config`
+
+Returns the editable runtime configuration used by the Settings page.
+
+`PUT /api/agents/config`
+
+Persists non-secret runtime configuration. Supported fields include
+`active_profile`, `profiles`, `route_assignments`, `max_concurrent_agents`,
+`default_timeout_minutes`, `default_harness`, `default_model`, and `models`.
+Provider tokens, OAuth state, and API keys are never accepted here.
 
 `GET /api/agents/runner-health`
 

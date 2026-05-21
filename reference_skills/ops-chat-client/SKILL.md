@@ -24,9 +24,10 @@ Reference stack:
 - Dashboard endpoint: `/api/ops-chat/message`
 - Agent execution: dashboard `agent_runner.spawn_agent()` using Hermes,
   Claude Code, or Codex through the configured AI proxy
-- Harness selector: leave `OPS_CHAT_AGENT_HARNESS` blank to follow
-  `AGENT_HARNESS`, or set/pass `hermes`, `claude-code`, or `codex` for a
-  bridge-wide or per-request smoke/demo override.
+- Harness selector: leave `OPS_CHAT_AGENT_HARNESS` and `OPS_CHAT_AGENT_MODEL`
+  blank to follow the active dashboard Settings profile, or set/pass `hermes`,
+  `claude-code`, or `codex` for a bridge-wide or per-request smoke/demo
+  override.
 
 ## Contract
 
@@ -147,9 +148,10 @@ Important environment:
 - `MATRIX_ELEMENT_TLS_KEY_PATH=./runtime/tls/dashboard.key`
 - `MATRIX_BOT_LOCALPART=agentic-ops`
 - `MATRIX_BOT_DISPLAY_NAME=Agentic Ops Agent`
-- `OPS_CHAT_AGENT_MODEL=<active chat handoff model>`
+- `OPS_CHAT_AGENT_MODEL=<blank to follow Settings profile, or targeted model>`
 - `OPS_CHAT_AGENT_HARNESS=<blank|hermes|claude-code|codex>`; blank follows
-  `AGENT_HARNESS`. Use this for bridge-level demo rooms only when needed.
+  the active Settings profile. Use this for bridge-level demo rooms only when
+  needed.
 - `OPS_CHAT_SEARCH_URL=<private SearXNG base URL, default http://host.docker.internal:7999>`
 - `OPS_CHAT_OUTBOUND_ENABLED=true`
 - `OPS_CHAT_OUTBOUND_POLL_SECONDS=5`
@@ -163,16 +165,19 @@ Short 120-180 second timeouts are treated as a regression for local model
 testing; rely on typing state and the working acknowledgement while the harness
 runs.
 
-`OPS_CHAT_AGENT_MODEL` must follow the active route profile. Use:
+The preferred path is the dashboard Settings page. Use it to choose
+`codex-primary`, `local-only`, or `hermes-external`, tune reasoning/fast mode,
+and assign chat to a specific runtime profile. Route switch scripts remain
+available for proxy-level local/external flips:
 
 ```bash
 python3 scripts/switch_model_route.py --route local --restart
 python3 scripts/switch_model_route.py --route external --restart
 ```
 
-The switcher updates both `AGENT_DEFAULT_MODEL` and `OPS_CHAT_AGENT_MODEL`.
-Do not manually leave Ops Chat on `local/agent-default` while the demo proxy is
-set to the external route.
+Do not manually leave Ops Chat on a stale model override while the Settings
+profile or demo proxy route changes. Blank `OPS_CHAT_AGENT_MODEL` is the safest
+default.
 
 The browser-facing Synapse URL must be HTTPS when Keycloak OIDC is enabled.
 The reference deployment sets `MATRIX_PUBLIC_BASEURL` and

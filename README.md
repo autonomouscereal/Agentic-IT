@@ -43,6 +43,9 @@ where agents can operate across existing tools with bounded authority.
   setup flows, and direct operator prompts.
 - Runs real agent harnesses against work items, currently including Hermes
   Agent, Claude Code, and Codex CLI through a common runner contract.
+- Uses a Settings plane for runtime profiles so Codex, Hermes, and Claude Code
+  can be selected per platform area, workflow, RACI group, or team without
+  hardcoding the Agents tab.
 - Routes models through a built-in AI proxy so deployments can prefer local or
   on-prem models, while still allowing deliberate external test routes.
 - Uses provider adapters so existing tools can stay in place. iTop, Wazuh,
@@ -90,8 +93,8 @@ Control plane builds context
         |
         v
 Agent is assigned
-  Hermes, Claude Code, Codex, or another future harness through the same task
-  and checkpoint contract
+  Settings resolves a runtime profile, then Hermes, Claude Code, Codex, or
+  another future harness runs through the same task and checkpoint contract
         |
         v
 Agent works under guardrails
@@ -125,6 +128,9 @@ working modules used to prove the product shape:
 - Keycloak for IAM/OIDC/SAML reference identity.
 - GitLab and GitLab Runner for CI/CD security workflows.
 - Matrix/Element Ops Chat for conversational work intake.
+- Settings-managed runtime profiles for Codex-primary, local-only, and
+  Hermes-external routes, including reasoning effort, fast mode, concurrency,
+  timeouts, and fallback order.
 - Semgrep, Trivy, OWASP ZAP, and Nuclei for CI/CD security gates.
 - Reference skills for deployment, provider management, scans, chat, memory,
   access workflows, and dashboard operations.

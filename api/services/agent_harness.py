@@ -159,7 +159,10 @@ class CodexHarness:
                 or ""
             ).rstrip("/")
             proxy_v1 = f"{proxy_base}/v1" if proxy_base else ""
+        fast_mode = os.getenv("CODEX_FAST_MODE", "").strip().lower() in ("1", "true", "yes", "on")
         effort = os.getenv("CODEX_REASONING_EFFORT", "").strip()
+        if fast_mode:
+            effort = "low"
 
         cmd = [
             codex_bin,
