@@ -9,6 +9,8 @@ agents do not have to reconstruct the intended behavior from old smoke runs.
 
 For the detailed 2026-05-21 hardening evidence, see
 `docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`.
+For the exact reusable Playwright login/verification-skip bundle, see
+`docs/OPS_CHAT_PLAYWRIGHT_BUNDLE.md`.
 
 ## Product Goal
 
@@ -36,6 +38,33 @@ The user experience should be:
 
 The user should not need to know iTop, Wazuh, Mailcow, GitLab, Keycloak,
 Semgrep, or the dashboard API. They should just ask for help.
+
+## Current Demo Readiness Snapshot
+
+2026-05-21 final pre-demo pass:
+
+- Dashboard UI login and navigation passed through Playwright.
+- Dashboard pages verified nonblank: Overview, Tickets, Intake, Agents,
+  Changes, Workflows, Postmortems, CI/CD, Learning, Tools, Setup, Access,
+  Audit, and Settings.
+- Browser console errors during the dashboard crawl: none.
+- Settings quick controls saved `codex-primary`, fast mode on, low reasoning,
+  and `max_concurrent_agents=5`; `/api/agents/runner-health` confirmed
+  `worker_count=5`, Codex OAuth `logged_in`, and proxy `ok`.
+- Element/Ops Chat login-only smoke passed through Keycloak and same-origin
+  Matrix health returned `200`.
+- Element/Ops Chat message smoke used
+  `OPS_CHAT_ROOM_ID=!zSTElAvfSUDmAKZSWm:agentic-ops.local`, skipped Matrix
+  verification/encryption prompts, sent marker `demo-bulletproof-1779402310`,
+  received a ticket-linked response on ticket `1444`, and spawned real Codex
+  worker agent `406`.
+- Agent `406` completed task `403`, wrote a public `ops-chat-closure` note,
+  resolved ticket `1444`, and active agents returned to `0`.
+
+Known live-demo caveat: the long-lived `demo_account_1` room may continue the
+existing queue-health ticket instead of opening a fresh one. That is acceptable
+for bridge/agent reliability proof. For a pristine story, use a fresh Matrix
+demo user/room or explicitly phrase the request as "open a new ticket".
 
 ## Architecture
 

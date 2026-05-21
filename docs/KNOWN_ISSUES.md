@@ -114,6 +114,10 @@ matrix proofs remain useful, but they predate the final two fixes.
   ticket `1444`.
 - Dashboard runner health remained healthy with `max_concurrent_agents=5`,
   `worker_count=5`, Codex OAuth `logged_in`, and no stuck active agents.
+- A later same-day pass sent marker `demo-bulletproof-1779402310`; real Codex
+  worker agent `406` completed task `403`, wrote a public
+  `ops-chat-closure` note, resolved ticket `1444`, and active agents returned
+  to `0`.
 
 ### Ops Chat progress-note live verification was source-and-synthetic, not full UI
 

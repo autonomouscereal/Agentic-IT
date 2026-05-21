@@ -340,6 +340,11 @@ verification prompts. Ops Chat demo proof does not require Matrix E2EE; it
 requires Keycloak login, same-origin Matrix health, bridge delivery, dashboard
 ticket/update linkage, and a visible agent response.
 
+The exact reusable prompt-handling bundle is documented in
+`docs/OPS_CHAT_PLAYWRIGHT_BUNDLE.md`. Future Ops Chat UI tests should copy that
+shape instead of confirming encryption setup, resetting digital identity, or
+requiring every smoke message to create a brand-new ticket.
+
 This proves dashboard login, Element login through Keycloak, same-origin Matrix
 health from inside the browser, DM creation to `@agentic-ops:agentic-ops.local`,
 ticket creation, and real agent handoff.
@@ -350,6 +355,12 @@ used room `!zSTElAvfSUDmAKZSWm:agentic-ops.local`, sent marker
 `1444`. The agent reused the active queue-health ticket instead of opening a
 fresh one; that is acceptable for bridge/reliability smoke and remains a
 separate agent-decision tuning caveat for clean demo storytelling.
+
+Follow-up same-day proof: marker `demo-bulletproof-1779402310` went through
+Element, the Matrix bridge, dashboard Ops Chat, and real Codex worker agent
+`406`. Agent `406` completed task `403`, wrote a public
+`external_ref=ops-chat-closure` note, resolved ticket `1444`, and the active
+agent count returned to `0`.
 
 One-room Element marathon:
 

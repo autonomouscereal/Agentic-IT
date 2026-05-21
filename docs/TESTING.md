@@ -176,6 +176,9 @@ The full deployment and demo-readiness checkpoint lives in
 the quick runbook and the checkpoint doc as the evidence catalog. The detailed
 2026-05-21 lifecycle hardening report lives in
 `docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`.
+The canonical Element/Keycloak prompt-handling bundle lives in
+`docs/OPS_CHAT_PLAYWRIGHT_BUNDLE.md`; use that pattern for future Ops Chat UI
+tests.
 
 ```bash
 python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
