@@ -57,11 +57,50 @@ Always validate:
 
 Use `references/research-summary.md` for the 2026 capability notes and source trail.
 
-## Agentic Ops Chat Helper
+## Agentic Ops Chat Remotion Path
 
-The Agentic Operations API image includes `ffmpeg` and mounts this skill under
-`/root/.agents/skills/animation-video`. For lightweight chat requests, agents
-can create a deterministic text-and-shapes MP4 without installing packages:
+For Agentic Operations chat/demo animation requests, use the same class of
+workflow as the demo MP4s: `animation-video` plus `remotion-best-practices`,
+implemented with Remotion. Do not depend on a bundled example video being
+present. Build the small animation in the current work directory.
+
+When a user asks for a small animation in chat:
+
+1. Create or copy a minimal Remotion project in the current work directory.
+2. Write `src/index.tsx` with a named composition such as `ChatAnimation`.
+3. Use deterministic React/Remotion primitives:
+   `AbsoluteFill`, `Composition`, `Sequence`, `useCurrentFrame`,
+   `useVideoConfig`, `interpolate`, and `spring`.
+4. Render a still frame if time allows.
+5. Render MP4 with H.264.
+6. Validate with this skill's verifier.
+7. Finish with `ops_chat_tool.py validate-artifact --kind video`.
+
+Fast local template:
+
+```bash
+mkdir -p remotion-chat/src remotion-chat/out
+cd remotion-chat
+npm init -y
+npm install remotion@4.0.463 @remotion/cli@4.0.463 react@18.3.1 react-dom@18.3.1
+# write src/index.tsx with a Composition id="ChatAnimation"
+npx remotion render src/index.tsx ChatAnimation out/chat_animation.mp4 --codec=h264 --crf=18
+python /root/.agents/skills/animation-video/scripts/verify_video.py out/chat_animation.mp4 --min-size 10000
+cd ..
+python ops_chat_tool.py validate-artifact \
+  --path remotion-chat/out/chat_animation.mp4 \
+  --kind video \
+  --title "Remotion animation artifact"
+```
+
+If the deployment has global Remotion packages installed, `npx remotion` should
+work immediately. If a temporary project cannot resolve packages, run the
+`npm install` line above inside the temporary project. Keep the animation
+self-contained: no remote media fetches, no external images, no package choices
+outside the Remotion/React renderer stack unless the user explicitly asks.
+
+The older helper remains available only as a last-resort fallback when Node or
+Remotion is unavailable:
 
 ```bash
 python /root/.agents/skills/animation-video/scripts/render_text_shapes_animation.py \
@@ -69,14 +108,7 @@ python /root/.agents/skills/animation-video/scripts/render_text_shapes_animation
   --title "Agentic Operations" \
   --subtitle "Validated animation artifact" \
   --marker "demo-marker"
-python /root/.agents/skills/animation-video/scripts/verify_video.py animation.mp4 --min-size 1024
-python ops_chat_tool.py validate-artifact --path animation.mp4 --kind video --title "Animation artifact"
 ```
 
-Use this helper for demo-safe motion graphics. Do not fetch remote assets or
-install packages from a chat turn.
-
-For richer React motion graphics, use the bundled `remotion-best-practices`
-skill. It is included in the deployable `reference_skills` bundle so Hermes,
-Claude Code, and Codex can all read the same Remotion rules when a task calls
-for a more complex text/shape animation.
+Do not fetch remote media assets for chat animation requests. Use local code,
+text, shapes, gradients, charts, and generated SVG/HTML/React primitives.

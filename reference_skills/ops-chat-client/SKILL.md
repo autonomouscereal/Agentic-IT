@@ -146,9 +146,12 @@ Reference stack:
   attachment metadata, and treated as untrusted input. Agent-generated
   artifacts from `validate-artifact` can be returned to Element as downloadable
   Matrix files when small enough for the demo bridge.
-- Animation/video requests use the bundled `animation-video` skill. Agents
-  should create short deterministic MP4/WebM artifacts, validate them, and send
-  the artifact back through Ops Chat instead of pasting binary data.
+- Animation/video requests use the bundled `animation-video` skill with
+  `remotion-best-practices` as the preferred renderer. Agents should create
+  short deterministic Remotion MP4/WebM artifacts, validate them, and send the
+  artifact back through Ops Chat instead of pasting binary data. Do not require
+  a bundled example video; create a minimal local Remotion project in the
+  current work directory and render it with `npx remotion render`.
 - Never perform hidden work outside tickets. If the user asks for account,
   system, email, deployment, security, access, change, research, or repair work,
   create or continue a ticket.
