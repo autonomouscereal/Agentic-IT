@@ -22,6 +22,13 @@ The control plane is designed to be:
 - auditable enough for demos, troubleshooting, and future compliance review
 - modular enough to deploy into a new environment without rewriting the dashboard
 
+Architectural doctrine: agent decisions belong to the harness; enforcement
+belongs to the platform. The dashboard should provide context and tools, then
+let Codex, Hermes, Claude Code, or a future harness decide how to proceed.
+Security, provider permissions, approvals, credential leases, audit, and unsafe
+action blocking are hard platform boundaries. See
+`docs/AGENT_DECISION_MODEL.md`.
+
 The current implementation uses iTop as the reference ticketing provider,
 Hermes Agent as the preferred queue harness, Claude Code as a fallback harness,
 and the built-in AI proxy as the model gateway. None of these is treated as the
@@ -136,6 +143,12 @@ codex exec --json --skip-git-repo-check --sandbox danger-full-access --model <mo
 9. `task_tracker` polls `checkpoint.json` and process state.
 10. If checkpoint status is `done` or `completed`, the task is completed and the harness process is terminated so local GPU work does not continue unnecessarily.
 
+The runner contract must stay harness-agnostic and decision-preserving. Do not
+add app-side classifiers that decide business intent, ticket reuse, assignment,
+or workflow choice when the agent can make that decision from context. Narrow
+fallbacks are acceptable for idempotency, lost-message prevention, and safety
+recovery, but they must not become the normal operating model.
+
 ## Wake, Restart, Stop
 
 `Wake`:
@@ -159,6 +172,11 @@ codex exec --json --skip-git-repo-check --sandbox danger-full-access --model <mo
 ## Approval Guardrail
 
 Agents are instructed to request approval before any action that can alter an environment, data, accounts, mailboxes, firewall rules, blocklists, services, repositories, or production state.
+
+The agent may decide that an action is needed, but the agent is not the approval
+authority. It must hit a real platform/provider barrier and request approval,
+access, or a credential lease. The system then enforces the decision through
+RBAC, approval APIs, provider permissions, and audit logs.
 
 The approval API:
 

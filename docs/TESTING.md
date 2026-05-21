@@ -2,6 +2,34 @@
 
 Last updated: 2026-05-21.
 
+## Pre-Demo Non-Agent Smoke Checkpoint
+
+2026-05-21 last-minute demo checkpoint intentionally avoided real agent
+invocations.
+
+Local/source checks:
+
+- `python -m pytest -q`: `210 passed`
+- `python -m py_compile api\routes\ops_chat.py api\services\ticket_service.py deploy\ops-chat\bridge\bridge.py`: passed
+- `python scripts\text_hygiene.py`: passed
+- `node --check scripts\smoke_ops_chat_playwright.js`: passed
+
+Live AI-server checks against `http://127.0.0.1:25480` and
+`https://127.0.0.1:25443`:
+
+- `/health`: `ok`
+- `/api/agents/active`: `{"agents":[],"count":0}` before and after
+- `scripts/smoke_global_search.py`: passed, ticket `1429`
+- `scripts/smoke_setup_platform.py`: passed with `spawn_agent=false`, setup
+  ticket `1430`, module ticket count `9`, single-module ticket `1440`
+- `scripts/smoke_dashboard_auth_enforcement.py`: passed, auth mode `header`,
+  enforcement `enforce`, no secret values returned
+- `scripts/smoke_dashboard_https.py`: passed, `/login` redirect, HSTS, and
+  `X-Frame-Options: DENY`
+
+This checkpoint validates platform health, auth, HTTPS, search, and setup
+ticket fan-out without starting any harness tasks during the live-demo window.
+
 ## Agent Harness Validation
 
 2026-05-21 Codex harness checkpoint:

@@ -15,6 +15,12 @@ giving up control. It gives agents the context, tools, permissions, approvals,
 and audit surface they need to do real work, while keeping humans in charge of
 risk, policy, and accountability.
 
+Core doctrine: agents own operational decisions; the platform owns real
+boundaries. Do not replace the agent with brittle app-side intent parsers.
+Instead, give the agent context and make authentication, RBAC, provider
+permissions, credential leases, approval gates, audit, and unsafe-action
+blocking enforce the walls. See [Agent Decision Model](docs/AGENT_DECISION_MODEL.md).
+
 ## What It Solves
 
 Most AI demos stop at chat. Most enterprise automation stops at rigid playbooks.
@@ -112,6 +118,11 @@ code translates between those tools and the canonical dashboard objects without
 forcing the whole product to become specific to one ITSM, SIEM, IAM provider, or
 agent harness.
 
+Design rule: build guardrails as real platform barriers, not as upstream
+decision cages. The agent should decide whether to answer, ask, create,
+continue, reassign, escalate, or learn; the system should stop unauthorized,
+unsafe, unaudited, or unapproved actions when the agent reaches those barriers.
+
 ## Current Reference Stack
 
 The live lab deployment runs a reference environment on the AI server. These are
@@ -181,6 +192,9 @@ health status.
   canonical work model.
 - Automation is aggressive but governed. Agents can do real work, but risky
   actions require approvals and scoped permissions.
+- The agentic harness is trusted to reason about work. The platform should
+  correct, steer, gate, audit, and recover agents, not neuter them into fixed
+  parser flows.
 - Every run is meant to improve the next one through postmortems, skills,
   workflows, tests, and documentation.
 

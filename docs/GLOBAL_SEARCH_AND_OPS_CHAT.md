@@ -60,6 +60,12 @@ a dashboard widget and not an OpenAI chat shim. The reference deployment uses:
 - the dashboard Ops Chat API as the canonical control-plane intake endpoint
 - Hermes, Claude Code, or Codex agent harnesses through the configured AI proxy
 
+Ops Chat follows `docs/AGENT_DECISION_MODEL.md`. The chat agent decides whether
+to answer, clarify, create a ticket, continue an existing ticket, cancel,
+reassign, escalate, or return a validated artifact. The bridge and API provide
+context and enforce real delivery/security boundaries; they should not become a
+brittle business-intent parser.
+
 Harness selection is deliberately modular:
 
 - Default chat intake follows the active Settings runtime profile when

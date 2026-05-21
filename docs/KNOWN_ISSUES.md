@@ -2,6 +2,33 @@
 
 Last updated: 2026-05-21.
 
+## Found During 2026-05-21 Pre-Demo Doctrine Lock
+
+### Over-hardening can reduce agent decision quality
+
+Status: documented as a product doctrine guardrail on 2026-05-21.
+
+Problem:
+
+- Several late Ops Chat fixes risked turning agent-owned decisions into
+  app-owned parser decisions, especially around old-versus-new ticket selection
+  in a long-lived Matrix room.
+- That protects one failure mode but damages the core product promise: agents
+  should reason over context, make decisions, and manage work, while the
+  platform enforces real security and change boundaries.
+
+Correction:
+
+- Added `docs/AGENT_DECISION_MODEL.md` as the canonical doctrine.
+- Updated README, architecture, deployment, Ops Chat, service desk, and skills
+  to say that agents own routing/assignment/ticket reuse/user-communication
+  decisions.
+- Guardrails should be implemented as RBAC, provider permissions, scoped
+  credential leases, approval gates, suspicious URL/file safety, audit,
+  idempotency, retry, and lost-message prevention.
+- Broad app-side hard stops or parser classifiers require a concrete safety
+  reason, documentation, and regression tests.
+
 ## Found During 2026-05-21 Ops Chat Codex Ticket Worker Retest
 
 ### Ops Chat Codex OAuth ticket worker inherited local model alias

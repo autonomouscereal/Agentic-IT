@@ -517,3 +517,14 @@ sudo chown -R cereal:cereal /home/cereal/SOC_TESTING/soc-dashboard/agent_work
 ## Rollback
 
 This project directory is not currently a git repository in this workspace. Before major live changes, copy the deployed directory or commit it in a proper repo. Database rollback is not implemented; migrations are additive and idempotent where possible.
+# Deployment Doctrine
+
+Agentic Operations deployments should preserve the agent-owned decision model:
+install the control plane, proxy, memory, auth, provider adapters, and setup
+ticket handoff, then let agents perform environment-specific onboarding under
+real platform guardrails. Deployment scripts should plant the seed and enforce
+boundaries; they should not hardcode customer-specific operational decisions
+that agents can make with richer context.
+
+See `docs/AGENT_DECISION_MODEL.md` before changing installer, setup, Ops Chat,
+assignment, or approval behavior.

@@ -46,6 +46,13 @@ supported peer harnesses. Keep harness-specific command building isolated in
 `api/services/agent_harness.py` and preserve the dashboard task/checkpoint/API
 contract for future harnesses.
 
+Decision doctrine: agents make operational decisions; the platform enforces
+real boundaries. Do not move routing, assignment, ticket reuse, workflow choice,
+or requester communication into brittle parser logic when a harness can decide
+from context. Build RBAC, approval gates, scoped credential leases, provider
+permission checks, audit, retries, and unsafe-action blockers as hard walls the
+agent must hit.
+
 ## Runtime Settings
 
 Agent runtime configuration lives in the dashboard `Settings` page and

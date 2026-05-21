@@ -7,6 +7,13 @@ customer-specific integration work in shell. The shell/Python bootstrap plants
 the seed; the platform continues onboarding through auditable setup tickets
 with approval gates.
 
+Installer doctrine follows `docs/AGENT_DECISION_MODEL.md`: bootstrap code should
+create the platform, configuration, proxy, auth, database, memory, and scoped
+setup tickets, then let agents perform environment discovery, integration
+choices, provider fixes, access requests, and workflow refinement from inside
+the governed platform. Do not turn the installer into a giant hardcoded
+decision engine.
+
 The near-term installer proves the SOC/IT seed domain. The long-term installer
 is the bootstrap for a private agentic operations layer that can connect to an
 existing enterprise, deploy approved reference modules for missing capabilities,

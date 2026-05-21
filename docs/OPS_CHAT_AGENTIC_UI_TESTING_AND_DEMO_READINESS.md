@@ -116,6 +116,12 @@ Matrix as "Agent completed this request..." and progress notes render as
 The application may recover side effects and enforce safety, but it should not
 replace the agent's decision with a brittle custom JSON classifier.
 
+This is not optional. Future changes must preserve the agent-owned decision
+model described in `docs/AGENT_DECISION_MODEL.md`. Add context, tools, tests,
+and real boundaries; do not move routing, old-vs-new ticket selection,
+assignment, or user-communication decisions into a rigid app parser unless a
+specific safety failure requires a narrow, documented fallback.
+
 Important room behavior:
 
 - A Matrix room is a conversation, not a ticket container. One room can contain
@@ -128,6 +134,9 @@ Important room behavior:
   when the same sentence contains words like "update" or "keep me updated."
   This avoids stale-room false positives while preserving the agent's ownership
   of old-vs-new decisions.
+- If the agent still continues an old ticket too often, treat that as a prompt,
+  context, or skill improvement. Do not solve it with a broad terminal-ticket
+  prohibition that blocks legitimate agent decisions.
 - Cancellation-like `continue-ticket` updates mark the selected ticket
   `cancelled`, record the requester note, and stop that ticket's active agent
   if one is present.

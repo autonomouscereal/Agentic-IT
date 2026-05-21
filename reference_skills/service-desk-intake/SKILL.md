@@ -81,6 +81,13 @@ credential, approval, and change gates must be enforced later by scoped vault
 leases, provider permission failures, workflow policy, and platform barriers
 when the ticket agent attempts work.
 
+Do not regress this into parser-first intake. The platform should give the
+agent requester context, affected-user context, room history, recent tickets,
+RACI options, provider state, and skills, then let the agent decide whether to
+answer, clarify, create, continue, reassign, escalate, or cancel. Build strong
+security walls at the permission/change/provider boundary, not broad upstream
+hard stops that prevent legitimate agent decisions.
+
 The chat agent may ask a concise follow-up before ticket creation if the answer
 would materially change the route, scope, urgency, or whether the ask needs a
 ticket. Once enough context exists, it should create the ticket and the platform

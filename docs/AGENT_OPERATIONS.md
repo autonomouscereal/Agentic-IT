@@ -39,6 +39,12 @@ The dashboard should let operators answer:
 - Did the process clean up after completion?
 - Can a demo viewer follow the story from ticket notes without reading raw logs?
 
+Operating doctrine: do not treat agents as passive executors behind rigid
+keyword routing. The agent should decide how to proceed from context. Operators
+and platform code should provide steering, permissions, approvals, and audit,
+then let real barriers stop unauthorized or unsafe actions. See
+`docs/AGENT_DECISION_MODEL.md`.
+
 ## Deployment Boundary For Agent-Created Sites
 
 Agents can safely create artifacts and run previews in their own work
@@ -206,6 +212,13 @@ assigned. It is not an approval authority. Approval, access, credential, and
 change gates must be created only when the ticket agent hits a real platform
 barrier such as a vault lease denial, provider `403`, workflow policy, or
 change approval requirement.
+
+Do not overfit chat rooms into one-ticket state machines. A room can contain
+several unrelated requests, harmless questions, cancellations, replacements,
+and old resolved work. Pass the agent recent ticket status/title/provider
+context and let it decide whether to answer, create, continue, reassign, or
+escalate. If the agent chooses poorly, document it and improve context/prompts
+rather than adding broad app-side hard stops.
 
 For demo-quality evidence, a chat-created ticket should show:
 

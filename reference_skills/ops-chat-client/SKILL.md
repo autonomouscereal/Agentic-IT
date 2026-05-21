@@ -76,6 +76,10 @@ Reference stack:
   continue/cancel an existing ticket from the same room. Do not assume one
   Matrix room equals one ticket; the room can contain several unrelated asks.
   Do not reintroduce app-side JSON parsing as the decision-maker.
+- Preserve agent freedom. Add context, skills, memory, ticket summaries,
+  provider metadata, and real permission barriers; do not replace the harness
+  with hardcoded keyword routing. If a behavior is wrong, improve prompts,
+  examples, and guardrails at the actual unsafe boundary.
 - During the chat-intake turn, the agent must finish with exactly one final
   dashboard tool: `python ops_chat_tool.py answer --reply-file answer.md` for
   general chat, `python ops_chat_tool.py create-ticket ...` for new tracked
