@@ -13,3 +13,5 @@ def test_ticket_prompt_distinguishes_preview_from_real_deployment():
     assert "container-local behavior" in prompt
     assert "status: resolved" in prompt
     assert "close_provider: true" in prompt
+    assert "external_ref: ops-chat-closure" in prompt
+    assert "published URL plus proof that it rendered" in prompt

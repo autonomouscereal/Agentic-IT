@@ -513,10 +513,13 @@ The 2026-05-20 hardening pass also fixed three demo-readiness issues:
   Approval-gate resume remains supported for gates created later by ticket
   execution, access requests, or workflow policy.
 - Ops Chat now has an outbound delivery ledger. User-facing
-  `/request-info` and `/status` notes appear in
+  `/request-info`, `/status`, and explicit agent closure notes appear in
   `/api/ops-chat/outbound/pending`, the Matrix bridge posts them back to the
   original room, and `/api/ops-chat/outbound/ack` prevents duplicate delivery
-  after bridge restarts.
+  after bridge restarts. Ticket agents must mark chat closure notes with
+  `source=agent`, `visibility=public`, and `external_ref=ops-chat-closure` so
+  the bridge forwards the agent's actual final response without backfilling
+  unrelated internal or historical notes.
 - Benign current-information chat can use the private SearXNG-backed
   `ops_chat_tool.py web-search` command before the final `answer`; suspicious
   URLs still must not be fetched directly.

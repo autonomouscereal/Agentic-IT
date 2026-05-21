@@ -152,6 +152,13 @@ Expected:
 - ticket scope changes can be handled with
   `POST /api/tickets/{id}/assignment` to reassign, set owning group, and record
   escalation tier evidence.
+- ticket workers must send the final requester-facing closure as their own
+  note before closing an Ops Chat-originated ticket. Use
+  `source=agent`, `visibility=public`, and `external_ref=ops-chat-closure`.
+  Include the outcome, access URL or artifact/report when applicable,
+  validation evidence, and whether follow-up is needed. The Matrix bridge
+  delivers that agent-authored note, not a generic status formatter, as the
+  user's closure response.
 
 Implementation note: Ops Chat does not rely on application-side structured
 parsing to classify the user message. The Matrix bridge hands the message to

@@ -6199,3 +6199,41 @@ Verification:
   agents after completion.
 - Cleanup resolved demo tickets `1416` and `1418` and cancelled no-spawn smoke
   ticket `1417`.
+
+### Ops Chat closure delivered generic status instead of agent result
+
+Status: fixed and live-verified on 2026-05-21.
+
+Problem:
+
+- Ticket `1416` contained the correct agent-authored public note with the
+  bunnies URL, validation evidence, and tea-price answer.
+- The chat-visible follow-up the requester noticed was the later generic
+  `ticket-status` note created by an operator cleanup close. That message did
+  not include the URL or proof, making the completed work feel opaque.
+
+Fix:
+
+- Ticket prompts now require agents working Matrix/Element Ops Chat tickets to
+  write a public `source=agent` closure note before closing, marked with
+  `external_ref=ops-chat-closure`. That note is the final user response and
+  must include result, access URL/artifact/report, validation evidence, and
+  follow-up state.
+- Ops Chat outbound delivery now includes only public/user-visible `agent`
+  closure notes with the `ops-chat-closure` external reference, while
+  continuing to exclude internal agent checkpoint/progress notes and historical
+  public notes that were not intended for chat backfill.
+- Generic ticket-status outbound remains available as a fallback, but it is no
+  longer the intended closure experience for agent-completed work.
+
+Verification:
+
+- Source regression tests cover prompt requirements and public-agent-note-only
+  outbound eligibility in `tests/test_ops_chat_ticket_lifecycle_regressions.py`.
+- Local full suite passed: `206 passed`.
+- Live API was rebuilt and health checked on the AI server.
+- Synthetic live session `717` / ticket `1419` inserted one public
+  `source=agent`, `external_ref=ops-chat-closure-proof` note plus one public
+  unmarked agent note. `/api/ops-chat/outbound/pending?session_id=717` returned
+  exactly the marked agent closure note and excluded the unmarked note. The
+  synthetic rows were deleted after verification; active agents remained zero.

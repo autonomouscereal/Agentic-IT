@@ -48,6 +48,13 @@ Reference stack:
   changes routing, scope, urgency, or whether a ticket is needed.
 - Operational chat creates or continues a canonical ticket, intake session,
   internal note, audit event, and real agent-harness queue task.
+- Ticket agents working Ops Chat-originated tickets must write their own
+  user-facing closure note before closing. Use `source=agent`,
+  `visibility=public`, and `external_ref=ops-chat-closure`; include what was
+  done, how the requester can access the result, proof/validation, and whether
+  follow-up is needed. The bridge delivers this agent-authored closure note back
+  to Matrix, so do not rely on a generic ticket-status event as the final user
+  response.
 - When a ticket is created after clarification, recent chat context is copied
   into the ticket description and the Ops Chat-created note.
 - Chat-created tickets must preserve canonical contact metadata:

@@ -85,6 +85,23 @@ def test_ops_chat_mixed_request_can_answer_and_create_ticket():
     assert "The Matrix bridge will append the dashboard ticket and agent ids." in source
 
 
+def test_ops_chat_delivers_public_agent_notes_only():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    assert 'OUTBOUND_CHAT_NOTE_SOURCES = {"user-info-request", "ticket-status", "agent"}' in source
+    assert "n.source = 'agent'" in source
+    assert "COALESCE(n.visibility, 'internal') IN ('user', 'public')" in source
+    assert "COALESCE(n.external_ref, '') LIKE 'ops-chat-closure%'" in source
+    assert "(n.source <> 'agent' AND COALESCE(n.visibility, 'internal') IN ('internal', 'user', 'public'))" in source
+
+
+def test_ticket_prompt_requires_user_facing_ops_chat_closure_note():
+    source = (ROOT / "api" / "services" / "task_prompts.py").read_text(encoding="utf-8")
+    assert "If the ticket originated from Matrix/Element Ops Chat" in source
+    assert "`source: agent`, `visibility: public`, `author: agent-{agent_id}`, and" in source
+    assert "`external_ref: ops-chat-closure`" in source
+    assert "the chat bridge delivers back to the user" in source
+
+
 def test_ops_chat_normalizes_placeholder_affected_user_to_requester():
     source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
     assert '"user (user-direct)"' in source

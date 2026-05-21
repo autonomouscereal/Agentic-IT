@@ -31,7 +31,7 @@ OPS_CHAT_MAX_ATTACHMENT_BYTES = int(os.getenv("OPS_CHAT_MAX_ATTACHMENT_BYTES", s
 OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES = int(os.getenv("OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES", str(8 * 1024 * 1024)))
 
 INTAKE_TIMEOUT_SECONDS = int(os.getenv("OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS", "3600"))
-OUTBOUND_CHAT_NOTE_SOURCES = {"user-info-request", "ticket-status"}
+OUTBOUND_CHAT_NOTE_SOURCES = {"user-info-request", "ticket-status", "agent"}
 OUTBOUND_CHAT_MAX_BODY_CHARS = int(os.getenv("OPS_CHAT_OUTBOUND_MAX_BODY_CHARS", "1400"))
 INTAKE_ALLOWED_TICKET_CLASSES = {"UserRequest", "Incident", "NormalChange"}
 INTAKE_ALLOWED_PRIORITIES = {"P1", "P2", "P3", "P4"}
@@ -2879,13 +2879,21 @@ async def pending_outbound_chat(limit: int = 50, matrix_only: bool = False,
                    n.source,
                    n.author,
                    n.body,
+                   n.external_ref,
                    n.created_at,
                    ('note:' || n.id::text) AS event_key
             FROM session_ticket st
             JOIN ticket_notes n ON n.ticket_id = st.ticket_id
             WHERE n.created_at >= st.session_created_at
               AND n.source = ANY($4::text[])
-              AND COALESCE(n.visibility, 'internal') IN ('internal', 'user', 'public')
+              AND (
+                (
+                  n.source = 'agent'
+                  AND COALESCE(n.visibility, 'internal') IN ('user', 'public')
+                  AND COALESCE(n.external_ref, '') LIKE 'ops-chat-closure%'
+                )
+                OR (n.source <> 'agent' AND COALESCE(n.visibility, 'internal') IN ('internal', 'user', 'public'))
+              )
         )
         SELECT *
         FROM candidate_notes c

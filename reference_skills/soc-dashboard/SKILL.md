@@ -96,6 +96,14 @@ the URL. For nginx, DNS, firewall, CI/CD, Git repo, remote server, or customer
 hosting, ask the user where to publish and request the necessary access/change
 approval before touching the target.
 
+For tickets opened from Ops Chat, the worker agent owns the user-facing closure
+message. Before closing, add a public ticket note with `source=agent`,
+`visibility=public`, and `external_ref=ops-chat-closure`; include what was
+completed, how to access the result, validation proof, and whether follow-up is
+needed. The Matrix bridge forwards that explicit agent-authored note back to the
+requester, so do not depend on generic ticket-status notes for the final chat
+experience.
+
 ## Setup Scope And Ticket Fan-Out
 
 Setup is intentionally agentic, but it must stay bounded. The installer and

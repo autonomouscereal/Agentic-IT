@@ -89,6 +89,15 @@ answer to the user and also open/assign the bunnies deployment ticket. The
 Matrix bridge appends the dashboard ticket and agent identifiers after the
 tool result.
 
+Once a ticket worker finishes an Ops Chat-originated ticket, the worker agent is
+responsible for the final user response. Before closing, it must write a public
+agent note with the outcome, access URL or artifact/report when applicable,
+validation evidence, and follow-up status. The note must use `source=agent`,
+`visibility=public`, and `external_ref=ops-chat-closure`. The outbound bridge
+delivers that explicit agent-authored closure note to Matrix. Generic
+ticket-status messages remain control-plane fallbacks, not the desired final
+user experience.
+
 The application may recover side effects and enforce safety, but it should not
 replace the agent's decision with a brittle custom JSON classifier.
 

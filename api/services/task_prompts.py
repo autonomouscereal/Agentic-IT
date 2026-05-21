@@ -10,6 +10,15 @@ TICKET_CLOSURE_RULE = """Ticket closure rule:
   POST /api/tickets/{ticket_id}/status yourself with `status`, `actor`,
   `reason`, and `close_provider` as appropriate before the final `done`
   checkpoint.
+- If the ticket originated from Matrix/Element Ops Chat, you must write a
+  user-facing closure note before closing. Use POST /api/tickets/{ticket_id}/notes
+  with `source: agent`, `visibility: public`, `author: agent-{agent_id}`, and
+  `external_ref: ops-chat-closure`.
+  The note should say what was done, the final status, any URL/artifact/report
+  the requester should open, the specific validation evidence, and whether any
+  follow-up is needed. For complex work, invite follow-up questions; for a
+  one-shot completion, keep it brief. This is the agent's response to the user,
+  not a generic control-plane status message.
 - Opt out of closure only when the ticket/workflow/deployment explicitly
   requires human review, requester response, more access, or a manual provider
   handoff. In that case leave a note explaining why the ticket remains open.
@@ -62,8 +71,10 @@ STATIC_DEPLOYMENT_BOUNDARY_RULE = """Deployment boundary rule:
   write the final evidence note and close the ticket with
   POST /api/tickets/{ticket_id}/status using `status: resolved` and
   `close_provider: true`, unless the ticket explicitly requires human review
-  or manual provider handoff. If you leave it open, write a clear note saying
-  what is still blocked.
+  or manual provider handoff. For Ops Chat-originated tickets, make that note
+  the requester-facing closure note with `external_ref: ops-chat-closure` and
+  include the published URL plus proof that it rendered. If you leave it open,
+  write a clear note saying what is still blocked.
 - If no approved target or adapter is available, stop at a clear requester
   question or ticket note: explain that you can provide a local artifact now,
   and ask where it should be published for a managed deployment.
@@ -109,6 +120,10 @@ Operational rules:
   agent-initiated closure with POST /api/tickets/{ticket_id}/status after the
   final evidence note when the work is complete; leave it open only when the
   workflow/deployment policy requires human review or another wait state.
+- For Ops Chat-originated tickets, the final evidence note must be public and
+  user-facing. Include the result, how to access it, and proof it worked before
+  closing, and set `external_ref: ops-chat-closure` because that note is what
+  the chat bridge delivers back to the user.
 - When complete, summarize root cause, evidence, actions taken, residual risk, and recommended follow-up.
 """
 
