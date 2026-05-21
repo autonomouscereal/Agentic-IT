@@ -246,6 +246,14 @@ start as `vpn-connectivity` / `Network Operations`, not as an entitlement
 request, unless the user clarifies that VPN works and the share permission
 itself is missing.
 
+For website/page hosting requests, distinguish artifact creation from
+deployment. "Write me an HTML page" can be answered in chat with a validated
+artifact when no tracking is needed. "Deploy/host/make it reachable" is
+operational work and should become a ticket. If the target is unclear, the
+agent should recommend the dashboard-managed static-site path for a demo-safe
+reachable URL, ask where to publish if the requester wants a real host, and
+ensure the downstream ticket agent hits the approval gate before publishing.
+
 ## Guardrails
 
 - Do not ask the requester to gather logs manually unless policy requires it.
@@ -253,6 +261,9 @@ itself is missing.
   investigation task.
 - Use approval gates for access grants, mailbox remediation, endpoint isolation,
   restarts, firewall, DNS, routing, and production deployments.
+- Treat `127.0.0.1` or temporary workdir servers as preview evidence only.
+  Durable publishing must use the platform static-site adapter or an approved
+  real deployment target.
 - Store attachment metadata and evidence references, not raw secrets.
 - Keep product-specific routing inside provider adapters.
 

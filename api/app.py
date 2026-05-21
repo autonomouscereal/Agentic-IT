@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import os
+from pathlib import Path
 from urllib.parse import quote
 
 from database import get_pool
@@ -171,6 +172,7 @@ app.include_router(search.router)
 app.include_router(ops_chat.router)
 
 frontend_dir = "/frontend"
+published_sites_dir = os.getenv("PUBLISHED_SITES_DIR", "/app/data/published_sites")
 
 if os.path.isdir(frontend_dir):
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
@@ -189,6 +191,23 @@ async def login_page():
     if os.path.exists(login_path):
         return FileResponse(login_path)
     return JSONResponse({"error": "Login page not found"}, status_code=404)
+
+
+@app.get("/published/{site_path:path}")
+async def published_site(site_path: str):
+    """Serve approval-gated static deployments from the platform-owned store."""
+    root = Path(published_sites_dir).resolve()
+    requested = (root / (site_path or "")).resolve()
+    try:
+        requested.relative_to(root)
+    except ValueError:
+        return JSONResponse({"error": "invalid published path"}, status_code=400)
+    if requested.is_dir():
+        requested = requested / "index.html"
+    if requested.exists() and requested.is_file():
+        return FileResponse(str(requested))
+    return JSONResponse({"error": "published artifact not found"}, status_code=404)
+
 
 @app.get("/favicon.ico")
 async def favicon():

@@ -167,6 +167,15 @@ def local_proxy_url(args):
     return f"http://localhost:{args.proxy_port}"
 
 
+def dashboard_public_url(args):
+    configured = os.getenv("DASHBOARD_PUBLIC_URL", "").rstrip("/")
+    if configured:
+        return configured
+    scheme = "http" if args.disable_https else "https"
+    port = args.dashboard_port if args.disable_https else args.https_port
+    return f"{scheme}://{detect_host_ip()}:{port}"
+
+
 def log_event(target, event, details):
     state_dir = target / "install_state"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -218,6 +227,7 @@ def write_env(target, args, dry_run=False):
         "DASHBOARD_BIND": "127.0.0.1",
         "DASHBOARD_HTTPS_PORT": args.https_port,
         "DASHBOARD_HTTPS_BIND": "0.0.0.0",
+        "DASHBOARD_PUBLIC_URL": dashboard_public_url(args),
         "DASHBOARD_TLS_DIR": "./runtime/tls",
         "DASHBOARD_TLS_COMMON_NAME": args.tls_common_name,
         "DASHBOARD_TLS_DAYS": args.tls_days,
@@ -261,6 +271,7 @@ def write_env(target, args, dry_run=False):
         "SOC_DB_PASSWORD": db_password,
         "AGENT_MEMORY_DB_PASSWORD": agent_memory_db_password,
         "AGENT_MEMORY_DB_PORT": args.memory_db_port,
+        "PUBLISHED_SITES_DIR": "/app/data/published_sites",
         "MEMORY_DB_HOST": "agent-memory-db",
         "MEMORY_DB_PORT": "5432",
         "MEMORY_DB_NAME": "agent_memory",

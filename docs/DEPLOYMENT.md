@@ -70,7 +70,9 @@ CODEX_API_KEY=<optional vault/runtime secret>
 DASHBOARD_BIND=127.0.0.1
 DASHBOARD_HTTPS_BIND=0.0.0.0
 DASHBOARD_HTTPS_PORT=25443
+DASHBOARD_PUBLIC_URL=https://<operator-routable-host>:25443
 DASHBOARD_TLS_DIR=./runtime/tls
+PUBLISHED_SITES_DIR=/app/data/published_sites
 ```
 
 Use the dashboard `Settings` page to choose runtime profiles, scoped routing,
@@ -108,6 +110,39 @@ In OAuth mode, debug with Codex's own JSONL stream rather than the AI proxy:
 `codex exec --json --output-last-message ...`. Subscription/OAuth runs use the
 mounted ChatGPT login in `CODEX_HOME`; proxy mode remains available through
 `CODEX_AUTH_MODE=proxy` for local/API-compatible model routes.
+
+## Managed Static Site Deployments
+
+Agents may create and test HTML/CSS/JS artifacts inside their isolated
+`agent_work` directory. A local dev server or `127.0.0.1` URL inside the API
+container is only a preview. It is not a customer-reachable deployment and must
+not be described as deployed.
+
+For simple demo-safe web pages, use the dashboard-managed static deployment
+adapter instead of ad hoc container ports. The pattern is:
+
+1. Agent builds the static site in its work directory, with `index.html` at the
+   site root.
+2. Agent requests or uses an existing approved change gate for publishing.
+3. Agent calls `POST /api/agents/{agent_id}/deploy/static-site` with
+   `change_id`, `source_dir`, and `slug`.
+4. The API validates the tree, rejects path escape/symlinks/disallowed file
+   types, copies the site to `PUBLISHED_SITES_DIR`, completes the gate, writes
+   a ticket note, and returns the durable URL.
+5. The agent verifies the returned URL through the dashboard edge.
+
+The published URL is served under:
+
+```text
+${DASHBOARD_PUBLIC_URL}/published/<slug>/
+```
+
+This route is behind dashboard auth/RBAC and the dashboard TLS edge. It is the
+right target for "make this reachable from the demo dashboard" requests. If the
+requester wants the site hosted on a different host, DNS name, nginx vhost,
+Kubernetes ingress, GitLab Pages, or customer server, the agent must stop,
+document the target options, and request the appropriate deployment/access
+approval before making changes.
 
 Agent-memory is mounted from `reference_skills` into read-only container paths.
 Inside API/agent containers, use the container runtime:

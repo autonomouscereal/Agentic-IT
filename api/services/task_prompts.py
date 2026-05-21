@@ -35,6 +35,34 @@ URL_DETONATION_SAFETY_RULE = """Suspicious URL handling rule:
 - Approval to block/quarantine/contain a URL is not approval to fetch it.
 """
 
+STATIC_DEPLOYMENT_BOUNDARY_RULE = """Deployment boundary rule:
+- Creating files or running a temporary server inside `/app/agent_work/<agent_id>`
+  is a safe local artifact preview, not a real deployment. Do not tell the
+  requester a site is "deployed" or "reachable" unless you validated a durable
+  target outside the agent workspace.
+- If a user asks for a webpage/app/script to be hosted and did not provide a
+  target, make a reasonable recommendation. For simple static pages, recommend
+  the platform-managed static-site target `/published/<slug>/`. If the user
+  only asked for a draft or file, return the artifact without opening host
+  exposure.
+- Real deployment to a dashboard path, host port, nginx route, repository
+  pipeline, remote server, or provider requires an approval gate before the
+  environment-changing step. Use POST /api/changes/request first.
+- After the gate is approved, use a controlled adapter rather than ad hoc host
+  mutation when one exists. For simple static sites, create the site under your
+  work directory with `index.html`, then call
+  POST /api/agents/<agent_id>/deploy/static-site with `change_id`, `source_dir`,
+  and `slug`. That adapter publishes to the dashboard-owned `/published/<slug>/`
+  path, completes the change gate, and records deployment evidence.
+- Validate the returned public URL from the correct boundary. A `127.0.0.1`
+  URL inside the API container proves only container-local behavior. A real
+  server deployment must be checked through the returned public URL or the
+  operator-facing dashboard URL.
+- If no approved target or adapter is available, stop at a clear requester
+  question or ticket note: explain that you can provide a local artifact now,
+  and ask where it should be published for a managed deployment.
+"""
+
 
 FAST_TICKET_PROMPT = """Work this ticket end to end as quickly as possible.
 
@@ -177,6 +205,7 @@ def build_ticket_resolution_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
         URL_DETONATION_SAFETY_RULE,
+        STATIC_DEPLOYMENT_BOUNDARY_RULE,
         FAST_TICKET_PROMPT,
         TICKET_CLOSURE_RULE,
         "",
@@ -191,6 +220,7 @@ def build_auto_assignment_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
         URL_DETONATION_SAFETY_RULE,
+        STATIC_DEPLOYMENT_BOUNDARY_RULE,
         AUTO_ASSIGNMENT_PROMPT,
         TICKET_CLOSURE_RULE,
         "",
@@ -205,6 +235,7 @@ def build_auto_assignment_prompt(ticket, extra_prompt=None):
 def build_postmortem_prompt(ticket, extra_context=None):
     body = [
         URL_DETONATION_SAFETY_RULE,
+        STATIC_DEPLOYMENT_BOUNDARY_RULE,
         POSTMORTEM_PROMPT,
         "",
         f"Ticket under review: {ticket.get('title') or ticket.get('id')}",
@@ -217,6 +248,7 @@ def build_postmortem_prompt(ticket, extra_context=None):
 def build_workflow_prompt(ticket, extra_context=None):
     body = [
         URL_DETONATION_SAFETY_RULE,
+        STATIC_DEPLOYMENT_BOUNDARY_RULE,
         WORKFLOW_BUILD_PROMPT,
         "",
         f"Workflow source ticket: {ticket.get('title') or ticket.get('id')}",

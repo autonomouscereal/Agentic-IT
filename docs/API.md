@@ -224,6 +224,44 @@ Ops Chat-created tickets. When `CODEX_AUTH_MODE=oauth`, stale local/provider
 aliases such as `local/agent-default`, `qwen/...`, or `deepseek/...` are
 repaired to the active Codex subscription model before the task is spawned.
 
+`POST /api/agents/{agent_id}/deploy/static-site`
+
+Publishes a static site artifact from the agent work directory to the
+dashboard-managed `/published/<slug>/` surface. This is the supported path for
+demo-safe "make this web page reachable from the dashboard" work. It requires
+an approved change gate linked to the same agent/ticket and the caller must
+have `deployments:write`.
+
+Example:
+
+```json
+{
+  "change_id": 42,
+  "source_dir": "hello",
+  "slug": "hello-demo",
+  "public_base_url": "https://192.168.50.222:25443"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "deployed",
+  "change_id": 42,
+  "deployment": {
+    "relative_url": "/published/hello-demo/",
+    "public_url": "https://192.168.50.222:25443/published/hello-demo/"
+  }
+}
+```
+
+The adapter only accepts a static tree with `index.html`, blocks symlinks and
+path escapes, writes a ticket evidence note, completes the change gate, and
+records a `static_site_deployed` audit event. Container-local preview URLs such
+as `http://127.0.0.1:<port>/` are not deployments unless they are merely test
+evidence before this adapter or another approved deployment target is used.
+
 `POST /api/tickets/{ticket_id}/postmortem`
 
 Spawns a postmortem agent.

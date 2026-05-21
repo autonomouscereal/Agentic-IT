@@ -73,6 +73,29 @@ Route assignments can target platform areas such as `ops_chat` or
 
 Default ticket agents should complete assigned work quickly and safely. They should not create reusable workflows unless explicitly asked. Postmortems and workflow-builds are separate learning tasks that convert completed work into reviewed knowledge, skills, tests, guardrails, and draft workflows.
 
+## Agent Deployment Boundary
+
+Agent work directories and container-local preview servers are safe validation
+spaces. They are not durable deployments. An agent must not tell a requester
+that a web page, script service, or UI is deployed simply because it worked at
+`127.0.0.1` inside the API/agent container.
+
+Use these terms consistently:
+
+- `preview validated`: the artifact rendered or passed checks in the work dir.
+- `published`: the platform static-site adapter returned a verified
+  `/published/<slug>/` URL behind dashboard auth/TLS.
+- `deployed`: a real requested target was changed after approval and verified
+  from the correct network/user perspective.
+
+For demo-safe static HTML/CSS/JS pages, create or use an approved change gate
+and call `POST /api/agents/{agent_id}/deploy/static-site` with `change_id`,
+`source_dir`, and `slug`. The adapter validates the tree, publishes under
+`PUBLISHED_SITES_DIR`, writes ticket evidence, completes the gate, and returns
+the URL. For nginx, DNS, firewall, CI/CD, Git repo, remote server, or customer
+hosting, ask the user where to publish and request the necessary access/change
+approval before touching the target.
+
 ## Setup Scope And Ticket Fan-Out
 
 Setup is intentionally agentic, but it must stay bounded. The installer and

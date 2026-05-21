@@ -178,8 +178,10 @@ services:
       DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-true}
       DASHBOARD_PROTECT_UI: ${DASHBOARD_PROTECT_UI:-true}
       DASHBOARD_PUBLIC_HEALTH: ${DASHBOARD_PUBLIC_HEALTH:-false}
+      DASHBOARD_PUBLIC_URL: ${DASHBOARD_PUBLIC_URL:-}
       DASHBOARD_CORS_ORIGINS: ${DASHBOARD_CORS_ORIGINS:-}
       DASHBOARD_HSTS: ${DASHBOARD_HSTS:-true}
+      PUBLISHED_SITES_DIR: ${PUBLISHED_SITES_DIR:-/app/data/published_sites}
       TRACK_INTERVAL: ${TRACK_INTERVAL:-10}
       STUCK_TIMEOUT_MINUTES: ${STUCK_TIMEOUT_MINUTES:-60}
       MODEL_CONFIG_PATH: /app/agent_models.json
@@ -200,6 +202,7 @@ services:
       - ./data/agent_logs:/app/data/agent_logs
       - ./data/ops_chat_uploads:/app/data/ops_chat_uploads
       - ./data/ops_chat_artifacts:/app/data/ops_chat_artifacts
+      - ./data/published_sites:/app/data/published_sites
       - ./data/active_agents.json:/app/data/active_agents.json:rw
       - ./frontend:/frontend:ro
       - ./platform:/app/platform:ro

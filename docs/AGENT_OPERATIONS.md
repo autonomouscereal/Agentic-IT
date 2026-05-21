@@ -39,6 +39,36 @@ The dashboard should let operators answer:
 - Did the process clean up after completion?
 - Can a demo viewer follow the story from ticket notes without reading raw logs?
 
+## Deployment Boundary For Agent-Created Sites
+
+Agents can safely create artifacts and run previews in their own work
+directory. That proves the artifact builds and renders; it does not prove the
+artifact is deployed to the host, LAN, customer network, or a durable service.
+
+Use this language in tickets:
+
+- `preview validated`: a file or local server was checked inside the agent/API
+  container.
+- `published`: the dashboard static-site adapter returned and verified a
+  `/published/<slug>/` URL.
+- `deployed`: the requested real target was changed after an approval gate and
+  the agent verified the target from the right network perspective.
+
+For simple HTML/CSS/JS output that should be reachable from the dashboard, the
+agent should recommend the platform-managed static-site adapter. The agent
+still needs an approved change gate before calling:
+
+```text
+POST /api/agents/{agent_id}/deploy/static-site
+```
+
+with `change_id`, `source_dir`, and `slug`. The API validates the source tree,
+publishes it under `PUBLISHED_SITES_DIR`, writes the ticket evidence note, and
+returns the dashboard URL. If the requester wants real server hosting, DNS,
+nginx, firewall, Git repo, CI/CD, or remote host changes, the agent must ask
+where to publish and request the appropriate approval/access gate before
+touching that target.
+
 ## Proxy And Model Activity
 
 Use proxy and model-server evidence as another liveness signal before deciding

@@ -1786,3 +1786,52 @@ Results:
 - Roundcube route check: passed.
 - Roundcube plugin PHP lint: passed.
 - Hidden report endpoint PHP lint: passed.
+
+## Static Site Deployment Boundary - 2026-05-21
+
+Regression covered:
+
+- Agent-created web pages must not be marked deployed when they are only served
+  by a container-local preview URL.
+- Real dashboard-reachable static page publishing must require an approved
+  change gate and go through the managed static-site deployment adapter.
+
+Local verification:
+
+```text
+python -m py_compile api\app.py api\routes\agents.py api\routes\ops_chat.py api\services\access_control.py api\services\static_deployments.py api\services\task_prompts.py
+python -m pytest -q tests\test_static_site_deployment_adapter.py tests\test_access_control_policy.py tests\test_deployment_boundary_prompts.py
+docker compose config --quiet
+```
+
+Expected:
+
+- Static publish copies a valid tree into the configured published-site root.
+- Path escape, missing `index.html`, symlinks, and unsafe file types are
+  rejected.
+- `POST /api/agents/{agent_id}/deploy/static-site` requires an approved gate
+  linked to the same agent/ticket, completes the gate, writes a ticket note,
+  and records `static_site_deployed`.
+- Auth policy maps the route to `deployments:write`; `/published/...` remains
+  behind dashboard `ui:read`.
+- Agent prompts say `127.0.0.1` inside the API container is preview evidence,
+  not a durable deployment.
+
+Live AI server verification:
+
+```text
+python3 scripts/smoke_static_site_deployment.py
+```
+
+Result on 2026-05-21:
+
+- `ok=true`
+- ticket `1415`
+- agent `383`
+- task `380`
+- change gate `312`
+- published URL:
+  `https://192.168.50.222:25443/published/static-site-deploy-smoke-1779382884/`
+- returned page rendered the smoke marker through the dashboard HTTPS edge.
+- `/api/agents/active` returned zero active agents after the smoke cleaned up
+  its synthetic task/agent/ticket.

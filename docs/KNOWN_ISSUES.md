@@ -6119,3 +6119,43 @@ Verification:
 - Dashboard-spawned Codex ticket `1393` completed cleanly with agent `365`,
   task `362`, model `local/agent-default`, note marker
   `CODEX_HARNESS_CLEAN_PASS`, and resolved ticket status.
+
+### Agent-created web page preview was described as deployed
+
+Status: fixed in source and live-verified on 2026-05-21.
+
+Problem:
+
+- Ticket `1409` validated a demo-safe hello web page inside the agent/API
+  container and wrote a `http://127.0.0.1:8144/` style URL in the resolution
+  evidence.
+- That URL was container-local/transient preview evidence. It was not reachable
+  from the operator workstation and did not represent host/server deployment.
+- The wording made it difficult to tell whether the agent had done real
+  durable work or only validated an artifact in its sandbox.
+
+Fix:
+
+- Added a dashboard-managed static-site deployment adapter:
+  `POST /api/agents/{agent_id}/deploy/static-site`.
+- The adapter requires an approved change gate linked to the same agent/ticket,
+  validates that the artifact is a safe static tree, publishes it under
+  `/published/<slug>/`, records an evidence note, completes the gate, and logs
+  `static_site_deployed`.
+- Added `/published/{site_path}` serving through the dashboard auth/TLS layer
+  and persisted the site root with `./data/published_sites`.
+- Updated ticket, assignment, postmortem, workflow, and Ops Chat prompts so
+  agents distinguish `preview validated`, `published`, and real external
+  deployment. Agents must ask for target details and approval gates before
+  host/nginx/DNS/repo/remote deployment work.
+
+Verification:
+
+- Focused source tests cover publish validation, path-escape rejection, approved
+  gate completion, RBAC capability mapping, and prompt language:
+  `python -m pytest -q tests/test_static_site_deployment_adapter.py tests/test_access_control_policy.py tests/test_deployment_boundary_prompts.py`.
+- Live smoke passed on the AI server with ticket `1415`, agent `383`, task
+  `380`, change gate `312`, and published URL
+  `https://192.168.50.222:25443/published/static-site-deploy-smoke-1779382884/`.
+  The smoke verified the returned URL rendered the marker, the gate advanced to
+  `completed`, and no active smoke agent was left behind.

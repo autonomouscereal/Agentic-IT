@@ -13,8 +13,13 @@ except ImportError:  # unit-test stubs do not expose Request
     class Request:
         pass
 from datetime import datetime
+import os
 from database import fetchall, fetchrow, execute, fetchval, json_dumps, json_loads
 from services.event_logger import log_event
+try:
+    from services.static_deployments import publish_static_site
+except ImportError:  # unit-test stubs sometimes replace services with a module
+    from api.services.static_deployments import publish_static_site
 from services.task_prompts import build_ticket_resolution_prompt
 try:
     from services import access_control
@@ -401,6 +406,106 @@ async def get_task_logs(task_id: int, lines: int = Query(200, ge=1, le=2000)):
         content = task.get("output") or ""
 
     return {"task_id": task_id, "log_path": log_path, "content": content}
+
+
+@router.post("/{agent_id}/deploy/static-site")
+async def deploy_static_site(agent_id: int, body: dict = Body({}), request: Request = None):
+    """Publish a static site from this agent's workspace after an approved gate.
+
+    This is the narrow self-management adapter for simple web artifacts. It
+    copies a validated static tree from /app/agent_work/<agent_id> into the
+    dashboard-owned published-site store and marks the linked approval gate
+    completed with deployment evidence.
+    """
+    body = body or {}
+    change_id = body.get("change_id")
+    if not change_id:
+        return {"error": "change_id is required"}
+    try:
+        change_id = int(change_id)
+    except (TypeError, ValueError):
+        return {"error": "change_id must be an integer"}
+
+    agent = await fetchrow("SELECT id, ticket_id FROM agents WHERE id = $1", agent_id)
+    if not agent:
+        return {"error": "Agent not found"}
+    task = await fetchrow(
+        "SELECT id, work_dir FROM agent_tasks WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 1",
+        agent_id,
+    )
+    if not task or not task.get("work_dir"):
+        return {"error": "Agent work directory not found"}
+
+    change = await fetchrow("SELECT * FROM change_requests WHERE id = $1", change_id)
+    if not change:
+        return {"error": "Change request not found"}
+    if int(change.get("agent_id") or 0) != int(agent_id):
+        return {"error": "Change request is not linked to this agent"}
+    if int(change.get("ticket_id") or 0) != int(agent.get("ticket_id") or 0):
+        return {"error": "Change request is not linked to this agent ticket"}
+    if change.get("status") != "approved":
+        return {"error": "Static deployment requires an approved change gate", "change_status": change.get("status")}
+
+    slug = body.get("slug") or f"ticket-{agent.get('ticket_id')}-agent-{agent_id}"
+    try:
+        deployment = publish_static_site(task["work_dir"], body.get("source_dir") or body.get("site_dir") or ".", slug)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    public_base = (body.get("public_base_url") or "").strip()
+    if not public_base:
+        public_base = (os.getenv("DASHBOARD_PUBLIC_URL") or "").strip()
+    if not public_base and request is not None:
+        public_base = str(request.base_url).rstrip("/")
+    public_url = f"{public_base.rstrip('/')}{deployment['relative_url']}" if public_base else deployment["relative_url"]
+    deployment["public_url"] = public_url
+
+    actor = f"agent_{agent_id}"
+    result = (
+        f"Published static site `{deployment['slug']}` from `{deployment['source_dir']}` "
+        f"to `{deployment['target_dir']}`. URL: {public_url}. "
+        f"Files: {deployment['file_count']}; bytes: {deployment['total_bytes']}."
+    )
+    await execute(
+        "UPDATE change_requests SET status = 'completed', result = $1 WHERE id = $2",
+        result,
+        change_id,
+    )
+    note_id = await fetchval("""
+        INSERT INTO ticket_notes (ticket_id, source, author, body, visibility)
+        VALUES ($1, 'deployment-adapter', $2, $3, 'internal')
+        RETURNING id
+    """, agent.get("ticket_id"), actor, (
+        f"Approval-gated static deployment completed\n\n"
+        f"- Change gate: `{change_id}`\n"
+        f"- Source: `{deployment['source_dir']}`\n"
+        f"- Target: `{deployment['target_dir']}`\n"
+        f"- URL: {public_url}\n"
+        f"- Files: {deployment['file_count']}\n"
+        f"- Bytes: {deployment['total_bytes']}\n"
+        "This is a durable dashboard-served deployment, not a transient agent-container preview."
+    ))
+    await execute("UPDATE tickets SET updated_at = NOW() WHERE id = $1", agent.get("ticket_id"))
+    await execute("""
+        INSERT INTO audit_log (actor, action, target, details)
+        VALUES ($1, 'static_site_deployed', $2, $3)
+    """, actor, f"ticket_{agent.get('ticket_id')}", json_dumps({
+        "agent_id": agent_id,
+        "task_id": task["id"],
+        "ticket_id": agent.get("ticket_id"),
+        "change_id": change_id,
+        "note_id": note_id,
+        **deployment,
+    }))
+    await log_event("deployment", "info", actor, "static_site_deployed", f"ticket_{agent.get('ticket_id')}", {
+        "agent_id": agent_id,
+        "task_id": task["id"],
+        "ticket_id": agent.get("ticket_id"),
+        "change_id": change_id,
+        "note_id": note_id,
+        **deployment,
+    })
+    return {"status": "deployed", "change_id": change_id, "note_id": note_id, "deployment": deployment}
 
 
 @router.get("/{agent_id}/steering")
