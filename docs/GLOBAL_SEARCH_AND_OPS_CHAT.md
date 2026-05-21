@@ -62,13 +62,17 @@ a dashboard widget and not an OpenAI chat shim. The reference deployment uses:
 
 Harness selection is deliberately modular:
 
-- Default chat intake follows `OPS_CHAT_AGENT_HARNESS` when set, otherwise
-  `AGENT_HARNESS` (Hermes in the live lab).
+- Default chat intake follows the active Settings runtime profile when
+  `OPS_CHAT_AGENT_HARNESS` and `OPS_CHAT_AGENT_MODEL` are blank.
 - The Matrix bridge can pass an optional `harness` field to
   `/api/ops-chat/message` for targeted smoke tests or demo rooms. Supported
   values are `hermes`, `claude-code`, and `codex`.
-- The same optional request body can pass `model` / `agent_model`. If omitted,
-  chat follows `OPS_CHAT_AGENT_MODEL` / `AGENT_DEFAULT_MODEL`.
+- The same optional request body can pass `model` / `agent_model` for targeted
+  smoke tests. If omitted, chat follows the Settings profile.
+- When Ops Chat creates a ticket and requests a ticket worker, the generated
+  `ops_chat_tool.py` omits an explicit model unless the operator/test caller
+  supplied one. This avoids stale `AGENT_DEFAULT_MODEL` values leaking into
+  Codex OAuth ticket workers.
 - Codex is not a separate bridge architecture. The bridge remains
   harness-agnostic and calls the same dashboard `services.agent_harness`
   contract used by Hermes and Claude Code.

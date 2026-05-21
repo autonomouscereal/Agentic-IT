@@ -212,9 +212,17 @@ Body:
 ```json
 {
   "model": "qwen/qwen3.6-27b",
+  "harness": "hermes",
+  "profile_id": "local-only",
   "prompt": "Optional override prompt"
 }
 ```
+
+All fields are optional. If `model` is omitted, the runner resolves the active
+Settings runtime profile for the ticket scope. This is the preferred path for
+Ops Chat-created tickets. When `CODEX_AUTH_MODE=oauth`, stale local/provider
+aliases such as `local/agent-default`, `qwen/...`, or `deepseek/...` are
+repaired to the active Codex subscription model before the task is spawned.
 
 `POST /api/tickets/{ticket_id}/postmortem`
 

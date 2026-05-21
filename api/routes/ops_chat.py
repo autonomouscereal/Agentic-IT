@@ -22,7 +22,7 @@ from services.task_prompts import build_auto_assignment_prompt, build_ticket_res
 router = APIRouter(prefix="/api/ops-chat", tags=["ops-chat"])
 
 OPS_CHAT_MODEL = "agentic-ops-intake"
-DEFAULT_AGENT_MODEL = os.getenv("OPS_CHAT_AGENT_MODEL") or os.getenv("AGENT_DEFAULT_MODEL") or "local/agent-default"
+DEFAULT_AGENT_MODEL = os.getenv("OPS_CHAT_AGENT_MODEL") or os.getenv("AGENT_DEFAULT_MODEL") or ""
 GENERAL_CHAT_TIMEOUT_SECONDS = int(os.getenv("OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS", "3600"))
 GENERAL_CHAT_MAX_OUTPUT_CHARS = int(os.getenv("OPS_CHAT_GENERAL_AGENT_MAX_OUTPUT_CHARS", "1800"))
 OPS_CHAT_UPLOAD_DIR = Path(os.getenv("OPS_CHAT_UPLOAD_DIR", "/app/data/ops_chat_uploads"))
@@ -94,9 +94,9 @@ def _chat_agent_model(classification=None, model_override=None):
         return explicit
     try:
         from services.agent_runner import resolve_agent_runtime_profile
-        return resolve_agent_runtime_profile(task_type="ops_chat").get("model") or DEFAULT_AGENT_MODEL
+        return resolve_agent_runtime_profile(task_type="ops_chat").get("model") or DEFAULT_AGENT_MODEL or "gpt-5.5"
     except Exception:
-        return os.getenv("AGENT_DEFAULT_MODEL") or ((classification or {}).get("auto_agent_model")) or DEFAULT_AGENT_MODEL
+        return os.getenv("AGENT_DEFAULT_MODEL") or ((classification or {}).get("auto_agent_model")) or DEFAULT_AGENT_MODEL or "gpt-5.5"
 
 
 def _json(value, default):
@@ -1120,7 +1120,7 @@ TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
 RESULT_PATH = os.environ.get("OPS_CHAT_RESULT_PATH", "ops_chat_result.json")
 ACTIONS_PATH = os.environ.get("OPS_CHAT_ACTIONS_PATH", "ops_chat_actions.jsonl")
 TICKET_CONTEXT_PATH = os.environ.get("OPS_CHAT_TICKET_CONTEXT_PATH", "ops_chat_ticket_context.txt")
-DEFAULT_MODEL = os.environ.get("OPS_CHAT_AGENT_MODEL") or os.environ.get("AGENT_DEFAULT_MODEL") or "local/agent-default"
+DEFAULT_MODEL = os.environ.get("OPS_CHAT_TICKET_AGENT_MODEL") or os.environ.get("OPS_CHAT_AGENT_MODEL") or ""
 SPAWN_AGENT_ALLOWED = os.environ.get("OPS_CHAT_SPAWN_AGENT_ALLOWED", "true").lower() not in ("0", "false", "no", "off")
 SEARCH_URL = os.environ.get("OPS_CHAT_SEARCH_URL", "http://host.docker.internal:7999").rstrip("/")
 ALLOWED_TICKET_IDS = {
@@ -1187,6 +1187,23 @@ def request(method, path, payload=None, timeout=90):
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         raise SystemExit(f"{method} {path} failed: HTTP {exc.code}: {body}")
+
+
+def assign_agent_payload(prompt, args):
+    payload = {
+        "prompt": prompt,
+        "requested_permissions": [],
+    }
+    model = (getattr(args, "model", "") or DEFAULT_MODEL or "").strip()
+    if model:
+        payload["model"] = model
+    harness = os.environ.get("OPS_CHAT_TICKET_AGENT_HARNESS", "").strip()
+    if harness:
+        payload["harness"] = harness
+    profile_id = os.environ.get("OPS_CHAT_TICKET_AGENT_PROFILE", "").strip()
+    if profile_id:
+        payload["profile_id"] = profile_id
+    return payload
 
 
 def append_action(action):
@@ -1658,11 +1675,7 @@ def create_ticket(args):
                 "Original chat message:",
                 original,
             ])
-            agent = request("POST", f"/api/tickets/{ticket_id}/assign-agent", {
-                "model": args.model or DEFAULT_MODEL,
-                "prompt": prompt,
-                "requested_permissions": [],
-            }, timeout=120)
+            agent = request("POST", f"/api/tickets/{ticket_id}/assign-agent", assign_agent_payload(prompt, args), timeout=120)
         elif args.spawn_agent and not SPAWN_AGENT_ALLOWED:
             agent = {"status": "skipped", "reason": "spawn_agent_disabled_by_caller"}
         result = {
@@ -1734,11 +1747,7 @@ def create_ticket(args):
             "Original chat message:",
             original,
         ])
-        agent = request("POST", f"/api/tickets/{ticket_id}/assign-agent", {
-            "model": args.model or DEFAULT_MODEL,
-            "prompt": prompt,
-            "requested_permissions": [],
-        }, timeout=120)
+        agent = request("POST", f"/api/tickets/{ticket_id}/assign-agent", assign_agent_payload(prompt, args), timeout=120)
     elif args.spawn_agent and not SPAWN_AGENT_ALLOWED:
         agent = {"status": "skipped", "reason": "spawn_agent_disabled_by_caller"}
     reply = initial_reply or (
@@ -2108,6 +2117,16 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
             env["OPS_CHAT_REQUESTER_EMAIL"] = str(tool_context.get("requester_email") or "")
             env["OPS_CHAT_CHANNEL"] = str(tool_context.get("channel") or "matrix")
             env["OPS_CHAT_ALLOWED_TICKET_IDS"] = ",".join(str(value) for value in tool_context.get("allowed_ticket_ids") or [])
+            try:
+                from services.agent_runner import resolve_agent_runtime_profile
+                ticket_profile = resolve_agent_runtime_profile(task_type="ticket_resolution")
+                env["OPS_CHAT_TICKET_AGENT_PROFILE"] = str(ticket_profile.get("profile_id") or ticket_profile.get("id") or "")
+                env["OPS_CHAT_TICKET_AGENT_HARNESS"] = str(ticket_profile.get("harness") or "")
+                env["OPS_CHAT_TICKET_AGENT_MODEL"] = ""
+            except Exception:
+                env["OPS_CHAT_TICKET_AGENT_PROFILE"] = ""
+                env["OPS_CHAT_TICKET_AGENT_HARNESS"] = ""
+                env["OPS_CHAT_TICKET_AGENT_MODEL"] = ""
         try:
             from services.agent_runner import _build_command_with_runtime_env
             cmd = _build_command_with_runtime_env(

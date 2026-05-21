@@ -1996,6 +1996,54 @@ def _normalize_model_config(config):
     }
 
 
+def _model_looks_proxy_or_local_only(model):
+    """Return true for model aliases that Codex OAuth cannot run directly."""
+    text = str(model or "").strip().lower()
+    if not text:
+        return True
+    if text in ("default", "agent-default", "local", "local-default"):
+        return True
+    if text.startswith(("local/", "qwen/", "lmstudio/", "ollama/", "openrouter/", "nous/", "deepseek/")):
+        return True
+    if "deepseek" in text or "openrouter" in text:
+        return True
+    return False
+
+
+def _codex_oauth_subscription_model(config, profile):
+    """Pick a subscription-compatible Codex model when a stale proxy alias leaks in."""
+    active = next((p for p in config.get("profiles") or [] if p.get("id") == config.get("active_profile")), None)
+    candidates = [
+        os.getenv("CODEX_SUBSCRIPTION_MODEL", "").strip(),
+        os.getenv("CODEX_OAUTH_MODEL", "").strip(),
+        (profile or {}).get("model"),
+        (active or {}).get("model"),
+        config.get("default"),
+        "gpt-5.5",
+    ]
+    for candidate in candidates:
+        candidate = str(candidate or "").strip()
+        if candidate and not _model_looks_proxy_or_local_only(candidate):
+            return candidate
+    return "gpt-5.5"
+
+
+def _repair_codex_oauth_profile(resolved, config, source_model=None):
+    """Keep Codex subscription mode from receiving proxy/local provider aliases."""
+    if str(resolved.get("harness") or "").strip().lower() != "codex":
+        return resolved
+    if str(os.getenv("CODEX_AUTH_MODE") or "proxy").strip().lower() != "oauth":
+        return resolved
+    model = str(resolved.get("model") or "").strip()
+    if not _model_looks_proxy_or_local_only(model):
+        return resolved
+    repaired = dict(resolved)
+    repaired["model"] = _codex_oauth_subscription_model(config, resolved)
+    repaired["model_repair_reason"] = "codex_oauth_replaced_proxy_or_local_model"
+    repaired["requested_model_repaired_from"] = str(source_model or model or "").strip()
+    return repaired
+
+
 def resolve_agent_runtime_profile(scope_type=None, scope_value=None, task_type=None, assignment_group=None,
                                   workflow_key=None, requested_profile=None, requested_harness=None,
                                   requested_model=None):
@@ -2040,7 +2088,7 @@ def resolve_agent_runtime_profile(scope_type=None, scope_value=None, task_type=N
     if requested_model:
         resolved["model"] = str(requested_model).strip()
     resolved["profile_id"] = profile.get("id")
-    return resolved
+    return _repair_codex_oauth_profile(resolved, config, requested_model)
 
 
 def _build_command_with_runtime_env(harness, prompt, settings_path, model, permission_mode, allowed_tools, runtime_env):

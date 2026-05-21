@@ -78,6 +78,18 @@ supported harnesses through the same runner contract. Ops Chat follows the
 active Settings profile when `OPS_CHAT_AGENT_HARNESS` and
 `OPS_CHAT_AGENT_MODEL` are blank.
 
+In Codex subscription/OAuth mode, Codex can only run subscription-supported
+Codex/ChatGPT models such as `gpt-5.5`. Local and provider aliases such as
+`local/agent-default`, `qwen/...`, `deepseek/...`, or `openrouter/...` must run
+through Hermes or Codex proxy/API mode. The runner repairs stale Codex-OAuth
+requests that include those aliases back to the active subscription model
+before spawning, and records the repair reason in the agent runtime config.
+
+Ops Chat ticket workers should normally omit an explicit model when calling
+`/api/tickets/{id}/assign-agent`. That lets the Settings profile select the
+correct harness/model. Explicit model overrides are for targeted smoke tests
+only and are still passed through the central Codex-OAuth compatibility guard.
+
 Environment overrides still work for targeted smoke tests:
 
 ```bash

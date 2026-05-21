@@ -2,6 +2,82 @@
 
 Last updated: 2026-05-21.
 
+## Found During 2026-05-21 Ops Chat Codex Ticket Worker Retest
+
+### Ops Chat Codex OAuth ticket worker inherited local model alias
+
+Status: fixed and live-verified on ticket `1405`.
+
+Observed from Matrix/Element chat ticket `1403`: Ops Chat created and synced the
+ticket, but the spawned ticket worker used Codex OAuth with
+`local/agent-default`, which Codex subscription accounts reject. Root cause was
+two stale defaults: generated `ops_chat_tool.py` used `AGENT_DEFAULT_MODEL` as a
+ticket-worker fallback, and `/api/tickets/{id}/assign-agent` defaulted to a
+provider model even when the caller omitted `model`.
+
+Fix:
+
+- Ops Chat ticket-worker assignment now omits `model` unless explicitly supplied
+  for a targeted smoke test.
+- Ops Chat passes the Settings-resolved ticket profile/harness to the assignment
+  endpoint.
+- `/api/tickets/{id}/assign-agent` accepts optional `profile_id` and no longer
+  forces a model default.
+- The central runtime resolver repairs Codex-OAuth local/provider aliases
+  (`local/...`, `qwen/...`, `deepseek/...`, `openrouter/...`) back to the active
+  subscription model before spawn and records the repair reason in
+  `agents.runtime_config`.
+
+### Codex ticket worker completed but tracker marked it failed
+
+Status: fixed and live-verified during ticket `1405` retest.
+
+After the model-routing fix, Codex agent `373` used `gpt-5.5`, wrote the proof
+note, moved ticket `1405` to resolved, and persisted a `done` checkpoint. The
+background tracker still marked the task failed with
+`Agent process is no longer running in the API container`. Root cause: Codex was
+missing from the tracker process marker list, and orphan handling did not
+preserve a 100% `done` checkpoint as terminal completion.
+
+Fix:
+
+- Add `codex` / `openai` to live harness process markers.
+- When orphan recovery sees a 100% `done` / `completed` checkpoint, mark the
+  task completed and agent finished instead of failed.
+- Regression coverage in `tests/test_task_tracker_provider_close.py` verifies
+  the done-checkpoint path.
+
+### Tracker-finalized chat ticket stayed in progress after done checkpoint
+
+Status: fixed and live-verified on ticket `1408`.
+
+Ticket `1407` proved the full Ops Chat tool path now spawns Codex with
+`gpt-5.5`, but because the background tracker finalized the task from the done
+checkpoint, it skipped the existing runner-side ticket status recovery. The
+agent finished cleanly and wrote resolution evidence, yet the ticket remained
+`in_progress`.
+
+Fix:
+
+- The task tracker now calls
+  `agent_runner.recover_done_checkpoint_ticket_status()` when it finalizes a
+  100% done checkpoint.
+- The recovery remains narrow: it requires a ticket-resolution task, explicit
+  closure wording in the prompt, no open gates, and final agent evidence.
+- Regression coverage asserts the tracker invokes the recovery path without
+  implicitly closing tickets when closure was not requested.
+
+Live proof:
+
+- Ops Chat API session `712` created ticket `1408`.
+- Ticket worker agent `376` spawned through Codex `gpt-5.5` / profile
+  `codex-primary`.
+- The agent wrote marker `OPS_CHAT_STATUS_RECOVERY_SMOKE_1779376754`, completed
+  the task, and the ticket ended `resolved` with iTop ref `826`.
+- Original failed chat ticket `1403` was resumed with agent `377`, also through
+  Codex `gpt-5.5`, and now shows `resolved` while preserving the old failed
+  agent record as historical evidence.
+
 ## Found During 2026-05-21 Harness-Agnostic Ops Chat Retest
 
 ### Codex OAuth exec waited on inherited stdin

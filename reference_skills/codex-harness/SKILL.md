@@ -58,6 +58,14 @@ subscription account instead of API/proxy billing. In that mode the harness does
 not inject `OPENAI_API_KEY` and does not force `agentic_proxy`; Codex reads the
 OAuth state from mounted `CODEX_HOME`.
 
+Codex OAuth/subscription mode must use subscription-supported Codex/ChatGPT
+models such as `gpt-5.5`. Do not send `local/agent-default`, `qwen/...`,
+`deepseek/...`, `openrouter/...`, or other proxy/provider aliases to Codex in
+OAuth mode. Those aliases belong to Hermes/local-only or Codex proxy/API mode.
+The dashboard runner repairs stale Codex-OAuth local/provider aliases back to
+the active subscription model before spawn, but callers should still omit the
+model and let Settings resolve the profile whenever possible.
+
 One-time enrollment:
 
 ```bash
@@ -75,6 +83,12 @@ Noninteractive Codex runs must close stdin. If stdin is inherited, Codex can
 print `Reading additional input from stdin...` and wait before starting the
 turn. The dashboard runner and Ops Chat harness use `stdin=subprocess.DEVNULL`
 for this reason.
+
+The task tracker must recognize Codex processes as live harness processes and
+must preserve a 100% `done` checkpoint as completion if the OS process exits
+before final bookkeeping. A ticket that has a done checkpoint and final evidence
+should not be shown as failed just because the process disappeared between
+tracker polls.
 
 For Ops Chat smoke tests without changing the global runner default:
 

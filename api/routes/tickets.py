@@ -833,8 +833,9 @@ async def sync_all(body=Body(None)):
 @router.post("/{ticket_id}/assign-agent")
 async def assign_agent(
     ticket_id: int,
-    model: str = Body("deepseek/deepseek-v4-flash"),
+    model: str = Body(None),
     harness: str = Body(None),
+    profile_id: str = Body(None),
     prompt: str = Body(None),
     requested_permissions: list = Body(None),
     request: Request = None,
@@ -869,6 +870,8 @@ async def assign_agent(
     }
     if harness:
         spawn_kwargs["harness"] = harness
+    if profile_id:
+        spawn_kwargs["profile_id"] = profile_id
     result = await agent_runner.spawn_agent(
         ticket_id,
         model,
@@ -876,7 +879,7 @@ async def assign_agent(
         **spawn_kwargs,
     )
     await log_event("ticket", "info", "dashboard", "agent_assigned",
-                    f"ticket_{ticket_id}", {"model": model, "agent_id": result.get("agent_id")})
+                    f"ticket_{ticket_id}", {"model": model, "harness": harness, "profile_id": profile_id, "agent_id": result.get("agent_id")})
     return result
 
 

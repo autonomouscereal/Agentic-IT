@@ -80,6 +80,11 @@ Reference stack:
   `message_hash` in ticket `access_scope`, and the dashboard returns the
   existing active ticket for the same `session_id + message_hash` instead of
   syncing a duplicate provider ticket.
+- Ticket worker assignment from `ops_chat_tool.py` does not default to
+  `local/agent-default`. Unless a caller explicitly passes a model for a smoke
+  test, the tool omits the model and passes the Settings-resolved runtime
+  profile/harness to `/api/tickets/{id}/assign-agent`. This prevents stale
+  `AGENT_DEFAULT_MODEL` values from breaking Codex OAuth workers.
 - Side-effect recovery must not use "latest ticket in the room" for harmless
   chat. If a general/current-information message follows a ticket, answer the
   message unless the user clearly asks for ticket work or explicitly references

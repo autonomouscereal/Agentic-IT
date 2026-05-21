@@ -73,7 +73,7 @@ def _is_agent_process_alive(pid):
         return False
     except OSError:
         return False
-    harness_markers = ("claude", "anthropic-ai", "hermes", "hermes-agent", "node")
+    harness_markers = ("claude", "anthropic-ai", "hermes", "hermes-agent", "codex", "openai", "node")
     return any(marker in cmdline for marker in harness_markers)
 
 
@@ -191,6 +191,51 @@ async def _wait_checkpoint_obsolete(agent_id, ticket_id):
 
 async def _mark_orphaned(task, reason):
     cp = await _read_checkpoint(task.get("work_dir"))
+    if cp and cp.get("status") in ("done", "completed") and int(cp.get("progress_pct") or 0) >= 100:
+        output = (cp or {}).get("output") or "Agent completed before the process tracker finalized the task."
+        progress = int((cp or {}).get("progress_pct") or 100)
+        existing = task.get("checkpoints") or []
+        if isinstance(existing, str):
+            try:
+                existing = json.loads(existing)
+            except json.JSONDecodeError:
+                existing = []
+        if not existing or existing[-1].get("step") != cp.get("step") or existing[-1].get("status") != cp.get("status"):
+            existing.append({
+                "step": cp.get("step", "completed"),
+                "status": cp.get("status", "done"),
+                "output": str(output)[:500],
+                "timestamp": cp.get("timestamp", datetime.now().isoformat()),
+            })
+        await execute(
+            "UPDATE agent_tasks SET status = 'completed', checkpoints = $1, progress_pct = GREATEST(progress_pct, $2), "
+            "output = $3, completed_at = NOW(), error_message = NULL WHERE id = $4",
+            json.dumps(existing),
+            progress,
+            str(output)[:1000],
+            task["id"],
+        )
+        await execute(
+            "UPDATE agents SET status = 'finished', heartbeat = NOW(), error_message = NULL, finished_at = NOW() WHERE id = $1",
+            task["agent_id"],
+        )
+        if task.get("ticket_id"):
+            await _add_checkpoint_note(task, cp.get("step", "completed"), cp.get("status", "done"), output, progress)
+        await log_event("agent", "info", f"agent_{task['agent_id']}",
+                        "orphaned_process_preserved_done_checkpoint", f"task_{task['id']}", {
+                            "ticket_id": task["ticket_id"],
+                            "pid": task.get("pid"),
+                            "reason": reason,
+                            "checkpoint": cp,
+                        })
+        if broadcast_fn:
+            await broadcast_fn({
+                "type": "agent_finished",
+                "agent_id": task["agent_id"],
+                "ticket_id": task["ticket_id"],
+                "task_id": task["id"],
+            })
+        return
     if _checkpoint_blocks_completion(cp):
         blocked_status = _blocked_task_status(cp)
         output = (cp or {}).get("output") or reason
@@ -407,11 +452,18 @@ async def _sync_task_status(task):
             reason="checkpoint_task_tracker_success",
             checkpoint=cp,
         )
+        status_recovery = await agent_runner.recover_done_checkpoint_ticket_status(
+            task["agent_id"],
+            task["id"],
+            cp,
+            reason="checkpoint_task_tracker_success",
+        )
         await log_event("agent", "info", f"agent_{task['agent_id']}", "task_completed",
                         f"task_{task['id']}", {
                             "ticket_id": task["ticket_id"],
                             "auto_completed_changes": change_completion.get("completed", []),
                             "auto_complete_skipped": change_completion.get("skipped", []),
+                            "ticket_status_recovery": status_recovery,
                             "provider_close": provider_close,
                         })
 
