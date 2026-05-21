@@ -1,6 +1,6 @@
 # Demo Runbook
 
-Last updated: 2026-05-20.
+Last updated: 2026-05-21.
 
 ## Demo Goal
 
@@ -63,6 +63,27 @@ lands while the model is already generating, the sequence shows when that turn
 started so it is clear the agent did not ignore the update. The next tool
 result, steering event, or continuation agent is where the new information is
 picked up.
+
+## Current Golden Ticket Flow
+
+Open the Tickets page and select `Demo Proofs`. The current curated flow starts
+with newer existing chat/intake proofs, then moves into mature agentic
+remediation:
+
+1. `1384` - chat-created watermelon procurement ticket, then cancelled from the
+   same workspace when the requester says Alice is allergic.
+2. `1385` - replacement pizza request created as a distinct ticket instead of
+   mutating the cancelled watermelon ticket.
+3. `1386` - urgent account-login request from the same chat, routed as P1
+   Identity & Access, then clarified as Keycloak SSO/MFA.
+4. `1309` - DevSecOps delivery-gate intake for Semgrep/Trivy findings with
+   provider sync and no implicit production approval.
+5. `1282` - software-install intake with requester and affected-user metadata.
+6. `1176` - software request reassigned/escalated to Tier 2 Endpoint Support.
+7. `695` - lead deep-work proof with URL-safe phishing/EDR, requester response,
+   steering, access gate, containment gate, postmortem, and provider close.
+8. `690`, `83`, `580`, `525`, `539`, and `531` - learning loop, CI/CD,
+   Mailcow/Roundcube, and least-privilege proof tickets.
 
 Approval gates are also deliberately visible for the demo. When the lab
 auto-approves a gate, the ticket timeline shows:
@@ -252,15 +273,18 @@ only as a container-side compatibility route for internal service access.
 
 Use [Demo Ticket Catalog](DEMO_TICKET_CATALOG.md) for the current curated list
 of prepared dashboard examples. The Tickets page has a `Demo Proofs` filter
-that shows the strongest resolved examples in demo order. Each ticket modal now
-has an `Evidence Trail` section with notes, audit count, agent work, approval
-gates, access requests, and postmortems in a human-readable layout.
+that shows the strongest prepared examples in demo order, including cancelled
+intake tickets when cancellation is the story. Each ticket modal now has an
+`Evidence Trail` section with notes, audit count, agent work, approval gates,
+access requests, and postmortems in a human-readable layout.
 
 Demo-readiness checkpoint from 2026-05-21:
 
-- `Demo Proofs` order: `695`, `690`, `83`, `580`, `525`, `539`, `531`, `422`,
-  `575`, `530`, `118`, `363`, `430`, `578`.
-- Lead with `695`; keep `690` and `83` as the next two examples.
+- `Demo Proofs` order: `1384`, `1385`, `1386`, `1309`, `1282`, `1176`,
+  `695`, `690`, `83`, `580`, `525`, `539`, `531`, `422`, `575`, `530`,
+  `118`, `363`, `430`, `578`.
+- Lead with the newer intake tickets `1384`, `1385`, and `1386`; keep `695`,
+  `690`, and `83` as the first deep-work examples after the intake story.
 - The live dashboard has zero open tickets, zero active agents, zero open
   tasks, and zero pending/approved changes after curation.
 - Old chat-marathon, setup-plan, smoke, broad-matrix, and superseded phishing

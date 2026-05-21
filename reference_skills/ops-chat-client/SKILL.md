@@ -301,6 +301,15 @@ Latest API-level multi-ticket proof:
 - Room summary answered without creating another ticket
 - All synthetic tickets were cleaned up after proof
 
+These tickets are also tagged as newer golden intake examples in the dashboard
+`Demo Proofs` filter. Use them to demonstrate chat workspace continuity before
+showing the heavier remediation/gating examples:
+
+- `1384`: cancellation from chat after the requester changes scope
+- `1385`: replacement request as a distinct ticket
+- `1386`: unrelated urgent Identity & Access ticket from the same room, with
+  Keycloak SSO/MFA clarification added as a user response
+
 Detailed report for this hardening pass:
 
 - `docs/OPS_CHAT_LIFECYCLE_TEST_REPORT_2026-05-21.md`

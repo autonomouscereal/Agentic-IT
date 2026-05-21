@@ -100,8 +100,9 @@ Required assertions:
 - Tickets page loads `200` rows initially, then more rows after scrolling.
 - Ticket footer shows the true total, for example `Showing 400 of 1095 tickets`.
 - Tickets page `Demo Proofs` shows the curated order:
-  `695`, `690`, `83`, `580`, `525`, `539`, `531`, `422`, `575`, `530`,
-  `118`, `363`, `430`, `578`.
+  `1384`, `1385`, `1386`, `1309`, `1282`, `1176`, `695`, `690`, `83`,
+  `580`, `525`, `539`, `531`, `422`, `575`, `530`, `118`, `363`, `430`,
+  `578`.
 - Setup page module search/filter is visible and returns a sensible count.
 - Agents page shows harness options `hermes` and `claude-code`.
 - Saving default harness/model returns `Saved server default.`
@@ -128,6 +129,13 @@ Ops Chat and global-search readiness are documented in:
 
 Current polished proof tickets:
 
+- `1384`, `1385`, and `1386`: newer Ops Chat proof that one workspace can
+  create, cancel, replace, and separately route multiple tickets without
+  duplicate bloat.
+- `1309`: chat-created DevSecOps delivery-gate ticket with iTop sync and
+  urgency follow-up.
+- `1282`: requester/affected-user metadata proof for software install intake.
+- `1176`: reassignment/escalation proof from Endpoint Support to Tier 2.
 - `695`: lead URL-safe phishing plus EDR hybrid with user response, steering,
   access wall, containment gate, postmortem, and provider close recovery.
 - `690`: cleaner learning/workflow proof for the same incident type.
