@@ -259,7 +259,7 @@ gates, access requests, and postmortems in a human-readable layout.
 Demo-readiness checkpoint from 2026-05-21:
 
 - `Demo Proofs` order: `695`, `690`, `83`, `580`, `525`, `539`, `531`, `422`,
-  `575`, `530`, `118`, `363`, `430`, `82`, `578`.
+  `575`, `530`, `118`, `363`, `430`, `578`.
 - Lead with `695`; keep `690` and `83` as the next two examples.
 - The live dashboard has zero open tickets, zero active agents, zero open
   tasks, and zero pending/approved changes after curation.

@@ -101,7 +101,7 @@ Required assertions:
 - Ticket footer shows the true total, for example `Showing 400 of 1095 tickets`.
 - Tickets page `Demo Proofs` shows the curated order:
   `695`, `690`, `83`, `580`, `525`, `539`, `531`, `422`, `575`, `530`,
-  `118`, `363`, `430`, `82`, `578`.
+  `118`, `363`, `430`, `578`.
 - Setup page module search/filter is visible and returns a sensible count.
 - Agents page shows harness options `hermes` and `claude-code`.
 - Saving default harness/model returns `Saved server default.`

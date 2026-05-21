@@ -147,7 +147,7 @@ function openAuditTrail(query, source = "") {
 let ticketSort = { by: "updated_at", dir: "desc" };
 let ticketListState = { key: "", offset: 0, limit: 200, total: 0, loading: false, done: false, rows: [] };
 let agentRuntimeConfig = { models: [], default_model: "", default_harness: "hermes", setups: [], available_harnesses: [] };
-const DEMO_TICKET_IDS = [695, 690, 83, 580, 525, 539, 531, 422, 575, 530, 118, 363, 430, 82, 578];
+const DEMO_TICKET_IDS = [695, 690, 83, 580, 525, 539, 531, 422, 575, 530, 118, 363, 430, 578];
 const DEMO_TICKET_ORDER = new Map(DEMO_TICKET_IDS.map((id, idx) => [id, idx]));
 
 function initTicketSorting() {
