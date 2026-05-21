@@ -855,6 +855,73 @@ async def _agent_queue_worker():
             _agent_queue.task_done()
 
 
+async def rehydrate_queued_tasks(limit=100):
+    """Re-enqueue DB-persisted queued tasks after an API restart.
+
+    The priority queue is in-memory, but tasks and work directories are durable.
+    Without this startup pass, a clean API rebuild can leave agents in
+    spawned/queued forever even though the database still has everything needed
+    to continue.
+    """
+    _ensure_queue_workers()
+    rows = await fetchall(
+        """
+        SELECT at.id AS task_id, at.agent_id, at.ticket_id, at.prompt, at.work_dir,
+               at.task_type, a.harness, t.priority
+        FROM agent_tasks at
+        JOIN agents a ON a.id = at.agent_id
+        JOIN tickets t ON t.id = at.ticket_id
+        WHERE at.status = 'queued'
+          AND a.status IN ('spawned', 'working', 'running')
+          AND at.work_dir IS NOT NULL
+        ORDER BY
+          CASE COALESCE(t.priority, 'P3')
+            WHEN 'P1' THEN 0
+            WHEN 'P2' THEN 1
+            WHEN 'P3' THEN 2
+            WHEN 'P4' THEN 3
+            ELSE 2
+          END,
+          at.created_at ASC
+        LIMIT $1
+        """,
+        max(1, min(int(limit or 100), 500)),
+    )
+    requeued = []
+    skipped = []
+    for row in rows or []:
+        work_dir = row.get("work_dir")
+        if not work_dir or not os.path.isdir(work_dir):
+            skipped.append({"task_id": row.get("task_id"), "reason": "missing_work_dir", "work_dir": work_dir})
+            continue
+        priority_rank = _ticket_priority_rank(row.get("priority"), row.get("task_type"))
+        sequence = next(_queue_counter)
+        await _agent_queue.put((
+            priority_rank,
+            sequence,
+            work_dir,
+            row.get("prompt"),
+            row.get("task_id"),
+            row.get("agent_id"),
+            _normalize_harness_name(row.get("harness")),
+        ))
+        requeued.append({
+            "task_id": row.get("task_id"),
+            "agent_id": row.get("agent_id"),
+            "ticket_id": row.get("ticket_id"),
+            "priority_rank": priority_rank,
+            "sequence": sequence,
+        })
+    if requeued or skipped:
+        await log_event("agent", "info", "agent-runner", "queued_tasks_rehydrated",
+                        "agent_queue", {
+                            "requeued": requeued,
+                            "skipped": skipped,
+                            "queued_depth": _agent_queue.qsize(),
+                        })
+    return {"status": "ok", "requeued": requeued, "skipped": skipped, "queued_depth": _agent_queue.qsize()}
+
+
 def _curl_guard_script(real_curl, blocked_paths=None, max_output_bytes=None, allowed_hosts=None):
     paths = blocked_paths if blocked_paths is not None else _split_guard_paths(AGENT_CURL_BLOCKED_PATHS)
     limit = int(max_output_bytes if max_output_bytes is not None else AGENT_CURL_MAX_OUTPUT_BYTES)

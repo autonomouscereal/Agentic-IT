@@ -65,6 +65,10 @@ agents with explicit extra or pinned skills.
 queued work. Keep the lab default at `1` for slow local models. Increase it only
 when the selected route has enough model/provider capacity.
 
+The queue itself is in-memory, while queued agent tasks are persisted in
+PostgreSQL. API startup rehydrates durable queued tasks so a rebuild/restart
+does not strand chat-created agents in `spawned` / `queued`.
+
 Timeout guidance:
 
 - local/on-prem model profiles: `60` minutes

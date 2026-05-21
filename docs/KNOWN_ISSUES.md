@@ -78,6 +78,33 @@ Live proof:
   Codex `gpt-5.5`, and now shows `resolved` while preserving the old failed
   agent record as historical evidence.
 
+### Queued chat agent stranded after API rebuild
+
+Status: fixed and live-verified on ticket `1409`.
+
+After the live API rebuild, chat ticket `1409` created agent `378` / task `375`,
+but the task remained `queued` with no running process. Root cause: the priority
+queue is in-memory while the queued task is durable in PostgreSQL. An API
+restart/rebuild can therefore leave a DB-persisted queued task without an
+in-memory queue item.
+
+Fix:
+
+- `agent_runner.rehydrate_queued_tasks()` re-enqueues durable queued tasks on API
+  startup when the agent is still in `spawned` / `working` / `running` state and
+  the work directory exists.
+- Startup calls the rehydration path after background services start.
+- The rehydration event records requeued/skipped tasks and queue depth.
+- Regression coverage verifies durable queued tasks are placed back on the
+  priority queue.
+
+Live proof:
+
+- After API rebuild, ticket `1409` / agent `378` was rehydrated from DB
+  `queued` state into the live worker queue.
+- The agent ran with Codex `gpt-5.5`, created and validated a demo-safe local
+  hello webpage, wrote Playwright/HTTP evidence, and resolved iTop ref `827`.
+
 ## Found During 2026-05-21 Harness-Agnostic Ops Chat Retest
 
 ### Codex OAuth exec waited on inherited stdin

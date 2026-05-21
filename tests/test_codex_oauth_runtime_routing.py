@@ -1,5 +1,7 @@
 import os
 import sys
+import asyncio
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -53,6 +55,44 @@ class CodexOauthRuntimeRoutingTests(unittest.TestCase):
         self.assertNotIn('DEFAULT_MODEL = os.environ.get("OPS_CHAT_AGENT_MODEL") or os.environ.get("AGENT_DEFAULT_MODEL") or "local/agent-default"', source)
         self.assertNotIn('"model": args.model or DEFAULT_MODEL', source)
         self.assertIn("assign_agent_payload(prompt, args)", source)
+
+    def test_rehydrate_queued_tasks_requeues_durable_work(self):
+        async def run_case():
+            with tempfile.TemporaryDirectory() as tmp:
+                rows = [{
+                    "task_id": 812,
+                    "agent_id": 813,
+                    "ticket_id": 814,
+                    "prompt": "resume durable work",
+                    "work_dir": tmp,
+                    "task_type": "ticket_resolution",
+                    "harness": "codex",
+                    "priority": "P2",
+                }]
+                events = []
+
+                async def fetchall(query, *args):
+                    return rows
+
+                async def log_event(*args):
+                    events.append(args)
+
+                agent_runner._agent_queue = asyncio.PriorityQueue()
+                agent_runner._queue_workers = set()
+                agent_runner.fetchall = fetchall
+                agent_runner.log_event = log_event
+                agent_runner._ensure_queue_workers = lambda: None
+
+                result = await agent_runner.rehydrate_queued_tasks(limit=10)
+                item = await agent_runner._agent_queue.get()
+                agent_runner._agent_queue.task_done()
+
+                return result, item, events
+
+        result, item, events = asyncio.run(run_case())
+        self.assertEqual(result["requeued"][0]["task_id"], 812)
+        self.assertEqual(item[4:7], (812, 813, "codex"))
+        self.assertTrue(any(event[3] == "queued_tasks_rehydrated" for event in events))
 
 
 if __name__ == "__main__":

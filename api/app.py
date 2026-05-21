@@ -28,7 +28,7 @@ from routes import (
     search,
     ops_chat,
 )
-from services import itop_sync, health_check, task_tracker, agent_auditor
+from services import itop_sync, health_check, task_tracker, agent_auditor, agent_runner
 from services import access_control
 from services.event_logger import log_event
 
@@ -77,6 +77,13 @@ async def lifespan(application: FastAPI):
     print(f"Started {len(_background_tasks)} background services")
     await log_event("system", "info", "app", "background_services_started",
                     str(len(_background_tasks)))
+    try:
+        rehydrate_result = await agent_runner.rehydrate_queued_tasks()
+        if rehydrate_result.get("requeued") or rehydrate_result.get("skipped"):
+            print(f"Rehydrated queued agent tasks: {rehydrate_result}")
+    except Exception as e:
+        print(f"Queued task rehydration warning: {e}")
+        await log_event("agent", "warning", "app", "queued_task_rehydration_failed", str(e))
     yield
     for task in _background_tasks:
         task.cancel()
