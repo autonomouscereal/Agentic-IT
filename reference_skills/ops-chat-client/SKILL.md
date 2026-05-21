@@ -39,6 +39,11 @@ Reference stack:
   internal note, audit event, and real agent-harness queue task.
 - When a ticket is created after clarification, recent chat context is copied
   into the ticket description and the Ops Chat-created note.
+- Chat-created tickets must preserve canonical contact metadata:
+  `opened_by_*` for the platform/agent/operator opening the ticket,
+  `requester_*` for the person asking for work, and `affected_user_*` for the
+  impacted person/account/mailbox/device/service/app. Requester and affected
+  user may differ. Do not invent affected-user emails.
 - The chat agent decides whether to answer directly, create a new ticket, or
   continue/cancel an existing ticket from the same room. Do not assume one
   Matrix room equals one ticket; the room can contain several unrelated asks.
@@ -70,6 +75,12 @@ Reference stack:
   and `--priority`. Use those fields to reassign or escalate an existing ticket
   when the requester clarifies scope. Do not open a duplicate just to move the
   work to a different team.
+- `create-ticket` supports `--affected-user-name` / `--affected-user-email`
+  and `continue-ticket` supports affected-user/requester override fields for
+  corrections. Use them when the user says the work is for someone else, such
+  as "Alice needs Acrobat" or "the CEO is locked out." If a follow-up says
+  "actually this is for Bob," continue the existing ticket and update contact
+  metadata instead of opening a duplicate.
 - The bridge sets Matrix typing state and, for turns that take longer than a few
   seconds, sends a short working acknowledgement so the user sees that the
   agent is alive before the final answer/ticket response arrives.
@@ -160,6 +171,8 @@ Expected:
 - `/api/ops-chat/matrix/health` reports Matrix Synapse + Element.
 - direct `/api/ops-chat/message` creates a ticket.
 - the ticket contains `Ops Chat agent-created ticket`.
+- the ticket shows requester and affected-user fields when applicable, and the
+  active provider preserves that contact context.
 - operational chat queues a real dashboard agent task unless
   `OPS_CHAT_SMOKE_SPAWN_AGENT=false` is set.
 - follow-up chat on the same session is recorded as a `user-response` note.
@@ -227,6 +240,17 @@ This keeps one Matrix DM open and mixes harmless chat, current-information
 questions, several operational tickets, cancellations, replacement work, scope
 updates, and ticket summaries. It is the preferred proof that Ops Chat is not a
 single latest-ticket parser path.
+
+Requester/affected-user proof, latest live lab:
+
+- Ticket `1284`
+- Session `574`
+- Requester `Demo Account 1 Demo`
+- Affected user initially `Alice Example`, then corrected to
+  `Charlie Example` by a follow-up in the same chat session
+- iTop ref `703`
+- Provider description preserved requester and affected-user lines
+- No affected-user email was invented when the user did not provide one
 
 Developer artifact proof:
 

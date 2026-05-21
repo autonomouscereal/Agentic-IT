@@ -143,6 +143,11 @@ ask one concise follow-up before creating a ticket if the answer changes route,
 scope, urgency, or whether a ticket is needed. Once a ticket is created, recent
 chat context is copied into ticket evidence and the active provider syncs the
 canonical ticket. In the current lab, Ops Chat tickets sync to iTop by default.
+Chat-created tickets now also show who opened the work, who requested it, and
+who or what is affected. This matters for demo and production cases like "I am
+locked out" versus "Alice needs software" or "the CEO is locked out": the
+requester and affected user can differ, and those fields sync into provider
+descriptions without inventing missing email addresses.
 
 Latest live proof set, 2026-05-20:
 
@@ -167,6 +172,10 @@ Latest live proof set, 2026-05-20:
   developer one-off artifact requests for Python, HTML, Markdown, and Bash,
   validated each artifact through the harness toolbelt, rendered them as Element
   code blocks, and created zero tickets.
+- ticket `1284`: Ops Chat created an iTop-synced software request with
+  requester `Demo Account 1 Demo`, affected user `Alice Example`, no invented
+  affected email, and provider-side contact context preserved; a follow-up in
+  the same chat corrected the affected user without opening a duplicate ticket.
 
 For the full test matrix and demo acceptance bar, see
 `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`.

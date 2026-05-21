@@ -340,6 +340,8 @@ class iTopProvider(TicketProvider):
             "urgency": _to_int(fields.get("urgency")),
             "assignee": fields.get("assignee_name", ""),
             "assignee_team": fields.get("team_name", ""),
+            "requester_name": fields.get("caller_name") or fields.get("caller_friendlyname"),
+            "requester_email": fields.get("caller_email"),
         }
 
         existing_ticket = await fetchrow(
@@ -372,24 +374,49 @@ class iTopProvider(TicketProvider):
             provider_team = (ticket_data["assignee_team"] or "").strip()
             if is_ops_chat_ticket and local_team and (not provider_team or provider_team == "Security Team"):
                 ticket_data["assignee_team"] = local_team
+            requester_update_sql = ""
+            requester_values = []
+            if not is_ops_chat_ticket:
+                requester_update_sql = """
+                    requester_name = COALESCE($12, requester_name),
+                    requester_email = COALESCE($13, requester_email),
+                """
+                requester_values = [ticket_data["requester_name"], ticket_data["requester_email"]]
             local_status = _effective_local_status(
                 ticket_data["status"],
                 existing_ticket.get("status"),
                 bool(existing_ticket.get("has_active_agent")),
             )
-            await execute("""
+            if requester_update_sql:
+                await execute(f"""
                 UPDATE tickets SET
                     title = $1, description = $2, status = $3, priority = $4,
                     impact = $5, urgency = $6, assignee = $7, assignee_team = $8,
                     provider = 'itop', provider_ref = $9, provider_class = $10,
+                    {requester_update_sql}
                     provider_sync_status = 'synced', provider_last_error = NULL,
                     provider_payload = $11, synced_at = NOW(), updated_at = NOW()
                 WHERE itop_ref = $9 AND itop_class = $10
             """, ticket_data["title"], ticket_data["description"],
-                local_status, ticket_data["priority"],
-                ticket_data["impact"], ticket_data["urgency"],
-                ticket_data["assignee"], ticket_data["assignee_team"],
-                str(key_val), ticket_class, json_dumps(obj_data))
+                    local_status, ticket_data["priority"],
+                    ticket_data["impact"], ticket_data["urgency"],
+                    ticket_data["assignee"], ticket_data["assignee_team"],
+                    str(key_val), ticket_class, json_dumps(obj_data),
+                    *requester_values)
+            else:
+                await execute("""
+                    UPDATE tickets SET
+                        title = $1, description = $2, status = $3, priority = $4,
+                        impact = $5, urgency = $6, assignee = $7, assignee_team = $8,
+                        provider = 'itop', provider_ref = $9, provider_class = $10,
+                        provider_sync_status = 'synced', provider_last_error = NULL,
+                        provider_payload = $11, synced_at = NOW(), updated_at = NOW()
+                    WHERE itop_ref = $9 AND itop_class = $10
+                """, ticket_data["title"], ticket_data["description"],
+                    local_status, ticket_data["priority"],
+                    ticket_data["impact"], ticket_data["urgency"],
+                    ticket_data["assignee"], ticket_data["assignee_team"],
+                    str(key_val), ticket_class, json_dumps(obj_data))
             ticket_id = existing_ticket["id"]
             try:
                 await _sync_case_log_notes(
@@ -406,16 +433,19 @@ class iTopProvider(TicketProvider):
             ticket_id = await fetchval("""
                 INSERT INTO tickets (itop_ref, itop_class, title, description, status,
                                     priority, impact, urgency, assignee, assignee_team,
+                                    requester_name, requester_email, affected_user_name, affected_user_email,
                                     provider, provider_ref, provider_class, provider_sync_status,
                                     provider_payload, synced_at, created_at, updated_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                        'itop', $1, $2, 'synced', $11, NOW(), NOW(), NOW())
+                        $11, $12, $11, $12,
+                        'itop', $1, $2, 'synced', $13, NOW(), NOW(), NOW())
                 RETURNING id
             """, str(key_val), ticket_class, ticket_data["title"],
                 ticket_data["description"], ticket_data["status"],
                 ticket_data["priority"], ticket_data["impact"],
                 ticket_data["urgency"], ticket_data["assignee"],
-                ticket_data["assignee_team"], json_dumps(obj_data))
+                ticket_data["assignee_team"], ticket_data["requester_name"],
+                ticket_data["requester_email"], json_dumps(obj_data))
 
         auto_assignment = None
         if auto_assign and not existing_ticket:
@@ -488,6 +518,31 @@ class iTopProvider(TicketProvider):
                 return item
         return None
 
+    async def _find_person_for_contact(self, name=None, email=None, org_id=None):
+        """Best-effort iTop Person lookup for canonical requester metadata."""
+        target_email = str(email or "").strip().lower()
+        target_name = str(name or "").strip().lower()
+        if not target_email and not target_name:
+            return None
+        def predicate(item):
+            fields = (item.get("fields") or {})
+            if org_id and str(fields.get("org_id") or "") != str(org_id):
+                return False
+            candidate_email = str(fields.get("email") or "").strip().lower()
+            full_name = " ".join([
+                str(fields.get("first_name") or ""),
+                str(fields.get("name") or ""),
+                str(fields.get("friendlyname") or ""),
+            ]).strip().lower()
+            if target_email and candidate_email == target_email:
+                return True
+            return bool(target_name and target_name in full_name)
+        return await self._find_first_object(
+            "Person",
+            "id,name,first_name,friendlyname,org_id,email",
+            predicate,
+        )
+
     async def _resolve_default_refs(self):
         org = None
         if ITOP_DEFAULT_ORG_ID:
@@ -556,13 +611,22 @@ class iTopProvider(TicketProvider):
                 "ticket_class": ticket_class,
             }
 
+        caller_id = refs["caller_id"]
+        requester = await self._find_person_for_contact(
+            fields.get("requester_name"),
+            fields.get("requester_email"),
+            refs.get("org_id"),
+        )
+        if requester and requester.get("key"):
+            caller_id = requester["key"]
+
         create_fields = {
             "title": fields.get("title") or f"Agentic Operations ticket {ticket_id}",
             "description": fields.get("description") or "",
             "org_id": refs["org_id"],
         }
         if ticket_class in ("Incident", "UserRequest"):
-            create_fields["caller_id"] = refs["caller_id"]
+            create_fields["caller_id"] = caller_id
         if ticket_class == "Incident":
             impact, urgency = _priority_to_impact_urgency(fields.get("priority"))
             create_fields["impact"] = impact

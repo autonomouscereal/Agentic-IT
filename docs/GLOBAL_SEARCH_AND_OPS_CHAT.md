@@ -81,6 +81,20 @@ the Ops Chat-created ticket note. Harmless/general requests such as a text cat,
 basic advice, or benign current-information questions can be answered without a
 ticket; operational work must become a ticket.
 
+Chat-created tickets also carry canonical contact metadata:
+
+- `opened_by_*`: the platform/agent or operator that opened the ticket
+- `requester_*`: the person asking for the work
+- `affected_user_*`: the person, account, mailbox, device, service, or app
+  impacted by the request
+
+The requester and affected user are often the same for "I am locked out" and
+different for "Alice needs Acrobat" or "the CEO is locked out." The harness
+toolbelt exposes these fields on `create-ticket` and `continue-ticket` so a
+follow-up clarification can correct the affected user without creating a
+duplicate ticket. Global search includes requester and affected-user names and
+emails.
+
 Compose services:
 
 - `ops-chat-db`: PostgreSQL for Synapse
@@ -179,6 +193,22 @@ The dev proof asks for Python, HTML, Markdown, and Bash artifacts through the
 real Element UI. The chat harness must validate each artifact with
 `ops_chat_tool.py validate-artifact`; Element must render the fenced artifacts
 as code blocks; and no tickets should be created for pure one-off dev answers.
+
+Requester / affected-user proof:
+
+```bash
+# AI server, inside the deployed repo with DASHBOARD_SERVICE_TOKEN set
+curl -sS -X POST "$DASHBOARD_URL/api/ops-chat/message" \
+  -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Please open a request for Alice Example. She needs Adobe Acrobat Pro installed on her laptop.","requester_name":"Demo Account 1 Demo","requester_email":"demo_account_1@example.local","channel":"matrix","spawn_agent":false}'
+```
+
+Latest live proof: ticket `1284` synced to iTop ref `703`; the dashboard stored
+requester `Demo Account 1 Demo`, affected user `Alice Example`, no invented
+affected email, and iTop preserved both contact lines in the provider
+description. A follow-up in the same session changed the affected user to
+`Charlie Example` through `continue-ticket` without opening a duplicate.
 
 Scenario smoke:
 

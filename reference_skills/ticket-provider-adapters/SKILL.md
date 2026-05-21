@@ -31,6 +31,11 @@ Expected providers:
   current lab that means iTop, and a healthy chat-created ticket should have
   `provider=itop`, a provider reference, `provider_sync_status=synced`, and a
   usable provider URL.
+- Canonical ticket contact metadata is part of provider sync:
+  `opened_by_*`, `requester_*`, and `affected_user_*`. Preserve it in the
+  dashboard record and provider description. Use `Name (email)` in provider
+  descriptions instead of angle brackets so iTop/HTML ticket UIs do not strip
+  the affected-user line. Never invent missing affected-user emails.
 - Current live chat proof: one-room Element marathon marker
   `ops-chat-marathon-1779299559` created tickets `1276`-`1280`; all five used
   provider `itop`, synced to provider refs `695`-`699`, and preserved dashboard
@@ -39,6 +44,9 @@ Expected providers:
 - Provider sync must not overwrite richer local evidence from Ops Chat. Keep
   recent chat context, agent-selected assignment, and human-readable Ops Chat
   notes even if the provider returns a short summary or generic assignment.
+- Follow-up chat corrections such as "actually this is for Bob" should update
+  `/api/tickets/{id}/contacts` and write a `ticket-contact` note, not create a
+  duplicate provider ticket.
 - Configure ServiceNow/Jira/webhook only through environment variables or vault-injected env. Never hardcode API tokens, passwords, or instance URLs containing secrets.
 - Fail closed when external provider config is missing. The canonical ticket should record `provider_sync_status=create_failed` and `provider_last_error`.
 - Do not claim provider sync succeeded unless the provider returns a usable external reference.
@@ -60,6 +68,14 @@ Push to a provider:
 curl -sS -X POST "$SOC_DASHBOARD_URL/api/tickets/123/push-provider" \
   -H "Content-Type: application/json" \
   -d '{"provider":"servicenow"}'
+```
+
+Update requester / affected user metadata:
+
+```bash
+curl -sS -X POST "$SOC_DASHBOARD_URL/api/tickets/123/contacts" \
+  -H "Content-Type: application/json" \
+  -d '{"affected_user_name":"Alice Example","actor":"ops-chat-agent","reason":"Requester clarified the affected user."}'
 ```
 
 ## Config Knobs
@@ -102,3 +118,8 @@ GENERIC_TICKETING_DRY_RUN
 - `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`: current Ops Chat
   provider-sync and demo-readiness checkpoint.
 - `scripts/smoke_provider_adapters.py`: safe live smoke test.
+
+Latest live contact proof: Ops Chat ticket `1284` synced to iTop ref `703`,
+kept requester `Demo Account 1 Demo`, affected user `Alice Example`, preserved
+both names in iTop, then updated the affected user to `Charlie Example` through
+the same chat session without opening a duplicate ticket.

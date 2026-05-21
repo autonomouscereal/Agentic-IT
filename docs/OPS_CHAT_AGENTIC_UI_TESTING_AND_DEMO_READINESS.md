@@ -157,12 +157,24 @@ the lab, that means iTop.
 Required evidence on a healthy chat-created ticket:
 
 - canonical dashboard ticket id
+- `opened_by_name` / `opened_by_email` when the platform or agent opened work
+  on behalf of someone else
+- `requester_name` / `requester_email` for the person asking for the work
+- `affected_user_name` / `affected_user_email` for the person, account,
+  mailbox, endpoint, service, or app impacted by the work
 - `provider = itop`
 - `provider_ref` / `itop_ref`
 - `provider_sync_status = synced`
 - `external_url` pointing to iTop details
 - Ops Chat agent-created note
 - recent chat context preserved in dashboard evidence
+
+Requester and affected user can differ. For example, if Demo Account asks for
+software for Alice, the ticket should show Demo Account as requester and Alice
+as affected user. Do not invent affected-user email addresses; leave the email
+blank unless the user or identity provider provides it. Provider descriptions
+use `Name (email)` instead of angle brackets so iTop and other HTML-rendering
+ticket systems preserve the contact block.
 
 The iTop sync path must not overwrite richer local Ops Chat evidence with short
 provider summaries. For Ops Chat-originated tickets, local description and
@@ -245,6 +257,7 @@ Latest validated state on 2026-05-20:
 | Real agent prompt guard | marker `ops-chat-scenarios-1779307368`, ticket `1255`, Hermes agent `333`, spawned prompt included canonical-ticket no-duplicate guardrail |
 | One-room Element marathon | marker `ops-chat-marathon-1779299559`, user `demo_chat_marathon5`, 16 mixed turns, tickets `1276`-`1280`, 15 working acks, passed |
 | Developer artifact chat | marker `ops-chat-dev-artifact-1780000005`, user `demo_chat_marathon5`, Python/HTML/Markdown/Bash validated and rendered as Element code blocks with zero tickets |
+| Requester / affected-user sync | ticket `1284`, session `574`, requester `Demo Account 1 Demo`, affected user `Alice Example`, iTop ref `703`, provider description preserved requester and affected user; follow-up changed affected user to `Charlie Example` without creating a duplicate ticket |
 
 Smoke-owned agents `327` and `328` were stopped after collecting evidence so
 the demo queue was left clean. Final active-agent and process checks were

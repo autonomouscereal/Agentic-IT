@@ -15,9 +15,43 @@ const opsChatPassword = process.env.OPS_CHAT_PASSWORD || "";
 const ignoreHttpsErrors = /^(1|true|yes|on)$/i.test(process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS || "");
 const marker = process.env.OPS_CHAT_MARATHON_MARKER || `ops-chat-marathon-${Date.now()}`;
 const screenshotDir = process.env.PLAYWRIGHT_SCREENSHOT_DIR || "";
+const dashboardUrl = (process.env.DASHBOARD_URL || "").replace(/\/$/, "");
+const dashboardToken = process.env.DASHBOARD_SERVICE_TOKEN || "";
 
 function requireSecret(name, value) {
   if (!value) throw new Error(`${name} is required`);
+}
+
+async function dashboardGet(path) {
+  if (!dashboardUrl || !dashboardToken) return null;
+  const response = await fetch(`${dashboardUrl}${path}`, {
+    headers: { "X-Dashboard-Service-Token": dashboardToken },
+  });
+  if (!response.ok) throw new Error(`dashboard GET ${path} failed: HTTP ${response.status} ${await response.text()}`);
+  return await response.json();
+}
+
+async function verifyTicketContact(ticketId, expected) {
+  if (!ticketId || !dashboardUrl || !dashboardToken) return { status: "skipped", reason: "dashboard_api_not_configured" };
+  const ticket = await dashboardGet(`/api/tickets/${ticketId}`);
+  for (const [key, pattern] of Object.entries(expected)) {
+    const value = String(ticket[key] || "");
+    if (!pattern.test(value)) {
+      throw new Error(`ticket #${ticketId} ${key} expected ${pattern}, got ${JSON.stringify(value)}`);
+    }
+  }
+  if (ticket.provider !== "local" && ticket.provider_sync_status !== "synced") {
+    throw new Error(`ticket #${ticketId} provider sync not healthy: ${ticket.provider}/${ticket.provider_sync_status}`);
+  }
+  return {
+    status: "verified",
+    ticket_id: ticketId,
+    requester: ticket.requester_name || ticket.requester_email,
+    affected_user: ticket.affected_user_name || ticket.affected_user_email,
+    provider: ticket.provider,
+    provider_ref: ticket.provider_ref,
+    provider_sync_status: ticket.provider_sync_status,
+  };
 }
 
 async function maybeScreenshot(page, name) {
@@ -364,6 +398,20 @@ async function sendMessage(page, label, message, expectPattern, timeout = 240000
     if (proof.tickets.adobe === proof.tickets.figma) {
       throw new Error("Adobe replacement reused the cancelled Figma ticket");
     }
+    proof.contact_checks = {
+      figma: await verifyTicketContact(proof.tickets.figma, {
+        requester_name: /demo|marathon|account|chat/i,
+        affected_user_name: /jeff/i,
+      }),
+      login: await verifyTicketContact(proof.tickets.login, {
+        requester_name: /demo|marathon|account|chat/i,
+        affected_user_name: /demo|marathon|account|chat/i,
+      }),
+      adobe: await verifyTicketContact(proof.tickets.adobe, {
+        requester_name: /demo|marathon|account|chat/i,
+        affected_user_name: /jeff/i,
+      }),
+    };
     const workingAcks = proof.turns.filter((turn) => turn.workingAckSeen).length;
     if (workingAcks < 3) {
       throw new Error(`working acknowledgement appeared too rarely: ${workingAcks}`);

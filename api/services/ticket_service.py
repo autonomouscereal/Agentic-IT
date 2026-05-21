@@ -37,6 +37,45 @@ def _truncate_text(value, limit=500):
     return text[:limit] + f"... [truncated {len(text) - limit} chars]"
 
 
+def contact_metadata_block(fields):
+    """Return a compact human-readable contact block for provider descriptions."""
+    lines = []
+    opened_by = _format_contact(fields.get("opened_by_name"), fields.get("opened_by_email"))
+    requester = _format_contact(fields.get("requester_name"), fields.get("requester_email"))
+    affected = _format_contact(fields.get("affected_user_name"), fields.get("affected_user_email"))
+    if opened_by:
+        lines.append(f"Opened by: {opened_by}")
+    if requester:
+        lines.append(f"Requester: {requester}")
+    if affected:
+        lines.append(f"Affected user: {affected}")
+    return "\n".join(lines)
+
+
+def _format_contact(name, email):
+    name = str(name or "").strip()
+    email = str(email or "").strip()
+    if name and email:
+        return f"{name} ({email})"
+    return name or email
+
+
+def enrich_description_with_contact_metadata(description, fields):
+    """Ensure external providers receive requester/affected-user context."""
+    block = contact_metadata_block(fields)
+    description = str(description or "")
+    if not block:
+        return description
+    if block in description:
+        return description
+    return "\n".join([
+        "Ticket contact context",
+        block,
+        "",
+        description,
+    ]).strip()
+
+
 def compact_ticket_payload(ticket, include_provider_payload=False):
     """Keep agent-facing ticket objects small while preserving useful refs."""
     if not ticket:
@@ -204,6 +243,12 @@ async def create_ticket(
     sync_provider=None,
     assignee=None,
     assignee_team=None,
+    opened_by_name=None,
+    opened_by_email=None,
+    requester_name=None,
+    requester_email=None,
+    affected_user_name=None,
+    affected_user_email=None,
     created_by="dashboard",
     auto_assign=True,
 ):
@@ -237,11 +282,14 @@ async def create_ticket(
     ticket_id = await fetchval("""
         INSERT INTO tickets (
             itop_ref, itop_class, title, description, status, priority,
-            assignee, assignee_team, provider, provider_ref, provider_class,
+            assignee, assignee_team,
+            opened_by_name, opened_by_email, requester_name, requester_email,
+            affected_user_name, affected_user_email,
+            provider, provider_ref, provider_class,
             provider_sync_status,
             synced_at, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW(), NOW())
         ON CONFLICT (itop_ref, itop_class) DO UPDATE SET
             title = EXCLUDED.title,
             description = EXCLUDED.description,
@@ -249,6 +297,12 @@ async def create_ticket(
             priority = EXCLUDED.priority,
             assignee = COALESCE(EXCLUDED.assignee, tickets.assignee),
             assignee_team = COALESCE(EXCLUDED.assignee_team, tickets.assignee_team),
+            opened_by_name = COALESCE(EXCLUDED.opened_by_name, tickets.opened_by_name),
+            opened_by_email = COALESCE(EXCLUDED.opened_by_email, tickets.opened_by_email),
+            requester_name = COALESCE(EXCLUDED.requester_name, tickets.requester_name),
+            requester_email = COALESCE(EXCLUDED.requester_email, tickets.requester_email),
+            affected_user_name = COALESCE(EXCLUDED.affected_user_name, tickets.affected_user_name),
+            affected_user_email = COALESCE(EXCLUDED.affected_user_email, tickets.affected_user_email),
             provider = EXCLUDED.provider,
             provider_ref = EXCLUDED.provider_ref,
             provider_class = EXCLUDED.provider_class,
@@ -256,7 +310,10 @@ async def create_ticket(
             updated_at = NOW()
         RETURNING id
     """, itop_ref, itop_class, title, description, status, priority,
-        assignee, assignee_team, provider, provider_ref, provider_class,
+        assignee, assignee_team,
+        opened_by_name, opened_by_email, requester_name, requester_email,
+        affected_user_name, affected_user_email,
+        provider, provider_ref, provider_class,
         sync_status, synced_at)
 
     await log_event("ticket", "info", created_by, "ticket_created",
@@ -269,11 +326,24 @@ async def create_ticket(
     if sync_provider:
         provider_result = await provider_registry.create_ticket(provider, ticket_id, {
             "title": title,
-            "description": description,
+            "description": enrich_description_with_contact_metadata(description, {
+                "opened_by_name": opened_by_name,
+                "opened_by_email": opened_by_email,
+                "requester_name": requester_name,
+                "requester_email": requester_email,
+                "affected_user_name": affected_user_name,
+                "affected_user_email": affected_user_email,
+            }),
             "ticket_class": ticket_class,
             "provider_class": provider_class,
             "priority": priority,
             "created_by": created_by,
+            "opened_by_name": opened_by_name,
+            "opened_by_email": opened_by_email,
+            "requester_name": requester_name,
+            "requester_email": requester_email,
+            "affected_user_name": affected_user_name,
+            "affected_user_email": affected_user_email,
         })
         if provider_result.get("error"):
             await execute("""
@@ -346,11 +416,17 @@ async def push_to_provider(ticket_id, provider=None):
     from services import provider_registry
     result = await provider_registry.create_ticket(target_provider, ticket_id, {
         "title": ticket.get("title"),
-        "description": ticket.get("description"),
+        "description": enrich_description_with_contact_metadata(ticket.get("description"), ticket),
         "ticket_class": ticket.get("itop_class"),
         "provider_class": ticket.get("provider_class") or ticket.get("itop_class"),
         "priority": ticket.get("priority"),
         "created_by": "dashboard",
+        "opened_by_name": ticket.get("opened_by_name"),
+        "opened_by_email": ticket.get("opened_by_email"),
+        "requester_name": ticket.get("requester_name"),
+        "requester_email": ticket.get("requester_email"),
+        "affected_user_name": ticket.get("affected_user_name"),
+        "affected_user_email": ticket.get("affected_user_email"),
     })
     if result.get("error"):
         await execute("""

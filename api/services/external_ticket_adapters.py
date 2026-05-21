@@ -25,6 +25,17 @@ def _headers(token=None, user=None, password=None, extra=None):
     return headers
 
 
+def _contact_payload(fields):
+    return {
+        "opened_by_name": fields.get("opened_by_name"),
+        "opened_by_email": fields.get("opened_by_email"),
+        "requester_name": fields.get("requester_name"),
+        "requester_email": fields.get("requester_email"),
+        "affected_user_name": fields.get("affected_user_name"),
+        "affected_user_email": fields.get("affected_user_email"),
+    }
+
+
 class EnvHttpTicketProvider:
     """Base class for simple outbound ticket create adapters."""
 
@@ -171,6 +182,10 @@ class JiraProvider(EnvHttpTicketProvider):
                 "issuetype": {"name": issue_type},
             }
         }
+        contact = _contact_payload(fields)
+        labels = payload["fields"].setdefault("labels", [])
+        if contact.get("affected_user_name") or contact.get("affected_user_email"):
+            labels.append("affected-user-recorded")
         url = f"{self.base_url}/rest/api/3/issue"
         headers = _headers(user=os.getenv("JIRA_EMAIL"), password=os.getenv("JIRA_API_TOKEN"))
         async with aiohttp.ClientSession() as session:
@@ -212,6 +227,7 @@ class GenericWebhookProvider(EnvHttpTicketProvider):
             "ticket_class": fields.get("provider_class") or fields.get("ticket_class"),
             "priority": fields.get("priority"),
             "created_by": fields.get("created_by"),
+            "contacts": _contact_payload(fields),
             "dry_run": _truthy(os.getenv("GENERIC_TICKETING_DRY_RUN", "false")),
         }
         extra_headers = {}

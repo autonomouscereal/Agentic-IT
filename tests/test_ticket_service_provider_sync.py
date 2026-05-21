@@ -24,10 +24,16 @@ def load_ticket_service(calls):
                 "description": args[3],
                 "status": args[4],
                 "priority": args[5],
-                "provider": args[8],
-                "provider_ref": args[9],
-                "provider_class": args[10],
-                "provider_sync_status": args[11],
+                "opened_by_name": args[8],
+                "opened_by_email": args[9],
+                "requester_name": args[10],
+                "requester_email": args[11],
+                "affected_user_name": args[12],
+                "affected_user_email": args[13],
+                "provider": args[14],
+                "provider_ref": args[15],
+                "provider_class": args[16],
+                "provider_sync_status": args[17],
             }
             return 901
         return None
@@ -151,6 +157,27 @@ class TicketServiceProviderSyncTests(unittest.TestCase):
         self.assertEqual(provider_calls[0][3]["provider_class"], "RoutineChange")
         self.assertEqual(ticket["itop_class"], "RoutineChange")
         self.assertEqual(ticket["provider"], "itop")
+
+    def test_create_ticket_persists_contacts_and_sends_provider_context(self):
+        calls = []
+        module = load_ticket_service(calls)
+        ticket = asyncio.run(module.create_ticket(
+            title="Jeff needs Figma",
+            description="Install request from chat.",
+            ticket_class="UserRequest",
+            opened_by_name="Ops Chat Agent",
+            requester_name="Demo Account",
+            requester_email="demo@example.invalid",
+            affected_user_name="Jeff Example",
+            affected_user_email="jeff@example.invalid",
+            created_by="unit-test",
+            auto_assign=False,
+        ))
+        provider_call = [call for call in calls if call[0] == "provider_create_ticket"][0]
+        provider_fields = provider_call[3]
+        self.assertEqual(ticket["requester_name"], "Demo Account")
+        self.assertEqual(ticket["affected_user_name"], "Jeff Example")
+        self.assertIn("Affected user: Jeff Example (jeff@example.invalid)", provider_fields["description"])
 
     def test_explicit_local_stays_local(self):
         calls = []

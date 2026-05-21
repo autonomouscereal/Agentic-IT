@@ -1585,6 +1585,9 @@ async function viewTicket(id) {
             <div class="detail-row"><span class="detail-label">Urgency:</span><span>${data.urgency || "-"}</span></div>
             <div class="detail-row"><span class="detail-label">Assignee:</span><span>${escHtml(data.assignee || "-")}</span></div>
             <div class="detail-row"><span class="detail-label">Team:</span><span>${escHtml(data.assignee_team || "-")}</span></div>
+            <div class="detail-row"><span class="detail-label">Opened By:</span><span>${escHtml(contactDisplay(data.opened_by_name, data.opened_by_email))}</span></div>
+            <div class="detail-row"><span class="detail-label">Requester:</span><span>${escHtml(contactDisplay(data.requester_name, data.requester_email))}</span></div>
+            <div class="detail-row"><span class="detail-label">Affected User:</span><span>${escHtml(contactDisplay(data.affected_user_name, data.affected_user_email))}</span></div>
             <div class="detail-row"><span class="detail-label">iTop Ref:</span><span>${data.itop_ref}</span></div>
             <div class="detail-row"><span class="detail-label">Provider:</span><span>${escHtml(data.provider || "itop")} / ${escHtml(data.provider_ref || data.itop_ref || "-")} <span class="status-badge ${statusClass(data.provider_sync_status || "unknown")}">${escHtml(data.provider_sync_status || "unknown")}</span></span></div>
             ${data.external_url ? `<div class="detail-row"><span class="detail-label">External:</span><span><a class="ticket-link" href="${escAttr(data.external_url)}" target="_blank" rel="noopener">${escHtml(data.external_url)}</a></span></div>` : ""}
@@ -1617,6 +1620,13 @@ function jsonBlock(value) {
 function shortText(value, max = 220) {
     const text = String(value || "").replace(/\s+/g, " ").trim();
     return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function contactDisplay(name, email) {
+    const n = String(name || "").trim();
+    const e = String(email || "").trim();
+    if (n && e) return `${n} <${e}>`;
+    return n || e || "-";
 }
 
 function normalizeNoteBody(value) {

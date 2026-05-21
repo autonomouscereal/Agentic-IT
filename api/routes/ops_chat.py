@@ -292,8 +292,14 @@ async def _spawn_chat_agent(ticket_id, classification, message, requester_name=N
 
 async def _create_routed_ticket(message, requester_name, requester_email, channel, classification, spawn_agent):
     title = message.strip().splitlines()[0][:120] if message.strip() else "Ops chat request"
+    affected_user_name = classification.get("affected_user_name") or requester_name or "Chat User"
+    affected_user_email = classification.get("affected_user_email")
+    if not affected_user_email and (affected_user_name or "").strip().lower() == (requester_name or "").strip().lower():
+        affected_user_email = requester_email
     description = "\n".join([
+        f"Opened by: ops-chat-agent",
         f"Requester: {requester_name or 'Chat User'} <{requester_email or 'not provided'}>",
+        f"Affected user: {affected_user_name or 'not provided'} <{affected_user_email or 'not provided'}>",
         f"Channel: {channel or 'matrix'}",
         f"Intent: {classification.get('intent')} ({classification.get('confidence')})",
         f"Assignment group: {classification.get('assignment_group')}",
@@ -310,6 +316,12 @@ async def _create_routed_ticket(message, requester_name, requester_email, channe
         provider="local",
         sync_provider=False,
         assignee_team=classification.get("assignment_group"),
+        opened_by_name="Ops Chat Agent",
+        opened_by_email=None,
+        requester_name=requester_name or "Chat User",
+        requester_email=requester_email,
+        affected_user_name=affected_user_name,
+        affected_user_email=affected_user_email,
         created_by="ops-chat-agent",
         auto_assign=False,
     )
@@ -422,6 +434,8 @@ async def _recover_ticket_side_effect(message, raw_text=None, session_id=None):
             LIMIT 1
         """, ticket_id)
         if row:
+            if _looks_like_existing_ticket_update_text(message):
+                return _format_recovered_existing_ticket_update(row, message)
             return _format_recovered_ticket(row)
 
     needle = str(message or "").strip()
@@ -622,6 +636,24 @@ def _format_recovered_ticket(row):
     }
 
 
+def _format_recovered_existing_ticket_update(row, message):
+    ticket_id = row.get("id")
+    status = row.get("status")
+    if _looks_like_cancellation_text(message) or status in ("cancelled", "canceled"):
+        reply = f"I updated ticket #{ticket_id} and recorded the cancellation or scope change."
+    else:
+        reply = f"I updated ticket #{ticket_id} and recorded your latest clarification for the ticket agent."
+    return {
+        "mode": "ticket-update",
+        "reply": reply,
+        "ticket_id": ticket_id,
+        "continued_ticket": True,
+        "response": {"status": "recovered_existing_ticket_update"},
+        "status_update": {"status": status, "recovered": True},
+        "recovered_side_effect": True,
+    }
+
+
 async def _continue_ticket_from_chat(session_id, ticket_id, message, requester_name, requester_email, channel, spawn_agent=True):
     status_restore = await _mark_ticket_user_response_received(ticket_id, requester_name or "Chat User")
     note = await ticket_service.add_note(
@@ -733,6 +765,26 @@ def _looks_like_dev_artifact_request(message):
 def _looks_like_cancellation_text(text):
     value = str(text or "").lower()
     return any(word in value for word in ("cancel", "cancelled", "canceled", "nevermind", "never mind"))
+
+
+def _looks_like_existing_ticket_update_text(text):
+    value = str(text or "").lower()
+    return any(word in value for word in (
+        "actually",
+        "update",
+        "change",
+        "clarify",
+        "clarification",
+        "not ",
+        "instead",
+        "same request",
+        "keep the same",
+        "cancel",
+        "cancelled",
+        "canceled",
+        "nevermind",
+        "never mind",
+    ))
 
 
 def _write_ops_chat_tool(work_dir, tool_context):
@@ -1045,10 +1097,18 @@ def create_ticket(args):
     session_id = args.session_id or os.environ.get("OPS_CHAT_SESSION_ID", "")
     requester_name = args.requester_name or os.environ.get("OPS_CHAT_REQUESTER_NAME", "")
     requester_email = args.requester_email or os.environ.get("OPS_CHAT_REQUESTER_EMAIL", "")
+    affected_user_name = args.affected_user_name or requester_name or "Chat User"
+    affected_user_email = args.affected_user_email
+    if not affected_user_email and (affected_user_name or "").strip().lower() == (requester_name or "").strip().lower():
+        affected_user_email = requester_email
+    opened_by_name = args.opened_by_name or "Ops Chat Agent"
+    opened_by_email = args.opened_by_email
     channel = args.channel or os.environ.get("OPS_CHAT_CHANNEL", "matrix")
     title = (args.title or original.splitlines()[0] if original else args.title or "Ops chat request").strip()[:120]
     description = "\n".join([
+        f"Opened by: {opened_by_name or 'Ops Chat Agent'} <{opened_by_email or 'not provided'}>",
         f"Requester: {requester_name or 'Chat User'} <{requester_email or 'not provided'}>",
+        f"Affected user: {affected_user_name or 'not provided'} <{affected_user_email or 'not provided'}>",
         f"Channel: {channel or 'matrix'}",
         f"Intent: {args.intent or 'agent-selected'}",
         f"Assignment group: {args.assignment_group or 'Service Desk'}",
@@ -1071,6 +1131,12 @@ def create_ticket(args):
         "auto_assign": False,
         "assignee_team": args.assignment_group or "Service Desk",
         "owning_group": args.assignment_group or "Service Desk",
+        "opened_by_name": opened_by_name or "Ops Chat Agent",
+        "opened_by_email": opened_by_email or None,
+        "requester_name": requester_name or "Chat User",
+        "requester_email": requester_email or None,
+        "affected_user_name": affected_user_name or None,
+        "affected_user_email": affected_user_email or None,
         "security_classification": "internal",
         "access_scope": {"source": "ops-chat", "session_id": session_id},
     })
@@ -1089,6 +1155,9 @@ def create_ticket(args):
     note = request("POST", f"/api/tickets/{ticket_id}/notes", {
         "body": "\n".join([
             "Ops Chat agent-created ticket",
+            f"- Opened by: {opened_by_name or 'Ops Chat Agent'} <{opened_by_email or 'not provided'}>",
+            f"- Requester: {requester_name or 'Chat User'} <{requester_email or 'not provided'}>",
+            f"- Affected user: {affected_user_name or 'not provided'} <{affected_user_email or 'not provided'}>",
             f"- Intent: {classification['intent']}",
             f"- Assignment group: {classification['assignment_group']}",
             f"- Priority: {classification['priority']}",
@@ -1176,6 +1245,16 @@ def continue_ticket(args):
     }, timeout=120)
     status_result = {"status": "skipped", "reason": "not_requested"}
     assignment_result = {"status": "skipped", "reason": "not_requested"}
+    contact_result = {"status": "skipped", "reason": "not_requested"}
+    if args.requester_name_override or args.requester_email_override or args.affected_user_name or args.affected_user_email:
+        contact_result = request("POST", f"/api/tickets/{args.ticket_id}/contacts", {
+            "requester_name": args.requester_name_override or None,
+            "requester_email": args.requester_email_override or None,
+            "affected_user_name": args.affected_user_name or None,
+            "affected_user_email": args.affected_user_email or None,
+            "actor": "ops-chat-agent",
+            "reason": args.reason or message,
+        }, timeout=90)
     if args.assignment_group or args.owning_group or args.assignee or args.escalation_tier or args.priority:
         assignment_result = request("POST", f"/api/tickets/{args.ticket_id}/assignment", {
             "assignee_team": args.assignment_group or None,
@@ -1221,6 +1300,7 @@ def continue_ticket(args):
         "ticket_id": args.ticket_id,
         "continued_ticket": True,
         "response": response,
+        "contact_update": contact_result,
         "assignment_update": assignment_result,
         "status_update": status_result,
     }
@@ -1251,6 +1331,10 @@ def main():
     create.add_argument("--reply-file", default="")
     create.add_argument("--requester-name", default="")
     create.add_argument("--requester-email", default="")
+    create.add_argument("--affected-user-name", default="")
+    create.add_argument("--affected-user-email", default="")
+    create.add_argument("--opened-by-name", default="")
+    create.add_argument("--opened-by-email", default="")
     create.add_argument("--channel", default="matrix")
     create.add_argument("--session-id", default="")
     create.add_argument("--message-file", default="ops_chat_message.txt")
@@ -1269,6 +1353,10 @@ def main():
     cont.add_argument("--reply-file", default="")
     cont.add_argument("--requester-name", default="")
     cont.add_argument("--requester-email", default="")
+    cont.add_argument("--requester-name-override", default="")
+    cont.add_argument("--requester-email-override", default="")
+    cont.add_argument("--affected-user-name", default="")
+    cont.add_argument("--affected-user-email", default="")
     cont.add_argument("--resume-agent", action=argparse.BooleanOptionalAction, default=True)
     cont.add_argument("--status", default="", choices=["", "new", "assigned", "in_progress", "awaiting_user_response", "pending_approval", "awaiting_access", "blocked", "resolved", "closed", "closed/resolved", "implemented", "rejected", "cancelled", "canceled"])
     cont.add_argument("--reason", default="")
@@ -1596,9 +1684,10 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "  python ops_chat_tool.py ticket-status --ticket-id 123",
         "  python ops_chat_tool.py answer --reply-file answer.md",
         '  python ops_chat_tool.py validate-artifact --path script.py --kind python --title "Tested Python script" --run',
-        '  python ops_chat_tool.py create-ticket --title "short title" --ticket-class UserRequest --priority P3 --assignment-group "Identity & Access" --intent "account-login" --spawn-agent',
+        '  python ops_chat_tool.py create-ticket --title "short title" --ticket-class UserRequest --priority P3 --assignment-group "Identity & Access" --intent "account-login" --affected-user-name "Alice Example" --spawn-agent',
         '  python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --reply-file answer.md',
         '  python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --assignment-group "Identity & Access" --priority P2 --reason "requester clarified SSO/MFA scope"',
+        '  python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --affected-user-name "Jeff Example" --reason "requester clarified who is impacted"',
         "",
         "Forbidden during this chat-intake turn:",
         "- Do not run python -c, inline scripts, curl, image generators, package installs, or arbitrary shell commands.",
@@ -1614,6 +1703,8 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- General chat: use the answer tool.",
         "- Dev artifact chat: write the requested file and use validate-artifact. This is still a no-ticket chat answer unless the user asks you to deploy, modify a real repo/system, create a PR, or track the work.",
         "- New operational work: use the create-ticket tool.",
+        "- For create-ticket, set requester/opened context correctly. The requester is usually the chat user unless they say they are opening it for someone else. The affected user is the person, account, mailbox, device, service, or app impacted, and may differ from the requester.",
+        "- Use --affected-user-name and --affected-user-email when known. Do not invent emails. If the chat user is affected, leave affected user equal to the requester. If the user says 'Jeff needs software' or 'the CEO is locked out', make Jeff or the CEO the affected user.",
         "- Messages asking you to install, purchase, check a mailbox/system, unlock an account, fix access, deploy, investigate an outage, update software, open a request, cancel work, or change scope are operational unless the user clearly asks for casual advice only.",
         "- Existing ticket follow-up: use continue-ticket only when the user's message is clearly an update, cancellation, requested detail, or scope change for one of the existing chat tickets listed below.",
         "- Do not assume a Matrix room equals one ticket. A user may ask several unrelated things in the same room. Decide per message.",
@@ -1621,6 +1712,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- If the user then asks for a replacement that is operationally distinct, create a new ticket unless the user explicitly says to keep it on the same ticket.",
         "- If the user asks what tickets are open or what you are tracking, call list-tickets and then answer with a short room-scoped summary.",
         "- If the user clarifies that an existing ticket belongs to a different group, priority, or tier, continue that ticket and use the assignment fields. Do not open a duplicate merely to reassign scope.",
+        "- If the user clarifies who requested the work or who is affected, continue the ticket and use --requester-name-override/--requester-email-override or --affected-user-name/--affected-user-email.",
         "- If one concise clarification would materially change the ticket route, scope, or urgency, you may answer with that clarifying question before creating a ticket.",
         "- Once enough context exists to route the work, use create-ticket. Prior chat context will be copied into the ticket so pre-ticket clarification stays auditable.",
         "- Never use the answer tool to say you created, opened, routed, assigned, or spawned a ticket. Only create-ticket can say that.",
@@ -1665,6 +1757,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- write me a Python script or HTML page -> create the file in the work directory, run validate-artifact, and return the validated fenced code in chat.",
         "- how much does a house cost in Reno Nevada -> use web-search if current data is needed, then answer directly; do not create a ticket unless the user asks for tracked research.",
         "- I cannot log into GitLab before a customer call -> create a ticket assigned to Identity & Access.",
+        "- Jeff needs Figma installed -> create an Endpoint Support or Procurement ticket based on the ask; requester is the chat user, affected user is Jeff.",
         "- I got a suspicious email -> create an Incident assigned to Security Operations; do not fetch suspicious URLs.",
         "- the production deploy failed Semgrep -> create a DevSecOps ticket; deployment approval must happen later at the policy gate.",
         "- Nevermind, cancel ticket #123 -> continue-ticket #123, usually with --status cancelled.",
@@ -1706,7 +1799,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
                 "Allowed final commands:",
                 "python ops_chat_tool.py answer --reply-file answer.md",
                 'python ops_chat_tool.py validate-artifact --path artifact.py --kind python --title "Tested artifact"',
-                'python ops_chat_tool.py create-ticket --title "..." --ticket-class UserRequest --priority P3 --assignment-group "..." --intent "..."',
+                'python ops_chat_tool.py create-ticket --title "..." --ticket-class UserRequest --priority P3 --assignment-group "..." --intent "..." --affected-user-name "..."',
                 'python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --reply-file answer.md',
                 "",
                 "Decision rules:",

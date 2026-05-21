@@ -53,6 +53,10 @@ async def _ticket_results(patterns, subject, limit):
             OR COALESCE(t.description, '') ILIKE ANY($1::text[])
             OR COALESCE(t.itop_ref, '') ILIKE ANY($1::text[])
             OR COALESCE(t.provider_ref, '') ILIKE ANY($1::text[])
+            OR COALESCE(t.requester_name, '') ILIKE ANY($1::text[])
+            OR COALESCE(t.requester_email, '') ILIKE ANY($1::text[])
+            OR COALESCE(t.affected_user_name, '') ILIKE ANY($1::text[])
+            OR COALESCE(t.affected_user_email, '') ILIKE ANY($1::text[])
             OR t.id::text ILIKE ANY($1::text[])
         )
     """
@@ -61,6 +65,7 @@ async def _ticket_results(patterns, subject, limit):
     params.append(limit)
     rows = await fetchall(f"""
         SELECT t.id, t.title, t.description, t.status, t.priority, t.itop_class,
+               t.requester_name, t.requester_email, t.affected_user_name, t.affected_user_email,
                t.provider, t.provider_ref, t.updated_at
         FROM tickets t
         WHERE {where}
@@ -80,6 +85,8 @@ async def _ticket_results(patterns, subject, limit):
                 "class": row.get("itop_class"),
                 "provider": row.get("provider"),
                 "provider_ref": row.get("provider_ref"),
+                "requester": row.get("requester_name") or row.get("requester_email"),
+                "affected_user": row.get("affected_user_name") or row.get("affected_user_email"),
             },
         )
         for row in rows

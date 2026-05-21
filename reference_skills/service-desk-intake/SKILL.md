@@ -17,7 +17,8 @@ routed work item.
 
 ## Flow
 
-1. Gather requester name/email, title, message, and optional attachment metadata.
+1. Gather requester name/email, affected user/account/device/service when known,
+   title, message, and optional attachment metadata.
 2. Classify with `POST /api/intake/classify`.
 3. Review assignment group, ticket class, priority, RACI, approval requirement,
    related tickets, and knowledge articles.
@@ -47,6 +48,7 @@ curl -sS -X POST "$SOC_DASHBOARD_URL/api/intake/submit" \
   -d '{
     "requester_name": "Demo User",
     "requester_email": "demo@example.local",
+    "affected_user_name": "Alice Example",
     "title": "Suspicious email",
     "message": "User reported a phishing email with a bad link.",
     "attachments": [{"filename": "reported-message.eml"}],
@@ -85,6 +87,13 @@ ticket. Once enough context exists, it should create the ticket and the platform
 copies recent chat context into ticket evidence. General harmless requests can
 stay in chat without a ticket.
 
+Requester and affected user are separate fields. For "I cannot log in," both
+usually point to the chat user. For "Alice needs Acrobat," the requester is the
+chat user and the affected user is Alice. Do not invent emails. If the affected
+user changes after ticket creation, update the existing ticket contact metadata
+with `/api/tickets/{id}/contacts` or the Ops Chat `continue-ticket` contact
+fields instead of creating a duplicate ticket.
+
 If scope changes after ticket creation, use the reassignment endpoint instead
 of opening a duplicate ticket:
 
@@ -106,6 +115,10 @@ Ops Chat exposes the same behavior to the chat harness through
 - `--assignee`
 - `--escalation-tier`
 - `--priority`
+- `--requester-name-override`
+- `--requester-email-override`
+- `--affected-user-name`
+- `--affected-user-email`
 - `--reason`
 
 Use these when the requester clarifies that a ticket belongs to another team or

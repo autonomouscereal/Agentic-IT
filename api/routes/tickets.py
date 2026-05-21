@@ -216,6 +216,12 @@ async def create_ticket(
     auto_assign: bool = Body(True),
     assignee_team: str = Body(None),
     owning_group: str = Body(None),
+    opened_by_name: str = Body(None),
+    opened_by_email: str = Body(None),
+    requester_name: str = Body(None),
+    requester_email: str = Body(None),
+    affected_user_name: str = Body(None),
+    affected_user_email: str = Body(None),
     security_classification: str = Body("internal"),
     access_scope: dict = Body(None),
     request: Request = None,
@@ -237,6 +243,12 @@ async def create_ticket(
         sync_provider=sync_provider,
         created_by=created_by,
         assignee_team=assignee_team,
+        opened_by_name=opened_by_name,
+        opened_by_email=opened_by_email,
+        requester_name=requester_name,
+        requester_email=requester_email,
+        affected_user_name=affected_user_name,
+        affected_user_email=affected_user_email,
         auto_assign=auto_assign,
     )
     update_fields = []
@@ -281,6 +293,75 @@ async def get_ticket_context(ticket_id: int, request: Request = None):
     if not ticket_decision.get("allow"):
         raise HTTPException(status_code=403, detail=ticket_decision)
     return await ticket_service.get_context(ticket_id)
+
+
+@router.post("/{ticket_id}/contacts")
+async def update_ticket_contacts(
+    ticket_id: int,
+    opened_by_name: str = Body(None),
+    opened_by_email: str = Body(None),
+    requester_name: str = Body(None),
+    requester_email: str = Body(None),
+    affected_user_name: str = Body(None),
+    affected_user_email: str = Body(None),
+    actor: str = Body("dashboard"),
+    reason: str = Body("ticket contact metadata updated"),
+    request: Request = None,
+):
+    ticket = await fetchrow("SELECT id, owning_group, security_classification FROM tickets WHERE id = $1", ticket_id)
+    if not ticket:
+        return {"error": "Ticket not found"}
+    decision = access_control.ticket_access_decision(
+        ticket,
+        access_control.subject_from_request(request),
+        "tickets:update",
+    )
+    if not decision.get("allow"):
+        raise HTTPException(status_code=403, detail=decision)
+
+    fields = []
+    values = []
+    idx = 1
+    for column, value in (
+        ("opened_by_name", opened_by_name),
+        ("opened_by_email", opened_by_email),
+        ("requester_name", requester_name),
+        ("requester_email", requester_email),
+        ("affected_user_name", affected_user_name),
+        ("affected_user_email", affected_user_email),
+    ):
+        if value is not None:
+            fields.append(f"{column} = ${idx}")
+            values.append(value)
+            idx += 1
+    if not fields:
+        return {"status": "skipped", "reason": "no_contact_fields"}
+    values.append(ticket_id)
+    await execute(
+        f"UPDATE tickets SET {', '.join(fields)}, updated_at = NOW() WHERE id = ${idx}",
+        *values,
+    )
+    note_lines = ["Ticket contact metadata updated", f"Reason: {reason}"]
+    if requester_name is not None or requester_email is not None:
+        note_lines.append(f"Requester: {requester_name or '-'} <{requester_email or 'not provided'}>")
+    if affected_user_name is not None or affected_user_email is not None:
+        note_lines.append(f"Affected user: {affected_user_name or '-'} <{affected_user_email or 'not provided'}>")
+    if opened_by_name is not None or opened_by_email is not None:
+        note_lines.append(f"Opened by: {opened_by_name or '-'} <{opened_by_email or 'not provided'}>")
+    note = await ticket_service.add_note(
+        ticket_id,
+        "\n".join(note_lines),
+        author=actor,
+        source="ticket-contact",
+        visibility="internal",
+    )
+    updated = await ticket_service.get_ticket(ticket_id)
+    await log_event("ticket", "info", actor, "ticket_contacts_updated",
+                    f"ticket_{ticket_id}", {
+                        "reason": reason,
+                        "note_id": note.get("id"),
+                    })
+    return {"status": "updated", "ticket": updated, "note": note}
 
 
 @router.post("/{ticket_id}/notes")

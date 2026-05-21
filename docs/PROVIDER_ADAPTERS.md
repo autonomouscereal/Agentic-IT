@@ -89,6 +89,11 @@ Routes should call the registry or `ticket_service`, not provider-specific modul
 
 A provider adapter should always populate:
 
+- `opened_by_name` / `opened_by_email` when work was opened by an agent,
+  operator, chat bridge, or automation on behalf of a user
+- `requester_name` / `requester_email` for the person asking for the work
+- `affected_user_name` / `affected_user_email` for the impacted user, account,
+  mailbox, device, service, or app
 - `provider`
 - `provider_ref`
 - `provider_class`
@@ -98,6 +103,11 @@ A provider adapter should always populate:
 - `synced_at` when sync succeeds
 
 If the provider has a direct browser URL, set `provider_url`. If not, `ticket_links.external_ticket_url()` may generate provider-specific links for supported providers.
+
+Provider descriptions should preserve the canonical contact block. Use
+`Name (email)` formatting instead of angle brackets because several ITSM UIs,
+including iTop, treat `<...>` as HTML and may strip the affected-user line.
+Never invent email addresses for affected users; blank is better than wrong.
 
 ## Ops Chat Ticket Sync
 
@@ -116,6 +126,11 @@ Provider sync must not erase the richer local Ops Chat record. When iTop or
 another provider returns a shorter description, generic team, or partial payload,
 keep the dashboard's full chat context, agent-created note, requester follow-up,
 and agent-selected assignment as the canonical evidence trail.
+
+Ops Chat `create-ticket` and `continue-ticket` can set or correct requester and
+affected-user metadata. A follow-up such as "actually this is for Bob, not
+Alice" should update the existing ticket through `/api/tickets/{id}/contacts`
+and a `ticket-contact` note, not create a duplicate ticket.
 
 Use `POST /api/tickets/{id}/assignment` when the agent or operator learns that
 the scope belongs to another group or tier. Provider-side assignment push is
@@ -171,6 +186,13 @@ Payload shape:
   "ticket_class": "Incident",
   "priority": "P2",
   "created_by": "service-desk-intake",
+  "contacts": {
+    "opened_by_name": "Ops Chat Agent",
+    "requester_name": "Demo Account 1 Demo",
+    "requester_email": "demo_account_1@example.local",
+    "affected_user_name": "Alice Example",
+    "affected_user_email": null
+  },
   "dry_run": false
 }
 ```
@@ -231,3 +253,9 @@ When the org/caller defaults are absent, the adapter asks iTop for safe defaults
 - `Team`: use configured `ITOP_SECURITY_TEAM_ID` only when it exists.
 
 `Incident` creates include `org_id`, `caller_id`, optional `team_id`, and mapped `impact`/`urgency`. `UserRequest` creates include `org_id`, `caller_id`, and optional `team_id`. If those defaults cannot be resolved from iTop, the canonical ticket records `create_failed`; otherwise demos should show `synced`, not an avoidable provider-create failure.
+
+When requester metadata matches an iTop `Person` by email or name, the adapter
+uses that person as the native `caller_id`. If no exact match exists, it uses
+the configured/default caller and still writes requester and affected-user
+metadata into the provider description so the iTop UI can show who requested
+the work and who is impacted.
