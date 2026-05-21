@@ -645,7 +645,7 @@ routing by platform area, workflow key, ticket class, or RACI group.
 Current local-model reference defaults:
 
 ```text
-MAX_CONCURRENT_AGENTS=1
+MAX_CONCURRENT_AGENTS=5
 AGENT_TIMEOUT_MINUTES=0
 AGENT_NO_OUTPUT_STALL_SECONDS=3600
 AUTO_ASSIGNMENT_MAX_ACTIVE_PER_RULE=1
@@ -661,12 +661,14 @@ is already active. Set it higher, or `0` for unlimited, in faster environments.
 
 Runtime profile timeout guidance:
 
-- `local-only`: Hermes/local model, 60 minute timeout, max active agents usually
-  `1`.
+- `local-only`: Hermes/local model, 60 minute timeout. The current demo default
+  max active agent setting is `5`; reduce it in Settings for slow customer
+  local-only routes when model capacity is limited.
 - `codex-primary`: Codex subscription/OAuth route, 10 minute timeout, high
-  reasoning by default, fast mode off unless an operator enables it for a demo.
+  reasoning by default, max active agents `5`, fast mode off unless an operator
+  enables it for a demo.
 - `hermes-external`: Hermes external lab provider route, 10 minute timeout,
-  with OpenRouter/local fallbacks.
+  max active agents `5`, with OpenRouter/local fallbacks.
 
 `local-only` and `hermes-external` are whole-platform mode switches: when one
 is active, it overrides seeded scoped assignments such as chat/demo defaults

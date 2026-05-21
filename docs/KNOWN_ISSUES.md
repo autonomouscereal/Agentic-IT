@@ -2,6 +2,46 @@
 
 Last updated: 2026-05-21.
 
+## Resolved During Live Demo Stabilization - 2026-05-21
+
+### Durable queued tasks could appear active with no live harness process
+
+Status: fixed and live-verified.
+
+Symptoms:
+
+- Ops Chat tickets `1441` and `1444` showed active agents in
+  `spawned` / `queued` state.
+- `/api/agents/processes` showed no matching Codex/Hermes/Claude process.
+- The queue looked blocked even though Codex OAuth and the model proxy were
+  healthy.
+
+Fix:
+
+- Runner workers now catch per-task exceptions and mark only the failed task
+  instead of killing the whole queue worker.
+- The success summary path no longer references a harness variable outside its
+  scope.
+- `runner-health` and `active` polling run a self-heal pass that re-enqueues
+  durable PostgreSQL `queued` tasks when no live process or in-memory queue
+  owner exists.
+- Demo/default concurrency was raised to `5` in source, live `.env`, and
+  `agent_models.json`.
+
+Live proof:
+
+- `/api/agents/runner-health` reported `worker_count=5`,
+  `max_concurrent_agents=5`, `queued_depth=0`, Codex OAuth `logged_in`, and
+  model proxy health `ok`.
+- Startup self-heal requeued ticket `1441` / task `393`; continuation agent
+  `396` completed and resolved the ticket.
+- Ticket `1444` was recovered with replacement agent `400` / task `397`, which
+  completed and resolved the queue-health ticket.
+- Ticket `1445` stopped at an actual access wall (`awaiting_access`) with
+  access request `61` and approval gate `320`, proving the queue fix did not
+  bypass governance.
+- Final active-agent count after recovery was `0`.
+
 ## Documentation-Only Review Snapshot - 2026-05-21
 
 This section records current known gaps and dropped/pending work discovered

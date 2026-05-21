@@ -29,7 +29,7 @@ def _env_bool(name, default=True):
 
 
 AGENT_WORK_BASE = os.getenv("AGENT_WORK_BASE", "/app/agent_work")
-MAX_CONCURRENT_AGENTS = int(os.getenv("MAX_CONCURRENT_AGENTS", "3"))
+MAX_CONCURRENT_AGENTS = int(os.getenv("MAX_CONCURRENT_AGENTS", "5"))
 AGENT_TIMEOUT_MINUTES = int(os.getenv("AGENT_TIMEOUT_MINUTES", "0"))
 MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "/app/agent_models.json")
 AGENT_PERMISSION_MODE = os.getenv("AGENT_PERMISSION_MODE", "acceptEdits")
@@ -70,6 +70,7 @@ AGENT_TRANSIENT_MODEL_FALLBACK_MODEL = os.getenv(
     "qwen/qwen3.6-27b",
 ).strip()
 
+_semaphore_limit = MAX_CONCURRENT_AGENTS
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_AGENTS)
 _agent_queue = asyncio.PriorityQueue()
 _queue_counter = itertools.count()
@@ -87,7 +88,7 @@ AGENT_RUNTIME_PRESETS = [
         "reasoning_effort": "high",
         "fast_mode": False,
         "timeout_minutes": 10,
-        "max_concurrent_agents": 1,
+        "max_concurrent_agents": 5,
         "fallbacks": [
             {"harness": "hermes", "model": "deepseek/deepseek-v4-flash", "route": "external"},
             {"harness": "hermes", "model": "local/agent-default", "route": "local"},
@@ -103,7 +104,7 @@ AGENT_RUNTIME_PRESETS = [
         "reasoning_effort": "medium",
         "fast_mode": False,
         "timeout_minutes": 60,
-        "max_concurrent_agents": 1,
+        "max_concurrent_agents": 5,
         "fallbacks": [
             {"harness": "hermes", "model": "qwen/qwen3.6-27b", "route": "local"},
         ],
@@ -118,7 +119,7 @@ AGENT_RUNTIME_PRESETS = [
         "reasoning_effort": "medium",
         "fast_mode": False,
         "timeout_minutes": 10,
-        "max_concurrent_agents": 1,
+        "max_concurrent_agents": 5,
         "fallbacks": [
             {"harness": "hermes", "model": "openrouter/free", "route": "external"},
             {"harness": "hermes", "model": "local/agent-default", "route": "local"},
@@ -821,9 +822,21 @@ def _ticket_priority_rank(priority, task_type="ticket_resolution"):
     return rank
 
 
+def _effective_max_concurrent_agents():
+    try:
+        config = _normalize_model_config(_load_model_config())
+        return max(1, min(int(config.get("max_concurrent_agents") or MAX_CONCURRENT_AGENTS), 50))
+    except Exception:
+        return max(1, min(int(MAX_CONCURRENT_AGENTS or 1), 50))
+
+
 def _ensure_queue_workers():
     """Start bounded priority queue workers for this event loop."""
-    desired = max(1, int(MAX_CONCURRENT_AGENTS or 1))
+    global _semaphore, _semaphore_limit
+    desired = _effective_max_concurrent_agents()
+    if desired != _semaphore_limit:
+        _semaphore = asyncio.Semaphore(desired)
+        _semaphore_limit = desired
     live = {task for task in _queue_workers if not task.done()}
     _queue_workers.clear()
     _queue_workers.update(live)
@@ -852,19 +865,53 @@ async def _agent_queue_worker():
                 await _spawn_with_semaphore(work_dir, prompt, task_id, agent_id)
             else:
                 await _spawn_with_semaphore(work_dir, prompt, task_id, agent_id, selected_harness)
+        except Exception as exc:
+            await log_event("agent", "error", f"agent_{agent_id}", "agent_queue_worker_error",
+                            f"task_{task_id}", {
+                                "error": f"{type(exc).__name__}: {exc}",
+                                "work_dir": work_dir,
+                            })
+            try:
+                await execute(
+                    "UPDATE agent_tasks SET status = 'failed', error_message = $1, completed_at = NOW() "
+                    "WHERE id = $2 AND status IN ('queued', 'running')",
+                    f"Queue worker error: {type(exc).__name__}: {exc}"[:1000],
+                    task_id,
+                )
+                await execute(
+                    "UPDATE agents SET status = 'failed', error_message = $1, finished_at = NOW(), heartbeat = NOW() "
+                    "WHERE id = $2 AND status IN ('spawned', 'running', 'working')",
+                    f"Queue worker error: {type(exc).__name__}: {exc}"[:1000],
+                    agent_id,
+                )
+            except Exception as update_exc:
+                await log_event("agent", "error", f"agent_{agent_id}", "agent_queue_worker_error_update_failed",
+                                f"task_{task_id}", {"error": str(update_exc)})
         finally:
             _agent_queue.task_done()
 
 
-async def rehydrate_queued_tasks(limit=100):
-    """Re-enqueue DB-persisted queued tasks after an API restart.
+def _in_memory_queued_task_ids():
+    task_ids = set()
+    try:
+        for item in list(getattr(_agent_queue, "_queue", []) or []):
+            if len(item) >= 5:
+                task_ids.add(item[4])
+    except Exception:
+        pass
+    return task_ids
 
-    The priority queue is in-memory, but tasks and work directories are durable.
-    Without this startup pass, a clean API rebuild can leave agents in
-    spawned/queued forever even though the database still has everything needed
-    to continue.
+
+async def ensure_agent_queue_health(reason="manual", limit=100):
+    """Ensure workers exist and DB-persisted queued tasks are in memory.
+
+    This is a light self-healing pass for demo/live operations. The queue is
+    intentionally in-memory, while task rows are durable. If a worker crashes or
+    the API is rebuilt between enqueue and dequeue, this pass re-adds only
+    missing DB-queued tasks and leaves running processes alone.
     """
     _ensure_queue_workers()
+    in_memory_task_ids = _in_memory_queued_task_ids()
     rows = await fetchall(
         """
         SELECT at.id AS task_id, at.agent_id, at.ticket_id, at.prompt, at.work_dir,
@@ -875,15 +922,7 @@ async def rehydrate_queued_tasks(limit=100):
         WHERE at.status = 'queued'
           AND a.status IN ('spawned', 'working', 'running')
           AND at.work_dir IS NOT NULL
-        ORDER BY
-          CASE COALESCE(t.priority, 'P3')
-            WHEN 'P1' THEN 0
-            WHEN 'P2' THEN 1
-            WHEN 'P3' THEN 2
-            WHEN 'P4' THEN 3
-            ELSE 2
-          END,
-          at.created_at ASC
+        ORDER BY at.created_at ASC
         LIMIT $1
         """,
         max(1, min(int(limit or 100), 500)),
@@ -891,9 +930,16 @@ async def rehydrate_queued_tasks(limit=100):
     requeued = []
     skipped = []
     for row in rows or []:
+        task_id = row.get("task_id")
         work_dir = row.get("work_dir")
+        if task_id in in_memory_task_ids:
+            skipped.append({"task_id": task_id, "reason": "already_in_memory"})
+            continue
+        if task_id in _active_processes:
+            skipped.append({"task_id": task_id, "reason": "active_process"})
+            continue
         if not work_dir or not os.path.isdir(work_dir):
-            skipped.append({"task_id": row.get("task_id"), "reason": "missing_work_dir", "work_dir": work_dir})
+            skipped.append({"task_id": task_id, "reason": "missing_work_dir", "work_dir": work_dir})
             continue
         priority_rank = _ticket_priority_rank(row.get("priority"), row.get("task_type"))
         sequence = next(_queue_counter)
@@ -902,25 +948,49 @@ async def rehydrate_queued_tasks(limit=100):
             sequence,
             work_dir,
             row.get("prompt"),
-            row.get("task_id"),
+            task_id,
             row.get("agent_id"),
             _normalize_harness_name(row.get("harness")),
         ))
+        in_memory_task_ids.add(task_id)
         requeued.append({
-            "task_id": row.get("task_id"),
+            "task_id": task_id,
             "agent_id": row.get("agent_id"),
             "ticket_id": row.get("ticket_id"),
             "priority_rank": priority_rank,
             "sequence": sequence,
         })
-    if requeued or skipped:
-        await log_event("agent", "info", "agent-runner", "queued_tasks_rehydrated",
+    if requeued:
+        await log_event("agent", "warning", "agent-runner", "agent_queue_self_healed",
                         "agent_queue", {
+                            "reason": reason,
                             "requeued": requeued,
-                            "skipped": skipped,
+                            "skipped": skipped[:20],
                             "queued_depth": _agent_queue.qsize(),
+                            "worker_count": len(_queue_workers),
+                            "max_concurrent_agents": _semaphore_limit,
                         })
-    return {"status": "ok", "requeued": requeued, "skipped": skipped, "queued_depth": _agent_queue.qsize()}
+    return {
+        "status": "ok",
+        "reason": reason,
+        "requeued": requeued,
+        "skipped": skipped,
+        "queued_depth": _agent_queue.qsize(),
+        "worker_count": len(_queue_workers),
+        "max_concurrent_agents": _semaphore_limit,
+    }
+
+
+async def rehydrate_queued_tasks(limit=100):
+    """Re-enqueue DB-persisted queued tasks after an API restart.
+
+    The priority queue is in-memory, but tasks and work directories are durable.
+    Without this startup pass, a clean API rebuild can leave agents in
+    spawned/queued forever even though the database still has everything needed
+    to continue.
+    """
+    health = await ensure_agent_queue_health(reason="startup_rehydrate", limit=limit)
+    return {"status": "ok", **health}
 
 
 def _curl_guard_script(real_curl, blocked_paths=None, max_output_bytes=None, allowed_hosts=None):
@@ -3024,6 +3094,7 @@ async def spawn_agent(ticket_id, model=None, prompt=None, task_type="ticket_reso
 
 async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id, selected_harness=None):
     """Wait for semaphore slot, then run agent."""
+    harness_name = _normalize_harness_name(selected_harness)
     async with _semaphore:
         task_meta = await fetchrow("""
             SELECT at.ticket_id, at.task_type, at.status AS task_status,
@@ -3218,7 +3289,7 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id, selected_ha
                     )
                     _active_processes.pop(task_id, None)
                     return
-            summary = _parse_stream_result(result["stdout"]) or f"{harness.name} process completed"
+            summary = _parse_stream_result(result["stdout"]) or f"{harness_name} process completed"
             if checkpoint_done and checkpoint.get("output"):
                 summary = checkpoint.get("output")
             if not checkpoint_done:
@@ -3255,7 +3326,7 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id, selected_ha
                     "Agent completed",
                     (
                         f"Agent `{agent_id}` finished task `{task_id}`. "
-                        f"Summary: {summary[:700] or f'{harness.name} process completed.'}"
+                        f"Summary: {summary[:700] or f'{harness_name} process completed.'}"
                     ),
                 )
                 status_recovery = await recover_done_checkpoint_ticket_status(
@@ -3512,6 +3583,7 @@ async def get_available_models():
 
 async def get_runner_health():
     """Return local runner diagnostics without making an LLM request."""
+    queue_health = await ensure_agent_queue_health(reason="runner_health_poll", limit=100)
     config = _normalize_model_config(_load_model_config())
     settings_path = os.path.expanduser("~/.claude/settings.json")
     creds_path = os.path.expanduser("~/.claude/.credentials.json")
@@ -3597,6 +3669,7 @@ async def get_runner_health():
         "default_model": config.get("default"),
         "work_base": AGENT_WORK_BASE,
         "max_concurrent_agents": config.get("max_concurrent_agents") or MAX_CONCURRENT_AGENTS,
+        "queue_health": queue_health,
         "timeout_minutes": config.get("default_timeout_minutes") or AGENT_TIMEOUT_MINUTES,
         "no_output_stall_seconds": AGENT_NO_OUTPUT_STALL_SECONDS,
         "permission_mode": AGENT_PERMISSION_MODE,

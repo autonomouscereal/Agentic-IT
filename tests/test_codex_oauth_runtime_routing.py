@@ -92,7 +92,7 @@ class CodexOauthRuntimeRoutingTests(unittest.TestCase):
         result, item, events = asyncio.run(run_case())
         self.assertEqual(result["requeued"][0]["task_id"], 812)
         self.assertEqual(item[4:7], (812, 813, "codex"))
-        self.assertTrue(any(event[3] == "queued_tasks_rehydrated" for event in events))
+        self.assertTrue(any(event[3] == "agent_queue_self_healed" for event in events))
 
 
 if __name__ == "__main__":

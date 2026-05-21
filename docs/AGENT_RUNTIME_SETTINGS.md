@@ -62,12 +62,17 @@ agents with explicit extra or pinned skills.
 ## Concurrency And Timeouts
 
 `Settings -> Max active agents` updates the runtime concurrency gate for newly
-queued work. Keep the lab default at `1` for slow local models. Increase it only
-when the selected route has enough model/provider capacity.
+queued work. The current demo default is `5` so several chat-created tickets can
+run while a longer worker is still active. For slow local-only deployments,
+operators can still lower this value from Settings before switching the active
+profile to `local-only`.
 
 The queue itself is in-memory, while queued agent tasks are persisted in
 PostgreSQL. API startup rehydrates durable queued tasks so a rebuild/restart
-does not strand chat-created agents in `spawned` / `queued`.
+does not strand chat-created agents in `spawned` / `queued`. Runner health and
+active-agent polling also run a lightweight self-heal pass: if a DB task is
+still `queued` and no live process or in-memory queue entry owns it, the runner
+re-adds it and records an `agent_queue_self_healed` event.
 
 Timeout guidance:
 

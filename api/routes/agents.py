@@ -107,6 +107,8 @@ async def list_agents(
 
 @router.get("/active")
 async def active_agents():
+    from services import agent_runner
+    queue_health = await agent_runner.ensure_agent_queue_health(reason="active_agents_poll", limit=100)
     rows = await fetchall("""
         SELECT a.*, t.title AS ticket_title, t.itop_ref AS ticket_itop_ref,
                task.id AS current_task_id, task.status AS task_status,
@@ -125,7 +127,7 @@ async def active_agents():
         WHERE a.status IN ('spawned', 'running', 'working')
         ORDER BY a.started_at DESC
     """)
-    return {"agents": rows, "count": len(rows)}
+    return {"agents": rows, "count": len(rows), "queue_health": queue_health}
 
 
 @router.get("/stats")

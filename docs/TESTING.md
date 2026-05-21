@@ -30,6 +30,30 @@ Live AI-server checks against `http://127.0.0.1:25480` and
 This checkpoint validates platform health, auth, HTTPS, search, and setup
 ticket fan-out without starting any harness tasks during the live-demo window.
 
+## Agent Queue Recovery Checkpoint
+
+2026-05-21 live queue recovery validated the runner after Ops Chat spawned
+multiple tickets during demo preparation:
+
+- Root symptom: tickets `1441` and `1444` showed `spawned` / `queued` with no
+  live harness processes.
+- Fix deployed: queue workers now survive per-task exceptions, runner health
+  and active-agent polling self-heal durable DB-queued tasks, and the live
+  default `max_concurrent_agents` is `5`.
+- `/api/agents/runner-health` reported `worker_count=5`,
+  `max_concurrent_agents=5`, `queued_depth=0`, Codex OAuth `logged_in`, and
+  model proxy health `ok`.
+- Startup self-heal requeued task `393` for ticket `1441` and task `396` for
+  ticket `1445`.
+- Ticket `1441` continuation agent `396` ran after self-heal and resolved the
+  static-site deployment ticket.
+- Ticket `1444` replacement agent `400` / task `397` ran through Codex and
+  resolved the queue-health ticket.
+- Ticket `1445` correctly stopped at a real access wall:
+  `awaiting_access`, access request `61`, approval gate `320`.
+- Final active-agent count after recovery was `0`; queue health remained
+  `worker_count=5`, `queued_depth=0`.
+
 ## Agent Harness Validation
 
 2026-05-21 Codex harness checkpoint:

@@ -68,11 +68,20 @@ the standalone Skills plane.
 Default profiles:
 
 - `codex-primary`: Codex `gpt-5.5`, high reasoning, fast mode off, 10 minute
-  timeout, Hermes external then Hermes local fallback intent.
+  timeout, max active agents `5`, Hermes external then Hermes local fallback
+  intent.
 - `local-only`: Hermes `local/agent-default`, 60 minute timeout, local/on-prem
-  only.
+  only. Lower max active agents from Settings for slow local-only deployments
+  when model capacity is limited.
 - `hermes-external`: Hermes `deepseek/deepseek-v4-flash`, 10 minute timeout,
-  OpenRouter/local fallback intent.
+  max active agents `5`, OpenRouter/local fallback intent.
+
+The queue is in-memory, while queued task records are durable in PostgreSQL.
+API startup, runner health, and active-agent polling run a self-heal pass that
+re-enqueues DB-queued tasks with no live process or in-memory owner. If the
+Agents view shows `spawned` / `queued` with no process, first check
+`/api/agents/runner-health` and `/api/agents/active`; both report
+`queue_health`, `worker_count`, `queued_depth`, and `max_concurrent_agents`.
 
 Route assignments can target platform areas such as `ops_chat` or
 `platform_setup`, workflow keys, ticket classes, and RACI groups such as
