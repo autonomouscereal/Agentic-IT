@@ -171,6 +171,50 @@ Verification:
   handled Figma, urgent account, mailbox, Adobe replacement, VPN, cancellations,
   room summary, and follow-up account reminder in one Matrix DM.
 
+### Ops Chat duplicate-looking tickets from one-room test reuse
+
+Status: fixed and verified.
+
+Problem:
+
+- During repeated Element testing, tickets `1264`-`1268` made the
+  watermelon/cancel/pizza flow look noisier than intended.
+- The audit showed repeated test runs reused Matrix session `180`, which is
+  valid for stress testing but confusing for demo evidence.
+- A real bug was also present: side-effect recovery could reuse the latest
+  linked room ticket after a harmless current-information message when the
+  harness failed to return a clean tool result.
+- Harness retries could also call `create-ticket` again for the same chat
+  message if the first tool side effect happened but the result was not parsed
+  cleanly.
+
+Fix:
+
+- Ops Chat `create-ticket` now sends `message_hash` inside `access_scope`.
+- `/api/tickets` suppresses active duplicate Ops Chat creates for the same
+  `session_id + message_hash` and returns the existing ticket instead of
+  syncing a second provider ticket.
+- Latest-ticket recovery is now gated to operational-looking requests, so
+  harmless chat such as price lookup cannot be recovered into the newest ticket.
+
+Verification:
+
+- Local regression checks cover the idempotency hook and recovery guard.
+- Live duplicate-create proof `ops-chat-dedupe-1779328639` called
+  `POST /api/tickets` twice with the same Ops Chat `session_id + message_hash`;
+  the second call returned the same dashboard ticket `1285`, same iTop ref
+  `704`, and `_idempotent_replay=true`. The smoke-owned proof ticket was then
+  cancelled.
+- Live recovery-guard proof used session `180`, which already had historical
+  tickets, then asked a harmless watermelon-price question. The response had
+  `ticket_id=null`, `created_ticket=false`, and no ticket-work claim.
+- Live two-ticket lifecycle proof `ops-chat-two-ticket-1779328796` used the real
+  Hermes chat intake with `spawn_agent=false`: general price questions created
+  no tickets, watermelon purchase created ticket `1286`, cancellation continued
+  and cancelled `1286`, and pizza replacement created ticket `1287`. The session
+  had exactly two tickets. The smoke-owned pizza proof ticket was cancelled
+  after verification.
+
 ## Found During 2026-05-20 Ops Chat And Access RACI Work
 
 ### Ops Chat intake was allowed to create approval gates

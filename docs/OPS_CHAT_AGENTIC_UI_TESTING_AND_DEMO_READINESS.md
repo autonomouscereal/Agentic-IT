@@ -258,6 +258,7 @@ Latest validated state on 2026-05-20:
 | One-room Element marathon | marker `ops-chat-marathon-1779299559`, user `demo_chat_marathon5`, 16 mixed turns, tickets `1276`-`1280`, 15 working acks, passed |
 | Developer artifact chat | marker `ops-chat-dev-artifact-1780000005`, user `demo_chat_marathon5`, Python/HTML/Markdown/Bash validated and rendered as Element code blocks with zero tickets |
 | Requester / affected-user sync | ticket `1284`, session `574`, requester `Demo Account 1 Demo`, affected user `Alice Example`, iTop ref `703`, provider description preserved requester and affected user; follow-up changed affected user to `Charlie Example` without creating a duplicate ticket |
+| Ticket clutter regression | historical tickets `1264`-`1267` reviewed; repeated Element test runs plus a too-loose recovery path made the room look noisy. The platform now idempotently suppresses duplicate create-ticket retries by `session_id + message_hash` and refuses latest-ticket recovery for harmless chat. Live proof `ops-chat-two-ticket-1779328796` created exactly two tickets: `1286` cancelled and `1287` replacement. |
 
 Smoke-owned agents `327` and `328` were stopped after collecting evidence so
 the demo queue was left clean. Final active-agent and process checks were
@@ -309,6 +310,12 @@ Rerun findings:
   Second, model text that merely claimed an old ticket id could resurrect a
   cancelled ticket during side-effect recovery; recovery now trusts a ticket id
   only when the user's current message explicitly referenced that ticket.
+- A later ticket-clutter review found the same recovery family could also reuse
+  the latest room ticket for a harmless current-information question. That path
+  is now gated to operational-looking ticket requests only. `create-ticket`
+  calls also carry a message hash, and `/api/tickets` returns the existing
+  active Ops Chat ticket on same-message retry instead of creating and syncing a
+  duplicate provider ticket.
 - Developer artifact testing exposed the same class of issue for code: the
   harness could claim it had validated a script while using the general answer
   path. Dev artifact asks now require `validate-artifact`; if the harness calls

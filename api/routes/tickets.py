@@ -40,6 +40,29 @@ from services.event_logger import log_event
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
 
 
+async def _find_ops_chat_idempotent_ticket(access_scope):
+    """Return an existing ticket for a retried Ops Chat create-ticket turn."""
+    if not isinstance(access_scope, dict):
+        return None
+    if str(access_scope.get("source") or "").strip().lower() != "ops-chat":
+        return None
+    session_id = str(access_scope.get("session_id") or "").strip()
+    message_hash = str(access_scope.get("message_hash") or "").strip()
+    if not session_id or not message_hash:
+        return None
+    return await fetchrow("""
+        SELECT *
+        FROM tickets
+        WHERE access_scope->>'source' = 'ops-chat'
+          AND access_scope->>'session_id' = $1
+          AND access_scope->>'message_hash' = $2
+          AND status NOT IN ('cancelled', 'canceled', 'closed', 'resolved')
+          AND created_at > NOW() - INTERVAL '30 minutes'
+        ORDER BY id ASC
+        LIMIT 1
+    """, session_id, message_hash)
+
+
 def _request_client_host(request):
     client = getattr(request, "client", None)
     return str(getattr(client, "host", "") or "").strip().lower()
@@ -231,6 +254,18 @@ async def create_ticket(
     Provider sync is automatic when an external provider is configured, and
     falls back to local-only when the dashboard is running without one.
     """
+    existing = await _find_ops_chat_idempotent_ticket(access_scope)
+    if existing:
+        existing["_idempotent_replay"] = True
+        existing["external_url"] = external_ticket_url(existing)
+        await log_event("ops-chat", "info", created_by, "ops_chat_duplicate_create_suppressed",
+                        f"ticket_{existing['id']}", {
+                            "session_id": (access_scope or {}).get("session_id"),
+                            "message_hash": (access_scope or {}).get("message_hash"),
+                        })
+        compact_ticket_payload(existing)
+        return existing
+
     ticket = await ticket_service.create_ticket(
         title=title,
         description=description,

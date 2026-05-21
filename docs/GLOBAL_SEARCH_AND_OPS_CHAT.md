@@ -179,6 +179,18 @@ memory, current information, multiple tickets, explicit cancellations,
 replacement work, scope updates, and room ticket summaries. The agent harness
 must decide answer/create/continue on every turn.
 
+Ticket lifecycle guard:
+
+- A Matrix room is a conversation, not a ticket container. Repeated harness
+  retries for the same user message are suppressed with an Ops Chat idempotency
+  key: `session_id + message_hash`.
+- Recovery no longer falls back to "latest ticket in the room" for harmless
+  chat. If the user asks a general question after a ticket was created, the
+  system must answer the question, not reuse the latest ticket.
+- Replacement work after cancellation creates a new ticket only for the new
+  operational ask. Example: watermelon purchase + cancel + pizza replacement
+  should leave one cancelled watermelon ticket and one active pizza ticket.
+
 Developer artifact proof:
 
 ```powershell
@@ -209,6 +221,21 @@ requester `Demo Account 1 Demo`, affected user `Alice Example`, no invented
 affected email, and iTop preserved both contact lines in the provider
 description. A follow-up in the same session changed the affected user to
 `Charlie Example` through `continue-ticket` without opening a duplicate.
+
+Duplicate/clutter review on 2026-05-20:
+
+- Historical tickets `1264`-`1267` were investigated because they looked like a
+  single flow created too many tickets.
+- The records showed repeated Element test runs reused Matrix session `180`,
+  and one recovery path incorrectly answered a harmless watermelon-price
+  question by reusing the latest linked ticket.
+- The fix adds create-ticket idempotency and blocks harmless-chat recovery into
+  the latest ticket. New verification should expect two tickets for the
+  watermelon/cancel/pizza flow, not four.
+- Live verification `ops-chat-two-ticket-1779328796` passed through the real
+  Hermes chat intake: general price questions created no tickets, watermelon
+  purchase created `1286`, cancellation continued/cancelled `1286`, pizza
+  replacement created `1287`, and the session contained exactly two tickets.
 
 Scenario smoke:
 

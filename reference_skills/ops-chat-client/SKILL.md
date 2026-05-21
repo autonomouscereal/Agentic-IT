@@ -70,6 +70,14 @@ Reference stack:
   is harmless chat, a new ticket, or a `user-response` note on a specific
   existing ticket. Cancellation-like updates mark the ticket cancelled and stop
   that ticket's active test/worker agent when present.
+- Same-message `create-ticket` retries are idempotent. The tool passes a
+  `message_hash` in ticket `access_scope`, and the dashboard returns the
+  existing active ticket for the same `session_id + message_hash` instead of
+  syncing a duplicate provider ticket.
+- Side-effect recovery must not use "latest ticket in the room" for harmless
+  chat. If a general/current-information message follows a ticket, answer the
+  message unless the user clearly asks for ticket work or explicitly references
+  an existing ticket.
 - `continue-ticket` supports assignment fields for scope changes:
   `--assignment-group`, `--owning-group`, `--assignee`, `--escalation-tier`,
   and `--priority`. Use those fields to reassign or escalate an existing ticket
@@ -337,6 +345,13 @@ queue or tier. It writes a `ticket-assignment` note for auditability.
   missed final chat tool, and ticket-id recovery that refuses to trust stale
   model claims unless the user's current message explicitly referenced that
   ticket.
+- Ticket clutter review found repeated watermelon test runs around
+  `1264`-`1268`; current code suppresses same-message create retries and blocks
+  harmless-chat recovery into the latest ticket. A clean
+  watermelon/cancel/pizza proof should produce two tickets, not four.
+- Live proof `ops-chat-two-ticket-1779328796` confirmed the current behavior:
+  harmless price questions created no tickets, watermelon created `1286`,
+  cancellation continued/cancelled `1286`, and pizza replacement created `1287`.
 - Developer artifact marker `ops-chat-dev-artifact-1780000005` passed as
   `demo_chat_marathon5`: Python, HTML, Markdown, and Bash artifacts were
   validated with `validate-artifact`, rendered as Element code blocks, and

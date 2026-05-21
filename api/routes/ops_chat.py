@@ -481,6 +481,8 @@ async def _recover_ticket_side_effect(message, raw_text=None, session_id=None):
     """, f"%{needle}%")
     if not row:
         if session_id:
+            if not _looks_like_operational_ticket_request(message):
+                return None
             row = await fetchrow("""
                 SELECT t.*,
                        note.body AS ops_chat_note_body,
@@ -787,6 +789,44 @@ def _looks_like_existing_ticket_update_text(text):
     ))
 
 
+def _looks_like_operational_ticket_request(text):
+    """Safety guard for recovery only; the harness still owns routing."""
+    value = str(text or "").lower()
+    return any(word in value for word in (
+        "ticket",
+        "request",
+        "install",
+        "deploy",
+        "purchase",
+        "order",
+        "unlock",
+        "reset",
+        "access",
+        "login",
+        "log into",
+        "can't log",
+        "cannot log",
+        "outage",
+        "incident",
+        "alert",
+        "suspicious",
+        "phish",
+        "mailbox",
+        "vpn",
+        "firewall",
+        "dns",
+        "proxy",
+        "gitlab",
+        "software",
+        "change",
+        "fix",
+        "broken",
+        "repair",
+        "reassign",
+        "escalate",
+    ))
+
+
 def _write_ops_chat_tool(work_dir, tool_context):
     result_path = work_dir / "ops_chat_result.json"
     actions_path = work_dir / "ops_chat_actions.jsonl"
@@ -800,6 +840,7 @@ def _write_ops_chat_tool(work_dir, tool_context):
     tool_path.write_text(
         r'''#!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -1025,6 +1066,11 @@ def looks_like_cancellation(text):
     return any(word in value for word in ("cancel", "cancelled", "canceled", "nevermind", "never mind"))
 
 
+def message_hash(text):
+    normalized = " ".join(str(text or "").strip().split()).lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24] if normalized else ""
+
+
 def web_search(args):
     query = (args.query or "").strip()
     if not query:
@@ -1094,6 +1140,7 @@ def ticket_status(args):
 def create_ticket(args):
     original = read_message(args.message_file)
     history = read_message(args.history_file)
+    original_hash = message_hash(original)
     session_id = args.session_id or os.environ.get("OPS_CHAT_SESSION_ID", "")
     requester_name = args.requester_name or os.environ.get("OPS_CHAT_REQUESTER_NAME", "")
     requester_email = args.requester_email or os.environ.get("OPS_CHAT_REQUESTER_EMAIL", "")
@@ -1138,7 +1185,12 @@ def create_ticket(args):
         "affected_user_name": affected_user_name or None,
         "affected_user_email": affected_user_email or None,
         "security_classification": "internal",
-        "access_scope": {"source": "ops-chat", "session_id": session_id},
+        "access_scope": {
+            "source": "ops-chat",
+            "session_id": session_id,
+            "message_hash": original_hash,
+            "message_preview": original[:220],
+        },
     })
     ticket_id = ticket.get("id")
     intent = clean_intent(args.intent)
@@ -1152,6 +1204,25 @@ def create_ticket(args):
         "approval_authority": "platform-policy-and-provider-barriers",
         "agent_approval_decision": "not-authorized",
     }
+    if ticket.get("_idempotent_replay"):
+        agent = {"status": "skipped", "reason": "idempotent_replay_existing_ticket"}
+        result = {
+            "mode": "ticket",
+            "reply": (
+                f"I already created ticket #{ticket_id} for this request and kept the existing ticket instead of opening a duplicate. "
+                f"It is routed to {classification['assignment_group']} with priority {classification['priority']}."
+            ),
+            "ticket_id": ticket_id,
+            "ticket": ticket,
+            "note": {"status": "skipped", "reason": "idempotent_replay"},
+            "classification": classification,
+            "agent": agent,
+            "idempotent_replay": True,
+        }
+        write_result(result)
+        print(json.dumps(result, indent=2))
+        return
+
     note = request("POST", f"/api/tickets/{ticket_id}/notes", {
         "body": "\n".join([
             "Ops Chat agent-created ticket",

@@ -47,6 +47,10 @@ Expected providers:
 - Follow-up chat corrections such as "actually this is for Bob" should update
   `/api/tickets/{id}/contacts` and write a `ticket-contact` note, not create a
   duplicate provider ticket.
+- Ops Chat create retries must be idempotent before provider sync. The
+  dashboard suppresses active duplicate creates for the same
+  `session_id + message_hash`, so a harness retry cannot create two iTop,
+  Jira, ServiceNow, or webhook records for one chat message.
 - Configure ServiceNow/Jira/webhook only through environment variables or vault-injected env. Never hardcode API tokens, passwords, or instance URLs containing secrets.
 - Fail closed when external provider config is missing. The canonical ticket should record `provider_sync_status=create_failed` and `provider_last_error`.
 - Do not claim provider sync succeeded unless the provider returns a usable external reference.

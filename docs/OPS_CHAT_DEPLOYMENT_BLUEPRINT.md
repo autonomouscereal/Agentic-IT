@@ -151,6 +151,17 @@ Latest UX proof:
   `demo_chat_direct4`: first-turn current-information answer, follow-up general
   answer, watermelon procurement ticket `1266`, cancellation of ticket `1266`,
   and a distinct replacement pizza ticket `1267`.
+- Follow-up review found additional historical watermelon tickets around
+  `1264`-`1268` because repeated test runs reused one Matrix room and recovery
+  could reuse the latest ticket when a harmless price question followed a
+  ticket. Current deployments suppress duplicate same-message create retries
+  using `session_id + message_hash`, and latest-ticket recovery is disabled for
+  harmless chat. A clean watermelon/cancel/pizza proof should create two
+  tickets: one cancelled watermelon request and one active pizza replacement.
+- Live proof `ops-chat-two-ticket-1779328796` confirmed the current behavior:
+  no tickets for the two general price questions, ticket `1286` for watermelon,
+  cancellation continued ticket `1286`, ticket `1287` for pizza, and exactly two
+  tickets linked to the session.
 - One-room Element marathon marker `ops-chat-marathon-1779299559` passed using
   `demo_chat_marathon5`: harmless chat, follow-up memory, current-information
   lookup, Figma install ticket `1276`, urgent account ticket `1277`, mailbox

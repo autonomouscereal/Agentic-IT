@@ -87,6 +87,12 @@ ticket. Once enough context exists, it should create the ticket and the platform
 copies recent chat context into ticket evidence. General harmless requests can
 stay in chat without a ticket.
 
+Ops Chat must not bloat the ticket queue. Same-message create retries are
+deduplicated with `session_id + message_hash`, and harmless chat after a ticket
+must not be recovered into the latest room ticket. A clean
+watermelon/cancel/pizza-style flow should leave one cancelled old request and
+one active replacement request.
+
 Requester and affected user are separate fields. For "I cannot log in," both
 usually point to the chat user. For "Alice needs Acrobat," the requester is the
 chat user and the affected user is Alice. Do not invent emails. If the affected
