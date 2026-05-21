@@ -6159,3 +6159,43 @@ Verification:
   `https://192.168.50.222:25443/published/static-site-deploy-smoke-1779382884/`.
   The smoke verified the returned URL rendered the marker, the gate advanced to
   `completed`, and no active smoke agent was left behind.
+
+### Ops Chat mixed request opened ticket but dropped harmless answer
+
+Status: fixed in source and live-verified on 2026-05-21.
+
+Problem:
+
+- In Matrix room session `714`, the requester asked one mixed message:
+  "build a static webpage and deploy it so I can see it about bunnies" plus
+  "tell me the price of tea in China."
+- The chat intake agent correctly created and assigned ticket `1416` for the
+  operational deployment work, and the ticket worker opened approval gate `313`.
+- The user-facing chat reply only reported the ticket. It did not answer the
+  harmless/current-information tea-price part because the chat prompt framed
+  the turn as exactly one final outcome instead of one final tool that may carry
+  a mixed reply.
+
+Fix:
+
+- Updated the Ops Chat harness prompt so mixed requests are first-class.
+- The agent should use `ops_chat_tool.py web-search` for the harmless/current
+  information part when needed, write `mixed_reply.md`, then finish with
+  `create-ticket` or `continue-ticket --reply-file mixed_reply.md`.
+- This keeps the agent as the decision-maker while preserving both outcomes:
+  user-facing answer plus traceable ticket assignment.
+
+Verification:
+
+- Source regression test added in
+  `tests/test_ops_chat_ticket_lifecycle_regressions.py`.
+- Live no-spawn Ops Chat API proof created ticket `1417` and returned one
+  reply that included the tea-price answer plus the tracked Platform Operations
+  request.
+- Live spawn proof created ticket `1418`, spawned Codex agent `385` / task
+  `382`, answered the tea-price portion in the same chat reply, opened approval
+  gate `314`, published the static page at
+  `https://192.168.50.222:25443/published/otters-1418/`, and left zero active
+  agents after completion.
+- Cleanup resolved demo tickets `1416` and `1418` and cancelled no-spawn smoke
+  ticket `1417`.

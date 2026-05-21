@@ -11,3 +11,5 @@ def test_ticket_prompt_distinguishes_preview_from_real_deployment():
     assert "/api/agents/<agent_id>/deploy/static-site" in prompt
     assert "127.0.0.1" in prompt
     assert "container-local behavior" in prompt
+    assert "status: resolved" in prompt
+    assert "close_provider: true" in prompt

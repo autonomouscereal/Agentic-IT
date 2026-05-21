@@ -58,6 +58,12 @@ STATIC_DEPLOYMENT_BOUNDARY_RULE = """Deployment boundary rule:
   URL inside the API container proves only container-local behavior. A real
   server deployment must be checked through the returned public URL or the
   operator-facing dashboard URL.
+- After the approved static-site adapter returns and the public URL validates,
+  write the final evidence note and close the ticket with
+  POST /api/tickets/{ticket_id}/status using `status: resolved` and
+  `close_provider: true`, unless the ticket explicitly requires human review
+  or manual provider handoff. If you leave it open, write a clear note saying
+  what is still blocked.
 - If no approved target or adapter is available, stop at a clear requester
   question or ticket note: explain that you can provide a local artifact now,
   and ask where it should be published for a managed deployment.

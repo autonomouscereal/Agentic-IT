@@ -39,6 +39,11 @@ Reference stack:
 - Codex is a peer harness, not a bridge redesign. Ops Chat must call the same
   dashboard harness abstraction for Hermes, Claude Code, and Codex.
 - General harmless chat can be answered without a ticket.
+- Mixed requests can both answer and create/continue work in one turn. For
+  example, "deploy a web page and tell me the price of tea" should answer the
+  harmless/current-info part in the `create-ticket --reply-file` response while
+  still opening and assigning the deployment ticket. Do not drop harmless
+  sub-requests just because the message also contains operational work.
 - The chat agent may ask one concise pre-ticket clarification when the answer
   changes routing, scope, urgency, or whether a ticket is needed.
 - Operational chat creates or continues a canonical ticket, intake session,

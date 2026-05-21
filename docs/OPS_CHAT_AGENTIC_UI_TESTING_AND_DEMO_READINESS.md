@@ -80,6 +80,15 @@ The dashboard gives the configured Hermes/Claude harness a small
 - `validate-artifact` for one-off developer artifacts such as Python scripts,
   HTML snippets, Markdown runbooks, Bash scripts, JavaScript, JSON, or YAML
 
+Mixed requests are allowed in a single agent turn. If a message asks for both
+a harmless answer and operational work, the harness should answer the harmless
+or current-information part in a reply file, then finish with `create-ticket`
+or `continue-ticket` using `--reply-file mixed_reply.md`. Example: "deploy a
+bunnies web page and tell me the price of tea in China" should return the tea
+answer to the user and also open/assign the bunnies deployment ticket. The
+Matrix bridge appends the dashboard ticket and agent identifiers after the
+tool result.
+
 The application may recover side effects and enforce safety, but it should not
 replace the agent's decision with a brittle custom JSON classifier.
 
@@ -270,6 +279,7 @@ Latest validated state on 2026-05-20:
 | Lifecycle regression | marker `ops-chat-scenarios-1779336984`, tickets `1378`-`1382`, general chat, web/current info, cat memory, account, software, VPN, phishing follow-up, and delivery gate all passed with cleanup |
 | Developer artifact UI proof | marker `ops-chat-dev-artifact-1779337398804`, user `demo_account_1`, Python/HTML/Markdown/Bash rendered as Element code blocks, validation passed, and zero tickets were created |
 | Multi-ticket lifecycle | marker `ops-chat-multiticket-1779338352`, one chat session created watermelon ticket `1384`, cancelled it, created distinct pizza ticket `1385`, created urgent account ticket `1386`, updated `1386`, summarized room tickets, then cleaned all three |
+| Mixed answer plus ticket | ticket `1418`, session `716`, Codex agent `385` / task `382`; one chat message asked for a static otter web page deployment and the price of tea in China. The chat reply answered the tea-price portion, created and assigned the Platform Operations ticket, opened approval gate `314`, published `https://192.168.50.222:25443/published/otters-1418/`, and finished with zero active agents. |
 
 Smoke-owned agents `327` and `328` were stopped after collecting evidence so
 the demo queue was left clean. Final active-agent and process checks were

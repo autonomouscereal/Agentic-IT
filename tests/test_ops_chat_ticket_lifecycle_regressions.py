@@ -76,6 +76,15 @@ def test_ops_chat_answer_cannot_overwrite_ticket_tool_result():
     assert "recovered_overwritten_result" in source
 
 
+def test_ops_chat_mixed_request_can_answer_and_create_ticket():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    assert "Mixed requests are allowed" in source
+    assert "write a concise mixed_reply.md" in source
+    assert "--reply-file mixed_reply.md --spawn-agent" in source
+    assert "tell me the price of tea in China" in source
+    assert "The Matrix bridge will append the dashboard ticket and agent ids." in source
+
+
 def test_ops_chat_normalizes_placeholder_affected_user_to_requester():
     source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
     assert '"user (user-direct)"' in source
