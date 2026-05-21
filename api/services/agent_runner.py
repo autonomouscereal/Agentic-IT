@@ -2757,7 +2757,7 @@ async def spawn_agent(ticket_id, model=None, prompt=None, task_type="ticket_reso
         selected_model,
         selected_harness,
         runtime_profile.get("profile_id") or runtime_profile.get("id"),
-        json_dumps(runtime_profile),
+        json.dumps(runtime_profile),
     )
 
     # Create task record with real agent_id
