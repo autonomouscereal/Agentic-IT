@@ -44,6 +44,11 @@ Latest extreme intake stress proof, verified 2026-05-21:
 - Access-gated Wazuh/SIEM work must complete the approved access change before
   requesting `/api/agents/{id}/vault/lease`; approval alone does not activate
   the per-agent scoped lease.
+- Live demos must use manual dashboard approval gates. Agents may create URL
+  block, mailbox quarantine, user follow-up, password/session review, and
+  endpoint-scan gates, but they are not the approval authority. The
+  `scripts/agentic_phishing_full_demo.py --auto-approve-gates` flag is
+  regression-only and should stay off for customer-facing manual-gate demos.
 
 Latest platform bridge rerun, verified 2026-05-13 UTC:
 

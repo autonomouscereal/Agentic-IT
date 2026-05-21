@@ -64,7 +64,7 @@ def _report_phish_content(ticket_id, ticket, runs, completed_changes, completed_
     went_well = "\n".join([
         "The phishing ticket preserved message metadata, recipient scope, clicked-user evidence, and credential-exposure context.",
         "The agent created explicit approval gates before URL blocking, message quarantine, training follow-up, password reset, and endpoint scan actions.",
-        "Demo auto-approval was transparent in notes and audit events, while preserving the same approval boundary production would require.",
+        "Manual approval gates were transparent in notes and audit events; unattended regression auto-approval is test-only and not the live demo posture.",
         "Approved remediation gates advanced to completed with human-readable evidence and a final ticket remediation note.",
     ])
     improvements = "\n".join([
@@ -77,7 +77,7 @@ def _report_phish_content(ticket_id, ticket, runs, completed_changes, completed_
         "1. Ingest reported email, preserve headers/body metadata, and attach parsed recipient/click/credential/host scope.",
         "2. Triage authentication, sender, URLs, recipients, clicked users, credential exposure, and endpoint candidates; write a progress note.",
         "3. Open approval gates for URL/domain blocking, mailbox quarantine, clicked-user training, credential-exposed password reset, and endpoint/Wazuh/Sysmon scans.",
-        "4. Wait for manual approval or transparent lab auto-approval; never perform production-impacting actions while gates are pending.",
+        "4. Wait for manual approval in live/demo flows; never perform production-impacting actions while gates are pending. Regression-only auto-approval must be explicitly enabled by the test runner.",
         "5. Complete approved remediations with evidence notes, including affected users, systems, action result, and residual risk.",
         "6. Post final remediation summary, create a postmortem, and promote draft knowledge/workflow/skill assets for human review.",
     ])
@@ -90,7 +90,7 @@ def _report_phish_content(ticket_id, ticket, runs, completed_changes, completed_
         "Reported phishing email creates a local or provider ticket with message and recipient-scope attachments.",
         "Agent scopes recipients, clicked users, credential-exposed users, malicious URLs, and endpoint scan candidates.",
         "Each remediation action creates an approval gate before completion.",
-        "Demo auto-approval leaves explicit AUTO-APPROVED notes and production mode waits for authorized approver.",
+        "Live/demo mode waits for an authorized approver; regression-only auto-approval leaves explicit AUTO-APPROVED notes when explicitly enabled.",
         "Approved gates are completed with evidence and final remediation note references every affected user/host/action.",
         "Postmortem promotion creates draft knowledge, workflow, and skill assets for review.",
     ]

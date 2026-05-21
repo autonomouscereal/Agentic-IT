@@ -36,6 +36,28 @@ The deeper story is:
 - Completed work becomes reusable knowledge, workflows, tests, and skills.
 - The platform can expand from SOC to the rest of enterprise operations.
 
+## Demo Approval Posture
+
+For the live demo, leave approval gates manual.
+
+Agents are allowed to decide what work is needed, request access, and open
+change/containment/remediation gates, but they are not the approval authority.
+The demo operator should approve or reject gates from the dashboard so the
+audience sees the manual control point.
+
+Do not run proof scripts with `--auto-approve-gates` during the demo. That flag
+is only for unattended regression testing when no human is present to click the
+gate. In the demo path, the ticket timeline should show:
+
+```text
+Approval gate opened: change <id>
+Approval gate approved: change <id>
+Approval gate completed: change <id>
+```
+
+The gate audit should show `approval_mode=manual_approval` and
+`auto_approved=false`.
+
 ## Activity Trail For Demos
 
 Ticket details show an audience-facing **Sequence of Events** before the raw
@@ -85,18 +107,21 @@ remediation:
 8. `690`, `83`, `580`, `525`, `539`, and `531` - learning loop, CI/CD,
    Mailcow/Roundcube, and least-privilege proof tickets.
 
-Approval gates are also deliberately visible for the demo. When the lab
-auto-approves a gate, the ticket timeline shows:
+Approval gates are also deliberately visible for the demo. The live demo should
+show a human/operator approval from the dashboard:
 
 ```text
 Approval gate opened: change <id>
-Approval gate AUTO-APPROVED: change <id>
+Approval gate approved: change <id>
 Approval gate completed: change <id>
 ```
 
 Use the gate card's **full gate audit** link to show the underlying audit fields:
-`approval_gate=true`, `approval_mode=demo_auto_approval`, and
-`auto_approved=true`.
+`approval_gate=true`, `approval_mode=manual_approval`, and
+`auto_approved=false`.
+
+The proof scripts still support `--auto-approve-gates` for unattended
+regression runs, but that mode is intentionally not the demo posture.
 
 Quick proof before the demo:
 
@@ -192,7 +217,8 @@ Narrative beats:
 3. Show the dashboard evidence ticket and initial failed or needs-review gate.
 4. Spawn the local-model remediation agent.
 5. Show the agent requesting approval before modifying source.
-6. Approve the remediation change from the dashboard.
+6. Approve the remediation change from the dashboard. Do not use
+   `--auto-approve-gates` for the live demo.
 7. Show the agent patch, note, checkpoint, and logs.
 8. Rerun the scanner gate and show final pass with no high/critical findings.
 9. For the local-only proof, show the local branch and patch artifact as the
@@ -232,6 +258,9 @@ The runner must be able to reach the dashboard and GitLab from inside job
 containers. In the reference deployment the runner uses `network_mode =
 "gitlab-net"`, mounts `/tmp/zap-wrk:/zap/wrk`, and passes
 `SOC_DASHBOARD_URL=http://192.168.50.222:25480` to jobs.
+
+For unattended regression only, append `--auto-approve-gates`. Do not use that
+flag when showing manual governance.
 
 ## Demo Logins
 

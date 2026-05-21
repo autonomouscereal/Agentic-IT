@@ -97,6 +97,10 @@ Reference stack:
   authority. Approval, access, credential, and change gates must come from real
   downstream barriers: scoped vault leases, provider permissions, workflow
   policy, and platform approval gates when the ticket agent attempts work.
+- For live demos, leave those gates manual. Test scripts may use explicit
+  regression-only auto-approval flags, but Ops Chat should show the requester
+  that the agent has reached a gate and is waiting for an authorized operator
+  rather than silently approving its own request.
 - Follow-up room messages do not automatically attach to the latest ticket.
   The chat agent sees recent linked tickets and must decide whether the message
   is harmless chat, a new ticket, or a `user-response` note on a specific

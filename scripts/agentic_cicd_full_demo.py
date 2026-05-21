@@ -6,13 +6,14 @@ The flow is intentionally end-to-end:
 2. Run the real Semgrep, Trivy, OWASP ZAP, and Nuclei security gate.
 3. Record the failed gate on a dashboard ticket.
 4. Spawn a local-model agent to request approval and remediate the app.
-5. Auto-approve the lab change gate.
+5. Wait for a manual lab change approval by default.
 6. Rerun the security gate, record the fixed result, and create a local MR
    artifact from the agent's changes.
 
 No secrets are required. If GitLab token material is available in the lab, this
 script can be extended to push the generated branch; the default artifact is a
-local git branch/patch so the demo remains portable.
+local git branch/patch so the demo remains portable. Auto-approval is available
+only with --auto-approve-gates for unattended regression testing.
 """
 from __future__ import annotations
 
@@ -234,10 +235,16 @@ def add_attachment(base: str, ticket_id: int, path: Path, metadata: dict):
     })
 
 
-def complete_lab_deployment_change(base: str, final_record: dict, final_result: dict, compile_returncode: int, mr_artifact: dict) -> dict:
+def complete_lab_deployment_change(base: str, final_record: dict, final_result: dict, compile_returncode: int, mr_artifact: dict, auto_approve_gates: bool = False) -> dict:
     change_id = final_record.get("change_id")
     if not change_id:
         return {"status": "not_applicable", "reason": "final run did not create a change"}
+    if not auto_approve_gates:
+        return {
+            "status": "pending_manual_approval",
+            "change_id": change_id,
+            "reason": "Deployment approval gate left pending for operator/manual demo approval.",
+        }
 
     request("POST", base, f"/api/changes/{change_id}/approve", {
         "approved_by": "agentic-cicd-demo-auto-approver",
@@ -426,12 +433,13 @@ def approve_pending_changes(base: str, ticket_id: int) -> list[int]:
     return approved
 
 
-def wait_for_agent(base: str, ticket_id: int, seed_repo: Path, initial_result_path: Path, timeout: int = 1800):
+def wait_for_agent(base: str, ticket_id: int, seed_repo: Path, initial_result_path: Path, timeout: int = 1800, auto_approve_gates: bool = False):
     deadline = time.time() + timeout
     seen = set()
     last_status = ""
     while time.time() < deadline:
-        approve_pending_changes(base, ticket_id)
+        if auto_approve_gates:
+            approve_pending_changes(base, ticket_id)
         tasks = latest_tasks(base, ticket_id)
         for task in tasks:
             if task.get("agent_id"):
@@ -539,6 +547,11 @@ def main() -> int:
     parser.add_argument("--host-ip", default=os.getenv("DEMO_HOST_IP", "192.168.50.222"), help="Host IP reachable from scanner containers")
     parser.add_argument("--workspace", default=str(ROOT / "demo_runs"), help="Directory for demo runs")
     parser.add_argument("--timeout", type=int, default=1800, help="Agent wait timeout seconds")
+    parser.add_argument(
+        "--auto-approve-gates",
+        action="store_true",
+        help="TEST ONLY: auto-approve pending lab gates. Leave off for demo/manual approval.",
+    )
     args = parser.parse_args()
 
     run_id = int(time.time())
@@ -593,6 +606,7 @@ def main() -> int:
         seed_repo,
         work_root / "initial-scan" / "security-gate-result.json",
         timeout=args.timeout,
+        auto_approve_gates=args.auto_approve_gates,
     )
     final_agent_id = completed_task.get("agent_id")
     final_workdir = ROOT / "agent_work" / str(final_agent_id)
@@ -625,6 +639,7 @@ def main() -> int:
         final,
         compile_check.returncode,
         mr_artifact,
+        auto_approve_gates=args.auto_approve_gates,
     )
 
     add_note(args.base, ticket_id, textwrap.dedent(f"""

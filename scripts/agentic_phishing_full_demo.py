@@ -3,12 +3,14 @@
 
 This is intentionally heavier than a smoke test. It creates a realistic
 report-phish ticket, attaches parsed email evidence, spawns the local model,
-auto-approves lab remediation gates so the approval chain is visible, verifies
-that the agent completed the gates, and starts a postmortem/promotion pass.
+waits at lab remediation gates by default so a human can show manual approval,
+verifies that the agent completed the gates, and starts a postmortem/promotion
+pass.
 
 All destructive-looking actions are lab no-ops recorded as approval-gated
 evidence: URL block, message quarantine, training follow-up, password reset,
-and endpoint scan.
+and endpoint scan. Auto-approval is available only with --auto-approve-gates
+for unattended regression testing, never for a live manual-gate demo.
 """
 from __future__ import annotations
 
@@ -172,7 +174,7 @@ def create_ticket(base: str, fixture: dict) -> int:
     return ticket_id
 
 
-def agent_prompt(ticket_id: int, fixture: dict) -> str:
+def agent_prompt(ticket_id: int, fixture: dict, auto_approve_gates: bool = False) -> str:
     expected = json.dumps({
         "urls": fixture["urls"],
         "recipients": [r["email"] for r in fixture["recipients"]],
@@ -180,6 +182,16 @@ def agent_prompt(ticket_id: int, fixture: dict) -> str:
         "credentialed": fixture["credentialed"],
         "hosts": fixture["hosts"],
     }, indent=2)
+    approval_policy = {
+        "lab_noop": True,
+        "auto_complete": True,
+        "requires_human": not auto_approve_gates,
+        "test_only_auto_approval": bool(auto_approve_gates),
+    }
+    if auto_approve_gates:
+        approval_policy["demo_auto_approval"] = True
+    approval_policy_json = json.dumps(approval_policy)
+
     return f"""You are working a report-phish incident in the SOC dashboard.
 
 Use only the dashboard API and your local checkpoint file. This is a lab demo,
@@ -208,7 +220,7 @@ Required exact workflow:
 2. GET http://localhost:8000/api/postmortems/evidence/{ticket_id}?task_log_lines=0 and inspect the compact ticket evidence, notes, change requests, and attachment metadata. Do not call /api/tickets/{ticket_id}/context during this ticket-resolution task.
 3. GET http://localhost:8000/api/tickets/{ticket_id}. Use `agent_instance_id` from that response as your `agent_id`.
 4. POST a ticket note with JSON exactly shaped like {{"body":"Agent phishing triage started\\n\\n...", "author":"agent_<agent_id>", "source":"agent", "visibility":"internal"}}. The body must list recipients, URLs, clicked users, credential-exposed users, and endpoint hosts.
-5. Create these five change requests with POST /api/changes/request. Include the real agent_id, ticket_id {ticket_id}, risk_level, reason, command, and approval_policy {{"demo_auto_approval": true, "lab_noop": true, "auto_complete": true}}:
+5. Create these five change requests with POST /api/changes/request. Include the real agent_id, ticket_id {ticket_id}, risk_level, reason, command, and approval_policy {approval_policy_json}:
    - action `block_url`, target `{fixture['urls'][0]}`.
    - action `quarantine_messages`, target `{fixture['message_id']}`.
    - action `send_training_followup`, target `{", ".join(fixture['clicked'])}`.
@@ -249,12 +261,13 @@ def latest_tasks(base: str, ticket_id: int):
     return request("GET", base, f"/api/agents/tasks?ticket_id={ticket_id}", timeout=120).get("tasks", [])
 
 
-def wait_for_agent(base: str, ticket_id: int, timeout: int) -> dict:
+def wait_for_agent(base: str, ticket_id: int, timeout: int, auto_approve_gates: bool = False) -> dict:
     deadline = time.time() + timeout
     last_rendered = ""
     seen_terminal = set()
     while time.time() < deadline:
-        approve_pending_changes(base, ticket_id)
+        if auto_approve_gates:
+            approve_pending_changes(base, ticket_id)
         tasks = latest_tasks(base, ticket_id)
         summary = [(t.get("id"), t.get("agent_id"), t.get("status"), t.get("progress_pct")) for t in tasks[:8]]
         rendered = json.dumps(summary)
@@ -388,6 +401,11 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Agent model ID")
     parser.add_argument("--timeout", type=int, default=2400, help="Agent wait timeout seconds")
     parser.add_argument("--skip-postmortem", action="store_true", help="Skip postmortem/promotion pass")
+    parser.add_argument(
+        "--auto-approve-gates",
+        action="store_true",
+        help="TEST ONLY: auto-approve pending lab gates. Leave off for demo/manual approval.",
+    )
     args = parser.parse_args()
 
     fixture = phishing_fixture(int(time.time()))
@@ -396,11 +414,15 @@ def main() -> int:
 
     spawn = request("POST", args.base, f"/api/tickets/{ticket_id}/assign-agent", {
         "model": args.model,
-        "prompt": agent_prompt(ticket_id, fixture),
+        "prompt": agent_prompt(ticket_id, fixture, auto_approve_gates=args.auto_approve_gates),
     }, timeout=120)
     print(json.dumps({"agent_spawn": spawn}))
+    print(json.dumps({
+        "approval_mode": "test_auto_approval" if args.auto_approve_gates else "manual_dashboard_approval",
+        "demo_note": "Leave gates pending and approve from the dashboard for the live demo." if not args.auto_approve_gates else "Auto-approval is enabled for unattended regression only.",
+    }))
 
-    completed_task = wait_for_agent(args.base, ticket_id, args.timeout)
+    completed_task = wait_for_agent(args.base, ticket_id, args.timeout, auto_approve_gates=args.auto_approve_gates)
     validation = validate(args.base, ticket_id, fixture)
 
     postmortem_spawn = None

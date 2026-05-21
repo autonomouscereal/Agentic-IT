@@ -128,6 +128,14 @@ class ChangeApprovalResumeTests(unittest.TestCase):
 
         self.assertEqual(actor, "complex-access-approver")
 
+    def test_demo_account_manual_approval_is_not_auto_approval(self):
+        module = load_changes_module()
+
+        self.assertFalse(module._is_auto_approver("demo_account_1"))
+        self.assertFalse(module._is_auto_approver("demo-operator"))
+        self.assertTrue(module._is_auto_approver("report-phish-demo-auto-approver"))
+        self.assertTrue(module._is_auto_approver("regression-auto-approver"))
+
     def test_change_completion_returns_access_sync_evidence(self):
         module = load_changes_module()
         sync_calls = []

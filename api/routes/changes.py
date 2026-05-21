@@ -28,7 +28,18 @@ router = APIRouter(prefix="/api/changes", tags=["changes"])
 
 def _is_auto_approver(actor):
     value = (actor or "").lower()
-    return "auto" in value or "demo" in value or "smoke" in value
+    explicit_markers = (
+        "auto-approver",
+        "auto_approver",
+        "auto approver",
+        "test-auto",
+        "test_auto",
+        "regression-auto",
+        "regression_auto",
+        "smoke-auto",
+        "smoke_auto",
+    )
+    return any(marker in value for marker in explicit_markers)
 
 
 def _completion_result_from_body(body):

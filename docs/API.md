@@ -474,9 +474,12 @@ Example:
 {"approved_by": "operator", "reason": "Reviewed evidence and approved scoped action."}
 ```
 
-Demo/lab auto-approvers can use an identity such as
-`demo-auto-approver`. The audit payload then includes
-`approval_gate=true`, `approval_mode=demo_auto_approval`, and
+Demo/lab auto-approvers are test-only and should be enabled only by an
+unattended regression script, for example with `--auto-approve-gates`. Live
+demo and production-style flows should use a human/operator approval identity.
+Manual approval audit payloads include `approval_gate=true`,
+`approval_mode=manual_approval`, and `auto_approved=false`. Test-only
+auto-approval payloads include `approval_mode=demo_auto_approval` and
 `auto_approved=true`.
 
 `POST /api/changes/{change_id}/reject`

@@ -66,12 +66,16 @@ curl -sS -X POST http://localhost:25480/api/changes/7/approve \
   -d '{"approved_by":"operator","reason":"Reviewed evidence and approved scoped action."}'
 ```
 
-Demo/lab auto-approval:
+Unattended regression-only auto-approval:
+
+Use this only in scripts that explicitly pass `--auto-approve-gates`. Do not
+use it for live demos, because the demo should show a human/operator approving
+the gate from the dashboard.
 
 ```bash
 curl -sS -X POST http://localhost:25480/api/changes/7/approve \
   -H 'Content-Type: application/json' \
-  -d '{"approved_by":"demo-auto-approver","reason":"Demo mode auto-approval to prove the approval gate without waiting for a human."}'
+  -d '{"approved_by":"demo-auto-approver","reason":"Regression-only auto-approval; live demos use manual dashboard approval."}'
 ```
 
 Reject:
@@ -199,12 +203,25 @@ Every change request is presented as an approval gate in the ticket timeline.
 The control plane writes ticket notes for:
 
 - `Approval gate opened`
-- `Approval gate AUTO-APPROVED` or `Approval gate approved`
+- `Approval gate approved`
 - `Approval gate rejected`
 - `Approval gate completed`
 
-Auto-approval is intentionally loud in the demo. If `approved_by` contains
-`auto`, `demo`, or `smoke`, the approval audit payload includes:
+Manual dashboard approval is the live-demo posture. The approval audit payload
+should include:
+
+```json
+{
+  "approval_gate": true,
+  "approval_mode": "manual_approval",
+  "auto_approved": false
+}
+```
+
+Auto-approval is intentionally loud when enabled for unattended regression
+testing. Only explicit auto-approver identities such as
+`demo-auto-approver`, `regression-auto-approver`, or `smoke-auto-approver`
+should produce this payload:
 
 ```json
 {
@@ -215,8 +232,9 @@ Auto-approval is intentionally loud in the demo. If `approved_by` contains
 ```
 
 The dashboard ticket detail modal renders each change as an **Approval Gate**
-card with an `Auto-approved demo gate` badge and direct links to the full gate,
-ticket, and agent audit trails.
+card with direct links to the full gate, ticket, and agent audit trails.
+Regression-only auto-approved gates show an `Auto-approved demo gate` badge;
+do not use that path for customer-facing manual-governance demos.
 
 ## Future Access Control
 

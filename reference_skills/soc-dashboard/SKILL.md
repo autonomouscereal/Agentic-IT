@@ -215,6 +215,13 @@ correction or queues a continuation agent after the owned harness is stopped.
 True waits must use `awaiting_access`, `pending_approval`,
 `awaiting_user_response`, or `blocked` instead of generic `working`.
 
+For live demos, approval gates are manual. Agents can request gates, but
+operators approve them from the dashboard. The auto-approval detector must not
+classify normal demo users such as `demo_account_1` or `demo-operator` as
+auto-approved; only explicit regression identities such as
+`*-auto-approver`, `regression-auto-*`, or `smoke-auto-*` should render the
+`AUTO-APPROVED` badge.
+
 ## Wazuh Lease-Gated Provider Access
 
 Wazuh/SIEM reads must be performed through dashboard-gated endpoints after an

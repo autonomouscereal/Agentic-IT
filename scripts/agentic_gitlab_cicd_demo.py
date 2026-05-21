@@ -408,12 +408,13 @@ def latest_dashboard_run(base: str, repo_ref: str, branch: str, timeout: int = 1
     raise RuntimeError(f"Dashboard run not found for {repo_ref}@{branch}")
 
 
-def wait_for_agent(base: str, ticket_id: int, seed_repo: Path, initial_result_path: Path, timeout: int = 1800):
+def wait_for_agent(base: str, ticket_id: int, seed_repo: Path, initial_result_path: Path, timeout: int = 1800, auto_approve_gates: bool = False):
     deadline = time.time() + timeout
     seen = set()
     last_status = ""
     while time.time() < deadline:
-        approve_pending_changes(base, ticket_id)
+        if auto_approve_gates:
+            approve_pending_changes(base, ticket_id)
         tasks = latest_tasks(base, ticket_id)
         for task in tasks:
             if task.get("agent_id"):
@@ -452,6 +453,11 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--workspace", default=str(ROOT / "demo_runs"))
     parser.add_argument("--timeout", type=int, default=2400)
+    parser.add_argument(
+        "--auto-approve-gates",
+        action="store_true",
+        help="TEST ONLY: auto-approve pending lab gates. Leave off for demo/manual approval.",
+    )
     args = parser.parse_args()
 
     token = Path(args.gitlab_token_file).read_text(encoding="utf-8").strip()
@@ -504,7 +510,14 @@ def main() -> int:
     init_git(agent_repo)
     print(json.dumps({"agent_id": agent_id, "task_id": spawn["task_id"], "agent_repo": str(agent_repo)}))
 
-    completed_task = wait_for_agent(args.dashboard, ticket_id, seed_repo, initial_result_path, timeout=args.timeout)
+    completed_task = wait_for_agent(
+        args.dashboard,
+        ticket_id,
+        seed_repo,
+        initial_result_path,
+        timeout=args.timeout,
+        auto_approve_gates=args.auto_approve_gates,
+    )
     final_agent_id = completed_task.get("agent_id")
     final_repo = ROOT / "agent_work" / str(final_agent_id) / "demo-app"
     if not final_repo.exists():
@@ -539,13 +552,15 @@ def main() -> int:
     final_path.write_text(json.dumps(final_run, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     add_attachment(args.dashboard, ticket_id, final_path, {"phase": "gitlab-final", "project": repo_ref, "mr": merge_request.get("web_url")})
 
-    if final_run.get("change_id"):
+    if final_run.get("change_id") and args.auto_approve_gates:
         approval = dashboard_request("POST", args.dashboard, f"/api/changes/{final_run['change_id']}/approve", {
             "approved_by": "gitlab-cicd-demo-auto-approver",
         }, timeout=120)
         dashboard_request("POST", args.dashboard, f"/api/changes/{final_run['change_id']}/complete", {
             "result": f"GitLab MR !{merge_request.get('iid')} passed the security gate; deployment approval simulated for lab demo. Approval response: {approval}",
         }, timeout=120)
+    elif final_run.get("change_id"):
+        add_note(args.dashboard, ticket_id, f"Final GitLab delivery gate change {final_run['change_id']} is pending manual approval for the live demo.")
 
     postmortem = dashboard_request("POST", args.dashboard, f"/api/tickets/{ticket_id}/postmortem", {
         "model": args.model,

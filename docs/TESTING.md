@@ -1314,8 +1314,9 @@ served /static/css/dashboard.css contains activity-note-body
 
 ## Transparent Approval Gate Verification
 
-The demo approval flow should make it obvious that a guardrail exists even when
-the lab is configured to auto-approve.
+The demo approval flow should make it obvious that a guardrail exists. Live
+demos should use manual dashboard approval; auto-approval is reserved for
+unattended regression runs.
 
 Verification on the main dashboard:
 
@@ -1323,17 +1324,17 @@ Verification on the main dashboard:
 BASE=http://localhost:25480
 TICKET=$(curl -sS -X POST "$BASE/api/tickets" \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Demo transparent approval gate verification","description":"Verify approval gates show opened, auto-approved, and completed notes/audit details.","provider":"local","sync_provider":false,"created_by":"approval-gate-test"}' \
+  -d '{"title":"Demo transparent approval gate verification","description":"Verify approval gates show opened, approved, and completed notes/audit details.","provider":"local","sync_provider":false,"created_by":"approval-gate-test"}' \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 
 CHANGE=$(curl -sS -X POST "$BASE/api/changes/request" \
   -H 'Content-Type: application/json' \
-  -d "{\"ticket_id\":$TICKET,\"action\":\"demo_block_url\",\"target\":\"https://example.invalid/phish\",\"reason\":\"Demonstrate a guardrailed remediation approval chain.\",\"risk_level\":\"medium\",\"approval_policy\":{\"demo_auto_approval\":true}}" \
+  -d "{\"ticket_id\":$TICKET,\"action\":\"demo_block_url\",\"target\":\"https://example.invalid/phish\",\"reason\":\"Demonstrate a guardrailed remediation approval chain.\",\"risk_level\":\"medium\",\"approval_policy\":{\"requires_human\":true}}" \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["change_id"])')
 
 curl -sS -X POST "$BASE/api/changes/$CHANGE/approve" \
   -H 'Content-Type: application/json' \
-  -d '{"approved_by":"demo-auto-approver","reason":"Demo mode auto-approval to prove the approval gate without waiting for a human."}'
+  -d '{"approved_by":"demo-operator","reason":"Operator reviewed the evidence and approved the scoped lab action."}'
 
 curl -sS -X POST "$BASE/api/changes/$CHANGE/complete" \
   -H 'Content-Type: application/json' \
@@ -1346,12 +1347,12 @@ Latest verified result:
 ticket_id=102
 change_id=52
 change_status=completed
-approved_by=demo-auto-approver
+approved_by=demo-operator
 note_count=3
 has_gate_opened_note=true
-has_auto_approved_note=true
+has_manual_approved_note=true
 has_completed_note=true
-auto_audit_entries=4
+manual_audit_entries=4
 audit_sources=audit,event,note
 active_agent_processes=0
 ```
@@ -1359,7 +1360,7 @@ active_agent_processes=0
 Frontend asset verification:
 
 ```text
-served /static/js/dashboard.js contains Auto-approved demo gate
+served /static/js/dashboard.js contains Approval Gate
 served /static/css/dashboard.css contains gate-card
 ```
 
