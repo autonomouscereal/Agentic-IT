@@ -61,6 +61,7 @@ AGENT_NO_OUTPUT_STALL_SECONDS = _env_int(
     "AGENT_NO_OUTPUT_STALL_SECONDS",
     _env_int("AGENT_NO_OUTPUT_TIMEOUT_SECONDS", 3600),
 )
+AGENT_STREAM_LINE_LIMIT_BYTES = _env_int("AGENT_STREAM_LINE_LIMIT_BYTES", 8 * 1024 * 1024)
 AGENT_TRANSIENT_MODEL_RETRY_MAX = _env_int("AGENT_TRANSIENT_MODEL_RETRY_MAX", 3)
 AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS = _env_int("AGENT_TRANSIENT_MODEL_RETRY_DELAY_SECONDS", 30)
 AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED = _env_bool("AGENT_TRANSIENT_MODEL_FALLBACK_ENABLED", True)
@@ -1331,9 +1332,9 @@ async def _resolve_ticket_from_terminal_evidence(ticket_id, agent_id, task_id, e
         ticket_id,
         agent_id,
         task_id,
-        "Ticket resolved by terminal evidence recovery"
+        "Ticket resolved from verified completion evidence"
         if not provider_result.get("error")
-        else "Ticket terminal evidence needs provider close review",
+        else "Ticket completion evidence needs provider close review",
         (
             f"{summary}\n\nProvider close: synchronized successfully."
             if not provider_result.get("error")
@@ -1776,7 +1777,7 @@ async def recover_completed_ticket_resolution(agent_id, task_id, reason="termina
         evidence["provider_result"] = provider_result
 
     summary = (
-        "Recovered terminal completion from dashboard evidence: "
+        "Verified completion from persisted dashboard evidence: "
         f"ticket status `{evidence['ticket_status']}`, "
         f"{evidence['completed_changes']} completed change gates, "
         f"{evidence['final_notes']} final notes, and "
@@ -1801,10 +1802,10 @@ async def recover_completed_ticket_resolution(agent_id, task_id, reason="termina
         evidence["ticket_id"],
         agent_id,
         task_id,
-        "Agent completed with terminal evidence recovery",
+        "Agent completion verified by supervisor",
         (
-            f"Agent `{agent_id}` had already completed ticket work but left the task running. "
-            f"The supervisor finalized task `{task_id}` from persisted evidence. {summary}"
+            f"Agent `{agent_id}` completed the ticket objective and the supervisor finalized "
+            f"task `{task_id}` from persisted dashboard evidence. {summary}"
         ),
         "agent-control-plane",
     )
@@ -2738,6 +2739,7 @@ async def _run_agent(work_dir, prompt, task_id, selected_harness=None):
             stderr=asyncio.subprocess.PIPE,
             env=env,
             cwd=work_dir,
+            limit=AGENT_STREAM_LINE_LIMIT_BYTES,
         )
         _active_processes[task_id] = process
 

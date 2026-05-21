@@ -295,6 +295,12 @@ ITOP_PASSWORD=<from vault or deployment secret>
 ITOP_SECURITY_TEAM_ID=65
 ```
 
+`ITOP_SECURITY_TEAM_ID` is a fallback, not the normal routing target. For
+dashboard-created tickets, the iTop adapter first resolves or creates an iTop
+Team that matches the canonical dashboard assignment group such as
+`Identity & Access`, `DevSecOps`, or `Network Operations`. This keeps the
+provider UI aligned with the dashboard RACI route.
+
 For local-only or non-iTop deployments:
 
 ```text

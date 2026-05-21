@@ -72,9 +72,15 @@ The Agentic Operations iTop adapter prefers explicit defaults:
 |----------|---------|
 | `ITOP_DEFAULT_ORG_ID` | Organization for outbound dashboard-created tickets |
 | `ITOP_DEFAULT_CALLER_ID` | Person caller for Incident/UserRequest creates |
-| `ITOP_SECURITY_TEAM_ID` | Optional assignment team |
+| `ITOP_SECURITY_TEAM_ID` | Optional legacy/fallback assignment team |
 
 If org/caller defaults are absent, the dashboard resolves them from iTop: Organization `1`, then first Organization; Person in that org, then first Person. This keeps demos synced to iTop instead of showing avoidable `create_failed` records. If no org/caller can be resolved, the dashboard keeps the local canonical ticket and records a clear `provider_last_error`.
+
+For assignment, outbound dashboard-created tickets now prefer the canonical
+dashboard `assignee_team` / `owning_group` as the iTop Team. If the Team does
+not exist, the adapter creates a matching reference Team in the selected
+Organization before creating the ticket. `ITOP_SECURITY_TEAM_ID` is only a
+fallback when no group-specific Team can be resolved or created.
 
 Verified on 2026-05-12: dashboard direct create produced `UserRequest::169` and `Incident::170` with org `1`, caller `94`, team `65`, and `Incident` impact/urgency mapped from priority.
 

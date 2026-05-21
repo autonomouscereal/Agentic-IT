@@ -1231,6 +1231,41 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertIn("produced no output", state["reason"])
         self.assertNotEqual(returncode, 0)
 
+    def test_agent_process_accepts_large_codex_json_lines(self):
+        module = load_agent_runner()
+        module.AGENT_STREAM_LINE_LIMIT_BYTES = 1024 * 1024
+        module.AGENT_TIMEOUT_MINUTES = 1
+
+        class FakeHarness:
+            name = "codex"
+
+            def build_env(self, env, **kwargs):
+                return env
+
+            def build_command(self, *args, **kwargs):
+                return [
+                    sys.executable,
+                    "-c",
+                    "import json; print(json.dumps({'type':'result','result':'CODEX_LARGE_STREAM_OK ' + ('x' * 120000)}))",
+                ]
+
+        async def fake_fetchrow(query, *args):
+            if "SELECT agent_id FROM agent_tasks" in query:
+                return {"agent_id": 991}
+            if "SELECT selected_model" in query:
+                return {"selected_model": "gpt-5.5", "model": "gpt-5.5", "runtime_config": {}}
+            return None
+
+        module.get_harness = lambda name: FakeHarness()
+        module.fetchrow = fake_fetchrow
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = asyncio.run(module._run_agent(tmp, "large stream test", 812, selected_harness="codex"))
+
+        self.assertEqual(result["exit_code"], 0)
+        self.assertIn("CODEX_LARGE_STREAM_OK", result["stdout"])
+        self.assertFalse(result.get("stderr"))
+
     def test_watchdog_stops_malformed_tool_use_without_tool_payload(self):
         module = load_agent_runner()
 
@@ -1471,7 +1506,8 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertTrue(any("UPDATE agents SET status = 'finished'" in call[0] for call in execute_calls))
         self.assertTrue(any(call[3] == "agent_terminal_completion_recovered" for call in event_calls))
         self.assertEqual(note_calls[0][0], 452)
-        self.assertIn("terminal evidence recovery", note_calls[0][3].lower())
+        self.assertIn("supervisor", note_calls[0][3].lower())
+        self.assertIn("persisted dashboard evidence", note_calls[0][4].lower())
 
     def test_recover_completed_ticket_resolution_resolves_promoted_open_ticket(self):
         module = load_agent_runner()
@@ -1535,7 +1571,7 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertTrue(any("UPDATE tickets SET status = 'resolved'" in call[0] for call in execute_calls))
         self.assertTrue(any(call[3] == "ticket_status_recovered_from_terminal_evidence" for call in event_calls))
         self.assertEqual(note_calls[0][0], 531)
-        self.assertIn("terminal evidence recovery", note_calls[-1][3].lower())
+        self.assertIn("persisted dashboard evidence", note_calls[-1][4].lower())
 
     def test_terminal_evidence_recovery_allows_ready_postmortem_and_closes_provider(self):
         module = load_agent_runner()
@@ -1597,7 +1633,7 @@ class AgentLifecycleGuardTests(unittest.TestCase):
         self.assertTrue(result["evidence"]["auto_resolved"])
         self.assertEqual(close_calls[0][0], 695)
         self.assertTrue(any("provider_sync_status = 'synced'" in call[0] for call in execute_calls))
-        self.assertIn("terminal evidence recovery", note_calls[0][3].lower())
+        self.assertIn("verified completion evidence", note_calls[0][3].lower())
 
 
 if __name__ == "__main__":

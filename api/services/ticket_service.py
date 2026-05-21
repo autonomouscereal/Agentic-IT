@@ -352,6 +352,7 @@ async def create_ticket(
             "provider_class": provider_class,
             "priority": priority,
             "created_by": created_by,
+            "assignee_team": assignee_team,
             "opened_by_name": opened_by_name,
             "opened_by_email": opened_by_email,
             "requester_name": requester_name,

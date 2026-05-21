@@ -250,7 +250,12 @@ When the org/caller defaults are absent, the adapter asks iTop for safe defaults
 
 - `Organization`: use configured ID, then Organization `1`, then first query result.
 - `Person`: use configured ID, then first person in the selected org, then first person.
-- `Team`: use configured `ITOP_SECURITY_TEAM_ID` only when it exists.
+- `Team`: prefer the canonical dashboard `assignee_team` / `owning_group`.
+  If iTop does not already have a matching Team, the adapter creates a reference
+  Team in the selected Organization so provider-side tickets do not all appear
+  under the legacy Security Team. `ITOP_SECURITY_TEAM_ID` remains a fallback
+  only when no assignment group is supplied or iTop cannot create/resolve the
+  group-specific Team.
 
 `Incident` creates include `org_id`, `caller_id`, optional `team_id`, and mapped `impact`/`urgency`. `UserRequest` creates include `org_id`, `caller_id`, and optional `team_id`. If those defaults cannot be resolved from iTop, the canonical ticket records `create_failed`; otherwise demos should show `synced`, not an avoidable provider-create failure.
 

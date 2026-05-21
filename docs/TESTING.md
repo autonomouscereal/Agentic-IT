@@ -52,6 +52,11 @@ Last updated: 2026-05-21.
   Docker hosts commonly disable the unprivileged user namespaces required by
   `workspace-write`. The enforceable boundary remains dashboard RBAC, scoped
   vault leases, approval gates, and the API container.
+- Ticket `1410` follow-up fixed two demo-polish regressions: large Codex JSONL
+  stream events no longer fail the runner with `Separator is found, but chunk is
+  longer than limit`, and outbound iTop creates now prefer the dashboard
+  assignment group Team (`Identity & Access` for account work) before falling
+  back to the legacy Security Team ID.
 
 ## Local Source Validation
 

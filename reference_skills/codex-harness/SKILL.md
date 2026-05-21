@@ -84,6 +84,13 @@ print `Reading additional input from stdin...` and wait before starting the
 turn. The dashboard runner and Ops Chat harness use `stdin=subprocess.DEVNULL`
 for this reason.
 
+Codex can emit very large single-line JSONL events when a tool result or
+conversation chunk is large. The dashboard runner sets
+`AGENT_STREAM_LINE_LIMIT_BYTES=8388608` by default so valid Codex JSONL output
+does not fail with Python's `Separator is found, but chunk is longer than
+limit` error. Keep this as a pipe-reader limit only; task output persisted to
+the dashboard remains tail-bounded for readability.
+
 The task tracker must recognize Codex processes as live harness processes and
 must preserve a 100% `done` checkpoint as completion if the OS process exits
 before final bookkeeping. A ticket that has a done checkpoint and final evidence

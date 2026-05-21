@@ -5048,6 +5048,39 @@ Verification:
   ticket context unless a specific fact is missing.
 - The original ticket `312` was completed by the follow-up bounded flow; changes
   `83`, `84`, and `85` all have persisted completion evidence.
+- 2026-05-21 follow-up from ticket `1410`: Codex emitted a single valid JSONL
+  stream event larger than Python's default async subprocess line limit while
+  waiting on approval gate `309`. The runner now passes
+  `limit=AGENT_STREAM_LINE_LIMIT_BYTES` to `asyncio.create_subprocess_exec`
+  (`8388608` bytes by default), so large JSONL events do not crash the task
+  reader while persisted dashboard output stays tail-bounded. Supervisor
+  completion notes were also rewritten to read as verified completion evidence
+  instead of a scary terminal-recovery failure.
+
+### iTop provider assignment fallback can make non-security tickets look misrouted
+
+Status: fixed on 2026-05-21.
+
+Problem:
+
+- Ticket `1410` correctly routed in the dashboard to `Identity & Access`, but
+  the iTop payload summary showed `team_name: Security Team` because outbound
+  creation always used the legacy `ITOP_SECURITY_TEAM_ID` fallback when present.
+
+Fix:
+
+- `iTopProvider.create_ticket()` now passes the dashboard `assignee_team` /
+  `owning_group` into reference resolution.
+- The adapter searches iTop Teams by canonical assignment group and creates a
+  matching reference Team in the selected Organization if one does not exist.
+- `ITOP_SECURITY_TEAM_ID` remains a fallback only when no group-specific Team
+  can be resolved or created.
+
+Verification:
+
+- Unit tests cover using an existing `Identity & Access` Team over Security Team
+  and creating a missing group-specific Team before outbound `UserRequest`
+  creation.
 
 ### RACI auto-assignment matched generic Incident tickets too broadly
 

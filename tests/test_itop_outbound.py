@@ -110,6 +110,89 @@ class iTopOutboundTests(unittest.TestCase):
         self.assertEqual(create_call["fields"]["urgency"], 2)
         self.assertTrue(updates)
 
+    def test_create_ticket_prefers_assignment_group_team_over_security_fallback(self):
+        module = load_itop_sync()
+        calls = []
+
+        async def fake_itop_request(operation, **fields):
+            calls.append((operation, fields))
+            if operation == "core/get" and fields["class"] == "Organization":
+                return {"code": 0, "objects": {"Organization::1": {"fields": {"id": "1", "name": "Org"}}}}
+            if operation == "core/get" and fields["class"] == "Person":
+                return {"code": 0, "objects": {"Person::94": {"fields": {"id": "94", "org_id": "1"}}}}
+            if operation == "core/get" and fields["class"] == "Team" and fields.get("key") == "SELECT Team":
+                return {
+                    "code": 0,
+                    "objects": {
+                        "Team::65": {"fields": {"id": "65", "name": "Security Team", "org_id": "1"}},
+                        "Team::77": {"fields": {"id": "77", "name": "Identity & Access", "org_id": "1"}},
+                    },
+                }
+            if operation == "core/get" and fields["class"] == "Team":
+                return {"code": 0, "objects": {"Team::65": {"fields": {"id": "65", "name": "Security Team", "org_id": "1"}}}}
+            if operation == "core/create":
+                return {"code": 0, "objects": {"UserRequest::828": {"fields": {"id": "828", "title": fields["fields"]["title"]}}}}
+            return {"code": 1, "message": "unexpected"}
+
+        module.itop_request = fake_itop_request
+        module.ITOP_DEFAULT_ORG_ID = ""
+        module.ITOP_DEFAULT_CALLER_ID = ""
+        module.ITOP_SECURITY_TEAM_ID = "65"
+
+        provider = module.iTopProvider()
+        result = asyncio.run(provider.create_ticket(1410, {
+            "title": "Create read-only account",
+            "description": "Created from unit test",
+            "ticket_class": "UserRequest",
+            "provider_class": "UserRequest",
+            "priority": "P3",
+            "assignee_team": "Identity & Access",
+        }))
+
+        self.assertEqual(result["status"], "created")
+        create_call = [item for item in calls if item[0] == "core/create"][0][1]
+        self.assertEqual(create_call["fields"]["team_id"], "77")
+
+    def test_create_ticket_creates_missing_assignment_group_team(self):
+        module = load_itop_sync()
+        calls = []
+
+        async def fake_itop_request(operation, **fields):
+            calls.append((operation, fields))
+            if operation == "core/get" and fields["class"] == "Organization":
+                return {"code": 0, "objects": {"Organization::1": {"fields": {"id": "1", "name": "Org"}}}}
+            if operation == "core/get" and fields["class"] == "Person":
+                return {"code": 0, "objects": {"Person::94": {"fields": {"id": "94", "org_id": "1"}}}}
+            if operation == "core/get" and fields["class"] == "Team":
+                return {"code": 0, "objects": {}}
+            if operation == "core/create" and fields["class"] == "Team":
+                self.assertEqual(fields["fields"]["name"], "Identity & Access")
+                return {"code": 0, "objects": {"Team::77": {"fields": {"id": "77", "name": "Identity & Access", "org_id": "1"}}}}
+            if operation == "core/create":
+                return {"code": 0, "objects": {"UserRequest::828": {"fields": {"id": "828", "title": fields["fields"]["title"]}}}}
+            return {"code": 1, "message": "unexpected"}
+
+        module.itop_request = fake_itop_request
+        module.ITOP_DEFAULT_ORG_ID = ""
+        module.ITOP_DEFAULT_CALLER_ID = ""
+        module.ITOP_SECURITY_TEAM_ID = ""
+
+        provider = module.iTopProvider()
+        result = asyncio.run(provider.create_ticket(1411, {
+            "title": "Create read-only account",
+            "description": "Created from unit test",
+            "ticket_class": "UserRequest",
+            "provider_class": "UserRequest",
+            "priority": "P3",
+            "assignee_team": "Identity & Access",
+        }))
+
+        self.assertEqual(result["status"], "created")
+        team_create = [item for item in calls if item[0] == "core/create" and item[1]["class"] == "Team"]
+        self.assertEqual(len(team_create), 1)
+        ticket_create = [item for item in calls if item[0] == "core/create" and item[1]["class"] == "UserRequest"][0][1]
+        self.assertEqual(ticket_create["fields"]["team_id"], "77")
+
     def test_list_keys_uses_select_for_sparse_provider_ids(self):
         module = load_itop_sync()
         calls = []

@@ -75,6 +75,14 @@ Timeout guidance:
 - external/cloud model profiles: `10` minutes
 - chat harness HTTP windows: `3600` seconds so local agents are not cut off
 
+Codex, Hermes, and Claude can emit very large JSONL stream events when a tool
+result or internal context chunk is long. The runner sets
+`AGENT_STREAM_LINE_LIMIT_BYTES=8388608` by default so a single valid harness
+event does not fail with Python's `Separator is found, but chunk is longer than
+limit` stream-reader error. The persisted task output is still bounded to a
+tail for dashboard readability; this setting only controls subprocess pipe
+parsing.
+
 ## Harness Defaults
 
 Codex is the default profile for the current demo. Hermes and Claude Code remain

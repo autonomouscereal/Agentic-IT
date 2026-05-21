@@ -597,6 +597,9 @@ The reference AI server currently runs slow local models. Do not use short wall-
   resolution work, so high-priority tickets can overtake lower-priority queued
   work when the local model lane is capped.
 - `AGENT_NO_OUTPUT_STALL_SECONDS=3600`: configurable no-output stall guard. This is a last-resort harness-hang guard, not a progress timer; streaming or tool-using agents should continue.
+- `AGENT_STREAM_LINE_LIMIT_BYTES=8388608`: subprocess JSONL stream line limit
+  for Codex/Hermes/Claude harness output. Keep this high enough for large valid
+  tool-result events; persisted dashboard output remains tail-bounded.
 - The agent auditor is the primary supervision path. Judge status from task logs, checkpoints, notes, audit entries, and process state, not from percent alone.
 - Include AI proxy and LM Studio activity when judging agent status. On the
   reference AI server, check `curl -s http://localhost:4001/health`,
@@ -813,7 +816,7 @@ All configuration is via environment variables in `.env`:
 | `ITOP_PORT` | `25432` | iTop REST API port |
 | `ITOP_USER` | `admin` | iTop API username |
 | `ITOP_PASSWORD` | vault-backed | iTop API password |
-| `ITOP_SECURITY_TEAM_ID` | `65` | iTop security team ID |
+| `ITOP_SECURITY_TEAM_ID` | `65` | Legacy/fallback iTop Team ID when no assignment group can be resolved |
 | `ITOP_DEFAULT_ORG_ID` | auto-resolved | Optional iTop Organization ID for outbound creates |
 | `ITOP_DEFAULT_CALLER_ID` | auto-resolved | Optional iTop Person ID for Incident/UserRequest caller |
 | `ITOP_DISCOVERY_INTERVAL` | `2` | Seconds between iTop discovery scans |
@@ -834,6 +837,10 @@ The dashboard uses `api/services/itop_sync.py` for outbound provider create. It 
 - `Incident` priority is mapped to iTop `impact` and `urgency`.
 - `ITOP_DEFAULT_ORG_ID` and `ITOP_DEFAULT_CALLER_ID` are preferred when set.
 - If those defaults are absent, the adapter resolves Organization `1` or the first Organization, then a Person in that org or the first Person.
+- The adapter now prefers the dashboard assignment group (`assignee_team` /
+  `owning_group`) as the iTop Team and creates a matching reference Team when
+  iTop does not already have one. This keeps Identity & Access, DevSecOps, and
+  other non-security tickets from appearing under the old Security Team fallback.
 - If iTop cannot provide org/caller context, the canonical ticket records `provider_sync_status=create_failed` with `provider_last_error`.
 
 Verified on 2026-05-12: direct dashboard creates produced `UserRequest::169` and `Incident::170` with `provider_sync_status=synced`, `org_id=1`, `caller_id=94`, and `team_id=65`.

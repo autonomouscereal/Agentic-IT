@@ -543,7 +543,60 @@ class iTopProvider(TicketProvider):
             predicate,
         )
 
-    async def _resolve_default_refs(self):
+    async def _find_or_create_team_for_assignment(self, assignment_group=None, org_id=None):
+        """Resolve a dashboard assignment group to an iTop Team.
+
+        The old reference stack used a single `ITOP_SECURITY_TEAM_ID` fallback,
+        which made non-security chat tickets look misrouted in iTop. Prefer the
+        canonical dashboard assignment group and create a matching reference
+        Team when iTop does not already have one.
+        """
+        team_name = str(assignment_group or "").strip()
+        if not team_name:
+            return None
+        team_name = re.sub(r"\s+", " ", team_name)[:160]
+        target = team_name.lower()
+
+        def predicate(item):
+            fields = item.get("fields") or {}
+            if org_id and str(fields.get("org_id") or "") not in ("", str(org_id)):
+                return False
+            names = {
+                str(fields.get("name") or "").strip().lower(),
+                str(fields.get("friendlyname") or "").strip().lower(),
+            }
+            return target in names
+
+        team = await self._find_first_object("Team", "id,name,friendlyname,org_id", predicate)
+        if team:
+            return team
+
+        if not org_id:
+            return None
+        result = await itop_request("core/create", **{
+            "class": "Team",
+            "comment": "Created by Agentic Operations outbound ticket sync for assignment-group parity",
+            "fields": {
+                "name": team_name,
+                "org_id": org_id,
+            },
+            "output_fields": "id,name,friendlyname,org_id",
+        })
+        if result.get("code") == 0 and result.get("objects"):
+            object_ref, obj = next(iter(result["objects"].items()))
+            team = {"object_ref": object_ref, "key": _object_key(object_ref, obj), "fields": (obj or {}).get("fields") or {}}
+            await log_event("sync", "info", "itop_sync", "team_created",
+                            f"team_{team.get('key')}", {"assignment_group": team_name, "org_id": org_id})
+            return team
+        await log_event("sync", "warning", "itop_sync", "team_create_failed",
+                        "itop_team", {
+                            "assignment_group": team_name,
+                            "org_id": org_id,
+                            "error": result.get("message") or result.get("error") or result,
+                        })
+        return None
+
+    async def _resolve_default_refs(self, assignment_group=None):
         org = None
         if ITOP_DEFAULT_ORG_ID:
             org = await self._get_object("Organization", ITOP_DEFAULT_ORG_ID)
@@ -584,9 +637,9 @@ class iTopProvider(TicketProvider):
         if not caller:
             return {"error": "No iTop Person caller is available for outbound ticket creation."}
 
-        team = None
+        team = await self._find_or_create_team_for_assignment(assignment_group, org_id)
         if ITOP_SECURITY_TEAM_ID:
-            team = await self._get_object("Team", ITOP_SECURITY_TEAM_ID, "id,name,friendlyname,org_id")
+            team = team or await self._get_object("Team", ITOP_SECURITY_TEAM_ID, "id,name,friendlyname,org_id")
 
         return {
             "org_id": org_id,
@@ -602,7 +655,8 @@ class iTopProvider(TicketProvider):
         deployment has not pinned IDs in `.env`.
         """
         ticket_class = _normalize_ticket_class(fields.get("provider_class") or fields.get("ticket_class"))
-        refs = await self._resolve_default_refs()
+        assignment_group = fields.get("assignee_team") or fields.get("owning_group")
+        refs = await self._resolve_default_refs(assignment_group)
         if refs.get("error"):
             return {
                 "error": refs["error"],
@@ -638,7 +692,7 @@ class iTopProvider(TicketProvider):
             "class": ticket_class,
             "comment": "Created by Agentic Operations canonical ticket sync",
             "fields": create_fields,
-            "output_fields": "id,friendlyname,title,status",
+            "output_fields": "id,friendlyname,title,status,team_id,team_name,caller_id,caller_name",
         })
         if result.get("code") != 0:
             return {
