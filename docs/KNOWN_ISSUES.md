@@ -2,6 +2,128 @@
 
 Last updated: 2026-05-21.
 
+## Documentation-Only Review Snapshot - 2026-05-21
+
+This section records current known gaps and dropped/pending work discovered
+during the documentation-only review after the live-demo stabilization pass. No
+code or deployment changes were made for this section.
+
+### Ops Chat can still over-attach new requests to old room tickets
+
+Status: known demo caveat; do not hard-block in the application.
+
+The chat agent is intentionally responsible for deciding whether a message
+continues old work or opens a fresh ticket. Recent retests showed the agent can
+still continue a stale resolved room ticket too often when the Matrix room has
+long history. The current guard only keeps `create-ticket` available for
+explicit fresh/new/separate/open/file ticket wording; it does not force a new
+ticket based on terminal status.
+
+Demo guidance:
+
+- Prefer a fresh demo room/user for live audience prompts.
+- Phrase new work as "open a new ticket for..." or "create a fresh ticket
+  for..." when the room already contains unrelated historical work.
+- Treat deeper tuning as post-demo work: improve prompt examples, ticket
+  relevance summaries, and stale-room memory compaction without removing the
+  agent's decision authority.
+
+### Ops Chat bridge avoids silent message loss, but lacks durable inbound outbox
+
+Status: mitigated for demo; proper durable queue/outbox remains open.
+
+The bridge now awaits inbound Matrix event processing before acknowledging
+Synapse transactions, which prevents the previous silent-loss path where a
+background task could fail after Synapse had already received HTTP 200.
+
+Remaining issue: this is not a durable outbox. If a chat turn is slow, the
+Matrix transaction can stay open while dashboard handoff/harness processing is
+in flight. The stronger production design is to persist inbound Matrix events
+to PostgreSQL first, return 200 after durable enqueue, then process the queue
+with retry/backoff and dead-letter visibility. That would avoid both silent loss
+and long transaction waits.
+
+### Latest full Element marathon was not rerun after the final bridge/closure fixes
+
+Status: documented gap.
+
+Focused checks passed after the final stabilization:
+
+- local focused Ops Chat/ticket-service tests
+- Python compile checks
+- text hygiene
+- Playwright smoke script syntax
+- live API health
+- live bridge health from inside the container
+- synthetic Matrix transaction smoke
+- live closure-note formatter smoke
+
+However, the full real Element UI marathon and 50-ish mixed-use-case run were
+not rerun after the last-minute bridge transaction and Matrix note-formatting
+patches because the live demo deadline was near. Older marathon and broad
+matrix proofs remain useful, but they predate the final two fixes.
+
+### Ops Chat progress-note live verification was source-and-synthetic, not full UI
+
+Status: fixed in source and synthetic live proof; full Element proof pending.
+
+Ticket-service behavior was verified with a synthetic live session/ticket:
+agent-authored `visibility=user` notes on Ops Chat-originated tickets are
+auto-marked `external_ref=ops-chat-agent-note`, and
+`/api/ops-chat/outbound/pending` exposes them for bridge delivery. This proves
+the dashboard/API contract. A full Element browser proof that watches the
+progress note arrive in the room is still pending.
+
+### Dashboard-wide UI overhaul remains partially unverified
+
+Status: backlog item; not part of the last demo stabilization.
+
+The requested broader UI cleanup includes global-search filtering/sorting,
+sortable/filterable tables across overview/intake/tickets/changes/workflows/
+postmortems/CI-CD/learning/tools/access/audit, a standalone Skills plane,
+better color hierarchy, settings/profile assignment UX, and more clickable
+overview tiles. Some related improvements exist, but this review did not prove
+that every requested page-level filtering/sorting/visual cleanup item is
+complete. Treat this as a post-demo UI hardening pass.
+
+### Agent runtime Settings and Skills assignment UX needs another product pass
+
+Status: backlog item.
+
+The platform supports Codex, Hermes, and Claude-style harness profiles through
+settings/config, but the complete product UX requested by the user is not fully
+validated end-to-end:
+
+- saved agent profiles per workflow/RACI/team/condition
+- easy local-only / Codex-primary / Hermes-external switching
+- reasoning and fast-mode toggles where supported
+- max active agent and timeout edits from Settings
+- skill activation/deactivation and assignment to saved agent profiles
+- removal of conflicting model controls from the Agents plane
+
+Do not present this as finished product polish until the Settings and Skills
+planes receive a dedicated Playwright crawl and operator-flow test.
+
+### Server-manager skill documentation still has legacy path examples
+
+Status: documentation cleanup pending.
+
+Some copied skill examples still reference `C:\Users\me\...` paths. The current
+working operator path in this environment is
+`C:\Users\cereal\.agents\skills\server-manager\...`. The stable vault command
+works when run with the current path, but the reference text should be swept
+after the demo so future agents do not copy stale examples.
+
+### Host-facing Ops Chat bridge health is intentionally not exposed
+
+Status: expected but easy to misread.
+
+The bridge health endpoint is reachable inside the container at
+`http://127.0.0.1:29318/health`; host `curl 127.0.0.1:29318` can fail because
+the bridge port is not published. Use Docker/container health checks or
+`docker compose exec ops-chat-bridge` for diagnostics. The user-facing demo URL
+is Element on `https://192.168.50.222:3303`, not the bridge internals.
+
 ## Found During 2026-05-21 Pre-Demo Doctrine Lock
 
 ### Over-hardening can reduce agent decision quality
@@ -6267,7 +6389,8 @@ Verification:
 
 ### Ops Chat agent-visible progress note was not delivered back to the requester
 
-Status: fixed in source on 2026-05-21; live verification pending.
+Status: fixed in source and synthetic-live verified on 2026-05-21; full
+Element proof pending.
 
 Problem:
 
@@ -6294,6 +6417,11 @@ Fix:
 Verification:
 
 - Source regression test added in `tests/test_ticket_service_provider_sync.py`.
+- Synthetic live proof used session `719` and ticket `1421`: a
+  `source=agent`, `visibility=user` note without `external_ref` was
+  auto-marked as `ops-chat-agent-note`, then appeared in
+  `/api/ops-chat/outbound/pending?session_id=719`. Synthetic rows were deleted
+  after verification.
 
 ### Ops Chat reused an old resolved room ticket for new work during browser retest
 
