@@ -26,6 +26,11 @@ Updated surfaces:
 - Access adds policy views for summary, role capabilities, API route
   requirements, and vault broker behavior.
 - Audit rows are compact and expandable with target/ticket/agent quick links.
+- Ticket evidence now renders operator-safe task summaries. The modal prefers
+  checkpoints or structured harness results and hides raw Codex/Hermes/Claude
+  JSONL, command fragments, memory-tool traces, and noisy prior chat context
+  from the demo-facing Sequence of Events and Agent Work cards. The raw data
+  remains in backend task logs and audit trails.
 
 ## Backend Changes
 
@@ -70,6 +75,18 @@ Live validation should use the dashboard UI skill runbook:
 Live Playwright crawl evidence:
 
 - `docs/evidence/playwright-ui-overhaul-2026-05-21.json`
+
+Focused ticket-modal evidence from 2026-05-21:
+
+- Ticket `1409` was opened through the authenticated dashboard with Playwright.
+- Evidence Trail loaded without requiring manual scroll.
+- Agent Work rendered task `375` as the checkpoint summary
+  `Demo-safe hello webpage redeployed locally...`.
+- The modal did not expose raw task markers such as `AGENT_MEMORY_SKILL_DIR`,
+  `aggregated_output`, `s/agent_memory.py`, JSONL item events, or shell command
+  fragments.
+- Prior Matrix/Ops Chat history was compacted to a readability note while
+  remaining available in the raw ticket metadata and audit trail.
 
 ## Demo Notes
 

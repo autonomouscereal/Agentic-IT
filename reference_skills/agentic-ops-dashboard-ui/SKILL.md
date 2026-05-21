@@ -122,6 +122,10 @@ Required assertions:
 - Setup must not show the removed Runtime Handoff or Generated Setup Plan
   panels.
 - Audit must render compact expandable rows, not giant always-open JSON cards.
+- Ticket modals must render operator-safe task summaries. Sequence of Events
+  and Agent Work should use checkpoint/result summaries and must not expose raw
+  harness JSONL, `AGENT_MEMORY_SKILL_DIR`, `aggregated_output`, shell command
+  fragments, or giant copied chat history in the demo-facing view.
 - Ops Chat Element proof can log in through Keycloak, open the Agentic Ops Agent
   profile, send a direct message, and show a dashboard ticket or no-ticket
   answer according to the request.
@@ -137,6 +141,11 @@ The 2026-05-20 deploy evidence is documented in:
 The broad search/filter/sort console overhaul is documented in:
 
 `docs/UI_OVERHAUL_2026-05-21.md`
+
+Ticket `1409` is the current regression proof for ticket-modal readability:
+authenticated Playwright opens the ticket, waits for Evidence Trail, confirms
+task `375` renders a checkpoint summary, confirms prior chat context is
+compacted, and confirms raw task markers are absent from the demo-facing view.
 
 Ops Chat and global-search readiness are documented in:
 

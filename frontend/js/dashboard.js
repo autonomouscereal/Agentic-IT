@@ -749,10 +749,24 @@ function decodeHtmlEntities(text) {
         .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
 }
 
+function compactChatContextForDisplay(value) {
+    let text = String(value || "");
+    const marker = "Recent chat context before ticket creation:";
+    const start = text.indexOf(marker);
+    if (start < 0) return text;
+    const replacement = `${marker}\n(prior chat context retained in ticket metadata and audit trail; hidden here for readability)`;
+    const afterStart = start + marker.length;
+    const chatMessageIndex = text.indexOf("\nChat message:", afterStart);
+    if (chatMessageIndex >= 0) {
+        return `${text.slice(0, start)}${replacement}${text.slice(chatMessageIndex)}`;
+    }
+    return `${text.slice(0, start)}${replacement}`;
+}
+
 function cleanTicketDescription(value) {
     const raw = String(value || "");
     if (!raw) return "";
-    return decodeHtmlEntities(raw)
+    return compactChatContextForDisplay(decodeHtmlEntities(raw))
         .replace(/<\s*br\s*\/?>/gi, "\n")
         .replace(/<\/\s*(p|div|li|tr|h[1-6])\s*>/gi, "\n")
         .replace(/<[^>]*>/g, "")
@@ -2009,8 +2023,9 @@ async function viewTicket(id) {
     document.getElementById("ticket-modal").classList.add("active");
     refreshModalScrollLayout(modalBody, { resetTop: true });
 
-    // Load activity log for this ticket
-    loadTicketActivity(id);
+    // Load activity log for this ticket. Retry once if the browser leaves the
+    // async placeholder painted after the API has already returned.
+    loadTicketActivityWithRetry(id);
 }
 
 function refreshModalScrollLayout(modalBody, options = {}) {
@@ -2049,6 +2064,122 @@ function shortText(value, max = 220) {
     return text.length > max ? `${text.slice(0, max - 1)}...` : text;
 }
 
+function parseJsonMaybe(value) {
+    if (!value) return null;
+    if (typeof value === "object") return value;
+    try {
+        return JSON.parse(String(value));
+    } catch (_) {
+        return null;
+    }
+}
+
+function parseCheckpointList(value) {
+    const parsed = parseJsonMaybe(value);
+    return Array.isArray(parsed) ? parsed : (Array.isArray(value) ? value : []);
+}
+
+function cleanTaskOutputText(value) {
+    if (value === undefined || value === null) return "";
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value)
+        .replace(/\r\n/g, "\n")
+        .replace(/\u001b\[[0-9;]*m/g, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+}
+
+function isRawHarnessNoise(value) {
+    const text = cleanTaskOutputText(value);
+    if (!text) return false;
+    const compact = text.replace(/\s+/g, "");
+    const markers = [
+        "AGENT_MEMORY_SKILL_DIR",
+        "aggregated_output",
+        "Reading additional input from stdin",
+        "\"type\":\"thread.",
+        "\"type\":\"turn.",
+        "\"type\":\"item.",
+        "\"type\":\"event.",
+        "\"type\":\"raw_item.",
+        "subprocess_jsonl",
+        "/bin/bash -lc",
+        "${",
+    ];
+    const jsonlEvents = text.split("\n").filter(line => {
+        const parsed = parseJsonMaybe(line.trim());
+        return parsed && typeof parsed === "object" && parsed.type;
+    }).length;
+    return markers.some(marker => text.includes(marker) || compact.includes(marker.replace(/\s+/g, ""))) || jsonlEvents >= 3;
+}
+
+function extractHarnessResult(value) {
+    const text = cleanTaskOutputText(value);
+    if (!text) return "";
+    const candidates = [];
+    text.split("\n").forEach(line => {
+        const parsed = parseJsonMaybe(line.trim());
+        if (!parsed || typeof parsed !== "object") return;
+        if (typeof parsed.result === "string") candidates.push(parsed.result);
+        if (typeof parsed.message === "string" && parsed.type === "error") candidates.push(parsed.message);
+        const item = parsed.item || parsed.event || parsed.data;
+        if (item && typeof item === "object") {
+            if (typeof item.result === "string") candidates.push(item.result);
+            if (typeof item.text === "string") candidates.push(item.text);
+            if (Array.isArray(item.content)) {
+                item.content.forEach(part => {
+                    if (typeof part === "string") candidates.push(part);
+                    if (part && typeof part.text === "string") candidates.push(part.text);
+                });
+            }
+        }
+    });
+    return candidates
+        .map(cleanTaskOutputText)
+        .filter(Boolean)
+        .filter(candidate => !isRawHarnessNoise(candidate))
+        .pop() || "";
+}
+
+function checkpointTaskSummary(task) {
+    const checkpoints = parseCheckpointList(task?.checkpoints);
+    for (const checkpoint of checkpoints.slice().reverse()) {
+        if (!checkpoint || typeof checkpoint !== "object") continue;
+        const detail = checkpoint.summary || checkpoint.message || checkpoint.result || checkpoint.output || checkpoint.error;
+        const detailText = cleanTaskOutputText(detail);
+        if (detailText && !isRawHarnessNoise(detailText)) {
+            const step = checkpoint.step || checkpoint.name || "checkpoint";
+            const status = checkpoint.status || "recorded";
+            return `${step} ${status}: ${detailText}`;
+        }
+        const step = checkpoint.step || checkpoint.name;
+        if (step && checkpoint.status) {
+            const progress = checkpoint.progress_pct ?? checkpoint.progress;
+            return `Checkpoint ${step} ${checkpoint.status}${progress !== undefined ? ` at ${progress}%` : ""}.`;
+        }
+    }
+    return "";
+}
+
+function taskDisplaySummary(task, max = 320) {
+    if (!task) return "Task recorded.";
+    const error = cleanTaskOutputText(task.error_message);
+    if (error) return shortText(error, max);
+    const checkpoint = checkpointTaskSummary(task);
+    if (checkpoint) return shortText(checkpoint, max);
+    const result = extractHarnessResult(task.output);
+    if (result) return shortText(result, max);
+    const output = cleanTaskOutputText(task.output);
+    if (output && !isRawHarnessNoise(output)) return shortText(output, max);
+    if (task.status === "completed") {
+        return "Task completed. See ticket notes, checkpoints, and evidence trail for the human-readable result.";
+    }
+    if (task.status === "failed") {
+        return "Task failed. See task logs and agent trail for the detailed error.";
+    }
+    return "Task is recorded. See ticket notes, checkpoints, and evidence trail for current state.";
+}
+
 function contactDisplay(name, email) {
     const n = String(name || "").trim();
     const e = String(email || "").trim();
@@ -2057,7 +2188,7 @@ function contactDisplay(name, email) {
 }
 
 function normalizeNoteBody(value) {
-    let text = String(value || "").replace(/\r\n/g, "\n").trim();
+    let text = compactChatContextForDisplay(String(value || "")).replace(/\r\n/g, "\n").trim();
     const fence = text.match(/^```(?:json|text|markdown)?\s*\n([\s\S]*?)\n```$/i);
     if (fence) text = fence[1].trim();
     return text.replace(/\n{3,}/g, "\n\n");
@@ -2266,7 +2397,7 @@ function buildTicketTimeline({ ticket, notes, relevant, tasks, changes, postmort
                 kind: "agent",
                 at: task.completed_at,
                 title: `Agent task ${task.id} ${task.status || "completed"}`,
-                body: shortText(task.error_message || task.output || "Task completed.", 340),
+                body: taskDisplaySummary(task, 340),
                 badge: task.status || "task",
                 key: eventKey(["task-end", task.id, task.status]),
             });
@@ -2400,7 +2531,7 @@ function renderTaskTrace(tasks) {
             <div class="trace-card-meta">
                 Agent ${escHtml(t.agent_id || "-")} &middot; ${escHtml(t.progress_pct ?? 0)}% &middot; ${formatTime(t.completed_at || t.started_at || t.created_at)}
             </div>
-            ${(t.error_message || t.output) ? `<div class="trace-card-body">${escHtml(shortText(t.error_message || t.output, 260))}</div>` : ""}
+            <div class="trace-card-body">${escHtml(taskDisplaySummary(t, 260))}</div>
         </div>
     `).join("");
 }
@@ -2634,6 +2765,19 @@ async function loadTicketActivity(ticketId) {
             `;
         }
     }
+}
+
+function loadTicketActivityWithRetry(ticketId) {
+    loadTicketActivity(ticketId);
+    setTimeout(() => {
+        const modalBody = document.getElementById("modal-body");
+        const activity = document.getElementById("ticket-activity-section");
+        if (!modalBody || !activity) return;
+        if (String(modalBody.dataset.ticketId || "") !== String(ticketId)) return;
+        const stillLoading = activity.classList.contains("ticket-activity-loading")
+            || activity.innerText.includes("Loading evidence trail");
+        if (stillLoading) loadTicketActivity(ticketId);
+    }, 2500);
 }
 
 // Assign agent to ticket

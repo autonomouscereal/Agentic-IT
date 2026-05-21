@@ -19,6 +19,10 @@ class FrontendUiRegressionTests(unittest.TestCase):
     def test_ticket_description_markup_is_cleaned_before_rendering(self):
         self.assertIn("function cleanTicketDescription(value)", self.dashboard_js)
         self.assertIn("const description = cleanTicketDescription(data.description);", self.dashboard_js)
+        self.assertIn("function compactChatContextForDisplay(value)", self.dashboard_js)
+        self.assertIn("prior chat context retained in ticket metadata and audit trail", self.dashboard_js)
+        self.assertIn("compactChatContextForDisplay(decodeHtmlEntities(raw))", self.dashboard_js)
+        self.assertIn("compactChatContextForDisplay(String(value || \"\"))", self.dashboard_js)
         self.assertIn("${escHtml(description)}", self.dashboard_js)
         self.assertNotIn("${escHtml(data.description)}", self.dashboard_js)
 
@@ -165,6 +169,9 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn('String(modalBody.dataset.ticketId || "") !== String(ticketId)', self.dashboard_js)
         self.assertIn("existingActivity.replaceWith(nextActivity);", self.dashboard_js)
         self.assertIn("function refreshModalScrollLayout", self.dashboard_js)
+        self.assertIn("function loadTicketActivityWithRetry(ticketId)", self.dashboard_js)
+        self.assertIn("loadTicketActivityWithRetry(id);", self.dashboard_js)
+        self.assertIn("activity.innerText.includes(\"Loading evidence trail\")", self.dashboard_js)
         self.assertIn("modalBody.scrollTop = Math.min(maxTop, originalTop + 1);", self.dashboard_js)
         self.assertIn('window.dispatchEvent(new Event("resize"));', self.dashboard_js)
         self.assertIn("flex: 1 1 auto", css)
@@ -172,7 +179,20 @@ class FrontendUiRegressionTests(unittest.TestCase):
         self.assertIn("scrollbar-gutter: stable", css)
         self.assertIn("content-visibility: visible", css)
         self.assertIn(".ticket-activity-loading", css)
-        self.assertIn("20260521-ticket-modal-scroll-refresh", index_html)
+        self.assertIn("20260521-task-summary-cleanup", index_html)
+
+    def test_ticket_task_output_uses_operator_safe_summary(self):
+        self.assertIn("function taskDisplaySummary(task", self.dashboard_js)
+        self.assertIn("function isRawHarnessNoise(value)", self.dashboard_js)
+        self.assertIn("function extractHarnessResult(value)", self.dashboard_js)
+        self.assertIn("function checkpointTaskSummary(task)", self.dashboard_js)
+        self.assertIn("taskDisplaySummary(task, 340)", self.dashboard_js)
+        self.assertIn("taskDisplaySummary(t, 260)", self.dashboard_js)
+        self.assertIn("See ticket notes, checkpoints, and evidence trail", self.dashboard_js)
+        self.assertNotIn("shortText(task.error_message || task.output", self.dashboard_js)
+        self.assertNotIn("shortText(t.error_message || t.output", self.dashboard_js)
+        self.assertIn("AGENT_MEMORY_SKILL_DIR", self.dashboard_js)
+        self.assertIn("aggregated_output", self.dashboard_js)
 
 
 if __name__ == "__main__":
