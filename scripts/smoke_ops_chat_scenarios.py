@@ -46,6 +46,17 @@ def note_bodies(context):
     return [str(note.get("body") or "") for note in context.get("notes") or []]
 
 
+def has_user_response_note(context):
+    for note in context.get("notes") or []:
+        source = str(note.get("source") or "")
+        body = str(note.get("body") or "")
+        if source == "user-response":
+            return True
+        if "User chat follow-up" in body or "User response received" in body:
+            return True
+    return False
+
+
 def progress_note_bodies(context):
     bodies = []
     for note in context.get("notes") or []:
@@ -139,8 +150,7 @@ def run_ticket_scenario(base, marker, name, message, expected_group, expected_in
     })
     require(follow.get("continued_ticket"), f"{name} follow-up did not continue ticket: {follow}")
     context = get_context(base, ticket_id)
-    bodies = note_bodies(context)
-    require(any("User chat follow-up" in body for body in bodies),
+    require(has_user_response_note(context),
             f"{name} ticket missing user-response follow-up note")
     return {
         "scenario": name,
@@ -249,6 +259,30 @@ def run_agent_handoff(base, marker, timeout_seconds, case_name="account-lockout"
     }
 
 
+def cleanup_result(base, result, marker):
+    ticket_id = result.get("ticket_id")
+    agent_id = result.get("agent_id")
+    cleanup = {"scenario": result.get("scenario"), "ticket_id": ticket_id, "agent_id": agent_id}
+    if agent_id:
+        try:
+            cleanup["agent_stop"] = request(base, "POST", f"/api/agents/{agent_id}/stop", {
+                "reason": f"Ops Chat scenario cleanup for synthetic marker {marker}; stopping only this test-owned agent."
+            }, timeout=60)
+        except Exception as exc:
+            cleanup["agent_stop"] = {"status": "error", "error": str(exc)}
+    if ticket_id:
+        try:
+            cleanup["ticket_status"] = request(base, "POST", f"/api/tickets/{ticket_id}/status", {
+                "status": "cancelled",
+                "actor": "ops-chat-scenario-smoke",
+                "reason": f"Cleanup for synthetic Ops Chat scenario marker {marker}.",
+                "close_provider": True,
+            }, timeout=90)
+        except Exception as exc:
+            cleanup["ticket_status"] = {"status": "error", "error": str(exc)}
+    return cleanup
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run Ops Chat scenario smoke tests")
     parser.add_argument("base", nargs="?", default="http://localhost:25480")
@@ -261,6 +295,8 @@ def main():
     parser.add_argument("--agent-timeout", type=int, default=360)
     parser.add_argument("--agent-only", action="store_true",
                         help="Skip the broad preflight scenarios and run only requested real-agent handoff cases.")
+    parser.add_argument("--cleanup", action="store_true",
+                        help="Cancel synthetic tickets and stop test-owned agents after validation.")
     args = parser.parse_args()
 
     if not TOKEN:
@@ -332,6 +368,7 @@ def main():
     search = request(base, "GET", f"/api/search/global?q={query}&limit=20")
     min_search_results = 1 if args.agent_only else 4
     require(search.get("total", 0) >= min_search_results, f"global search did not find scenario tickets: {search}")
+    cleanup = [cleanup_result(base, result, marker) for result in results if args.cleanup]
 
     print(json.dumps({
         "status": "passed",
@@ -340,6 +377,7 @@ def main():
         "health": health,
         "results": results,
         "search_total": search.get("total"),
+        "cleanup": cleanup,
     }, indent=2))
 
 

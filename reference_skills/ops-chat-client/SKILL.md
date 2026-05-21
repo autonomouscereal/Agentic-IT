@@ -78,6 +78,10 @@ Reference stack:
   chat. If a general/current-information message follows a ticket, answer the
   message unless the user clearly asks for ticket work or explicitly references
   an existing ticket.
+- The `create-ticket` tool rejects obvious follow-up/update/cancel/reassign
+  messages when the chat session already has linked ticket ids. Use
+  `continue-ticket` for those messages so a user confirmation does not open a
+  duplicate work ticket.
 - `continue-ticket` supports assignment fields for scope changes:
   `--assignment-group`, `--owning-group`, `--assignee`, `--escalation-tier`,
   and `--priority`. Use those fields to reassign or escalate an existing ticket
@@ -190,15 +194,15 @@ Expected:
 Scenario smoke:
 
 ```bash
-python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480
-python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --agent-timeout 600
-python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --spawn-agent --all-agent-cases --agent-timeout 600
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --cleanup
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --agent-only --spawn-agent --agent-case account-lockout --agent-timeout 600 --cleanup
+python3 scripts/smoke_ops_chat_scenarios.py http://localhost:25480 --agent-only --spawn-agent --agent-case delivery-gate --agent-timeout 600 --cleanup
 ```
 
 Broad routing matrix:
 
 ```bash
-python3 scripts/smoke_ops_chat_enterprise_matrix.py http://localhost:25480
+python3 scripts/smoke_ops_chat_enterprise_matrix.py http://localhost:25480 --strict-routing --require-provider-sync --cleanup
 ```
 
 This creates 50 no-spawn chat-intake tickets across executive support, IAM,
@@ -206,7 +210,10 @@ email, phishing/EDR, network, endpoint, procurement, onboarding/offboarding,
 infrastructure, cloud, database, UI support, CI/CD, audit/compliance, and
 platform self-repair. By default it verifies ticket creation and nonempty
 agent-selected assignment; add `--strict-routing` to fail when an assignment
-does not match the expected demo hint.
+does not match the expected demo hint. In the iTop-backed lab, also use
+`--require-provider-sync` so each synthetic ticket must have a provider,
+provider ref, and `provider_sync_status=synced`. Use `--cleanup` so broad tests
+cancel their own synthetic tickets and do not clutter the demo queue.
 
 This proves general chat no-ticket behavior, private-web-search assisted
 answers when the search provider is configured, account lockout, software
@@ -214,6 +221,28 @@ request, VPN connectivity routing, phishing and CI/CD routing without
 intake-time approval gates, follow-up notes, outbound ticket updates back to
 chat, global search visibility, and optional real agent handoff. The
 risky-action gates must appear only during downstream ticket execution.
+
+Tool-result reliability:
+
+- Once the chat toolbelt records a structured `ticket`, `ticket-update`, or
+  `artifact` result, a later `answer` call in the same harness turn must not
+  overwrite it.
+- If a model does overwrite the visible result with a general "Ticket #..."
+  style response, the API recovers the last structured action from the action
+  log and surfaces the real ticket/update/artifact result.
+- Bare "change" in a new user request is not enough to treat the message as an
+  existing-ticket update. Only explicit scope/change-ticket phrases should
+  trigger update recovery.
+- Bare "instead" is not enough to attach a replacement request to a cancelled
+  ticket. Use `continue-ticket` only when the user explicitly updates/cancels
+  a known ticket or says to keep the same request/ticket. A replacement such as
+  "instead put in a new ticket to order pizza" should create a distinct ticket.
+- If the harness fails to call a final tool after retries, the dashboard has a
+  bounded fallback only for obvious existing-ticket updates in a one-ticket
+  room or when the user explicitly names a linked ticket id. Harmless chat and
+  multi-ticket rooms are not silently attached to the latest ticket.
+- Placeholder affected users like `User (user-direct)`, `me`, or `requester`
+  are normalized to the chat requester for first-person requests.
 
 Browser Playwright smoke:
 
@@ -249,6 +278,22 @@ questions, several operational tickets, cancellations, replacement work, scope
 updates, and ticket summaries. It is the preferred proof that Ops Chat is not a
 single latest-ticket parser path.
 
+If the shared demo DM already has heavy scrollback, create a fresh demo user or
+room before running the marathon. A noisy shared room can make Playwright parse
+old messages and fail the test harness even when the backend behavior is
+healthy.
+
+Latest API-level multi-ticket proof:
+
+- Marker `ops-chat-multiticket-1779338352`
+- Watermelon purchase ticket `1384` created, then cancelled from the same chat
+- Replacement pizza ticket `1385` created as a distinct request, not attached
+  to cancelled ticket `1384`
+- Urgent account ticket `1386` created from the same room and updated with a
+  Keycloak SSO/MFA clarification
+- Room summary answered without creating another ticket
+- All synthetic tickets were cleaned up after proof
+
 Requester/affected-user proof, latest live lab:
 
 - Ticket `1284`
@@ -274,6 +319,13 @@ node scripts\smoke_ops_chat_dev_artifacts.js
 This asks for Python, HTML, Markdown, and Bash artifacts through the real
 Element UI. Expected result: every artifact says `Validation: passed`, renders
 inside Element code blocks, and creates no tickets.
+
+Latest Element artifact proof:
+
+- Marker `ops-chat-dev-artifact-1779337398804`
+- User `demo_account_1`
+- Python, HTML, Markdown, and Bash all returned validated code blocks
+- Ticket count delta was zero for every artifact request
 
 ## Demo Prompt
 
@@ -352,6 +404,20 @@ queue or tier. It writes a `ticket-assignment` note for auditability.
 - Live proof `ops-chat-two-ticket-1779328796` confirmed the current behavior:
   harmless price questions created no tickets, watermelon created `1286`,
   cancellation continued/cancelled `1286`, and pizza replacement created `1287`.
+- Real scenario rerun later caught a follow-up confirmation opening a duplicate
+  account ticket. The tool now refuses `create-ticket` for obvious follow-up
+  text when room tickets already exist, forcing `continue-ticket`.
+- If side-effect recovery finds a durable user-response/status note after a
+  messy harness turn, it may reply as an update, not "I created ticket." If no
+  durable note exists, recovery must not claim success; the harness should retry
+  and call `continue-ticket`.
+- Assignment group names are normalized by the Ops Chat tool before ticket
+  creation or reassignment. If a model says `Delivery Gate`, `CI/CD`,
+  `pipeline`, or `release`, the ticket should land in canonical `DevSecOps`
+  rather than creating a one-off queue label.
+- If the model says it created an Incident, User Request, or Change but the
+  final tool result is messy, the API treats that as a ticket-work claim and
+  attempts side-effect recovery instead of recording it as harmless chat.
 - Developer artifact marker `ops-chat-dev-artifact-1780000005` passed as
   `demo_chat_marathon5`: Python, HTML, Markdown, and Bash artifacts were
   validated with `validate-artifact`, rendered as Element code blocks, and

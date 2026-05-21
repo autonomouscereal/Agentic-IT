@@ -435,7 +435,7 @@ async def _recover_ticket_side_effect(message, raw_text=None, session_id=None):
         """, ticket_id)
         if row:
             if _looks_like_existing_ticket_update_text(message):
-                return _format_recovered_existing_ticket_update(row, message)
+                return None
             return _format_recovered_ticket(row)
 
     needle = str(message or "").strip()
@@ -528,7 +528,11 @@ async def _recover_ticket_side_effect(message, raw_text=None, session_id=None):
                 LIMIT 1
             """, str(session_id), int(session_id))
             if row:
+                if _looks_like_existing_ticket_update_text(message):
+                    return None
                 return _format_recovered_ticket(row)
+        return None
+    if _looks_like_existing_ticket_update_text(message):
         return None
     return _format_recovered_ticket(row)
 
@@ -656,6 +660,10 @@ def _format_recovered_existing_ticket_update(row, message):
     }
 
 
+def _explicit_ticket_ids_from_text(text):
+    return [int(value) for value in re.findall(r"(?:ticket\s*)#?(\d+)", str(text or ""), flags=re.IGNORECASE)]
+
+
 async def _continue_ticket_from_chat(session_id, ticket_id, message, requester_name, requester_email, channel, spawn_agent=True):
     status_restore = await _mark_ticket_user_response_received(ticket_id, requester_name or "Chat User")
     note = await ticket_service.add_note(
@@ -706,6 +714,77 @@ async def _continue_ticket_from_chat(session_id, ticket_id, message, requester_n
     return {"note": note, "active_agent": active, "resume": resume, "status_restore": status_restore}
 
 
+async def _apply_existing_ticket_update_fallback(message, session_id, requester_name, requester_email, channel, spawn_agent=True):
+    """Last-resort safety net after the harness failed to call the tool.
+
+    The agent still gets first and second chance to manage the turn. This only
+    applies when the message is plainly an update/cancel/scope-change and the
+    room context points to exactly one ticket, or the user explicitly named a
+    linked ticket id. That keeps harmless chat and multi-ticket rooms out of
+    the fallback path.
+    """
+    if not session_id or not _looks_like_existing_ticket_update_text(message):
+        return None
+    rows = await _session_ticket_context(session_id, limit=10)
+    if not rows:
+        return None
+    by_id = {int(row["id"]): row for row in rows if row.get("id")}
+    explicit_ids = [ticket_id for ticket_id in _explicit_ticket_ids_from_text(message) if ticket_id in by_id]
+    if explicit_ids:
+        ticket_id = explicit_ids[-1]
+    elif len(rows) == 1:
+        ticket_id = int(rows[0]["id"])
+    else:
+        return None
+    continuation = await _continue_ticket_from_chat(
+        session_id,
+        ticket_id,
+        message,
+        requester_name,
+        requester_email,
+        channel,
+        spawn_agent=spawn_agent,
+    )
+    status_update = {"status": "skipped", "reason": "not_requested"}
+    if _looks_like_cancellation_text(message):
+        await execute("""
+            UPDATE tickets
+            SET status = 'cancelled',
+                updated_at = NOW()
+            WHERE id = $1
+        """, ticket_id)
+        status_note = await ticket_service.add_note(
+            ticket_id,
+            "\n".join([
+                "Ticket cancelled from Ops Chat fallback",
+                f"Actor: {requester_name or 'Chat User'} <{requester_email or 'not provided'}>",
+                "",
+                message,
+            ]),
+            author=requester_name or "Chat User",
+            source="ticket-status",
+            visibility="internal",
+            external_ref=f"ops-chat-session:{session_id}:fallback-cancel",
+        )
+        status_update = {"status": "cancelled", "note": status_note, "fallback": True}
+    reply = (
+        f"I cancelled ticket #{ticket_id} and recorded your update."
+        if status_update.get("status") == "cancelled"
+        else f"I updated ticket #{ticket_id} and recorded your latest clarification for the ticket agent."
+    )
+    return {
+        "mode": "ticket-update",
+        "reply": reply,
+        "ticket_id": ticket_id,
+        "continued_ticket": True,
+        "response": continuation.get("note"),
+        "resume": continuation.get("resume"),
+        "status_restore": continuation.get("status_restore"),
+        "status_update": status_update,
+        "fallback_after_harness_no_tool": True,
+    }
+
+
 def _clean_harness_reply(text):
     value = (text or "").strip()
     if not value:
@@ -745,7 +824,13 @@ def _reply_claims_ticket_work(reply):
     text = str(reply or "").lower()
     patterns = (
         r"\bticket\s*#?\d+",
+        r"\bincident\s*#?\d+",
+        r"\buser\s*request\s*#?\d+",
+        r"\bchange\s*#?\d+",
         r"\bcreated\s+(a\s+)?ticket\b",
+        r"\bcreated\s+(an?\s+)?incident\b",
+        r"\bcreated\s+(a\s+)?user\s*request\b",
+        r"\bcreated\s+(a\s+)?change\b",
         r"\bopened\s+(a\s+)?ticket\b",
         r"\brouted\s+it\s+to\b",
         r"\bagent\s+harness\s+status\b",
@@ -771,14 +856,12 @@ def _looks_like_cancellation_text(text):
 
 def _looks_like_existing_ticket_update_text(text):
     value = str(text or "").lower()
-    return any(word in value for word in (
+    explicit_update_words = any(word in value for word in (
         "actually",
         "update",
-        "change",
         "clarify",
         "clarification",
         "not ",
-        "instead",
         "same request",
         "keep the same",
         "cancel",
@@ -787,6 +870,17 @@ def _looks_like_existing_ticket_update_text(text):
         "nevermind",
         "never mind",
     ))
+    explicit_change_phrases = any(phrase in value for phrase in (
+        "scope change",
+        "scope changed",
+        "change the ticket",
+        "change that ticket",
+        "change this ticket",
+        "change the request",
+        "change this request",
+        "no production change",
+    ))
+    return explicit_update_words or explicit_change_phrases
 
 
 def _looks_like_operational_ticket_request(text):
@@ -863,6 +957,51 @@ ALLOWED_TICKET_IDS = {
     int(value) for value in os.environ.get("OPS_CHAT_ALLOWED_TICKET_IDS", "").replace(";", ",").split(",")
     if value.strip().isdigit()
 }
+ASSIGNMENT_GROUPS = {
+    "Service Desk",
+    "Identity & Access",
+    "Security Operations",
+    "Network Operations",
+    "Endpoint Support",
+    "Email Operations",
+    "DevSecOps",
+    "Platform Operations",
+    "Business Applications",
+    "Infrastructure Operations",
+    "Cloud Operations",
+    "Database Operations",
+    "Compliance & Audit",
+    "Procurement & Vendor Management",
+    "Executive Support",
+}
+ASSIGNMENT_ALIASES = {
+    "delivery gate": "DevSecOps",
+    "delivery gates": "DevSecOps",
+    "ci/cd": "DevSecOps",
+    "cicd": "DevSecOps",
+    "pipeline": "DevSecOps",
+    "release": "DevSecOps",
+    "devops": "DevSecOps",
+    "security": "Security Operations",
+    "soc": "Security Operations",
+    "iam": "Identity & Access",
+    "identity": "Identity & Access",
+    "access": "Identity & Access",
+    "network": "Network Operations",
+    "endpoint": "Endpoint Support",
+    "desktop": "Endpoint Support",
+    "email": "Email Operations",
+    "mail": "Email Operations",
+    "procurement": "Procurement & Vendor Management",
+    "purchasing": "Procurement & Vendor Management",
+    "executive": "Executive Support",
+    "platform": "Platform Operations",
+    "dashboard": "Platform Operations",
+    "database": "Database Operations",
+    "cloud": "Cloud Operations",
+    "audit": "Compliance & Audit",
+    "compliance": "Compliance & Audit",
+}
 
 
 def request(method, path, payload=None, timeout=90):
@@ -893,6 +1032,18 @@ def write_result(result):
     append_action(result)
 
 
+def read_existing_result():
+    try:
+        if os.path.exists(RESULT_PATH):
+            with open(RESULT_PATH, "r", encoding="utf-8") as handle:
+                result = json.load(handle)
+            if isinstance(result, dict):
+                return result
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {}
+
+
 def read_message(path):
     if not path:
         return ""
@@ -918,6 +1069,44 @@ def clean_intent(value):
     if not text or len(text) > 80:
         return "agent-selected"
     return text
+
+
+def normalize_assignment_group(value):
+    raw = (value or "Service Desk").strip()
+    if raw in ASSIGNMENT_GROUPS:
+        return raw
+    lowered = raw.lower().strip()
+    if lowered in ASSIGNMENT_ALIASES:
+        return ASSIGNMENT_ALIASES[lowered]
+    for needle, group in ASSIGNMENT_ALIASES.items():
+        if needle in lowered:
+            return group
+    return "Service Desk"
+
+
+def infer_assignment_group(value, text=""):
+    group = normalize_assignment_group(value)
+    lowered = str(text or "").lower()
+    if any(word in lowered for word in ("semgrep", "trivy", "zap", "nuclei", "pipeline", "ci/cd", "cicd", "deployment", "release gate", "delivery gate")):
+        return "DevSecOps"
+    if any(phrase in lowered for phrase in ("policy exception", "risk acceptance", "sla report", "audit report", "compliance evidence", "metrics report", "ticket metrics", "leadership deck")):
+        return "Compliance & Audit"
+    if any(word in lowered for word in ("offboard", "off-boarding", "revoke access", "disable account", "termination access")):
+        return "Identity & Access"
+    if any(phrase in lowered for phrase in ("restore a deleted", "restore deleted", "restore file", "from backup", "backup restore")):
+        return "Infrastructure Operations"
+    if group == "Service Desk":
+        if any(word in lowered for word in ("ceo", "executive", "board call", "board meeting", "board-room", "vip")):
+            return "Executive Support"
+        if any(word in lowered for word in ("gitlab", "sso", "mfa", "password", "locked out", "cannot log", "can't log", "login")):
+            return "Identity & Access"
+        if any(word in lowered for word in ("phish", "suspicious email", "edr", "wazuh", "malware")):
+            return "Security Operations"
+        if any(word in lowered for word in ("vpn", "dns", "firewall", "proxy")):
+            return "Network Operations"
+        if any(word in lowered for word in ("software", "install", "laptop", "workstation", "patch")):
+            return "Endpoint Support"
+    return group
 
 
 def safe_artifact_path(value):
@@ -1066,6 +1255,33 @@ def looks_like_cancellation(text):
     return any(word in value for word in ("cancel", "cancelled", "canceled", "nevermind", "never mind"))
 
 
+def looks_like_existing_ticket_followup(text):
+    value = (text or "").lower()
+    return any(word in value for word in (
+        "follow-up",
+        "follow up",
+        "update",
+        "confirm",
+        "confirms",
+        "confirmed",
+        "actually",
+        "clarify",
+        "clarification",
+        "same request",
+        "same ticket",
+        "keep the",
+        "cancel",
+        "cancelled",
+        "canceled",
+        "nevermind",
+        "never mind",
+        "no production change",
+        "scope changed",
+        "escalate",
+        "reassign",
+    ))
+
+
 def message_hash(text):
     normalized = " ".join(str(text or "").strip().split()).lower()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24] if normalized else ""
@@ -1141,24 +1357,48 @@ def create_ticket(args):
     original = read_message(args.message_file)
     history = read_message(args.history_file)
     original_hash = message_hash(original)
+    if ALLOWED_TICKET_IDS and looks_like_existing_ticket_followup(original):
+        allowed = ", ".join(str(value) for value in sorted(ALLOWED_TICKET_IDS))
+        append_action({
+            "mode": "create-ticket",
+            "ok": False,
+            "reason": "existing_ticket_followup_requires_continue_ticket",
+            "allowed_ticket_ids": sorted(ALLOWED_TICKET_IDS),
+        })
+        raise SystemExit(
+            "This message looks like a follow-up, cancellation, correction, "
+            f"or reassignment for an existing chat ticket. Use continue-ticket. Allowed tickets: {allowed}"
+        )
     session_id = args.session_id or os.environ.get("OPS_CHAT_SESSION_ID", "")
     requester_name = args.requester_name or os.environ.get("OPS_CHAT_REQUESTER_NAME", "")
     requester_email = args.requester_email or os.environ.get("OPS_CHAT_REQUESTER_EMAIL", "")
+    title = (args.title or original.splitlines()[0] if original else args.title or "Ops chat request").strip()[:120]
+    assignment_group = infer_assignment_group(args.assignment_group, " ".join([title, original, history]))
     affected_user_name = args.affected_user_name or requester_name or "Chat User"
     affected_user_email = args.affected_user_email
+    if (affected_user_name or "").strip().lower() in (
+        "user",
+        "user (user-direct)",
+        "requester",
+        "chat user",
+        "me",
+        "myself",
+        "self",
+    ):
+        affected_user_name = requester_name or "Chat User"
+        affected_user_email = affected_user_email or requester_email
     if not affected_user_email and (affected_user_name or "").strip().lower() == (requester_name or "").strip().lower():
         affected_user_email = requester_email
     opened_by_name = args.opened_by_name or "Ops Chat Agent"
     opened_by_email = args.opened_by_email
     channel = args.channel or os.environ.get("OPS_CHAT_CHANNEL", "matrix")
-    title = (args.title or original.splitlines()[0] if original else args.title or "Ops chat request").strip()[:120]
     description = "\n".join([
         f"Opened by: {opened_by_name or 'Ops Chat Agent'} <{opened_by_email or 'not provided'}>",
         f"Requester: {requester_name or 'Chat User'} <{requester_email or 'not provided'}>",
         f"Affected user: {affected_user_name or 'not provided'} <{affected_user_email or 'not provided'}>",
         f"Channel: {channel or 'matrix'}",
         f"Intent: {args.intent or 'agent-selected'}",
-        f"Assignment group: {args.assignment_group or 'Service Desk'}",
+        f"Assignment group: {assignment_group}",
         "",
         "Recent chat context before ticket creation:",
         history or "(none)",
@@ -1176,8 +1416,8 @@ def create_ticket(args):
         "sync_provider": args.sync_provider,
         "created_by": "ops-chat-agent",
         "auto_assign": False,
-        "assignee_team": args.assignment_group or "Service Desk",
-        "owning_group": args.assignment_group or "Service Desk",
+        "assignee_team": assignment_group,
+        "owning_group": assignment_group,
         "opened_by_name": opened_by_name or "Ops Chat Agent",
         "opened_by_email": opened_by_email or None,
         "requester_name": requester_name or "Chat User",
@@ -1199,18 +1439,40 @@ def create_ticket(args):
         "intent": intent,
         "ticket_class": args.ticket_class or "UserRequest",
         "priority": args.priority or "P3",
-        "assignment_group": args.assignment_group or "Service Desk",
+        "assignment_group": assignment_group,
         "approval_policy": "system-enforced",
         "approval_authority": "platform-policy-and-provider-barriers",
         "agent_approval_decision": "not-authorized",
     }
     if ticket.get("_idempotent_replay"):
         agent = {"status": "skipped", "reason": "idempotent_replay_existing_ticket"}
+        if args.spawn_agent and SPAWN_AGENT_ALLOWED and not ticket.get("agent_id"):
+            prompt = "\n".join([
+                "This ticket originated from the real Matrix/Element Ops Chat client.",
+                f"Requester: {requester_name or 'Chat User'}",
+                f"Channel: {channel or 'matrix'}",
+                f"Canonical ticket id: {ticket_id}. Do not create a second normal work ticket for this same chat request.",
+                "Use the dashboard ticket as the system of record.",
+                "Only create child work through explicit access-request, change-request, setup/module, or operator-requested follow-up endpoints when a real barrier requires it.",
+                "If you hit missing permissions, denied vault leases, provider 403s, or risky action barriers, create the required access request or approval gate and stop at that barrier.",
+                "Do not assume approval. Do not bypass provider permission failures. Ask one concise clarification if needed.",
+                "",
+                "Original chat message:",
+                original,
+            ])
+            agent = request("POST", f"/api/tickets/{ticket_id}/assign-agent", {
+                "model": args.model or DEFAULT_MODEL,
+                "prompt": prompt,
+                "requested_permissions": [],
+            }, timeout=120)
+        elif args.spawn_agent and not SPAWN_AGENT_ALLOWED:
+            agent = {"status": "skipped", "reason": "spawn_agent_disabled_by_caller"}
         result = {
             "mode": "ticket",
             "reply": (
                 f"I already created ticket #{ticket_id} for this request and kept the existing ticket instead of opening a duplicate. "
-                f"It is routed to {classification['assignment_group']} with priority {classification['priority']}."
+                f"It is routed to {classification['assignment_group']} with priority {classification['priority']}. "
+                f"Agent harness status: {agent.get('status', 'queued')}."
             ),
             "ticket_id": ticket_id,
             "ticket": ticket,
@@ -1326,10 +1588,12 @@ def continue_ticket(args):
             "actor": "ops-chat-agent",
             "reason": args.reason or message,
         }, timeout=90)
-    if args.assignment_group or args.owning_group or args.assignee or args.escalation_tier or args.priority:
+    assignment_group = normalize_assignment_group(args.assignment_group) if args.assignment_group else None
+    owning_group = normalize_assignment_group(args.owning_group) if args.owning_group else assignment_group
+    if assignment_group or owning_group or args.assignee or args.escalation_tier or args.priority:
         assignment_result = request("POST", f"/api/tickets/{args.ticket_id}/assignment", {
-            "assignee_team": args.assignment_group or None,
-            "owning_group": args.owning_group or args.assignment_group or None,
+            "assignee_team": assignment_group or None,
+            "owning_group": owning_group or None,
             "assignee": args.assignee or None,
             "escalation_tier": args.escalation_tier or None,
             "priority": args.priority or None,
@@ -1380,6 +1644,17 @@ def continue_ticket(args):
 
 
 def answer(args):
+    existing = read_existing_result()
+    if existing.get("mode") in ("ticket", "ticket-update", "artifact"):
+        append_action({
+            "mode": "answer",
+            "ok": False,
+            "reason": "structured_result_already_recorded",
+            "preserved_mode": existing.get("mode"),
+            "ticket_id": existing.get("ticket_id"),
+        })
+        print(existing.get("reply") or json.dumps(existing, indent=2))
+        return
     reply = read_text_arg(args.reply, args.reply_file)
     if not reply:
         raise SystemExit("--reply or --reply-file is required")
@@ -1496,12 +1771,36 @@ def _read_ops_chat_tool_result(tool_paths):
     if not tool_paths:
         return None
     result_path = tool_paths.get("result_path")
+    actions_path = tool_paths.get("actions_path")
     try:
         if result_path and result_path.exists():
-            return _json(result_path.read_text(encoding="utf-8"), {})
+            result = _json(result_path.read_text(encoding="utf-8"), {})
+            if isinstance(result, dict) and result.get("mode") == "general" and _reply_claims_ticket_work(result.get("reply")):
+                preserved = _last_structured_tool_action(actions_path)
+                if preserved:
+                    preserved = dict(preserved)
+                    preserved["recovered_overwritten_result"] = True
+                    return preserved
+            return result
     except OSError:
         return None
     return None
+
+
+def _last_structured_tool_action(actions_path):
+    if not actions_path:
+        return None
+    try:
+        if not actions_path.exists():
+            return None
+        latest = None
+        for line in actions_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            action = _json(line, {})
+            if isinstance(action, dict) and action.get("mode") in ("ticket", "ticket-update", "artifact"):
+                latest = action
+        return latest
+    except OSError:
+        return None
 
 
 async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpose="general_chat",
@@ -1777,7 +2076,9 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- For create-ticket, set requester/opened context correctly. The requester is usually the chat user unless they say they are opening it for someone else. The affected user is the person, account, mailbox, device, service, or app impacted, and may differ from the requester.",
         "- Use --affected-user-name and --affected-user-email when known. Do not invent emails. If the chat user is affected, leave affected user equal to the requester. If the user says 'Jeff needs software' or 'the CEO is locked out', make Jeff or the CEO the affected user.",
         "- Messages asking you to install, purchase, check a mailbox/system, unlock an account, fix access, deploy, investigate an outage, update software, open a request, cancel work, or change scope are operational unless the user clearly asks for casual advice only.",
+        "- Requests to generate SLA reports, policy exceptions, risk acceptance, audit exports, evidence packages, or leadership metrics are operational Compliance & Audit work; create a ticket.",
         "- Existing ticket follow-up: use continue-ticket only when the user's message is clearly an update, cancellation, requested detail, or scope change for one of the existing chat tickets listed below.",
+        "- The create-ticket tool will reject obvious follow-up/update/cancel/reassign messages when this room already has linked tickets. Use continue-ticket for those.",
         "- Do not assume a Matrix room equals one ticket. A user may ask several unrelated things in the same room. Decide per message.",
         "- If the user cancels a prior request, continue that ticket and set status cancelled when appropriate.",
         "- If the user then asks for a replacement that is operationally distinct, create a new ticket unless the user explicitly says to keep it on the same ticket.",
@@ -1831,6 +2132,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- Jeff needs Figma installed -> create an Endpoint Support or Procurement ticket based on the ask; requester is the chat user, affected user is Jeff.",
         "- I got a suspicious email -> create an Incident assigned to Security Operations; do not fetch suspicious URLs.",
         "- the production deploy failed Semgrep -> create a DevSecOps ticket; deployment approval must happen later at the policy gate.",
+        "- Generate an SLA report for executive review -> create a Compliance & Audit ticket.",
         "- Nevermind, cancel ticket #123 -> continue-ticket #123, usually with --status cancelled.",
         "- Instead order pizza after cancelling a watermelon purchase -> create a new Procurement ticket unless the user explicitly says to reuse the cancelled ticket.",
         "",
@@ -2035,6 +2337,23 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
                             "attempts": attempts,
                         })
         return recovered
+    fallback_update = await _apply_existing_ticket_update_fallback(
+        message,
+        session_id,
+        requester_name,
+        requester_email,
+        channel,
+        spawn_agent=spawn_agent,
+    )
+    if fallback_update:
+        await log_event("ops-chat", "warning", "ops-chat-agent", "chat_agent_existing_ticket_update_fallback",
+                        f"chat_session_{session_id}", {
+                            "ticket_id": fallback_update.get("ticket_id"),
+                            "harness": last_result.get("harness"),
+                            "model": last_result.get("model"),
+                            "attempts": attempts,
+                        })
+        return fallback_update
     await log_event("ops-chat", "warning", "ops-chat-agent", "chat_agent_tool_not_used",
                     f"chat_session_{session_id}", {
                         "harness": last_result.get("harness"),

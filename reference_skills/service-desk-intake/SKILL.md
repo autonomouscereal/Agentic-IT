@@ -93,6 +93,25 @@ must not be recovered into the latest room ticket. A clean
 watermelon/cancel/pizza-style flow should leave one cancelled old request and
 one active replacement request.
 
+Latest live multi-ticket proof:
+
+- Marker `ops-chat-multiticket-1779338352`
+- Watermelon purchase ticket `1384` was cancelled from chat.
+- Pizza replacement ticket `1385` was created as a distinct request.
+- Urgent account ticket `1386` was created from the same room and updated with
+  a Keycloak SSO/MFA clarification.
+- The room summary answered without creating another ticket.
+
+Important routing nuance: the word "instead" alone does not mean "continue the
+same ticket." Treat explicit "same ticket", "keep this request", "cancel ticket
+#123", and "ticket #123 is actually..." as existing-ticket updates. Treat
+"instead put in a new ticket/request" as replacement work.
+
+When a chat session already has linked tickets, obvious follow-up/update/cancel
+or reassignment text must use `continue-ticket`. The `create-ticket` tool
+enforces this guard so a user confirmation or scope update cannot open a second
+normal work ticket by accident.
+
 Requester and affected user are separate fields. For "I cannot log in," both
 usually point to the chat user. For "Alice needs Acrobat," the requester is the
 chat user and the affected user is Alice. Do not invent emails. If the affected
@@ -250,6 +269,17 @@ Latest Ops Chat routing proof, 2026-05-20:
 - Post-guard real-agent marker `ops-chat-scenarios-1779307368` created ticket
   `1255` and spawned Hermes agent `333`; the actual process prompt contained
   the canonical-ticket no-duplicate instruction.
+- Scenario matrix marker `ops-chat-scenarios-1779332898` passed general chat,
+  current-info web answer, cat memory, account, software, VPN, phishing, and
+  delivery-gate routing. Follow-ups wrote durable `user-response` notes and
+  synthetic tickets were cancelled after proof.
+- Real-agent account marker `ops-chat-scenarios-1779334013` created iTop-synced
+  ticket `1318`, spawned Hermes agent `358`, and produced a user-facing
+  clarification/checkpoint before smoke cleanup stopped only that agent.
+- Real-agent delivery-gate marker `ops-chat-scenarios-1779334281` created
+  iTop-synced ticket `1319`, spawned Hermes agent `359`, recorded clean
+  transient-provider retries, and wrote a DevSecOps progress note before
+  cleanup.
 
 - Broad enterprise matrix marker `ops-chat-enterprise-matrix-1779257312`
   created tickets `846`-`895` and passed 50/50 no-spawn RACI checks across

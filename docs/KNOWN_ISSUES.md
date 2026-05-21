@@ -215,6 +215,128 @@ Verification:
   had exactly two tickets. The smoke-owned pizza proof ticket was cancelled
   after verification.
 
+### Ops Chat follow-up message opened a duplicate account ticket
+
+Status: fixed and verified.
+
+Problem:
+
+- A real `smoke_ops_chat_scenarios.py --spawn-agent` run caught an
+  account-lockout follow-up message that said the requester confirmed urgency
+  and no production change was approved.
+- The chat harness incorrectly used `create-ticket` instead of
+  `continue-ticket`, producing a second account ticket in the same session.
+
+Fix:
+
+- `ops_chat_tool.py create-ticket` now refuses obvious follow-up, update,
+  cancellation, correction, escalation, or reassignment messages when the chat
+  session already has linked tickets. The harness must use `continue-ticket`
+  with one of the allowed room ticket ids.
+- Side-effect recovery no longer claims a follow-up was updated unless a real
+  `user-response` note/status side effect exists. If the note was not written,
+  the chat turn is retried so the harness must actually call `continue-ticket`.
+
+Verification:
+
+- Live rerun `ops-chat-scenarios-1779330495` proved account, software, and VPN
+  follow-ups wrote `user-response` notes on the existing tickets. It also
+  exposed a presentation bug where one recovered VPN continuation still replied
+  "I created ticket #1296"; recovery formatting was patched afterward.
+- Rerun `ops-chat-scenarios-1779331594` then exposed the inverse: software
+  ticket `1304` replied "updated" without a `user-response` note. Recovery is
+  now forbidden from claiming an update without that durable note.
+- Final scenario rerun `ops-chat-scenarios-1779332898` passed account,
+  software, VPN, phishing, and delivery-gate follow-up checks. All follow-ups
+  wrote durable `user-response` notes instead of opening duplicate tickets.
+
+### Ops Chat agent invented a noncanonical assignment group
+
+Status: fixed and verified.
+
+Problem:
+
+- Scenario rerun `ops-chat-scenarios-1779330842` routed a CI/CD delivery gate
+  request to a new `Delivery Gate` group instead of the canonical `DevSecOps`
+  queue.
+- This would make reporting and demo filtering noisy even though the user's
+  intent was clear.
+
+Fix:
+
+- `ops_chat_tool.py` now normalizes assignment groups to the configured
+  dashboard queues before ticket creation or reassignment. Common aliases such
+  as `Delivery Gate`, `CI/CD`, `pipeline`, and `release` map to `DevSecOps`.
+
+Verification:
+
+- Local regression checks assert the alias normalization path exists.
+- Live rerun `ops-chat-scenarios-1779332898` routed delivery-gate ticket `1315`
+  to canonical `DevSecOps`.
+- Real-agent delivery-gate rerun `ops-chat-scenarios-1779334281` created
+  ticket `1319`, synced it to iTop, spawned Hermes agent `359`, and produced a
+  DevSecOps delivery-gate progress note before smoke cleanup stopped the
+  test-owned agent and cancelled the synthetic ticket.
+
+### Ops Chat treated "Created Incident #..." as a general answer
+
+Status: fixed and verified.
+
+Problem:
+
+- Scenario rerun `ops-chat-scenarios-1779331363` produced ticket `1302`, but
+  the harness returned a polished "Created Incident #1302" answer without a
+  parsed final tool result.
+- The API recognized fake "ticket" claims, but not "Incident #", so it recorded
+  the assistant reply as general chat with `ticket_id=null`.
+
+Fix:
+
+- Fake-ticket-claim detection now recognizes `Incident #`, `User Request #`,
+  `Change #`, and corresponding "Created Incident/User Request/Change" claims,
+  so side-effect recovery can attach the existing ticket response properly.
+
+Verification:
+
+- Local regression checks assert the new claim patterns exist.
+
+### Ops Chat ticket result was overwritten by a later general answer
+
+Status: fixed and verified.
+
+Problem:
+
+- Real-agent smoke marker `ops-chat-scenarios-1779333713` created and synced
+  ticket `1317` and spawned Hermes agent `357`, but the chat response returned
+  the generic fallback.
+- The audit showed the harness called `create-ticket`, then later called
+  `answer`; the final `answer` result overwrote the structured ticket result
+  file. The API therefore saw a general reply claiming "Ticket #1317" instead
+  of the actual ticket payload.
+
+Fix:
+
+- `ops_chat_tool.py answer` now refuses to overwrite an existing structured
+  `ticket`, `ticket-update`, or `artifact` result in the same harness turn.
+- `_read_ops_chat_tool_result` also inspects the action log and recovers the
+  last structured action when a final general reply claims ticket work.
+- Side-effect recovery no longer treats bare "change" as an existing-ticket
+  update signal; only explicit scope/change-ticket phrases count. This keeps
+  new account-lockout text such as "avoid any credential change" recoverable.
+- Placeholder affected-user values such as `User (user-direct)` are normalized
+  to the requester for first-person chat requests.
+
+Verification:
+
+- Local regression suite
+  `tests/test_ops_chat_ticket_lifecycle_regressions.py` now covers the
+  overwrite guard, action-log recovery, narrowed update detection, and
+  affected-user normalization.
+- Real-agent account-lockout rerun `ops-chat-scenarios-1779334013` created
+  ticket `1318`, synced to iTop, spawned Hermes agent `358`, produced a
+  user-facing clarification/checkpoint, then cleanup stopped only that
+  smoke-owned agent and cancelled the synthetic ticket.
+
 ## Found During 2026-05-20 Ops Chat And Access RACI Work
 
 ### Ops Chat intake was allowed to create approval gates
@@ -5646,3 +5768,61 @@ Verification:
   stored finding.
 - Operational metrics smoke passed with CI/CD run `42` and verified Semgrep
   dashboard report access plus provider-authenticated external artifact labels.
+
+### Ops Chat follow-up could fail closed when the harness skipped the final tool
+
+Status: fixed locally and live-patched during 2026-05-21 testing.
+
+Problem:
+
+- Broad Ops Chat lifecycle smoke marker `ops-chat-scenarios-1779336299`
+  created and synced phishing ticket `1377`, but the follow-up message
+  returned the generic harness failure because the chat harness did not call
+  its required final `continue-ticket` tool.
+- The failed synthetic run created tickets `1374` through `1377`; they were
+  cancelled immediately as test cleanup.
+
+Fix:
+
+- The chat agent still owns the decision and gets the normal retry path first.
+- A bounded fallback now applies only when the message is plainly an
+  update/cancel/scope-change and the room has exactly one linked ticket, or the
+  user explicitly names a linked ticket id.
+- The fallback records a real `user-response` note, restores
+  awaiting-user-response state when applicable, and records cancellation status
+  only for cancellation-like messages.
+
+Verification:
+
+- The exact matrix misses from the previous 50-case run passed in focused live
+  rerun marker `ops-chat-enterprise-matrix-1779336161`.
+- The follow-up fallback is covered by
+  `tests/test_ops_chat_ticket_lifecycle_regressions.py`.
+
+### Ops Chat replacement request reused a cancelled ticket
+
+Status: fixed and live-verified on 2026-05-21.
+
+Problem:
+
+- A clean one-room lifecycle test initially created watermelon ticket `1383`,
+  cancelled it, then sent "can you instead order pizza".
+- The chat harness treated the word "instead" as a generic existing-ticket
+  update and continued the cancelled watermelon ticket instead of opening
+  distinct replacement work.
+
+Fix:
+
+- The toolbelt no longer treats bare "instead" as an automatic follow-up or
+  update signal.
+- Existing-ticket updates still require explicit cancellation/update language,
+  explicit ticket id, "same ticket", "same request", or "keep the same"
+  language.
+
+Verification:
+
+- Live marker `ops-chat-multiticket-1779338352` passed:
+  watermelon ticket `1384` cancelled, pizza ticket `1385` created separately,
+  urgent account ticket `1386` created and updated, room summary answered
+  without creating another ticket, and all synthetic tickets were cancelled
+  during cleanup.

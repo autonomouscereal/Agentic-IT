@@ -88,6 +88,20 @@ def request(base, method, path, payload=None, timeout=240):
         raise RuntimeError(f"{method} {path} failed: HTTP {exc.code}: {body}") from exc
 
 
+def cancel_ticket(base, ticket_id, marker):
+    if not ticket_id:
+        return {"status": "skipped", "reason": "missing_ticket_id"}
+    try:
+        return request(base, "POST", f"/api/tickets/{ticket_id}/status", {
+            "status": "cancelled",
+            "actor": "ops-chat-enterprise-matrix-smoke",
+            "reason": f"Cleanup for broad Ops Chat matrix smoke {marker}; ticket was synthetic validation evidence.",
+            "close_provider": True,
+        }, timeout=60)
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("base", nargs="?", default="http://localhost:25480")
@@ -97,6 +111,10 @@ def main():
     parser.add_argument("--case-timeout", type=int, default=240)
     parser.add_argument("--strict-routing", action="store_true",
                         help="Fail on expected-group mismatch instead of reporting routing quality.")
+    parser.add_argument("--require-provider-sync", action="store_true",
+                        help="Fail when created tickets do not sync to an external provider.")
+    parser.add_argument("--cleanup", action="store_true",
+                        help="Cancel synthetic tickets after verification so broad tests do not clutter the demo queue.")
     args = parser.parse_args()
     if not TOKEN:
         raise SystemExit("DASHBOARD_SERVICE_TOKEN is required")
@@ -123,16 +141,31 @@ def main():
         classification = result.get("classification") or {}
         actual_group = classification.get("assignment_group")
         ticketed = bool(result.get("created_ticket"))
+        ticket_id = result.get("ticket_id")
+        ticket = request(args.base, "GET", f"/api/tickets/{ticket_id}") if ticket_id else {}
         routed = bool(actual_group)
         matches_hint = actual_group == expected_group
-        ok = ticketed and routed and (matches_hint or not args.strict_routing)
+        provider_sync_ok = (
+            not args.require_provider_sync
+            or (
+                ticket.get("provider")
+                and ticket.get("provider") != "local"
+                and ticket.get("provider_ref")
+                and ticket.get("provider_sync_status") == "synced"
+            )
+        )
+        ok = ticketed and routed and provider_sync_ok and (matches_hint or not args.strict_routing)
         record = {
             "case": slug,
-            "ticket_id": result.get("ticket_id"),
+            "ticket_id": ticket_id,
             "intent": classification.get("intent"),
             "expected_group": expected_group,
             "actual_group": actual_group,
             "matches_expected_hint": matches_hint,
+            "provider": ticket.get("provider"),
+            "provider_ref": ticket.get("provider_ref"),
+            "provider_sync_status": ticket.get("provider_sync_status"),
+            "provider_sync_ok": provider_sync_ok,
             "ok": ok,
         }
         results.append(record)
@@ -140,6 +173,14 @@ def main():
         if not ok:
             failures.append(record)
     search = request(args.base, "GET", f"/api/search/global?q={urllib.parse.quote(marker)}&limit=10")
+    cleanup = []
+    if args.cleanup:
+        for record in results:
+            cleanup.append({
+                "case": record["case"],
+                "ticket_id": record.get("ticket_id"),
+                "result": cancel_ticket(args.base, record.get("ticket_id"), marker),
+            })
     output = {
         "status": "passed" if not failures else "failed",
         "marker": marker,
@@ -147,6 +188,7 @@ def main():
         "failure_count": len(failures),
         "failures": failures,
         "search_total": search.get("total"),
+        "cleanup": cleanup,
         "results": results,
     }
     print(json.dumps(output, indent=2))

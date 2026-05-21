@@ -259,6 +259,14 @@ Latest validated state on 2026-05-20:
 | Developer artifact chat | marker `ops-chat-dev-artifact-1780000005`, user `demo_chat_marathon5`, Python/HTML/Markdown/Bash validated and rendered as Element code blocks with zero tickets |
 | Requester / affected-user sync | ticket `1284`, session `574`, requester `Demo Account 1 Demo`, affected user `Alice Example`, iTop ref `703`, provider description preserved requester and affected user; follow-up changed affected user to `Charlie Example` without creating a duplicate ticket |
 | Ticket clutter regression | historical tickets `1264`-`1267` reviewed; repeated Element test runs plus a too-loose recovery path made the room look noisy. The platform now idempotently suppresses duplicate create-ticket retries by `session_id + message_hash` and refuses latest-ticket recovery for harmless chat. Live proof `ops-chat-two-ticket-1779328796` created exactly two tickets: `1286` cancelled and `1287` replacement. |
+| Scenario matrix rerun | marker `ops-chat-scenarios-1779332898`, tickets `1311`-`1315`, general chat, current-info web answer, cat memory, account, software, VPN, phishing, and CI/CD all passed; synthetic tickets were cancelled after proof |
+| Real agent account lockout | marker `ops-chat-scenarios-1779334013`, ticket `1318`, Hermes agent `358`, iTop sync, user-facing clarification/checkpoint, cleanup stopped only the smoke-owned agent |
+| Real agent delivery gate | marker `ops-chat-scenarios-1779334281`, ticket `1319`, Hermes agent `359`, iTop sync, transient provider retries were recorded cleanly, DevSecOps progress note written, cleanup stopped only the smoke-owned agent |
+| Broad enterprise matrix | marker `ops-chat-enterprise-matrix-1779334693`, tickets `1320`-`1368`, 45/50 initial pass with iTop sync; misses were offboarding, restore-file, Nuclei CI/CD, policy exception, and SLA report |
+| Focused matrix repair | marker `ops-chat-enterprise-matrix-1779336161`, tickets `1369`-`1373`, 5/5 passed with iTop sync and cleanup after routing guardrail patch |
+| Lifecycle regression | marker `ops-chat-scenarios-1779336984`, tickets `1378`-`1382`, general chat, web/current info, cat memory, account, software, VPN, phishing follow-up, and delivery gate all passed with cleanup |
+| Developer artifact UI proof | marker `ops-chat-dev-artifact-1779337398804`, user `demo_account_1`, Python/HTML/Markdown/Bash rendered as Element code blocks, validation passed, and zero tickets were created |
+| Multi-ticket lifecycle | marker `ops-chat-multiticket-1779338352`, one chat session created watermelon ticket `1384`, cancelled it, created distinct pizza ticket `1385`, created urgent account ticket `1386`, updated `1386`, summarized room tickets, then cleaned all three |
 
 Smoke-owned agents `327` and `328` were stopped after collecting evidence so
 the demo queue was left clean. Final active-agent and process checks were
@@ -316,11 +324,53 @@ Rerun findings:
   calls also carry a message hash, and `/api/tickets` returns the existing
   active Ops Chat ticket on same-message retry instead of creating and syncing a
   duplicate provider ticket.
+- A real scenario rerun later caught a different duplicate path: a
+  follow-up/confirmation message in a room with an account ticket used
+  `create-ticket` instead of `continue-ticket`. The tool now rejects
+  follow-up/update/cancel/reassign-shaped create attempts when room tickets
+  already exist, forcing the harness to continue the correct ticket.
+- The same rerun showed a recovery presentation issue: the ticket had the
+  correct `user-response` note, but the room reply could still say "I created
+  ticket" after recovering the side effect. Session-side recovery now formats
+  follow-up side effects as ticket updates.
+- A later rerun showed the opposite risk: the room could say "updated" without
+  the `user-response` note existing. Recovery now refuses to claim an update
+  unless the durable note/status side effect is present, forcing the harness to
+  retry with `continue-ticket`.
 - Developer artifact testing exposed the same class of issue for code: the
   harness could claim it had validated a script while using the general answer
   path. Dev artifact asks now require `validate-artifact`; if the harness calls
   `answer` instead, the turn is rejected and retried with an artifact-only
   prompt.
+- Real-agent reruns exposed a structured-result overwrite pattern: Hermes could
+  create the ticket and then call `answer`, causing the final result file to
+  look like general chat. The toolbelt now preserves earlier ticket/update/
+  artifact results, and the API can recover the last structured action from
+  the action log if a later general reply claims ticket work.
+- Broad matrix and scenario scripts now support `--cleanup`, and the enterprise
+  matrix supports `--require-provider-sync`, so breadth tests can prove iTop
+  sync without leaving active demo clutter.
+- A 50-case enterprise matrix on marker `ops-chat-enterprise-matrix-1779334693`
+  exposed five routing gaps: offboarding, restore-from-backup, Nuclei CI/CD,
+  policy exception, and SLA report. Guardrails now normalize those obvious
+  enterprise domains while keeping the chat harness in control of the turn.
+  Focused rerun marker `ops-chat-enterprise-matrix-1779336161` passed 5/5.
+- Scenario marker `ops-chat-scenarios-1779336299` exposed a follow-up turn
+  where the harness skipped the required final `continue-ticket` tool. The
+  platform now has a bounded no-tool fallback only for obvious existing-ticket
+  updates in a single-ticket room or when the user explicitly names a linked
+  ticket id. Scenario marker `ops-chat-scenarios-1779336984` passed after this
+  repair.
+- Multi-ticket marker `ops-chat-multiticket-1779338352` proved that
+  "instead put in a new ticket" creates replacement work instead of continuing
+  a cancelled ticket. The word "instead" is no longer treated as an automatic
+  existing-ticket update by itself; explicit "same ticket"/"keep the same"
+  language still routes to continuation.
+- A later `demo_account_1` Element marathon attempt failed as a test-harness
+  problem because the shared DM had a large old scrollback and the output
+  flooded with historical messages. It created no tickets. For future long UI
+  marathons, use a fresh demo user/room or add a room reset step before running
+  the Playwright script.
 
 ## Required Smoke Commands
 
@@ -351,15 +401,16 @@ Live API-level chat matrix:
 
 ```bash
 export DASHBOARD_SERVICE_TOKEN=<runtime secret>
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480
+python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --cleanup
+python3 scripts/smoke_ops_chat_enterprise_matrix.py http://127.0.0.1:25480 --strict-routing --require-provider-sync --cleanup
 ```
 
 Real agent cases:
 
 ```bash
 export DASHBOARD_SERVICE_TOKEN=<runtime secret>
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --spawn-agent --agent-case account-lockout --agent-timeout 420
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --spawn-agent --agent-case software-request --agent-timeout 420
+python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --agent-only --spawn-agent --agent-case account-lockout --agent-timeout 600 --cleanup
+python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --agent-only --spawn-agent --agent-case delivery-gate --agent-timeout 600 --cleanup
 ```
 
 Browser proof from a host/container with Playwright:
