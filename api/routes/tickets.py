@@ -126,7 +126,7 @@ async def list_tickets(
     agent_only: bool = Query(False, description="Only tickets with agents"),
     sort_by: str = Query("updated_at", description="Sort field"),
     sort_dir: str = Query("desc", description="Sort direction"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     request: Request = None,
 ):

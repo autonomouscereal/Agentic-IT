@@ -215,6 +215,13 @@ does not match the expected demo hint. In the iTop-backed lab, also use
 provider ref, and `provider_sync_status=synced`. Use `--cleanup` so broad tests
 cancel their own synthetic tickets and do not clutter the demo queue.
 
+Demo baseline note: after the 2026-05-21 curation pass, the live dashboard
+should have zero open tickets, zero active agents, zero open agent tasks, and
+zero pending/approved changes before an audience demo. If an Ops Chat marathon
+or broad matrix run leaves synthetic tickets behind, archive them with an
+explicit demo-curation reason and keep the golden prepared proofs in
+`docs/DEMO_TICKET_CATALOG.md` as the only `Demo Proofs` examples.
+
 This proves general chat no-ticket behavior, private-web-search assisted
 answers when the search provider is configured, account lockout, software
 request, VPN connectivity routing, phishing and CI/CD routing without

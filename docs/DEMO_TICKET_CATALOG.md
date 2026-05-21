@@ -1,6 +1,6 @@
 # Demo Ticket Catalog
 
-Last updated: 2026-05-19.
+Last updated: 2026-05-21.
 
 Use the dashboard at `https://192.168.50.222:25443`. On the Tickets page, choose
 the `Demo Proofs` filter to show the curated prepared examples in the order
@@ -33,6 +33,24 @@ The demo account password is still stored only in vault key `demo_account_1`.
 | Multi-action phishing remediation gate proof | `363` | iTop `235` | gates `97`/`98`/`99` completed for URL block, mailbox quarantine, and password/session review |
 | False-positive internal training URL classification | `430` | local | agent `151`, resolved internal training false-positive investigation |
 
+## Golden Demo Order
+
+For the polished demo, use this order in the `Demo Proofs` filter:
+
+1. `695` - lead proof: URL-safe phishing plus EDR with requester response,
+   steering, Wazuh-style access wall, containment approval, postmortem, and
+   provider close recovery.
+2. `690` - cleaner learning proof: same phishing/EDR pattern with promoted
+   workflow evidence.
+3. `83` - CI/CD proof: GitLab runner gate fails, agent remediates, MR opens,
+   final pipeline passes, deployment gate completes.
+4. `580` - Mailcow/Roundcube proof: Report Phish button creates ticket,
+   quarantine evidence, and postmortem.
+5. `525` and `539` - least-privilege proof: agents hit real permission walls,
+   create access requests, and resume only after approval/scoped lease.
+6. `531` - older enterprise proof that still tells the full approval/access
+   story, useful if you want a second complete incident.
+
 ## Live Demo Path
 
 1. Open Tickets and select `Demo Proofs`.
@@ -63,6 +81,25 @@ On 2026-05-18, stale smoke/proof/provider/test artifacts were archived with
 from those old artifacts were reconciled so the Changes page no longer shows
 phantom approvals. Prepared proof tickets were preserved and, where terminal
 evidence already existed, their dashboard status was reconciled to `resolved`.
+
+On 2026-05-21, the dashboard was re-curated for the employer demo:
+
+- `Demo Proofs` now starts with tickets `695`, `690`, `83`, `580`, `525`,
+  `539`, and `531`.
+- The frontend demo filter now loads the full ticket corpus so older but
+  valuable proof tickets such as `83`, `118`, and `430` are not missed.
+- 660 stale smoke, setup, broad-matrix, and chat-marathon tickets were archived
+  as `resolved` with `demo-curation` or `ticket-status` notes. Provider-backed
+  incident/request tickets were closed in iTop when their workflow allowed it;
+  Change-class tickets that rejected `ev_resolve` were dashboard-archived with
+  an explicit cleanup reason.
+- Stale nonterminal agents/tasks tied to archived tickets were reconciled to
+  terminal states.
+- Stale pending/approved gates tied to archived synthetic tickets were
+  reconciled to `rejected` or `completed` with cleanup evidence.
+- Final live counts: zero open tickets, zero active agents, zero open tasks,
+  and zero pending/approved changes. Historical evidence remains in the audit
+  trail and resolved-ticket history.
 
 Current cleanup target state:
 

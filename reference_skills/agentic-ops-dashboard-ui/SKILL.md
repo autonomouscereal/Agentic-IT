@@ -25,6 +25,9 @@ dashboard UI at `https://192.168.50.222:25443/`.
 - Static `frontend/` changes can be synced without restarting containers.
 - Backend Python changes require rebuilding and recreating only the `api`
   service.
+- Before demo cleanup or API recreation, confirm there are no active agents.
+  The 2026-05-21 demo baseline should show zero open tickets, zero active
+  agents, zero open tasks, and zero pending/approved changes.
 
 ## Preflight
 
@@ -96,6 +99,9 @@ Required assertions:
 - Auth succeeds and dashboard shell is visible.
 - Tickets page loads `200` rows initially, then more rows after scrolling.
 - Ticket footer shows the true total, for example `Showing 400 of 1095 tickets`.
+- Tickets page `Demo Proofs` shows the curated order:
+  `695`, `690`, `83`, `580`, `525`, `539`, `531`, `422`, `575`, `530`,
+  `118`, `363`, `430`, `82`, `578`.
 - Setup page module search/filter is visible and returns a sensible count.
 - Agents page shows harness options `hermes` and `claude-code`.
 - Saving default harness/model returns `Saved server default.`
@@ -118,5 +124,16 @@ The 2026-05-20 deploy evidence is documented in:
 Ops Chat and global-search readiness are documented in:
 
 - `docs/GLOBAL_SEARCH_AND_OPS_CHAT.md`
+- `docs/DEMO_TICKET_CATALOG.md`
+
+Current polished proof tickets:
+
+- `695`: lead URL-safe phishing plus EDR hybrid with user response, steering,
+  access wall, containment gate, postmortem, and provider close recovery.
+- `690`: cleaner learning/workflow proof for the same incident type.
+- `83`: GitLab CI/CD gate, agent remediation branch, MR, final passing
+  pipeline, and deployment approval.
+- `580`: Roundcube Report Phish to Mailcow quarantine.
+- `525` and `539`: least-privilege access walls and scoped lease/resume.
 - `docs/OPS_CHAT_DEPLOYMENT_BLUEPRINT.md`
 - `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`

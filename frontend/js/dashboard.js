@@ -147,7 +147,7 @@ function openAuditTrail(query, source = "") {
 let ticketSort = { by: "updated_at", dir: "desc" };
 let ticketListState = { key: "", offset: 0, limit: 200, total: 0, loading: false, done: false, rows: [] };
 let agentRuntimeConfig = { models: [], default_model: "", default_harness: "hermes", setups: [], available_harnesses: [] };
-const DEMO_TICKET_IDS = [531, 83, 82, 580, 578, 525, 539, 422, 558, 575, 530, 118, 363, 430];
+const DEMO_TICKET_IDS = [695, 690, 83, 580, 525, 539, 531, 422, 575, 530, 118, 363, 430, 82, 578];
 const DEMO_TICKET_ORDER = new Map(DEMO_TICKET_IDS.map((id, idx) => [id, idx]));
 
 function initTicketSorting() {
@@ -698,7 +698,7 @@ async function loadTickets(options = {}) {
     const append = !!options.append && key === ticketListState.key && !ticketListState.done;
     if (ticketListState.loading) return;
     if (!append) {
-        ticketListState = { key, offset: 0, limit: status === "__demo" ? 1000 : 200, total: 0, loading: false, done: false, rows: [] };
+        ticketListState = { key, offset: 0, limit: status === "__demo" ? 5000 : 200, total: 0, loading: false, done: false, rows: [] };
     }
     ticketListState.loading = true;
     updateTicketPagination();

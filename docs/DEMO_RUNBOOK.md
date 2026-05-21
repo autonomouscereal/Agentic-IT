@@ -256,6 +256,19 @@ that shows the strongest resolved examples in demo order. Each ticket modal now
 has an `Evidence Trail` section with notes, audit count, agent work, approval
 gates, access requests, and postmortems in a human-readable layout.
 
+Demo-readiness checkpoint from 2026-05-21:
+
+- `Demo Proofs` order: `695`, `690`, `83`, `580`, `525`, `539`, `531`, `422`,
+  `575`, `530`, `118`, `363`, `430`, `82`, `578`.
+- Lead with `695`; keep `690` and `83` as the next two examples.
+- The live dashboard has zero open tickets, zero active agents, zero open
+  tasks, and zero pending/approved changes after curation.
+- Old chat-marathon, setup-plan, smoke, broad-matrix, and superseded phishing
+  proof tickets were archived as resolved rather than deleted, preserving
+  audit history without making the queue look unfinished.
+- Use fresh live intake for audience prompts; use prepared tickets only for
+  completed end-to-end evidence.
+
 Latest verified GitLab runner artifacts:
 
 - GitLab project `root/agentic-cicd-demo-1778538475`, project id `15`
