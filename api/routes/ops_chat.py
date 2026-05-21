@@ -378,6 +378,12 @@ async def _recover_ticket_side_effect(message, raw_text=None, session_id=None):
     match = re.search(r"\bticket\s*#?\s*(\d+)\b|#(\d+)\b", str(raw_text or ""), re.I)
     if match:
         ticket_id = int(match.group(1) or match.group(2))
+        # Do not trust a model's bare "I created ticket #123" claim for new
+        # work. Recovery may reuse an explicit ticket id only when the user
+        # actually referenced that ticket; otherwise the harness must retry and
+        # call create-ticket so replacements cannot resurrect cancelled work.
+        if f"#{ticket_id}" not in str(message or "") and f"ticket {ticket_id}" not in str(message or "").lower():
+            ticket_id = None
     if ticket_id:
         row = await fetchrow("""
             SELECT t.*,
@@ -744,6 +750,7 @@ BASE = os.environ.get("DASHBOARD_API_BASE", "http://localhost:8000").rstrip("/")
 TOKEN = os.environ.get("DASHBOARD_SERVICE_TOKEN", "")
 RESULT_PATH = os.environ.get("OPS_CHAT_RESULT_PATH", "ops_chat_result.json")
 ACTIONS_PATH = os.environ.get("OPS_CHAT_ACTIONS_PATH", "ops_chat_actions.jsonl")
+TICKET_CONTEXT_PATH = os.environ.get("OPS_CHAT_TICKET_CONTEXT_PATH", "ops_chat_ticket_context.txt")
 DEFAULT_MODEL = os.environ.get("OPS_CHAT_AGENT_MODEL") or os.environ.get("AGENT_DEFAULT_MODEL") or "local/agent-default"
 SPAWN_AGENT_ALLOWED = os.environ.get("OPS_CHAT_SPAWN_AGENT_ALLOWED", "true").lower() not in ("0", "false", "no", "off")
 SEARCH_URL = os.environ.get("OPS_CHAT_SEARCH_URL", "http://host.docker.internal:7999").rstrip("/")
@@ -843,6 +850,40 @@ def web_search(args):
         })
     append_action({"mode": "web-search", "ok": True, "query": query, "result_count": len(results)})
     print(json.dumps({"query": query, "results": results}, indent=2))
+
+
+def list_tickets(args):
+    try:
+        text = open(TICKET_CONTEXT_PATH, "r", encoding="utf-8").read().strip()
+    except OSError:
+        text = ""
+    result = {
+        "mode": "list-tickets",
+        "ok": True,
+        "session_tickets": text or "(no tickets are currently linked to this chat room)",
+    }
+    append_action(result)
+    print(result["session_tickets"])
+
+
+def ticket_status(args):
+    if args.ticket_id not in ALLOWED_TICKET_IDS:
+        allowed = ", ".join(str(value) for value in sorted(ALLOWED_TICKET_IDS)) or "none"
+        raise SystemExit(f"ticket #{args.ticket_id} is not in this chat session context; allowed tickets: {allowed}")
+    ticket = request("GET", f"/api/tickets/{args.ticket_id}", timeout=30)
+    summary = {
+        "id": ticket.get("id"),
+        "title": ticket.get("title"),
+        "status": ticket.get("status"),
+        "priority": ticket.get("priority"),
+        "assignment_group": ticket.get("owning_group") or ticket.get("assignee_team"),
+        "provider": ticket.get("provider"),
+        "provider_ref": ticket.get("provider_ref"),
+        "provider_sync_status": ticket.get("provider_sync_status"),
+        "provider_url": ticket.get("provider_url") or ticket.get("external_url"),
+    }
+    append_action({"mode": "ticket-status", "ok": True, "ticket_id": args.ticket_id})
+    print(json.dumps(summary, indent=2))
 
 
 def create_ticket(args):
@@ -981,6 +1022,17 @@ def continue_ticket(args):
         "resume_agent": args.resume_agent and not looks_like_cancellation(message),
     }, timeout=120)
     status_result = {"status": "skipped", "reason": "not_requested"}
+    assignment_result = {"status": "skipped", "reason": "not_requested"}
+    if args.assignment_group or args.owning_group or args.assignee or args.escalation_tier or args.priority:
+        assignment_result = request("POST", f"/api/tickets/{args.ticket_id}/assignment", {
+            "assignee_team": args.assignment_group or None,
+            "owning_group": args.owning_group or args.assignment_group or None,
+            "assignee": args.assignee or None,
+            "escalation_tier": args.escalation_tier or None,
+            "priority": args.priority or None,
+            "actor": "ops-chat-agent",
+            "reason": args.reason or message,
+        }, timeout=90)
     status = args.status
     if not status and looks_like_cancellation(message):
         status = "cancelled"
@@ -1016,6 +1068,7 @@ def continue_ticket(args):
         "ticket_id": args.ticket_id,
         "continued_ticket": True,
         "response": response,
+        "assignment_update": assignment_result,
         "status_update": status_result,
     }
     write_result(result)
@@ -1066,6 +1119,11 @@ def main():
     cont.add_argument("--resume-agent", action=argparse.BooleanOptionalAction, default=True)
     cont.add_argument("--status", default="", choices=["", "new", "assigned", "in_progress", "awaiting_user_response", "pending_approval", "awaiting_access", "blocked", "resolved", "closed", "closed/resolved", "implemented", "rejected", "cancelled", "canceled"])
     cont.add_argument("--reason", default="")
+    cont.add_argument("--assignment-group", default="")
+    cont.add_argument("--owning-group", default="")
+    cont.add_argument("--assignee", default="")
+    cont.add_argument("--escalation-tier", default="")
+    cont.add_argument("--priority", default="", choices=["", "P1", "P2", "P3", "P4", "1", "2", "3", "4"])
     cont.add_argument("--close-provider", action=argparse.BooleanOptionalAction, default=False)
     cont.add_argument("--stop-agent-on-cancel", action=argparse.BooleanOptionalAction, default=True)
     cont.set_defaults(func=continue_ticket)
@@ -1082,6 +1140,13 @@ def main():
     search.add_argument("--limit", type=int, default=5)
     search.add_argument("--timeout", type=int, default=20)
     search.set_defaults(func=web_search)
+
+    list_cmd = sub.add_parser("list-tickets")
+    list_cmd.set_defaults(func=list_tickets)
+
+    status_cmd = sub.add_parser("ticket-status")
+    status_cmd.add_argument("--ticket-id", required=True, type=int)
+    status_cmd.set_defaults(func=ticket_status)
 
     args = parser.parse_args()
     args.func(args)
@@ -1164,6 +1229,7 @@ async def _run_chat_harness(prompt, session_id=None, requester_name=None, purpos
         if tool_paths:
             env["OPS_CHAT_RESULT_PATH"] = str(tool_paths["result_path"])
             env["OPS_CHAT_ACTIONS_PATH"] = str(tool_paths["actions_path"])
+            env["OPS_CHAT_TICKET_CONTEXT_PATH"] = str(work_dir / "ops_chat_ticket_context.txt")
             env["OPS_CHAT_SPAWN_AGENT_ALLOWED"] = "true" if _shell_bool(tool_context.get("spawn_agent"), True) else "false"
             env["OPS_CHAT_SESSION_ID"] = str(tool_context.get("session_id") or "")
             env["OPS_CHAT_REQUESTER_NAME"] = str(tool_context.get("requester_name") or "")
@@ -1316,7 +1382,7 @@ async def _general_reply(message, session_id=None, requester_name=None):
     return result.get("text") or "I could not produce a clean chat response."
 
 
-async def _recent_chat_history(session_id, limit=10):
+async def _recent_chat_history(session_id, limit=8):
     if not session_id:
         return []
     rows = await fetchall("""
@@ -1336,7 +1402,7 @@ def _format_chat_history(rows):
         text = " ".join(str(row.get("message") or "").split())
         if not text:
             continue
-        lines.append(f"- {role}: {text[:800]}")
+        lines.append(f"- {role}: {text[:360]}")
     return "\n".join(lines)
 
 
@@ -1361,9 +1427,12 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "",
         "Allowed commands:",
         '  python ops_chat_tool.py web-search --query "benign research query" --limit 5',
+        "  python ops_chat_tool.py list-tickets",
+        "  python ops_chat_tool.py ticket-status --ticket-id 123",
         "  python ops_chat_tool.py answer --reply-file answer.md",
         '  python ops_chat_tool.py create-ticket --title "short title" --ticket-class UserRequest --priority P3 --assignment-group "Identity & Access" --intent "account-login" --spawn-agent',
         '  python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --reply-file answer.md',
+        '  python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --assignment-group "Identity & Access" --priority P2 --reason "requester clarified SSO/MFA scope"',
         "",
         "Forbidden during this chat-intake turn:",
         "- Do not run python -c, inline scripts, curl, image generators, package installs, or arbitrary shell commands.",
@@ -1377,14 +1446,18 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "Decision guidance:",
         "- General chat: use the answer tool.",
         "- New operational work: use the create-ticket tool.",
+        "- Messages asking you to install, purchase, check a mailbox/system, unlock an account, fix access, deploy, investigate an outage, update software, open a request, cancel work, or change scope are operational unless the user clearly asks for casual advice only.",
         "- Existing ticket follow-up: use continue-ticket only when the user's message is clearly an update, cancellation, requested detail, or scope change for one of the existing chat tickets listed below.",
         "- Do not assume a Matrix room equals one ticket. A user may ask several unrelated things in the same room. Decide per message.",
         "- If the user cancels a prior request, continue that ticket and set status cancelled when appropriate.",
         "- If the user then asks for a replacement that is operationally distinct, create a new ticket unless the user explicitly says to keep it on the same ticket.",
+        "- If the user asks what tickets are open or what you are tracking, call list-tickets and then answer with a short room-scoped summary.",
+        "- If the user clarifies that an existing ticket belongs to a different group, priority, or tier, continue that ticket and use the assignment fields. Do not open a duplicate merely to reassign scope.",
         "- If one concise clarification would materially change the ticket route, scope, or urgency, you may answer with that clarifying question before creating a ticket.",
         "- Once enough context exists to route the work, use create-ticket. Prior chat context will be copied into the ticket so pre-ticket clarification stays auditable.",
         "- Never use the answer tool to say you created, opened, routed, assigned, or spawned a ticket. Only create-ticket can say that.",
         "- Keep operational ticket replies professional and boring on purpose. Do not add jokes, puns, emojis, or cute phrasing to ticket creation, cancellation, access, security, or change updates.",
+        "- Keep harmless chat replies compact too. ASCII art must be small, no more than 6 lines, so it does not drown out later operational context.",
         "",
         "Approval boundary:",
         "- You are not an approval authority.",
@@ -1420,6 +1493,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "Examples:",
         "- hey -> answer directly.",
         "- send me a picture of a cat -> call the answer tool with a concise text/emoji cat response; do not call image services.",
+        "- send a meme to Rachel -> if the user only wants a caption, answer directly; if they ask you to actually send it to Rachel, create a traceable communications/request ticket or ask what channel/recipient details are approved.",
         "- how much does a house cost in Reno Nevada -> use web-search if current data is needed, then answer directly; do not create a ticket unless the user asks for tracked research.",
         "- I cannot log into GitLab before a customer call -> create a ticket assigned to Identity & Access.",
         "- I got a suspicious email -> create an Incident assigned to Security Operations; do not fetch suspicious URLs.",
@@ -1446,22 +1520,35 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
     attempts = max(1, int(os.getenv("OPS_CHAT_AGENT_TOOL_ATTEMPTS", "2")))
     last_result = {}
     for attempt in range(1, attempts + 1):
-        retry_prefix = ""
+        effective_prompt = base_prompt
         if attempt > 1:
-            retry_prefix = "\n".join([
+            effective_prompt = "\n".join([
                 "Your previous chat turn did not call a final ops_chat_tool.py answer/create-ticket command, so it was rejected.",
-                "This retry must call one final allowed command:",
-                "python ops_chat_tool.py answer --reply-file answer.md",
-                "or",
-                'python ops_chat_tool.py create-ticket --title "..." --ticket-class UserRequest --priority P3 --assignment-group "..." --intent "..."',
-                "or",
-                'python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --reply-file answer.md',
-                "Do not do any other work before the tool call.",
-                "If the user asked for operational work, use create-ticket or continue-ticket. Do not use answer to claim that a ticket exists.",
+                "This retry is a compact tool-decision turn. Do not explain. Do not do extra shell work. Use exactly one final Ops Chat tool command.",
                 "",
+                "Allowed final commands:",
+                "python ops_chat_tool.py answer --reply-file answer.md",
+                'python ops_chat_tool.py create-ticket --title "..." --ticket-class UserRequest --priority P3 --assignment-group "..." --intent "..."',
+                'python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --reply-file answer.md',
+                "",
+                "Decision rules:",
+                "- Harmless chat or current-info answer -> answer.",
+                "- New work involving install, purchase, account unlock, system/mailbox check, access, outage, deployment, security, ticket/request creation, or repair -> create-ticket.",
+                "- Update, cancellation, status check, or scope change for an existing linked ticket -> continue-ticket.",
+                "- Do not decide approvals. Real platform/provider barriers enforce approval later.",
+                "- Do not say you created a ticket unless create-ticket succeeds.",
+                "",
+                "Recent conversation context:",
+                history_text or "(no prior context)",
+                "",
+                "Existing/recent tickets linked to this chat room:",
+                ticket_context_text or "(no tickets are currently linked to this chat room)",
+                "",
+                "User message:",
+                message,
             ])
         result = await _run_chat_harness(
-            retry_prefix + base_prompt,
+            effective_prompt,
             session_id=session_id,
             requester_name=requester_name,
             purpose=f"chat_agent_turn_{attempt}",

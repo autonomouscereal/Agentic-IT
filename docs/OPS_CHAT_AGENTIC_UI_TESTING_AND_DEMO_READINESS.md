@@ -235,6 +235,7 @@ Latest validated state on 2026-05-20:
 | Browser UI retest | marker `ops-chat-ui-exec-1779283445`, ticket `1197`, iTop ref `616`, outbound Matrix question delivered, chat reply recorded as ticket note |
 | Broad enterprise retest | marker `ops-chat-enterprise-matrix-1779305167`, tickets `1198`-`1248`, 50/50 passed, global search found marker |
 | Real agent prompt guard | marker `ops-chat-scenarios-1779307368`, ticket `1255`, Hermes agent `333`, spawned prompt included canonical-ticket no-duplicate guardrail |
+| One-room Element marathon | marker `ops-chat-marathon-1779299559`, user `demo_chat_marathon5`, 16 mixed turns, tickets `1276`-`1280`, 15 working acks, passed |
 
 Smoke-owned agents `327` and `328` were stopped after collecting evidence so
 the demo queue was left clean. Final active-agent and process checks were
@@ -242,6 +243,32 @@ empty.
 
 Additional smoke-owned agents `330`, `331`, `332`, and `333` were stopped after
 collecting evidence during the later UI retest. Active agents ended at `0`.
+
+Latest one-room Element marathon:
+
+- Ran through the real Element UI and Keycloak as `demo_chat_marathon5`.
+- Used one Matrix DM with `@agentic-ops:agentic-ops.local` for harmless chat,
+  current-info questions, multiple operational tickets, cancellations,
+  replacement work, scope updates, and a room-scoped ticket summary.
+- Marker `ops-chat-marathon-1779299559` passed with 16 chat turns and 15 visible
+  working acknowledgements.
+- Created Figma install ticket `1276`, synced to iTop ref `695`, then cancelled
+  it when the requester said Jeff already had Figma.
+- Created urgent GitLab/account ticket `1277`, synced to iTop ref `696`, routed
+  to `Identity & Access`, priority `P1`, and spawned real agent `350`.
+- Created mailbox-check ticket `1278`, synced to iTop ref `697`, routed to
+  `Email Operations`, and spawned real agent `351`.
+- Created Adobe Acrobat Pro replacement ticket `1279`, synced to iTop ref
+  `698`, routed to `Procurement & Vendor Management`, and spawned real agent
+  `352`. This intentionally proved replacement work did not reuse cancelled
+  ticket `1276`.
+- Created VPN ticket `1280`, synced to iTop ref `699`, routed to `Network
+  Operations`, then cancelled it when the requester clarified they were on guest
+  Wi-Fi.
+- Backend verification after the run showed ticket `1276` and `1280` cancelled,
+  tickets `1277`-`1279` in progress, all five tickets provider-synced to iTop,
+  and no active agents/processes after stopping only the smoke-owned agents
+  `346`, `348`, `350`, `351`, and `352`.
 
 Rerun findings:
 
@@ -254,6 +281,12 @@ Rerun findings:
   access/change/setup/follow-up endpoints only.
 - The VPN real-agent case correctly asked a pre-ticket clarification. That is
   expected behavior when the missing answer changes route/scope/urgency.
+- The marathon exposed two chat-intake reliability bugs. First, a long general
+  chat history could make the harness miss the required final tool call on a
+  later operational turn; retries now use a compact tool-decision prompt.
+  Second, model text that merely claimed an old ticket id could resurrect a
+  cancelled ticket during side-effect recovery; recovery now trusts a ticket id
+  only when the user's current message explicitly referenced that ticket.
 
 ## Required Smoke Commands
 
@@ -262,6 +295,7 @@ Local source checks:
 ```powershell
 python -m py_compile api\routes\ops_chat.py api\routes\tickets.py api\routes\tools.py api\services\agent_runner.py api\services\itop_sync.py
 node --check scripts\smoke_ops_chat_playwright.js
+node --check scripts\smoke_ops_chat_workspace_marathon.js
 python scripts\text_hygiene.py
 python -m pytest tests -q
 ```
@@ -307,6 +341,22 @@ PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
 OPS_CHAT_ALLOW_IDENTITY_RESET=true \
 node scripts/smoke_ops_chat_playwright.js
 ```
+
+One-room user-experience marathon:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_MARATHON_MARKER="ops-chat-marathon-<unique>"
+node scripts\smoke_ops_chat_workspace_marathon.js
+```
+
+The marathon should create several provider-synced tickets from the same Matrix
+room, cancel the correct old tickets, create distinct replacement tickets,
+answer harmless chat without tickets, keep visible working acknowledgements,
+and leave no active smoke agents after cleanup.
 
 ## Broad UI Use-Case Matrix
 

@@ -36,8 +36,9 @@ approved reference modules when those capabilities are missing.
 
 The shared dashboard demo user is `demo_account_1`; its password is stored only
 in the local server-manager vault key `demo_account_1`. For the Element Ops
-Chat demo, use `demo_chat_alice`, `demo_chat_jeff`, or `demo_chat_exec`; those
-passwords are stored as same-named server-manager vault keys. The dashboard itself now has
+Chat demo, use `demo_chat_alice`, `demo_chat_jeff`, `demo_chat_exec`, or the
+marathon-proof account `demo_chat_marathon5`; those passwords are stored as
+same-named server-manager vault keys. The dashboard itself now has
 a first-party login page at `/login`; failed UI login attempts redirect back to
 that page, successful logins mint a signed HttpOnly `dashboard_session`, and
 the sidebar shows the signed-in account plus sign-out. Latest 2026-05-18 login
@@ -156,6 +157,12 @@ Latest live proof set, 2026-05-20:
 - marker `ops-chat-scenarios-1779302571`: no-spawn scenario smoke validated
   general chat, private web lookup, cat memory, account, software, VPN,
   phishing, CI/CD routing, and no intake-time approval gates.
+- marker `ops-chat-marathon-1779299559`: one real Element room handled
+  harmless chat, follow-up memory, current-info lookup, five provider-synced
+  operational tickets, cancellations, replacement work, scope update, room
+  ticket summary, visible working acknowledgements, and real agent spawns for
+  active work. Tickets `1276` and `1280` ended cancelled; tickets `1277`-`1279`
+  stayed in progress after spawning smoke-owned agents that were cleaned up.
 
 For the full test matrix and demo acceptance bar, see
 `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`.

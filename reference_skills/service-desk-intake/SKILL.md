@@ -98,6 +98,22 @@ The endpoint updates canonical assignment fields and records a
 `ticket-assignment` note. Provider-side assignment sync depends on the active
 ticket adapter.
 
+Ops Chat exposes the same behavior to the chat harness through
+`ops_chat_tool.py continue-ticket` fields:
+
+- `--assignment-group`
+- `--owning-group`
+- `--assignee`
+- `--escalation-tier`
+- `--priority`
+- `--reason`
+
+Use these when the requester clarifies that a ticket belongs to another team or
+tier. A single Matrix room can contain several unrelated tickets; do not attach
+every later message to the newest ticket. The chat agent should answer harmless
+messages, create distinct new tickets for distinct work, and continue only the
+specific ticket that the requester referenced or context clearly selects.
+
 Access-request RACI is also rule-driven. Rules whose intent starts with
 `access-` are used when an agent hits a permission wall and omits an explicit
 assignment group. Seeded examples route Mailcow to Email Operations, Wazuh/SIEM
@@ -157,6 +173,12 @@ Current high-signal examples:
   gates for mailbox, SIEM, containment, URL block, or endpoint response work
   are opened later only when the ticket agent hits the real workflow/provider
   barrier.
+- One-room Element marathon marker `ops-chat-marathon-1779299559` proved this
+  behavior end-to-end: Figma ticket `1276` was cancelled, Adobe replacement
+  ticket `1279` was created as distinct work, urgent account ticket `1277`
+  stayed in `Identity & Access`, mailbox ticket `1278` routed to `Email
+  Operations`, and VPN ticket `1280` routed to `Network Operations` then
+  cancelled.
 
 When a message mixes concepts, prefer the operational blocker. For example,
 "I cannot reach the finance file share because VPN stopped connecting" should

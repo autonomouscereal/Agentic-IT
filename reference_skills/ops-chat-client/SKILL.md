@@ -47,10 +47,13 @@ Reference stack:
   dashboard tool: `python ops_chat_tool.py answer --reply-file answer.md` for
   general chat, `python ops_chat_tool.py create-ticket ...` for new tracked
   work, or `python ops_chat_tool.py continue-ticket ...` for updates to an
-  existing room ticket. For benign current-information questions it may first use
-  `python ops_chat_tool.py web-search ...`, then finish with `answer`. It must
-  not run arbitrary curl, inline Python, external image generators, package
-  installs, or suspicious URL fetches in this lightweight chat turn.
+  existing room ticket. It can also use `python ops_chat_tool.py list-tickets`
+  and `python ops_chat_tool.py ticket-status --ticket-id N` before answering
+  room-scoped status questions. For benign current-information questions it may
+  first use `python ops_chat_tool.py web-search ...`, then finish with
+  `answer`. It must not run arbitrary curl, inline Python, external image
+  generators, package installs, or suspicious URL fetches in this lightweight
+  chat turn.
 - The chat agent may decide routing and assignment, but it is not an approval
   authority. Approval, access, credential, and change gates must come from real
   downstream barriers: scoped vault leases, provider permissions, workflow
@@ -60,6 +63,11 @@ Reference stack:
   is harmless chat, a new ticket, or a `user-response` note on a specific
   existing ticket. Cancellation-like updates mark the ticket cancelled and stop
   that ticket's active test/worker agent when present.
+- `continue-ticket` supports assignment fields for scope changes:
+  `--assignment-group`, `--owning-group`, `--assignee`, `--escalation-tier`,
+  and `--priority`. Use those fields to reassign or escalate an existing ticket
+  when the requester clarifies scope. Do not open a duplicate just to move the
+  work to a different team.
 - The bridge sets Matrix typing state and, for turns that take longer than a few
   seconds, sends a short working acknowledgement so the user sees that the
   agent is alive before the final answer/ticket response arrives.
@@ -199,6 +207,22 @@ This proves dashboard login, Element login through Keycloak, same-origin Matrix
 health from inside the browser, DM creation to `@agentic-ops:agentic-ops.local`,
 ticket creation, and real agent handoff.
 
+One-room Element marathon:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_MARATHON_MARKER="ops-chat-marathon-<unique>"
+node scripts\smoke_ops_chat_workspace_marathon.js
+```
+
+This keeps one Matrix DM open and mixes harmless chat, current-information
+questions, several operational tickets, cancellations, replacement work, scope
+updates, and ticket summaries. It is the preferred proof that Ops Chat is not a
+single latest-ticket parser path.
+
 ## Demo Prompt
 
 Fastest browser path:
@@ -258,6 +282,17 @@ queue or tier. It writes a `ticket-assignment` note for auditability.
 - Broad enterprise retest marker `ops-chat-enterprise-matrix-1779305167`
   created tickets `1198`-`1248`, passed 50/50 no-spawn cases, and proved global
   search visibility.
+- One-room Element marathon marker `ops-chat-marathon-1779299559` passed as
+  `demo_chat_marathon5` with 16 turns and 15 visible working acknowledgements.
+  It created Figma ticket `1276` and cancelled it, urgent GitLab/account ticket
+  `1277`, mailbox ticket `1278`, distinct Adobe replacement ticket `1279`, and
+  VPN ticket `1280` which was later cancelled. All five tickets synced to iTop
+  refs `695`-`699`. Real agents `350`-`352` were spawned for active work and
+  then stopped as smoke-owned cleanup, leaving active agents/processes empty.
+- The marathon also verified two reliability fixes: compact retry after a
+  missed final chat tool, and ticket-id recovery that refuses to trust stale
+  model claims unless the user's current message explicitly referenced that
+  ticket.
 - Real-agent prompt-guard marker `ops-chat-scenarios-1779307368` created ticket
   `1255`, spawned Hermes agent `333`, and verified that the actual process
   prompt included the canonical-ticket no-duplicate instruction.

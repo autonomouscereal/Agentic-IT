@@ -75,6 +75,17 @@ $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
 node scripts/smoke_ops_chat_user_experience.js
 ```
 
+One-room Element marathon proof:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_MARATHON_MARKER="ops-chat-marathon-<unique>"
+node scripts/smoke_ops_chat_workspace_marathon.js
+```
+
 Expected:
 
 - harmless/general chat returns an answer without a ticket;
@@ -95,6 +106,12 @@ Expected:
   explicitly decides it is a same-ticket scope update;
 - `/api/tickets/{id}/assignment` can reassign or escalate the ticket with a
   `ticket-assignment` audit note.
+- the marathon can keep one Matrix room open while the user asks unrelated
+  harmless questions, opens several tickets, cancels specific tickets, asks for
+  replacement work, updates scope on an existing urgent ticket, and asks for a
+  room-scoped status summary.
+- provider sync remains active for chat-created tickets, so iTop refs and sync
+  status should be visible after each operational ticket.
 
 Latest verified result on 2026-05-20:
 
@@ -109,6 +126,7 @@ browser UI retest: marker ops-chat-ui-exec-1779283445, ticket 1197, outbound cha
 post-guard real agent: marker ops-chat-scenarios-1779307368, ticket 1255, agent 333, canonical-ticket no-duplicate prompt verified
 direct watermelon UX: session !ux-watermelon2-1779308718, tickets 1259 cancelled and 1260 pizza replacement, both synced to iTop
 Element watermelon UX: marker ops-chat-ux-live-1779314587, tickets 1266 cancelled and 1267 pizza replacement, passed
+Element one-room marathon: marker ops-chat-marathon-1779299559, tickets 1276 cancelled, 1277 in_progress, 1278 in_progress, 1279 in_progress, 1280 cancelled; iTop refs 695-699; real agents 350-352 spawned and then smoke-cleaned; active agents after cleanup 0
 ```
 
 ## Server Health

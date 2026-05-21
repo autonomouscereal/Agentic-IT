@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-20T22:22:23.549651+00:00",
+  "generated_at": "2026-05-21T00:05:25.046204+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -561,6 +561,17 @@
       ]
     },
     {
+      "name": "ops-chat-client",
+      "source": "bundle",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 19099,
+          "sha256": "4bfb480c8c61efccc9a85f8d0c45c6321e4e634dffa70d2ea062e2125d758279"
+        }
+      ]
+    },
+    {
       "name": "owasp-zap-scanner",
       "source": "bundle",
       "files": [
@@ -1079,8 +1090,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 9953,
-          "sha256": "d091c6b33b085325226500bf2f976b5425051b2ddb63c3d015331f8766a01b8b"
+          "size": 10949,
+          "sha256": "873ddb686ad809f01c96896cd62f2bb94fa983dd5ac72ac789caa91ba1b71bb4"
         }
       ]
     },
@@ -1090,8 +1101,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 3392,
-          "sha256": "5c1bc727ad2686535a1b5ce1204a3c41ca1c4636483fd51fc3d1a839f5312234"
+          "size": 3703,
+          "sha256": "45fbb3aae4d6ddc2f59bc532aceb429cfa4165e9d131efbfd570663f0cb4e23c"
         }
       ]
     },

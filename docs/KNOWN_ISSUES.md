@@ -86,7 +86,7 @@ Required follow-up:
 
 ### Chat-originated ticket agent created a duplicate work ticket
 
-Status: fixed in source prompt guardrail; live rerun required.
+Status: fixed and verified.
 
 Impact:
 
@@ -104,6 +104,42 @@ Fix:
 - Strengthen chat-originated ticket prompt instructions to forbid duplicate
   work-ticket creation and to preserve the existing ticket unless creating a
   child access request/change/setup ticket is explicitly required.
+- Side-effect recovery now rejects a bare model claim such as "I created ticket
+  #123" unless the user's current message explicitly referenced that ticket.
+  This prevents replacement work from reviving a cancelled ticket based on a
+  stale or hallucinated id.
+
+Verification:
+
+- Controlled API guard test cancelled Figma ticket `1274`, then created a
+  distinct Adobe replacement ticket `1275`.
+- Real Element marathon marker `ops-chat-marathon-1779299559` cancelled Figma
+  ticket `1276`, then created distinct Adobe replacement ticket `1279`.
+
+### Ops Chat harness missed final tool after long mixed-room context
+
+Status: fixed and verified.
+
+Problem:
+
+- A long single-room conversation containing general chat, current-info
+  questions, and several operational asks could make the intake harness miss
+  the required final `ops_chat_tool.py` command on a later ticket turn.
+- The old retry resent too much context, so the same failure could repeat and
+  leave a scary dashboard-intake failure in the chat.
+
+Fix:
+
+- Recent chat history sent to the intake harness is shorter and bounded.
+- Retry attempts now use a compact tool-decision prompt with the current user
+  message, recent tickets, and allowed final commands instead of the full
+  explanatory prompt.
+
+Verification:
+
+- Real Element marathon marker `ops-chat-marathon-1779299559` successfully
+  handled Figma, urgent account, mailbox, Adobe replacement, VPN, cancellations,
+  room summary, and follow-up account reminder in one Matrix DM.
 
 ## Found During 2026-05-20 Ops Chat And Access RACI Work
 

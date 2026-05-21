@@ -149,6 +149,22 @@ After Keycloak login, confirm the profile says `Agentic Ops Agent`, click
 demo; it is Element's generic Matrix directory, not the local support-agent
 intake route.
 
+One-room marathon proof:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+node scripts\smoke_ops_chat_workspace_marathon.js
+```
+
+This uses the real Element UI, not a dashboard API shortcut. It validates that
+one Matrix room can hold several unrelated requests: harmless chat, follow-up
+memory, current information, multiple tickets, explicit cancellations,
+replacement work, scope updates, and room ticket summaries. The agent harness
+must decide answer/create/continue on every turn.
+
 Scenario smoke:
 
 ```bash
@@ -218,6 +234,18 @@ Latest live proof on 2026-05-20:
     Hermes agent `327`, and a request for the minimum missing details
     (approved software name and workstation hostname). The spawned smoke agent
     was stopped after visible progress to leave the demo queue clean.
+- One-room Element marathon:
+  - Marker `ops-chat-marathon-1779299559` passed as `demo_chat_marathon5` with
+    16 mixed chat turns and 15 visible working acknowledgements.
+  - Tickets `1276`-`1280` all synced to iTop refs `695`-`699`.
+  - Ticket `1276` was cancelled when the requester said Jeff already had Figma.
+  - Tickets `1277`-`1279` spawned real agents for account, mailbox, and Adobe
+    replacement work.
+  - Ticket `1280` was cancelled after the requester clarified the VPN issue was
+    guest Wi-Fi.
+  - The run proved the compact retry path and the guard that refuses to reuse a
+    cancelled ticket from stale model text unless the user explicitly
+    referenced that ticket.
 
 - Harness-required Ops Chat proof:
   - General chat marker `harness-answer-tool-1779286572` was answered by the

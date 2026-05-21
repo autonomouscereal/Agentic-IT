@@ -31,6 +31,11 @@ Expected providers:
   current lab that means iTop, and a healthy chat-created ticket should have
   `provider=itop`, a provider reference, `provider_sync_status=synced`, and a
   usable provider URL.
+- Current live chat proof: one-room Element marathon marker
+  `ops-chat-marathon-1779299559` created tickets `1276`-`1280`; all five used
+  provider `itop`, synced to provider refs `695`-`699`, and preserved dashboard
+  chat evidence while cancellations/replacements updated the canonical local
+  ticket state.
 - Provider sync must not overwrite richer local evidence from Ops Chat. Keep
   recent chat context, agent-selected assignment, and human-readable Ops Chat
   notes even if the provider returns a short summary or generic assignment.

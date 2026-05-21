@@ -144,12 +144,39 @@ Latest UX proof:
   `demo_chat_direct4`: first-turn current-information answer, follow-up general
   answer, watermelon procurement ticket `1266`, cancellation of ticket `1266`,
   and a distinct replacement pizza ticket `1267`.
+- One-room Element marathon marker `ops-chat-marathon-1779299559` passed using
+  `demo_chat_marathon5`: harmless chat, follow-up memory, current-information
+  lookup, Figma install ticket `1276`, urgent account ticket `1277`, mailbox
+  check ticket `1278`, cancellation of `1276`, Adobe replacement ticket `1279`,
+  VPN ticket `1280`, cancellation of `1280`, room ticket summary, and a final
+  account-reminder update. All five operational tickets synced to iTop refs
+  `695`-`699`; tickets `1277`-`1279` spawned real agents before smoke cleanup.
 - Direct API harness flow `!ux-watermelon2-1779308718:agentic-ops.local`
   passed the same behavior on tickets `1259` and `1260`, with both tickets
   synced to iTop.
 - Cancellation now stops the active chat-created ticket agent when the requester
   cancels the ticket, and `agent_runner.stop_agent_task` handles stale process
   handles without returning a scary 500.
+- Chat-intake retries now use a compact tool-decision prompt when the first
+  harness turn misses the required final tool. Side-effect recovery now trusts
+  a mentioned ticket id only when the current user message explicitly referenced
+  that ticket, so replacement work cannot accidentally revive a cancelled
+  request because a model sentence claimed the old id.
+
+Run the full one-room UX marathon:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+node scripts\smoke_ops_chat_workspace_marathon.js
+```
+
+This is the preferred pre-demo proof that one Element room can carry multiple
+general questions, multiple tickets, cancellations, replacements, scope
+updates, and user-visible working acknowledgements without collapsing into a
+single latest-ticket parser path.
 
 Latest live proof:
 

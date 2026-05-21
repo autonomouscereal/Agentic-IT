@@ -20,6 +20,7 @@
     "mailcow-wazuh-integration",
     "mempalace-mcp",
     "nuclei-scanner",
+    "ops-chat-client",
     "owasp-zap-scanner",
     "platform-credentials",
     "report-phish",
