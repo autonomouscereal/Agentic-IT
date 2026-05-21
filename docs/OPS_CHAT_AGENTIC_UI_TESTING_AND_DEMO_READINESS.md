@@ -1,6 +1,6 @@
 # Ops Chat Agentic UI Testing And Demo Readiness
 
-Last updated: 2026-05-20.
+Last updated: 2026-05-21.
 
 This document is the checkpoint for the current Ops Chat workstream: Element
 UI, Matrix/Synapse, Keycloak login, chat-to-agent routing, ticket sync,
@@ -74,6 +74,8 @@ The dashboard gives the configured Hermes/Claude harness a small
 - `create-ticket` for tracked operational work
 - `continue-ticket` for updates, requester replies, cancellations, or scope
   changes that clearly belong to one of the recent tickets in the room
+- `validate-artifact` for one-off developer artifacts such as Python scripts,
+  HTML snippets, Markdown runbooks, Bash scripts, JavaScript, JSON, or YAML
 
 The application may recover side effects and enforce safety, but it should not
 replace the agent's decision with a brittle custom JSON classifier.
@@ -101,6 +103,12 @@ Allowed pre-ticket clarification:
   description and the Ops Chat-created ticket note.
 - The agent should not ask the user to gather logs unless a policy/workflow
   requires it.
+- One-off developer artifact requests should stay in chat unless the user asks
+  to deploy, modify a real repo/system, or track the work. The chat harness must
+  write the artifact in its work directory, run `ops_chat_tool.py
+  validate-artifact`, and return the validated fenced code. The Matrix bridge
+  renders fenced code as safe Matrix `formatted_body` HTML so Element shows
+  readable code blocks without executing user-provided HTML.
 
 No-ticket examples:
 
@@ -236,6 +244,7 @@ Latest validated state on 2026-05-20:
 | Broad enterprise retest | marker `ops-chat-enterprise-matrix-1779305167`, tickets `1198`-`1248`, 50/50 passed, global search found marker |
 | Real agent prompt guard | marker `ops-chat-scenarios-1779307368`, ticket `1255`, Hermes agent `333`, spawned prompt included canonical-ticket no-duplicate guardrail |
 | One-room Element marathon | marker `ops-chat-marathon-1779299559`, user `demo_chat_marathon5`, 16 mixed turns, tickets `1276`-`1280`, 15 working acks, passed |
+| Developer artifact chat | marker `ops-chat-dev-artifact-1780000005`, user `demo_chat_marathon5`, Python/HTML/Markdown/Bash validated and rendered as Element code blocks with zero tickets |
 
 Smoke-owned agents `327` and `328` were stopped after collecting evidence so
 the demo queue was left clean. Final active-agent and process checks were
@@ -287,6 +296,11 @@ Rerun findings:
   Second, model text that merely claimed an old ticket id could resurrect a
   cancelled ticket during side-effect recovery; recovery now trusts a ticket id
   only when the user's current message explicitly referenced that ticket.
+- Developer artifact testing exposed the same class of issue for code: the
+  harness could claim it had validated a script while using the general answer
+  path. Dev artifact asks now require `validate-artifact`; if the harness calls
+  `answer` instead, the turn is rejected and retried with an artifact-only
+  prompt.
 
 ## Required Smoke Commands
 
@@ -296,6 +310,7 @@ Local source checks:
 python -m py_compile api\routes\ops_chat.py api\routes\tickets.py api\routes\tools.py api\services\agent_runner.py api\services\itop_sync.py
 node --check scripts\smoke_ops_chat_playwright.js
 node --check scripts\smoke_ops_chat_workspace_marathon.js
+node --check scripts\smoke_ops_chat_dev_artifacts.js
 python scripts\text_hygiene.py
 python -m pytest tests -q
 ```
@@ -357,6 +372,21 @@ The marathon should create several provider-synced tickets from the same Matrix
 room, cancel the correct old tickets, create distinct replacement tickets,
 answer harmless chat without tickets, keep visible working acknowledgements,
 and leave no active smoke agents after cleanup.
+
+Developer artifact UI proof:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_DEV_ARTIFACT_MARKER="ops-chat-dev-artifact-<unique>"
+node scripts\smoke_ops_chat_dev_artifacts.js
+```
+
+The artifact proof must return validated code blocks for Python, HTML,
+Markdown, and Bash in the real Element UI. It should not create tickets unless
+the user asks for tracked operational work.
 
 ## Broad UI Use-Case Matrix
 
@@ -455,6 +485,9 @@ For a demo-ready UI scenario:
 - The user can start in Element with a normal sentence.
 - The bot response is human-readable and not a raw stack trace/transcript.
 - General chat does not create unnecessary tickets.
+- One-off developer scripts, HTML, Markdown, Bash, JavaScript, JSON, and similar
+  artifacts are validated before being returned and render as code blocks in
+  Element without mangled shell, currency, or code characters.
 - Operational work creates a ticket only when enough context exists.
 - Ticket sync status is visible and `synced` when provider integration is on.
 - Ticket notes tell a chronological story without requiring raw logs.

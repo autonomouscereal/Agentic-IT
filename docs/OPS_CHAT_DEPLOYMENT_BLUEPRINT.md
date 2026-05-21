@@ -120,10 +120,17 @@ Expected:
   for long harness turns (`OPS_CHAT_WORKING_ACK_ENABLED=true`,
   `OPS_CHAT_WORKING_ACK_DELAY_SECONDS=2.5` by default) so users do not have to
   wonder whether the agent received the message.
+- fenced code responses are sent with safe Matrix `formatted_body` HTML, so
+  Element renders readable code blocks without executing user-provided HTML.
 - benign current-information questions can use the private SearXNG-backed
   `ops_chat_tool.py web-search` command before the chat agent sends its final
   `answer`. Suspicious URL handling remains ticket/workflow controlled and must
   not directly browse or curl the URL.
+- one-off developer artifact requests can use
+  `ops_chat_tool.py validate-artifact` after the harness writes the artifact
+  file. The tool validates Python, HTML, Markdown, Bash, JavaScript, and JSON
+  basics, then returns the full fenced artifact in chat. This stays no-ticket
+  unless the user asks to deploy, edit a real repo/system, or track the work.
 - ambiguous requests can be clarified before ticket creation when the answer
   changes routing or scope. Once the ticket is created, recent chat context is
   copied into the ticket description and the Ops Chat note.
@@ -151,6 +158,10 @@ Latest UX proof:
   VPN ticket `1280`, cancellation of `1280`, room ticket summary, and a final
   account-reminder update. All five operational tickets synced to iTop refs
   `695`-`699`; tickets `1277`-`1279` spawned real agents before smoke cleanup.
+- Developer artifact marker `ops-chat-dev-artifact-1780000005` passed through
+  the real Element UI as `demo_chat_marathon5`: Python, HTML, Markdown, and Bash
+  artifacts were validated, returned as rendered code blocks, and created no
+  tickets.
 - Direct API harness flow `!ux-watermelon2-1779308718:agentic-ops.local`
   passed the same behavior on tickets `1259` and `1260`, with both tickets
   synced to iTop.

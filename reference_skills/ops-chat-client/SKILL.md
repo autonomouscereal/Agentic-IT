@@ -51,9 +51,11 @@ Reference stack:
   and `python ops_chat_tool.py ticket-status --ticket-id N` before answering
   room-scoped status questions. For benign current-information questions it may
   first use `python ops_chat_tool.py web-search ...`, then finish with
-  `answer`. It must not run arbitrary curl, inline Python, external image
-  generators, package installs, or suspicious URL fetches in this lightweight
-  chat turn.
+  `answer`. For one-off developer artifacts, it must write the artifact file
+  and finish with `python ops_chat_tool.py validate-artifact --path ...`; do
+  not paste untested code through `answer`. It must not run arbitrary curl,
+  inline Python, external image generators, package installs, or suspicious URL
+  fetches in this lightweight chat turn.
 - The chat agent may decide routing and assignment, but it is not an approval
   authority. Approval, access, credential, and change gates must come from real
   downstream barriers: scoped vault leases, provider permissions, workflow
@@ -71,6 +73,9 @@ Reference stack:
 - The bridge sets Matrix typing state and, for turns that take longer than a few
   seconds, sends a short working acknowledgement so the user sees that the
   agent is alive before the final answer/ticket response arrives.
+- The bridge sends fenced code with safe Matrix `formatted_body` HTML, so
+  Element renders code blocks for developer one-off scripts without executing
+  user HTML.
 - Never perform hidden work outside tickets. If the user asks for account,
   system, email, deployment, security, access, change, research, or repair work,
   create or continue a ticket.
@@ -223,6 +228,21 @@ questions, several operational tickets, cancellations, replacement work, scope
 updates, and ticket summaries. It is the preferred proof that Ops Chat is not a
 single latest-ticket parser path.
 
+Developer artifact proof:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_DEV_ARTIFACT_MARKER="ops-chat-dev-artifact-<unique>"
+node scripts\smoke_ops_chat_dev_artifacts.js
+```
+
+This asks for Python, HTML, Markdown, and Bash artifacts through the real
+Element UI. Expected result: every artifact says `Validation: passed`, renders
+inside Element code blocks, and creates no tickets.
+
 ## Demo Prompt
 
 Fastest browser path:
@@ -293,6 +313,11 @@ queue or tier. It writes a `ticket-assignment` note for auditability.
   missed final chat tool, and ticket-id recovery that refuses to trust stale
   model claims unless the user's current message explicitly referenced that
   ticket.
+- Developer artifact marker `ops-chat-dev-artifact-1780000005` passed as
+  `demo_chat_marathon5`: Python, HTML, Markdown, and Bash artifacts were
+  validated with `validate-artifact`, rendered as Element code blocks, and
+  created zero tickets. A prior failed attempt showed the model claiming
+  validation through `answer`; the API now rejects that path for dev artifacts.
 - Real-agent prompt-guard marker `ops-chat-scenarios-1779307368` created ticket
   `1255`, spawned Hermes agent `333`, and verified that the actual process
   prompt included the canonical-ticket no-duplicate instruction.

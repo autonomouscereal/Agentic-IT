@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-21T00:05:25.046204+00:00",
+  "generated_at": "2026-05-21T01:02:00.376267+00:00",
   "config": "platform/skill_sync_config.json",
   "skills": [
     {
@@ -566,8 +566,8 @@
       "files": [
         {
           "path": "SKILL.md",
-          "size": 19099,
-          "sha256": "4bfb480c8c61efccc9a85f8d0c45c6321e4e634dffa70d2ea062e2125d758279"
+          "size": 20379,
+          "sha256": "0b782c9845ceaa5bf6609ce7c5071e34e452d22cd904220b0510246e76bb0e79"
         }
       ]
     },

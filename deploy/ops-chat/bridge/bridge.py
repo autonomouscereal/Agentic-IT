@@ -1,6 +1,8 @@
 import asyncio
+import html
 import json
 import os
+import re
 import time
 from urllib.parse import quote
 
@@ -29,6 +31,53 @@ WORKING_ACK_TEXT = os.getenv(
 
 BOT_USER_ID = f"@{MATRIX_BOT_LOCALPART}:{MATRIX_SERVER_NAME}"
 PROCESSED = set()
+
+
+def matrix_formatted_body(text):
+    """Render a small safe Markdown subset for Element without trusting HTML."""
+    parts = []
+    in_code = False
+    code_lang = ""
+    code_lines = []
+    paragraph_lines = []
+
+    def flush_paragraph():
+        if not paragraph_lines:
+            return
+        escaped = "<br>".join(html.escape(line) for line in paragraph_lines)
+        escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
+        escaped = re.sub(r"`([^`]+)`", lambda m: f"<code>{html.escape(m.group(1))}</code>", escaped)
+        parts.append(escaped)
+        paragraph_lines.clear()
+
+    def flush_code():
+        lang_class = f' class="language-{html.escape(code_lang)}"' if code_lang else ""
+        code = html.escape("\n".join(code_lines))
+        parts.append(f"<pre><code{lang_class}>{code}</code></pre>")
+        code_lines.clear()
+
+    for raw_line in str(text or "").splitlines():
+        fence = re.match(r"^\s*```\s*([A-Za-z0-9_+.#-]*)\s*$", raw_line)
+        if fence:
+            if in_code:
+                flush_code()
+                in_code = False
+                code_lang = ""
+            else:
+                flush_paragraph()
+                in_code = True
+                code_lang = fence.group(1).strip()[:40]
+            continue
+        if in_code:
+            code_lines.append(raw_line)
+        elif raw_line.strip():
+            paragraph_lines.append(raw_line)
+        else:
+            flush_paragraph()
+    if in_code:
+        flush_code()
+    flush_paragraph()
+    return "<br><br>".join(parts) or html.escape(str(text or ""))
 
 
 async def ensure_bot_profile():
@@ -134,13 +183,20 @@ async def send_matrix_message(room_id, text):
         f"{MATRIX_HOMESERVER_URL}/_matrix/client/v3/rooms/"
         f"{quote(room_id, safe='')}/send/m.room.message/{txn_id}"
     )
-    payload = {"msgtype": "m.text", "body": text}
+    payload = {
+        "msgtype": "m.text",
+        "body": text,
+        "format": "org.matrix.custom.html",
+        "formatted_body": matrix_formatted_body(text),
+    }
     params = {"access_token": MATRIX_AS_TOKEN, "user_id": BOT_USER_ID}
     async with ClientSession() as session:
         async with session.put(url, params=params, json=payload, timeout=30) as response:
             if response.status >= 400:
                 body = await response.text()
                 print(f"Matrix send failed {response.status}: {body}", flush=True)
+                if response.status == 403:
+                    return "forbidden"
                 return False
             return True
 
@@ -295,11 +351,18 @@ async def poll_dashboard_outbound(app):
                 if not room_id or not body:
                     continue
                 sent = await send_matrix_message(room_id, body)
-                if sent:
+                if sent is True:
                     await dashboard_outbound_ack(event)
                     print(
                         f"Delivered outbound chat event {event.get('event_key')} "
                         f"for ticket {event.get('ticket_id')} to {room_id}",
+                        flush=True,
+                    )
+                elif sent == "forbidden":
+                    await dashboard_outbound_ack(event)
+                    print(
+                        f"Acked undeliverable outbound chat event {event.get('event_key')} "
+                        f"for ticket {event.get('ticket_id')} because bot is not in {room_id}",
                         flush=True,
                     )
         except asyncio.CancelledError:

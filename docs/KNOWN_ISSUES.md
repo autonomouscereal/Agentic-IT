@@ -4,6 +4,36 @@ Last updated: 2026-05-20.
 
 ## Found During 2026-05-20 Ops Chat UI Retest
 
+### Dev artifact requests rendered or validated inconsistently
+
+Status: fixed and verified on 2026-05-21.
+
+Problem:
+
+- When a developer asked for a script through Element, the harness could return
+  code using the general `answer` path while merely claiming it had tested the
+  code.
+- Matrix was also sending plain `m.text` only, so fenced code survived as text
+  but Element was not explicitly receiving safe `formatted_body` code blocks.
+
+Fix:
+
+- Added `ops_chat_tool.py validate-artifact` for Python, HTML, Markdown, Bash,
+  JavaScript, and JSON basics. The tool runs bounded validation, returns a
+  validation summary, and includes the full artifact in a fenced code block.
+- Dev artifact requests are now detected by the API. If the harness tries to
+  answer with `answer` instead of `validate-artifact`, the turn is rejected and
+  retried with an artifact-only prompt.
+- The Matrix bridge now renders a safe Markdown subset into Matrix
+  `formatted_body`, escaping user HTML and rendering fenced code as
+  `<pre><code>`.
+
+Verification:
+
+- Real Element marker `ops-chat-dev-artifact-1780000005` passed as
+  `demo_chat_marathon5`: Python, HTML, Markdown, and Bash artifacts all showed
+  `Validation: passed`, rendered as code blocks, and created zero tickets.
+
 ### Ops Chat felt unresponsive and assumed one ticket per Matrix room
 
 Status: fixed and verified.

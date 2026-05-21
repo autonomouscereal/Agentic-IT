@@ -163,6 +163,10 @@ Latest live proof set, 2026-05-20:
   ticket summary, visible working acknowledgements, and real agent spawns for
   active work. Tickets `1276` and `1280` ended cancelled; tickets `1277`-`1279`
   stayed in progress after spawning smoke-owned agents that were cleaned up.
+- marker `ops-chat-dev-artifact-1780000005`: the same Element chat path handled
+  developer one-off artifact requests for Python, HTML, Markdown, and Bash,
+  validated each artifact through the harness toolbelt, rendered them as Element
+  code blocks, and created zero tickets.
 
 For the full test matrix and demo acceptance bar, see
 `docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md`.

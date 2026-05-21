@@ -720,6 +720,16 @@ def _reply_claims_ticket_work(reply):
     return any(re.search(pattern, text) for pattern in patterns)
 
 
+def _looks_like_dev_artifact_request(message):
+    text = str(message or "").lower()
+    if not re.search(r"\b(create|write|make|generate|build|give me|send me)\b", text):
+        return False
+    return bool(re.search(
+        r"\b(script|python|html|markdown|md file|bash|shell script|javascript|js file|json|yaml|runbook|code|snippet)\b",
+        text,
+    ))
+
+
 def _looks_like_cancellation_text(text):
     value = str(text or "").lower()
     return any(word in value for word in ("cancel", "cancelled", "canceled", "nevermind", "never mind"))
@@ -740,6 +750,8 @@ def _write_ops_chat_tool(work_dir, tool_context):
 import argparse
 import json
 import os
+from pathlib import Path
+import subprocess
 import sys
 import time
 import urllib.error
@@ -813,6 +825,147 @@ def clean_intent(value):
     if not text or len(text) > 80:
         return "agent-selected"
     return text
+
+
+def safe_artifact_path(value):
+    if not value:
+        raise SystemExit("--path is required")
+    root = Path.cwd().resolve()
+    path = (root / value).resolve()
+    if root != path and root not in path.parents:
+        raise SystemExit("artifact path must stay inside the chat work directory")
+    if not path.exists() or not path.is_file():
+        raise SystemExit(f"artifact path does not exist: {value}")
+    return path
+
+
+def artifact_kind(path, requested):
+    kind = (requested or "").strip().lower()
+    if kind:
+        return kind
+    suffix = path.suffix.lower()
+    return {
+        ".py": "python",
+        ".html": "html",
+        ".htm": "html",
+        ".md": "markdown",
+        ".sh": "shell",
+        ".bash": "shell",
+        ".js": "javascript",
+        ".mjs": "javascript",
+        ".json": "json",
+    }.get(suffix, "text")
+
+
+def run_check(command, cwd, timeout, input_text=None):
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(cwd),
+            input=input_text,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+    except FileNotFoundError:
+        return {"ok": False, "command": command[0], "error": f"{command[0]} not found"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "command": " ".join(command), "error": f"timed out after {timeout}s"}
+    return {
+        "ok": completed.returncode == 0,
+        "command": " ".join(command),
+        "returncode": completed.returncode,
+        "stdout": (completed.stdout or "")[-1200:],
+        "stderr": (completed.stderr or "")[-1200:],
+    }
+
+
+def validate_artifact(args):
+    path = safe_artifact_path(args.path)
+    kind = artifact_kind(path, args.kind)
+    content = path.read_text(encoding="utf-8", errors="replace")
+    checks = []
+    timeout = max(1, min(int(args.timeout or 15), 60))
+    if kind == "python":
+        checks.append(run_check([sys.executable, "-m", "py_compile", str(path)], path.parent, timeout))
+        if args.run:
+            checks.append(run_check([sys.executable, str(path.name)], path.parent, timeout, input_text=""))
+    elif kind in ("javascript", "js"):
+        checks.append(run_check(["node", "--check", str(path)], path.parent, timeout))
+        if args.run:
+            checks.append(run_check(["node", str(path.name)], path.parent, timeout, input_text=""))
+    elif kind == "shell":
+        checks.append(run_check(["bash", "-n", str(path)], path.parent, timeout))
+    elif kind == "json":
+        try:
+            json.loads(content)
+            checks.append({"ok": True, "command": "json.loads", "returncode": 0})
+        except json.JSONDecodeError as exc:
+            checks.append({"ok": False, "command": "json.loads", "error": str(exc)})
+    elif kind == "html":
+        import html.parser
+        parser = html.parser.HTMLParser()
+        try:
+            parser.feed(content)
+            lower = content.lower()
+            missing = [tag for tag in ("<html", "<body") if tag not in lower]
+            checks.append({
+                "ok": not missing,
+                "command": "HTMLParser.feed",
+                "warning": f"missing tags: {', '.join(missing)}" if missing else "",
+            })
+        except Exception as exc:
+            checks.append({"ok": False, "command": "HTMLParser.feed", "error": str(exc)})
+    elif kind == "markdown":
+        fence_count = content.count("```")
+        checks.append({
+            "ok": fence_count % 2 == 0,
+            "command": "markdown fence balance",
+            "warning": "unbalanced fenced code blocks" if fence_count % 2 else "",
+        })
+    else:
+        checks.append({"ok": bool(content.strip()), "command": "nonempty artifact"})
+    ok = all(check.get("ok") for check in checks)
+    lang = {
+        "python": "python",
+        "javascript": "javascript",
+        "js": "javascript",
+        "html": "html",
+        "markdown": "markdown",
+        "shell": "bash",
+        "json": "json",
+    }.get(kind, "")
+    title = (args.title or path.name).strip()
+    summary = [f"{title}", ""]
+    summary.append("Validation: " + ("passed" if ok else "failed"))
+    for check in checks:
+        label = check.get("command", "check")
+        status = "pass" if check.get("ok") else "fail"
+        detail = check.get("warning") or check.get("error") or check.get("stderr") or check.get("stdout") or ""
+        detail = " ".join(str(detail).split())[:220]
+        summary.append(f"- {status}: {label}" + (f" - {detail}" if detail else ""))
+    if args.notes:
+        summary.extend(["", args.notes.strip()])
+    if len(content) > int(args.max_chars):
+        shown = content[:int(args.max_chars)]
+        summary.extend(["", f"Artifact is {len(content)} characters; showing first {args.max_chars}."])
+    else:
+        shown = content
+    summary.extend(["", f"```{lang}", shown.rstrip(), "```"])
+    reply = "\n".join(summary).strip()
+    result = {
+        "mode": "artifact",
+        "reply": reply,
+        "artifact": {
+            "filename": path.name,
+            "kind": kind,
+            "size_chars": len(content),
+            "validation_passed": ok,
+            "checks": checks,
+        },
+    }
+    write_result(result)
+    print(reply)
 
 
 def looks_like_cancellation(text):
@@ -1141,6 +1294,16 @@ def main():
     search.add_argument("--timeout", type=int, default=20)
     search.set_defaults(func=web_search)
 
+    artifact = sub.add_parser("validate-artifact")
+    artifact.add_argument("--path", required=True)
+    artifact.add_argument("--kind", default="")
+    artifact.add_argument("--title", default="")
+    artifact.add_argument("--notes", default="")
+    artifact.add_argument("--run", action=argparse.BooleanOptionalAction, default=False)
+    artifact.add_argument("--timeout", type=int, default=15)
+    artifact.add_argument("--max-chars", type=int, default=8000)
+    artifact.set_defaults(func=validate_artifact)
+
     list_cmd = sub.add_parser("list-tickets")
     list_cmd.set_defaults(func=list_tickets)
 
@@ -1413,23 +1576,26 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
     ticket_context = await _session_ticket_context(session_id) if session_id else []
     ticket_context_text = _format_session_ticket_context(ticket_context)
     allowed_ticket_ids = [int(row["id"]) for row in ticket_context if row.get("id")]
+    requires_artifact = _looks_like_dev_artifact_request(message)
     base_prompt = "\n".join([
         "You are the Matrix/Element Ops Chat agent for Agentic Operations.",
         "You are a real agent harness turn, not a classifier.",
         "",
         "Your job:",
-        "1. You must end every user message with one final Ops Chat tool command: answer, create-ticket, or continue-ticket.",
+        "1. You must end every user message with one final Ops Chat tool command: answer, validate-artifact, create-ticket, or continue-ticket.",
         "2. If this is harmless/general chat, call the answer tool.",
         "3. If this is a benign current-information question, you may first call web-search, then call answer with a short sourced summary.",
-        "4. If this is new operational work, call the create-ticket tool.",
-        "5. If this is clearly about an existing ticket in this same chat, call continue-ticket against that ticket.",
-        "6. Do not return a final answer until after the final tool command succeeds.",
+        "4. If the user asks for a one-off dev artifact, write the file and call validate-artifact.",
+        "5. If this is new operational work, call the create-ticket tool.",
+        "6. If this is clearly about an existing ticket in this same chat, call continue-ticket against that ticket.",
+        "7. Do not return a final answer until after the final tool command succeeds.",
         "",
         "Allowed commands:",
         '  python ops_chat_tool.py web-search --query "benign research query" --limit 5',
         "  python ops_chat_tool.py list-tickets",
         "  python ops_chat_tool.py ticket-status --ticket-id 123",
         "  python ops_chat_tool.py answer --reply-file answer.md",
+        '  python ops_chat_tool.py validate-artifact --path script.py --kind python --title "Tested Python script" --run',
         '  python ops_chat_tool.py create-ticket --title "short title" --ticket-class UserRequest --priority P3 --assignment-group "Identity & Access" --intent "account-login" --spawn-agent',
         '  python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --reply-file answer.md',
         '  python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --assignment-group "Identity & Access" --priority P2 --reason "requester clarified SSO/MFA scope"',
@@ -1442,9 +1608,11 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- Do not emit JSON for the application to parse. Use the tool.",
         "- For current-information answers, preserve numbers, units, dates, and currency magnitudes exactly from the web-search snippets. If snippets disagree or look abbreviated, say so instead of guessing or dropping digits.",
         "- For answers with currency symbols, code, quotes, or multiple lines, write answer.md with the file tool and call --reply-file. Do not pass US$0.65 or similar dollar amounts through a shell argument because shells can expand $0.",
+        "- For dev one-off code/artifact asks such as Python, HTML, Markdown, JavaScript, shell scripts, or JSON, write the artifact file, validate it with validate-artifact, and return that tool output. Do not paste untested code through answer.",
         "",
         "Decision guidance:",
         "- General chat: use the answer tool.",
+        "- Dev artifact chat: write the requested file and use validate-artifact. This is still a no-ticket chat answer unless the user asks you to deploy, modify a real repo/system, create a PR, or track the work.",
         "- New operational work: use the create-ticket tool.",
         "- Messages asking you to install, purchase, check a mailbox/system, unlock an account, fix access, deploy, investigate an outage, update software, open a request, cancel work, or change scope are operational unless the user clearly asks for casual advice only.",
         "- Existing ticket follow-up: use continue-ticket only when the user's message is clearly an update, cancellation, requested detail, or scope change for one of the existing chat tickets listed below.",
@@ -1494,6 +1662,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- hey -> answer directly.",
         "- send me a picture of a cat -> call the answer tool with a concise text/emoji cat response; do not call image services.",
         "- send a meme to Rachel -> if the user only wants a caption, answer directly; if they ask you to actually send it to Rachel, create a traceable communications/request ticket or ask what channel/recipient details are approved.",
+        "- write me a Python script or HTML page -> create the file in the work directory, run validate-artifact, and return the validated fenced code in chat.",
         "- how much does a house cost in Reno Nevada -> use web-search if current data is needed, then answer directly; do not create a ticket unless the user asks for tracked research.",
         "- I cannot log into GitLab before a customer call -> create a ticket assigned to Identity & Access.",
         "- I got a suspicious email -> create an Incident assigned to Security Operations; do not fetch suspicious URLs.",
@@ -1522,17 +1691,27 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
     for attempt in range(1, attempts + 1):
         effective_prompt = base_prompt
         if attempt > 1:
+            artifact_retry = [
+                "This user asked for a developer artifact. Your final command must be validate-artifact.",
+                "Write the requested artifact file in the current work directory first.",
+                "Then run a final command like:",
+                'python ops_chat_tool.py validate-artifact --path artifact.py --kind python --title "Tested artifact" --run',
+                "",
+            ] if requires_artifact else []
             effective_prompt = "\n".join([
-                "Your previous chat turn did not call a final ops_chat_tool.py answer/create-ticket command, so it was rejected.",
+                "Your previous chat turn did not call the required final ops_chat_tool.py command, so it was rejected.",
                 "This retry is a compact tool-decision turn. Do not explain. Do not do extra shell work. Use exactly one final Ops Chat tool command.",
                 "",
+                *artifact_retry,
                 "Allowed final commands:",
                 "python ops_chat_tool.py answer --reply-file answer.md",
+                'python ops_chat_tool.py validate-artifact --path artifact.py --kind python --title "Tested artifact"',
                 'python ops_chat_tool.py create-ticket --title "..." --ticket-class UserRequest --priority P3 --assignment-group "..." --intent "..."',
                 'python ops_chat_tool.py continue-ticket --ticket-id 123 --message-file ops_chat_message.txt --reply-file answer.md',
                 "",
                 "Decision rules:",
                 "- Harmless chat or current-info answer -> answer.",
+                "- One-off dev code/artifact request -> write a file, then validate-artifact.",
                 "- New work involving install, purchase, account unlock, system/mailbox check, access, outage, deployment, security, ticket/request creation, or repair -> create-ticket.",
                 "- Update, cancellation, status check, or scope change for an existing linked ticket -> continue-ticket.",
                 "- Do not decide approvals. Real platform/provider barriers enforce approval later.",
@@ -1568,6 +1747,15 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         last_result = result
         tool_result = result.get("tool_result")
         if isinstance(tool_result, dict) and tool_result.get("mode"):
+            if requires_artifact and tool_result.get("mode") != "artifact":
+                await log_event("ops-chat", "warning", "ops-chat-agent", "chat_agent_artifact_tool_required",
+                                f"chat_session_{session_id}", {
+                                    "harness": result.get("harness"),
+                                    "model": result.get("model"),
+                                    "attempt": attempt,
+                                    "tool_mode": tool_result.get("mode"),
+                                })
+                continue
             if tool_result.get("mode") == "general" and _reply_claims_ticket_work(tool_result.get("reply")):
                 recovered_update = await _recover_ticket_update_side_effect(message, session_id=session_id)
                 if recovered_update:

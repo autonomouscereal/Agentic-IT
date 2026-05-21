@@ -86,6 +86,17 @@ $env:OPS_CHAT_MARATHON_MARKER="ops-chat-marathon-<unique>"
 node scripts/smoke_ops_chat_workspace_marathon.js
 ```
 
+Developer artifact proof through Element:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_DEV_ARTIFACT_MARKER="ops-chat-dev-artifact-<unique>"
+node scripts/smoke_ops_chat_dev_artifacts.js
+```
+
 Expected:
 
 - harmless/general chat returns an answer without a ticket;
@@ -112,6 +123,8 @@ Expected:
   room-scoped status summary.
 - provider sync remains active for chat-created tickets, so iTop refs and sync
   status should be visible after each operational ticket.
+- dev one-off artifact asks can return tested Python, HTML, Markdown, and Bash
+  artifacts as rendered Element code blocks without creating tickets.
 
 Latest verified result on 2026-05-20:
 
@@ -127,6 +140,7 @@ post-guard real agent: marker ops-chat-scenarios-1779307368, ticket 1255, agent 
 direct watermelon UX: session !ux-watermelon2-1779308718, tickets 1259 cancelled and 1260 pizza replacement, both synced to iTop
 Element watermelon UX: marker ops-chat-ux-live-1779314587, tickets 1266 cancelled and 1267 pizza replacement, passed
 Element one-room marathon: marker ops-chat-marathon-1779299559, tickets 1276 cancelled, 1277 in_progress, 1278 in_progress, 1279 in_progress, 1280 cancelled; iTop refs 695-699; real agents 350-352 spawned and then smoke-cleaned; active agents after cleanup 0
+Element dev artifacts: marker ops-chat-dev-artifact-1780000005, Python/HTML/Markdown/Bash validated and rendered as code blocks; ticket delta 0 for all four cases
 ```
 
 ## Server Health

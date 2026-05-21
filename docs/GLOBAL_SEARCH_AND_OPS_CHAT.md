@@ -165,6 +165,21 @@ memory, current information, multiple tickets, explicit cancellations,
 replacement work, scope updates, and room ticket summaries. The agent harness
 must decide answer/create/continue on every turn.
 
+Developer artifact proof:
+
+```powershell
+$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_USER="demo_chat_marathon5"
+$env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+node scripts\smoke_ops_chat_dev_artifacts.js
+```
+
+The dev proof asks for Python, HTML, Markdown, and Bash artifacts through the
+real Element UI. The chat harness must validate each artifact with
+`ops_chat_tool.py validate-artifact`; Element must render the fenced artifacts
+as code blocks; and no tickets should be created for pure one-off dev answers.
+
 Scenario smoke:
 
 ```bash
@@ -246,6 +261,14 @@ Latest live proof on 2026-05-20:
   - The run proved the compact retry path and the guard that refuses to reuse a
     cancelled ticket from stale model text unless the user explicitly
     referenced that ticket.
+- Developer artifact proof:
+  - Marker `ops-chat-dev-artifact-1780000005` passed through Element as
+    `demo_chat_marathon5`.
+  - Python, HTML, Markdown, and Bash artifacts were validated, returned as
+    rendered code blocks, and created zero tickets.
+  - The first failed attempt in this workstream proved why the guard matters:
+    the model claimed script validation through the general answer path. The API
+    now requires `validate-artifact` for dev artifact asks and retries otherwise.
 
 - Harness-required Ops Chat proof:
   - General chat marker `harness-answer-tool-1779286572` was answered by the
