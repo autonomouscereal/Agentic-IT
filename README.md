@@ -297,6 +297,24 @@ Security/compliance:
 - [FedRAMP-Style Security Hardening](docs/FEDRAMP_SECURITY_HARDENING.md)
 - [FedRAMP Access Control Prep](docs/FEDRAMP_ACCESS_CONTROL_PREP.md)
 
+## Current Demo Baseline
+
+Last verified on 2026-05-22:
+
+- Dashboard health is `ok` at the live HTTPS deployment.
+- Runner health shows Codex OAuth logged in, model API reachable through the
+  `4001` proxy, worker count `5`, max concurrent agents `5`, and queue depth
+  `0`.
+- Tickets are curated to terminal demo state: `1093` resolved, `294` closed,
+  `204` cancelled, `1` implemented, and zero open/nonterminal tickets.
+- Agent work is idle: zero active agents and zero queued/running tasks.
+- Approval queue is clean: zero pending/approved change gates.
+- Tool health is clean: `19` healthy, `0` degraded, `0` down, `0` unknown.
+
+Use [Demo Ticket Catalog](docs/DEMO_TICKET_CATALOG.md) for prepared proof
+tickets and [Ops Chat Agentic UI Testing And Demo Readiness](docs/OPS_CHAT_AGENTIC_UI_TESTING_AND_DEMO_READINESS.md)
+for the latest chat, artifact, Roundcube, and cleanup evidence.
+
 ## Useful Operator Commands
 
 Health checks:

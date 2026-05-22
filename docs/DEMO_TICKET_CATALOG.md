@@ -1,6 +1,6 @@
 # Demo Ticket Catalog
 
-Last updated: 2026-05-21.
+Last updated: 2026-05-22.
 
 Use the dashboard at `https://192.168.50.222:25443`. On the Tickets page, choose
 the `Demo Proofs` filter to show the curated prepared examples in the order
@@ -169,6 +169,29 @@ Current cleanup target state:
   Codex CLI `0.132.0` ran as agent `365` through the `4001` AI proxy, used the
   scoped workspace dashboard session, wrote a ticket note, and resolved the
   ticket.
+
+On 2026-05-22, the live dashboard received a final pre-demo curation after the
+heavy Ops Chat and security regression passes:
+
+- 86 stale nonterminal synthetic tickets were resolved with internal
+  `demo-curation` notes. No tickets were deleted; evidence remains in notes,
+  audit records, provider references, and test reports.
+- 41 stale change gates tied to archived tickets were rejected, including the
+  leftover privileged-reset negative-control gate `349` on already-cancelled
+  ticket `1490`.
+- 29 stale access requests were rejected, and 39 stale agent tasks plus 39 stale
+  agents were moved to terminal states so the Agents view does not show old
+  smoke work as active work.
+- Final live counts after cleanup: `1093` resolved tickets, `294` closed
+  tickets, `204` cancelled tickets, `1` implemented ticket, zero open tickets,
+  zero active agents, zero queued/running tasks, and zero pending/approved
+  change gates.
+- `/api/agents/runner-health` showed worker count `5`, max concurrent agents
+  `5`, Codex OAuth logged in, the model API reachable through the `4001` proxy,
+  and no active queue depth.
+- `/api/tools/check-all` and `/api/tools/status` showed `19` healthy tools,
+  `0` degraded, `0` down, and `0` unknown after Codex Agent Harness was
+  classified as a managed harness/no-network-probe module.
 
 ## Regression Cases Not For Lead Demo
 

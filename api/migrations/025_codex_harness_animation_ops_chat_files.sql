@@ -30,8 +30,8 @@ INSERT INTO tools (name, type, host, port, description)
 VALUES (
     'Codex Agent Harness',
     'agent-harness',
-    'api',
-    0,
+    NULL,
+    NULL,
     'OpenAI Codex CLI harness option for dashboard agents, routed through the Agentic Operations AI proxy.'
 )
 ON CONFLICT (name) DO UPDATE SET

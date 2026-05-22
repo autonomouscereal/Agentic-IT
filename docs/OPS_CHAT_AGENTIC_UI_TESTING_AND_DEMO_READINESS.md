@@ -920,6 +920,38 @@ installed. Use Element on `https://host.docker.internal:3303` and Roundcube on
 `http://host.docker.internal:2581/webmail/`; never replace either with a shim
 for demo acceptance.
 
+## 2026-05-22 Final Demo Curation
+
+After the severe chat, artifact, Roundcube, and guardrail tests, the live
+dashboard was curated so the employer demo opens cleanly without stale smoke
+state masquerading as active work.
+
+Live cleanup actions:
+
+- Resolved 86 stale nonterminal synthetic tickets with internal
+  `demo-curation` notes.
+- Rejected 41 stale change gates and 29 stale access requests tied to archived
+  synthetic tickets.
+- Terminated 39 stale agent tasks and 39 stale agents that had no live process
+  or useful demo role.
+- Rejected leftover privileged-reset gate `349` on already-cancelled ticket
+  `1490`; this was a non-destructive security negative-control proof.
+
+Final live baseline:
+
+- Dashboard `/health`: `ok`, version `1.3.0`.
+- Tickets: `1093` resolved, `294` closed, `204` cancelled, `1` implemented,
+  zero open/nonterminal tickets.
+- Agents/tasks: zero active agents and zero queued/running tasks.
+- Changes: zero pending/approved gates.
+- Runner: worker count `5`, max concurrent agents `5`, queue depth `0`, Codex
+  OAuth logged in, model API reachable through the `4001` proxy.
+- Tools: `19` healthy, `0` degraded, `0` down, `0` unknown.
+
+Demo rule: keep manual approval gates manual during the live demo. Only clear
+stale synthetic gates during pre-demo curation when their parent ticket is
+already terminal and the cleanup note records why the gate was rejected.
+
 ## Known Rough Edge
 
 Element first-login and first-contact prompts are stateful and can make browser

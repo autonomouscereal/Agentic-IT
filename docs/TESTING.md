@@ -1918,3 +1918,37 @@ Result on 2026-05-21:
 - returned page rendered the smoke marker through the dashboard HTTPS edge.
 - `/api/agents/active` returned zero active agents after the smoke cleaned up
   its synthetic task/agent/ticket.
+
+## Final Demo Baseline - 2026-05-22
+
+Purpose: prove the live dashboard is clean after severe Ops Chat, artifact,
+Roundcube report-phish, security guardrail, and ticket lifecycle testing.
+
+Live validation commands were run on the AI server from
+`/home/cereal/SOC_TESTING/soc-dashboard` using the dashboard service token from
+runtime `.env` only.
+
+Results:
+
+- `/health`: `{"status":"ok","version":"1.3.0"}`.
+- `/api/agents/runner-health`: Codex OAuth logged in, model API reachable
+  through the `4001` proxy, worker count `5`, max concurrent agents `5`, queue
+  depth `0`.
+- Ticket status counts: `resolved=1093`, `closed=294`, `cancelled=204`,
+  `implemented=1`; no open/nonterminal tickets.
+- Agent work: zero queued/running tasks and zero active agents.
+- Change gates: zero pending/approved gates after rejecting stale synthetic gate
+  `349` on already-cancelled ticket `1490`.
+- Tools: `/api/tools/check-all` then `/api/tools/status` returned `19` healthy,
+  `0` degraded, `0` down, and `0` unknown.
+- Codex Agent Harness is now classified as a managed `agent-harness` module with
+  no network probe instead of an unknown port check.
+
+Cleanup evidence:
+
+- 86 stale synthetic nonterminal tickets were resolved with internal
+  `demo-curation` notes.
+- 41 stale change gates, 29 stale access requests, 39 stale agent tasks, and 39
+  stale agents were reconciled to terminal states.
+- No evidence was deleted; historical work remains in tickets, notes, audit,
+  provider references, and the test reports.

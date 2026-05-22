@@ -77,6 +77,30 @@ Use `/api/agents/runner-health` after saving. It should show matching
 login status, and proxy health. If those values disagree, recycle only the API
 service and recheck before a demo.
 
+## Current Demo Baseline
+
+Last verified on 2026-05-22 after final pre-demo curation:
+
+- Dashboard `/health`: `ok`, version `1.3.0`.
+- Runner health: Codex OAuth logged in, model API reachable through the `4001`
+  proxy, worker count `5`, max concurrent agents `5`, queue depth `0`.
+- Tickets: `1093` resolved, `294` closed, `204` cancelled, `1` implemented,
+  zero open/nonterminal tickets.
+- Agents/tasks: zero active agents and zero queued/running tasks.
+- Changes: zero pending/approved gates.
+- Tools: `19` healthy, `0` degraded, `0` down, `0` unknown.
+
+Cleanup was non-destructive: 86 stale nonterminal synthetic tickets were
+resolved with `demo-curation` notes, 41 stale gates and 29 stale access requests
+were rejected, and 39 stale tasks plus 39 stale agents were made terminal.
+Historical evidence remains in ticket notes, audit, provider references, and
+test reports. The leftover privileged-reset negative-control gate `349` on
+already-cancelled ticket `1490` was rejected as stale demo clutter.
+
+Do not auto-approve gates for the live demo. Manual gates are part of the story;
+only clear stale synthetic gates whose parent ticket is already terminal and
+whose cleanup rationale is recorded.
+
 Saved profiles can also pin enabled skills. Empty profile skill lists inherit
 all enabled global/default skills; selected skill lists add explicit pinned
 skills to that profile's spawned agent context. Manage this from Settings and

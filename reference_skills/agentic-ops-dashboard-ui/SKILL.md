@@ -26,8 +26,9 @@ dashboard UI at `https://127.0.0.1:25443/`.
 - Backend Python changes require rebuilding and recreating only the `api`
   service.
 - Before demo cleanup or API recreation, confirm there are no active agents.
-  The 2026-05-21 demo baseline should show zero open tickets, zero active
-  agents, zero open tasks, and zero pending/approved changes.
+  The 2026-05-22 demo baseline should show zero open tickets, zero active
+  agents, zero open tasks, zero pending/approved changes, and tool health
+  `19 healthy / 0 degraded / 0 down / 0 unknown`.
 
 ## Preflight
 
@@ -155,6 +156,19 @@ Ops Chat and global-search readiness are documented in:
 
 - `docs/GLOBAL_SEARCH_AND_OPS_CHAT.md`
 - `docs/DEMO_TICKET_CATALOG.md`
+
+Final pre-demo curation on 2026-05-22:
+
+- 86 stale nonterminal synthetic tickets were resolved with internal
+  `demo-curation` notes.
+- 41 stale change gates and 29 stale access requests were rejected.
+- 39 stale agent tasks and 39 stale agents were reconciled to terminal states.
+- Remaining privileged-reset negative-control gate `349` on already-cancelled
+  ticket `1490` was rejected as stale demo clutter.
+- Live baseline after cleanup: dashboard health `ok`, zero active agents,
+  zero queued/running tasks, zero pending/approved gates, runner worker count
+  `5`, max concurrent agents `5`, Codex OAuth logged in, and tools
+  `19 healthy / 0 degraded / 0 down / 0 unknown`.
 
 Current polished proof tickets:
 

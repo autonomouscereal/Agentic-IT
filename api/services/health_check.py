@@ -82,7 +82,7 @@ async def check_tool(tool_id: int):
                 status = "down"
                 error = f"Port {port} unreachable on {host}"
         else:
-            if (tool.get("type") or "") in ("bridge", "ids"):
+            if (tool.get("type") or "") in ("bridge", "ids", "agent-harness"):
                 status = "healthy"
                 error = None
             else:
