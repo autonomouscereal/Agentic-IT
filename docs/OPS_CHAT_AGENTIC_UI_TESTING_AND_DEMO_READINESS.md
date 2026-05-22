@@ -249,6 +249,41 @@ Identity & Access gate rather than trusting the model or exposing credentials.
   `/api/tickets/1541/request-info`. Ticket `1541`, task `454`, and agent `460`
   all ended in `awaiting_user_response`; no active processes remained.
 
+2026-05-22 fourth live testing pass:
+
+- Real Element developer-artifact marker `more-artifacts-20260522025805`
+  passed through the live UI as `demo_account_1`. The chat agent returned
+  validated Python, HTML, Markdown, Bash, Remotion MP4 animation,
+  combined Python-plus-animation, and uploaded Markdown summary artifacts.
+  Every case reported `ticket_count_delta=0`, proving harmless developer and
+  artifact requests are not cluttering the ticket queue.
+- Real Element UX marker `more-ux-20260522030902` passed through current-info
+  chat, contextual follow-up, watermelon purchase, cancellation, and
+  replacement pizza flow. It created and cancelled watermelon ticket `1542` /
+  iTop `944`. The pizza replacement continued older ticket `1539`, which is the
+  known long-room continuation caveat and not a current demo blocker.
+- Two focused stale-room reuse-regression attempts
+  (`more-reuse-20260522032426` with `demo_account_1` and
+  `more-reuse-m5-20260522032943` with `demo_chat_marathon5`) timed out waiting
+  for a new software-ticket response. Follow-up inspection showed no queued
+  agents, no orphaned processes, no matching tickets, and no marker-bearing
+  ticket rows. Treat this as a Playwright/Element long-room automation caveat
+  for now; use the already-verified `reuse-regression-20260522010734` proof
+  for stale-room correction in the demo.
+- Real-agent API-path cases marker `ops-chat-scenarios-1779442639` passed for
+  software request and account lockout. The software request created ticket
+  `1543` / iTop `945` and spawned Codex worker `463`; the account lockout
+  created ticket `1544` and spawned Codex worker `464`. Both workers wrote
+  progress checkpoints; the smoke then cancelled only those synthetic tickets
+  and stopped only those test-owned agents.
+- Mailcow/Roundcube module health passed after the chat tests:
+  `test_mailcow_api_shim.py --mysql-parity` returned `13 passed, 0 failed`;
+  `/webmail/` rendered Roundcube; the Report Phish plugin and hidden
+  `/demo-report` PHP endpoint passed lint; dashboard tool inventory still
+  showed Mailcow, Roundcube, iTop, Wazuh, GitLab, and Keycloak.
+- Final queue health after this pass remained clean: `/api/agents/active`
+  reported zero active agents, zero queued depth, and `worker_count=5`.
+
 ## Architecture
 
 Reference services:
