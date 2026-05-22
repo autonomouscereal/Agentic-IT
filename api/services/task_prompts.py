@@ -22,6 +22,11 @@ TICKET_CLOSURE_RULE = """Ticket closure rule:
 - Opt out of closure only when the ticket/workflow/deployment explicitly
   requires human review, requester response, more access, or a manual provider
   handoff. In that case leave a note explaining why the ticket remains open.
+- If you cannot complete because key requester/procurement details are missing
+  such as delivery location, vendor choice, quantity, date/time, budget, payment
+  approval, or allergy/dietary confirmation, do not leave the ticket silently
+  `in_progress`. Ask the requester with POST /api/tickets/{ticket_id}/request-info,
+  write a `waiting_for_user` checkpoint below 100%, and stop.
 - Use `close_provider: true` when the external ticketing record should also be
   resolved/closed; use `close_provider: false` when only the dashboard state
   should change or a human/provider handoff is required.
@@ -106,6 +111,11 @@ Operational rules:
 - If investigation proves an alert is a false positive, classify it that way in a ticket note with the exact evidence, affected rule id/signature, observed benign source, and residual risk. Do not suppress anything unless the benign pattern is precise and repeatable. For suppression/rule tuning, create a change request first, include the proposed exact match criteria, expiration/review date, rollback, and a test plan proving the tuned rule still catches malicious variants.
 - In lab/demo runs, if no concrete provider action adapter is available for an approved containment action, do not browse broad tool inventory. Complete the approved gate with explicit simulated control evidence, add a ticket note, and name the production adapter that would perform the real operation.
 - If you cannot proceed without requester input, POST /api/tickets/{ticket_id}/request-info with a concise question, recipient/contact method when known, and context. Then update checkpoint.json with status waiting_for_user and stop. When a user response arrives, the dashboard will record it with /api/tickets/{ticket_id}/user-response and may resume the ticket.
+- Procurement and service requests that are missing practical ordering or
+  fulfillment details count as requester-input blockers. Ask for the missing
+  delivery location, vendor/option, quantity, timing, budget/payment approval,
+  and allergy/dietary constraints instead of completing the task while leaving
+  the ticket in progress.
 - Prefer non-destructive investigation, documentation, and clear ticket notes.
 - Add ticket notes with POST /api/tickets/{ticket_id}/notes whenever you have meaningful progress, blockers, evidence, or resolution details.
 - Never write placeholder/debug notes such as "test", "test note", "checking", or "ignore this". If you need to verify note writing, include the real operational context and why the note matters.
@@ -211,6 +221,11 @@ Operational rules:
 - If the evidence proves a false positive, write a false-positive classification note with exact matching evidence and residual risk. Only propose suppression/rule tuning through a change request with precise match terms, expiry/review date, rollback, and tests; never blanket-suppress a rule or source.
 - In lab/demo runs, if no concrete provider action adapter is available for an approved containment action, do not browse broad tool inventory. Complete the approved gate with explicit simulated control evidence, add a ticket note, and name the production adapter that would perform the real operation.
 - If requester input is required, POST /api/tickets/{ticket_id}/request-info, update checkpoint.json with status waiting_for_user, and stop.
+- Procurement and service requests that are missing practical ordering or
+  fulfillment details count as requester-input blockers. Ask for the missing
+  delivery location, vendor/option, quantity, timing, budget/payment approval,
+  and allergy/dietary constraints instead of completing the task while leaving
+  the ticket in progress.
 - Keep shell commands simple and auditable. Avoid multiline `python -c` snippets,
   comments inside quoted shell arguments, and deeply nested quoting; if JSON
   parsing needs more than a one-liner, write/read a temporary script or file.

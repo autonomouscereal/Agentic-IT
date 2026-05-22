@@ -221,6 +221,34 @@ Demo note: ticket `1536` is the cleanest current proof that a user can ask for
 a privileged password reset through chat and the platform enforces a real manual
 Identity & Access gate rather than trusting the model or exposing credentials.
 
+2026-05-22 additional UX marathon:
+
+- Element UX run marker `ux-more-20260522083502` drove the same user room
+  through current-info chat, contextual follow-up, a watermelon purchase
+  request, cancellation, and a replacement pizza request.
+- The run created ticket `1538` / iTop `940` for the watermelon purchase and
+  correctly cancelled it after the user said Alice is allergic to watermelons.
+- The replacement request created ticket `1539` / iTop `941` for pizza and
+  real Codex worker `458` wrote requester-visible procurement handoff evidence.
+- A demo polish issue was found: worker `458` completed while ticket `1539`
+  remained `in_progress` because the missing delivery/vendor/quantity/payment
+  details were documented as a handoff instead of converted into a requester
+  wait state. The ticket-agent prompts now explicitly require
+  `/api/tickets/{ticket_id}/request-info` plus a `waiting_for_user` checkpoint
+  when procurement/service fulfillment details are missing. The live ticket was
+  then cleaned into `awaiting_user_response` with user-info note `5509`.
+- Follow-up bagel ticket `1540` / iTop `942` showed the next edge: Codex wrote
+  a durable `waiting_for_bagel_order_details` checkpoint but did not call the
+  requester-info endpoint. The runner now maps procurement/detail wait
+  checkpoints to `awaiting_user_response` and creates a user-visible
+  `user-info-request` note if the agent forgot the endpoint call.
+- Fresh proof marker `proc-auto-wait-20260522024953` created donut ticket
+  `1541` / iTop `943` from Element. Codex worker `460` asked the requester for
+  delivery/pickup location, vendor/option, quantity, target time,
+  budget/payment approval, and dietary/allergy details through
+  `/api/tickets/1541/request-info`. Ticket `1541`, task `454`, and agent `460`
+  all ended in `awaiting_user_response`; no active processes remained.
+
 ## Architecture
 
 Reference services:

@@ -1255,6 +1255,18 @@ class AgentLifecycleGuardTests(unittest.TestCase):
             self.assertIn("Never directly browse, curl, wget, open, screenshot", value)
             self.assertIn("Approval to block/quarantine/contain a URL is not approval to fetch it", value)
 
+    def test_ticket_prompts_require_request_info_for_missing_procurement_details(self):
+        module = load_task_prompts()
+        ticket = {"id": 1539, "title": "Order pizza for Alice birthday"}
+        prompt = module.build_ticket_resolution_prompt(ticket)
+        auto_prompt = module.build_auto_assignment_prompt(ticket)
+
+        for value in (prompt, auto_prompt):
+            self.assertIn("/api/tickets/{ticket_id}/request-info", value)
+            self.assertIn("delivery location", value)
+            self.assertIn("budget/payment approval", value)
+            self.assertIn("waiting_for_user", value)
+
     def test_postmortem_list_fields_accept_scalar_agent_payloads(self):
         module = load_postmortems_route()
 
@@ -1461,6 +1473,73 @@ class AgentLifecycleGuardTests(unittest.TestCase):
 
         self.assertTrue(module._checkpoint_blocks_completion(checkpoint))
         self.assertEqual(module._blocked_task_status(checkpoint), "awaiting_access")
+
+    def test_procurement_detail_checkpoint_maps_to_requester_wait(self):
+        module = load_agent_runner()
+
+        checkpoint = {
+            "step": "waiting_for_bagel_order_details",
+            "status": "running",
+            "output": (
+                "Prepared requester clarification for missing delivery location, vendor, "
+                "quantity, target time, budget/payment approval, and dietary constraints."
+            ),
+            "progress_pct": 35,
+        }
+
+        self.assertTrue(module._checkpoint_blocks_completion(checkpoint))
+        self.assertEqual(module._blocked_task_status(checkpoint), "awaiting_user_response")
+
+    def test_requester_wait_note_created_from_checkpoint(self):
+        module = load_agent_runner()
+        fetch_count = {"notes": 0}
+        execute_calls = []
+        events = []
+        added_notes = []
+
+        async def fetchval(query, *args):
+            fetch_count["notes"] += 1
+            self.assertIn("source = 'user-info-request'", query)
+            return 0
+
+        async def execute(query, *args):
+            execute_calls.append((query, args))
+
+        async def log_event(*args):
+            events.append(args)
+
+        ticket_service = types.ModuleType("services.ticket_service")
+
+        async def add_note(ticket_id, body, **kwargs):
+            added_notes.append((ticket_id, body, kwargs))
+            return {"id": 718, "status": "created"}
+
+        ticket_service.add_note = add_note
+        sys.modules["services"].ticket_service = ticket_service
+        sys.modules["services.ticket_service"] = ticket_service
+
+        module.fetchval = fetchval
+        module.execute = execute
+        module.log_event = log_event
+
+        result = asyncio.run(module._ensure_requester_wait_note(
+            1540,
+            459,
+            453,
+            {
+                "step": "waiting_for_bagel_order_details",
+                "output": "Missing delivery location, vendor, quantity, and budget/payment approval.",
+            },
+            "in_progress",
+        ))
+
+        self.assertEqual(result["status"], "created")
+        self.assertEqual(added_notes[0][0], 1540)
+        self.assertEqual(added_notes[0][2]["source"], "user-info-request")
+        self.assertEqual(added_notes[0][2]["visibility"], "user")
+        self.assertIn("delivery or pickup location", added_notes[0][1])
+        self.assertTrue(any("provider_payload" in call[0] for call in execute_calls))
+        self.assertTrue(any(event[3] == "user_info_requested_from_checkpoint" for event in events))
 
     def test_wait_checkpoint_is_obsolete_after_gate_approval(self):
         module = load_agent_runner()

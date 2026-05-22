@@ -46,6 +46,10 @@ Reference stack:
   sub-requests just because the message also contains operational work.
 - The chat agent may ask one concise pre-ticket clarification when the answer
   changes routing, scope, urgency, or whether a ticket is needed.
+- Ticket workers that cannot complete procurement/service fulfillment because
+  practical details are missing should ask through the ticket/requester-info
+  path and stop at `waiting_for_user`. Do not finish the worker while leaving
+  the ticket silently `in_progress`.
 - Operational chat creates or continues a canonical ticket, intake session,
   internal note, audit event, and real agent-harness queue task.
 - Ticket agents working Ops Chat-originated tickets must write their own
