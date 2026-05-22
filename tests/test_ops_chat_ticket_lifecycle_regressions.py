@@ -72,6 +72,8 @@ def test_ops_chat_assignment_group_aliases_are_normalized():
 
 def test_ops_chat_enterprise_domain_guardrails_cover_matrix_misses():
     source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    assert '"new hire"' in source
+    assert "New-hire onboarding that mentions laptop, mailbox, and app accounts still routes to Identity & Access" in source
     assert '"offboard", "off-boarding", "revoke access"' in source
     assert '"restore a deleted", "restore deleted", "restore file"' in source
     assert '"policy exception", "risk acceptance", "sla report"' in source

@@ -1296,6 +1296,19 @@ def normalize_assignment_group(value):
 def infer_assignment_group(value, text=""):
     group = normalize_assignment_group(value)
     lowered = str(text or "").lower()
+    if any(phrase in lowered for phrase in (
+        "new hire",
+        "new-hire",
+        "new employee",
+        "onboard a new",
+        "onboard new",
+        "employee onboarding",
+        "hire starting",
+        "starting monday",
+        "starting on",
+        "app accounts",
+    )):
+        return "Identity & Access"
     if any(word in lowered for word in ("semgrep", "trivy", "zap", "nuclei", "pipeline", "ci/cd", "cicd", "deployment", "release gate", "delivery gate")):
         return "DevSecOps"
     if any(phrase in lowered for phrase in ("policy exception", "risk acceptance", "sla report", "audit report", "compliance evidence", "metrics report", "ticket metrics", "leadership deck")):
@@ -2480,6 +2493,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "Routing guide:",
         "- Executive/high-visibility user impact, including CEO lockout, CEO login, board-meeting impact, executive travel, or executive laptop issues -> Executive Support even when the technical fix may involve IAM, endpoint, or network teams.",
         "- Login, password, MFA, Keycloak, SSO, onboarding, offboarding, or general entitlement requests -> Identity & Access.",
+        "- New-hire onboarding that mentions laptop, mailbox, and app accounts still routes to Identity & Access as the coordinating owner; Endpoint Support and Email Operations are downstream contributors, not the initial queue.",
         "- Wazuh/SIEM/EDR access or alerts, phishing, suspicious URL/email, endpoint isolation, false positives, or confirmed security incidents -> Security Operations.",
         "- Mailbox permissions, shared mailbox, distribution lists, forwarding, webmail, Mailcow, or mail routing -> Email Operations.",
         "- VPN, proxy, DNS, firewall, site reachability, segmentation, or network connectivity -> Network Operations.",
@@ -2502,6 +2516,7 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- build and deploy a bunnies web page, and tell me the price of tea in China -> use web-search for tea, write mixed_reply.md with the tea answer and a note that the bunnies deployment ticket is being opened, then create a Platform Operations ticket with --reply-file mixed_reply.md and --spawn-agent.",
         "- I cannot log into GitLab before a customer call -> create a ticket assigned to Identity & Access.",
         "- Jeff needs Figma installed -> create an Endpoint Support or Procurement ticket based on the ask; requester is the chat user, affected user is Jeff.",
+        "- Onboard a new hire starting Monday with laptop, mailbox, and app accounts -> create an Identity & Access ticket; mention endpoint/email dependencies in the notes.",
         "- I got a suspicious email -> create an Incident assigned to Security Operations; do not fetch suspicious URLs.",
         "- the production deploy failed Semgrep -> create a DevSecOps ticket; deployment approval must happen later at the policy gate.",
         "- deploy a webpage called hello -> create a Platform Operations NormalChange/UserRequest. The ticket agent may create a local preview safely, but real reachable deployment needs a target plus approval gate.",

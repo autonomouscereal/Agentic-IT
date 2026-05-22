@@ -303,6 +303,11 @@ does not match the expected demo hint. In the iTop-backed lab, also use
 provider ref, and `provider_sync_status=synced`. Use `--cleanup` so broad tests
 cancel their own synthetic tickets and do not clutter the demo queue.
 
+Routing nuance: new-hire/onboarding requests that mention laptop, mailbox, and
+app accounts should still start with `Identity & Access` as the coordinating
+owner. Endpoint Support and Email Operations are dependencies, not the first
+queue, unless the requester asks only for a device/software task.
+
 Demo baseline note: after the 2026-05-21 curation pass, the live dashboard
 should have zero open tickets, zero active agents, zero open agent tasks, and
 zero pending/approved changes before an audience demo. If an Ops Chat marathon

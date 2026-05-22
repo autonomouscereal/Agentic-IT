@@ -232,6 +232,10 @@ chat agent.
 Current high-signal examples:
 
 - Account lockout or MFA help routes to `Identity & Access`.
+- New-hire/onboarding requests with laptop, mailbox, and app-account setup
+  route first to `Identity & Access` as the coordinating owner. Endpoint
+  Support and Email Operations are downstream dependencies for the device and
+  mailbox pieces.
 - Software install requests route to `Endpoint Support`.
 - VPN tunnel failures such as "VPN stopped connecting after reboot" route to
   `Network Operations` through intent `vpn-connectivity`.

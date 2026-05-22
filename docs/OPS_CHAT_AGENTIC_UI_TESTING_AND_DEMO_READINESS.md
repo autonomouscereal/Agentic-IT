@@ -284,6 +284,28 @@ Identity & Access gate rather than trusting the model or exposing credentials.
 - Final queue health after this pass remained clean: `/api/agents/active`
   reported zero active agents, zero queued depth, and `worker_count=5`.
 
+2026-05-22 fifth live testing pass:
+
+- Broad enterprise intake matrix ran all 50 request classes with
+  `--strict-routing`, `--require-provider-sync`, and `--cleanup`.
+  Forty-nine cases routed to the expected owner, synced to iTop, and were
+  cancelled by cleanup.
+- The only miss was `new-hire`: the chat agent selected `Endpoint Support`
+  because the request mentioned a laptop even though the ask also included
+  mailbox and app-account onboarding. The route guidance and toolbelt fallback
+  were tightened so new-hire/onboarding requests route to `Identity & Access`
+  as the coordinating owner, with endpoint/email work treated as dependencies.
+- Targeted live rerun marker `ops-chat-enterprise-matrix-1779443778` passed:
+  `new-hire` created ticket `1595` / iTop `997`, routed to
+  `Identity & Access`, synced to iTop, and was cancelled by cleanup. Queue
+  health returned to zero active agents and zero queued depth.
+- `scripts/platform_doctor.py` was repaired to read
+  `DASHBOARD_SERVICE_TOKEN` from the deployment env file for protected
+  dashboard API checks. Rerun after the patch returned `19 passed, 0 failed,
+  0 warned`, covering dashboard health, setup manifest, ticket sorting,
+  provider adapters, iTop, Mailcow API, Roundcube, CI/CD scanner bundles,
+  Wazuh EDR Sysmon, AI proxy, and SearXNG.
+
 ## Architecture
 
 Reference services:

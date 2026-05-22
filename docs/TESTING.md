@@ -307,6 +307,8 @@ Latest verified result on 2026-05-21:
 
 ```text
 broad enterprise matrix: marker ops-chat-enterprise-matrix-1779334693, tickets 1320-1368, 45/50 initial pass with iTop sync; misses documented and fixed
+broad enterprise matrix rerun: marker ops-chat-enterprise-matrix-1779443778, targeted new-hire case created ticket 1595 / iTop 997 and routed to Identity & Access after the onboarding guidance fix
+platform doctor: 19 passed, 0 failed after adding DASHBOARD_SERVICE_TOKEN support for auth-hardened dashboard API checks
 focused enterprise rerun: marker ops-chat-enterprise-matrix-1779336161, tickets 1369-1373, 5/5 passed with iTop sync and cleanup
 scenario lifecycle smoke: marker ops-chat-scenarios-1779336984, tickets 1378-1382, general chat/current-info/cat memory/account/software/VPN/phishing/delivery gate passed with cleanup
 developer artifact UI: marker ops-chat-dev-artifact-1779337398804, Python/HTML/Markdown/Bash validated and rendered in Element; ticket delta 0

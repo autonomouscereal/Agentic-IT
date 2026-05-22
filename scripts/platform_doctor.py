@@ -62,7 +62,11 @@ def http_request(url, method="GET", headers=None, body=None, timeout=20):
 
 
 def json_request(base, path, method="GET", body=None):
-    status, raw, _headers = http_request(base.rstrip("/") + path, method=method, body=body)
+    headers = {}
+    token = os.environ.get("DASHBOARD_SERVICE_TOKEN", "").strip()
+    if token:
+        headers["X-Dashboard-Service-Token"] = token
+    status, raw, _headers = http_request(base.rstrip("/") + path, method=method, headers=headers, body=body)
     text = raw.decode("utf-8")
     return status, json.loads(text) if text else {}
 
@@ -211,6 +215,9 @@ def main():
 
     doctor = Doctor()
     env = load_env_file(args.env_file)
+    for key, value in env.items():
+        if key.startswith("DASHBOARD_") and value:
+            os.environ.setdefault(key, value)
     check_dashboard(doctor, args.base)
     check_itop_ui(doctor, env)
     check_mailcow_api(doctor)
