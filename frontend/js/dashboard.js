@@ -3,6 +3,8 @@ const API = "";
 let agentOpenCountState = null;
 let skillsCache = [];
 let knowledgeCache = [];
+let intakeRaciRulesCache = [];
+let intakeRaciExpanded = false;
 let tableSortState = {
     intake: { key: "created_at", dir: "desc" },
     changes: { key: "requested_at", dir: "desc" },
@@ -853,7 +855,7 @@ function renderTicketRows(rows) {
             <td class="ticket-title-cell" title="${escAttr(t.title)}">
                 ${sourceBadge}
                 ${DEMO_TICKET_ORDER.has(Number(t.id)) ? '<span class="source-badge demo">Demo</span>' : ""}
-                ${t.external_url ? `<a class="ticket-link" href="${escAttr(t.external_url)}" target="_blank" rel="noopener">${escHtml(t.title)}</a>` : escHtml(t.title)}
+                <span class="ticket-title-text">${t.external_url ? `<a class="ticket-link" href="${escAttr(t.external_url)}" target="_blank" rel="noopener">${escHtml(t.title)}</a>` : escHtml(t.title)}</span>
             </td>
             <td><span class="class-badge">${escHtml(t.itop_class || "Incident")}</span></td>
             <td><span class="status-badge ${statusClass(t.status)}">${escHtml(t.status)}</span></td>
@@ -980,24 +982,9 @@ async function loadIntake() {
         apiGet("/api/intake/raci"),
         apiGet("/api/intake/sessions?limit=25"),
     ]);
-    const raciList = document.getElementById("intake-raci-list");
-    if (raciList && raci) {
-        const rules = raci.rules || [];
-        const visibleRules = rules.slice(0, 5);
-        raciList.innerHTML = visibleRules.map(rule => `
-        <div class="learning-item">
-            <div><strong>${escHtml(rule.name)}</strong> <span class="source-badge local">${escHtml(rule.ticket_class)}</span></div>
-            <div>${escHtml(rule.assignment_group)} &middot; ${rule.approval_required ? "approval required" : "no approval gate"}</div>
-            <div class="learning-meta">R: ${escHtml(rule.responsible)} / A: ${escHtml(rule.accountable)} &middot; auto-agent ${rule.auto_assign_agent ? "on" : "off"}</div>
-            <div class="modal-actions-bar inline-actions">
-                <button class="inline-link" onclick="editRaciRule(${rule.id})">edit</button>
-                <button class="inline-link" onclick="disableRaciRule(${rule.id})">disable</button>
-                </div>
-            </div>
-        `).join("");
-        if (rules.length > visibleRules.length) {
-            raciList.innerHTML += `<div class="learning-meta">Showing ${visibleRules.length} of ${rules.length} routing rules. Use search or edit from the RACI API for the full list.</div>`;
-        }
+    if (raci) {
+        intakeRaciRulesCache = raci.rules || [];
+        renderIntakeRaciRules();
     }
     const tbody = document.getElementById("intake-sessions-tbody");
     if (tbody && sessions) {
@@ -1026,6 +1013,53 @@ async function loadIntake() {
             }).join("");
         }
     }
+}
+
+function renderIntakeRaciRules() {
+    const raciList = document.getElementById("intake-raci-list");
+    if (!raciList) return;
+    const search = (document.getElementById("intake-raci-search")?.value || "").trim().toLowerCase();
+    let rules = intakeRaciRulesCache || [];
+    if (search) {
+        rules = rules.filter(rule => [
+            rule.name,
+            rule.ticket_class,
+            rule.assignment_group,
+            rule.responsible,
+            rule.accountable,
+            ...(rule.keywords || []),
+        ].join(" ").toLowerCase().includes(search));
+    }
+    const limit = intakeRaciExpanded ? 80 : 6;
+    const visibleRules = rules.slice(0, limit);
+    const expandBtn = document.getElementById("intake-raci-expand");
+    if (expandBtn) {
+        expandBtn.textContent = intakeRaciExpanded ? "Collapse" : "Expand";
+        expandBtn.disabled = rules.length <= 6;
+    }
+    if (!visibleRules.length) {
+        raciList.innerHTML = '<div class="learning-empty">No RACI rules match this filter.</div>';
+        return;
+    }
+    raciList.innerHTML = visibleRules.map(rule => `
+        <div class="learning-item raci-rule-item">
+            <div><strong>${escHtml(rule.name)}</strong> <span class="source-badge local">${escHtml(rule.ticket_class)}</span></div>
+            <div>${escHtml(rule.assignment_group)} &middot; ${rule.approval_required ? "approval required" : "no approval gate"}</div>
+            <div class="learning-meta">R: ${escHtml(rule.responsible)} / A: ${escHtml(rule.accountable)} &middot; auto-agent ${rule.auto_assign_agent ? "on" : "off"}</div>
+            <div class="modal-actions-bar inline-actions">
+                <button class="btn btn-sm btn-edit" onclick="editRaciRule(${rule.id})">Edit</button>
+                <button class="btn btn-sm btn-warning" onclick="disableRaciRule(${rule.id})">Disable</button>
+            </div>
+        </div>
+    `).join("");
+    if (rules.length > visibleRules.length) {
+        raciList.innerHTML += `<div class="learning-meta">Showing ${visibleRules.length} of ${rules.length} matching routing rules. Use Expand for the full filtered set.</div>`;
+    }
+}
+
+function toggleIntakeRaciExpanded() {
+    intakeRaciExpanded = !intakeRaciExpanded;
+    renderIntakeRaciRules();
 }
 
 function collectIntakeBody() {

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agentic Operations</title>
-    <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260521-golden-tags">
+    <link rel="icon" type="image/svg+xml" href='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"%3E%3Crect width="40" height="40" rx="8" fill="%230a0e17"/%3E%3Ccircle cx="20" cy="20" r="17" fill="none" stroke="%2300d4ff" stroke-width="2"/%3E%3Cpath d="M14 14L26 12L28 26L12 28Z" fill="none" stroke="%2300d4ff" stroke-width="1.8" stroke-linejoin="round"/%3E%3Ccircle cx="14" cy="14" r="4" fill="%2300d4ff"/%3E%3Ccircle cx="26" cy="12" r="4" fill="%2300ff88"/%3E%3Ccircle cx="28" cy="26" r="4" fill="%23ffd700"/%3E%3Ccircle cx="12" cy="28" r="4" fill="%2300d4ff" opacity=".7"/%3E%3Ccircle cx="20" cy="20" r="3" fill="%23e2e8f0"/%3E%3C/svg%3E'>
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260521-demo-ui-fixes">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -465,7 +465,13 @@
                     <div class="setup-panel wide">
                         <div class="setup-section-title">Routing Preview</div>
                         <div id="intake-classification" class="intake-preview">No classification yet.</div>
-                        <div class="setup-section-title">RACI Rules</div>
+                        <div class="setup-section-title raci-title-row">
+                            <span>RACI Rules</span>
+                            <button class="btn btn-sm btn-secondary" id="intake-raci-expand" onclick="toggleIntakeRaciExpanded()">Expand</button>
+                        </div>
+                        <div class="raci-toolbar">
+                            <input id="intake-raci-search" class="filter-input" placeholder="Search routing rules, groups, keywords..." oninput="renderIntakeRaciRules()">
+                        </div>
                         <div class="modal-actions-bar inline-actions">
                             <button class="btn btn-sm" onclick="createRaciGroup()">New Group</button>
                             <button class="btn btn-sm" onclick="createRaciRule()">New Rule</button>
@@ -928,7 +934,7 @@
         </div>
     </div>
 
-    <script src="/static/js/dashboard.js?v=20260521-task-summary-cleanup"></script>
+    <script src="/static/js/dashboard.js?v=20260521-task-summary-cleanup-demo-ui-fixes"></script>
     <script src="/static/js/charts.js?v=20260519-global-chat"></script>
     <script src="/static/js/agents.js?v=20260520-ui-pass"></script>
     <script src="/static/js/websocket.js"></script>

@@ -1,0 +1,111 @@
+{
+  "url": "https://192.168.50.222:25443",
+  "checks": [
+    {
+      "name": "dashboard login",
+      "ok": true
+    },
+    {
+      "name": "favicon present",
+      "ok": true,
+      "prefix": "data:image/svg+xml,%3Csvg xmlns="
+    },
+    {
+      "name": "no horizontal overflow on tickets",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "no horizontal overflow on intake",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "no horizontal overflow on changes",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "no horizontal overflow on workflows",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "no horizontal overflow on postmortems",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "no horizontal overflow on cicd",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "no horizontal overflow on setup",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "no horizontal overflow on access",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "no horizontal overflow on settings",
+      "ok": true,
+      "body": 0,
+      "main": 0
+    },
+    {
+      "name": "ticket title clamp elements visible",
+      "ok": true,
+      "overflow": "hidden",
+      "display": "flow-root",
+      "lineClamp": "2"
+    },
+    {
+      "name": "intake full-width searchable routing",
+      "ok": true,
+      "layoutWidth": 1152,
+      "panelWidths": [
+        1152,
+        1152
+      ],
+      "hasSearch": true,
+      "hasExpand": true
+    },
+    {
+      "name": "changes action buttons styled",
+      "ok": true,
+      "changeButtons": 370
+    },
+    {
+      "name": "setup full-width stacked layout",
+      "ok": true,
+      "layoutWidth": 1152,
+      "deploymentWidth": 1152,
+      "modulesWidth": 1152,
+      "modulesBelow": true
+    },
+    {
+      "name": "settings demo controls do not overlap",
+      "ok": true,
+      "count": 6,
+      "collisions": [],
+      "overflow": 0
+    },
+    {
+      "name": "no browser console errors",
+      "ok": true
+    }
+  ],
+  "errors": []
+}

@@ -4,7 +4,7 @@
 - Remotion's agent skill package is installed with `npx skills add remotion-dev/skills`; in this environment it installed globally for Codex as `C:\Users\me\.agents\skills\remotion-best-practices`.
 - The Remotion skill teaches agent-side rules: use React components, `useCurrentFrame()`, `interpolate()`, `spring()`, `Sequence`, explicit composition dimensions/duration/fps, and avoid CSS animations for render-critical motion.
 - Adjacent 2026 approaches include HTML-to-MP4 capture for crisp text/UI, Pillow/FFmpeg frame generation for simple motion graphics, and larger Claude Code video toolkits combining Remotion, FFmpeg, browser recording, voiceover, and scene review.
-- Practical rule: use Remotion first for polished text-and-shape videos; use HTML capture for exact browser UI; use Pillow/Manim when a Python-only or technical-explainer route is better.
+- Practical rule for Agentic Operations: use Remotion for polished text-and-shape videos, animated diagrams, charts, and UI-style motion. The older Python/text-shapes helpers have been removed from this skill so chat/demo agents do not fall back to the wrong renderer.
 
 Sources consulted in this session:
 

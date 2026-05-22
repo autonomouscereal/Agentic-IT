@@ -322,16 +322,25 @@ body {
 .btn {
     background: var(--accent-primary);
     color: var(--bg-primary);
-    border: none;
+    border: 1px solid transparent;
     padding: 8px 16px;
     border-radius: var(--radius);
     font-weight: 600;
     font-size: 13px;
     cursor: pointer;
     transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
-.btn:hover { opacity: 0.9; }
+.btn:hover {
+    opacity: 0.95;
+    transform: translateY(-1px);
+}
 
 .btn-sm {
     padding: 6px 12px;
@@ -351,6 +360,12 @@ body {
 .btn-warning {
     background: var(--accent-warning);
     color: var(--bg-primary);
+}
+
+.btn-secondary {
+    border-color: rgba(148, 163, 184, 0.32);
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-primary);
 }
 
 .workflow-actions {
@@ -714,6 +729,7 @@ body {
 .data-table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: auto;
 }
 
 .data-table th {
@@ -753,6 +769,22 @@ body {
     color: var(--text-secondary);
     vertical-align: top;
     overflow-wrap: anywhere;
+}
+
+.data-table th:first-child,
+.data-table td:first-child,
+#changes-table th:nth-child(5),
+#changes-table td:nth-child(5),
+#workflows-tbody td:first-child,
+#workflows-tbody td:nth-child(5),
+#postmortems-page-tbody td:first-child,
+#postmortems-page-tbody td:nth-child(2),
+#cicd-runs-tbody td:first-child,
+#cicd-runs-tbody td:nth-child(5),
+#cicd-runs-tbody td:nth-child(6) {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
 }
 
 .data-table tr:hover td {
@@ -2054,9 +2086,26 @@ body {
 }
 
 .ticket-title-cell {
-    max-width: 320px;
+    min-width: 280px;
+    max-width: 440px;
     white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.ticket-title-text {
+    display: -webkit-box;
+    margin-top: 5px;
+    max-width: 100%;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.32;
     overflow-wrap: anywhere;
+}
+
+.ticket-title-text .ticket-link {
+    display: inline;
 }
 
 .postmortem-summary-cell {
@@ -2071,34 +2120,39 @@ body {
     flex-wrap: wrap;
     align-items: center;
     min-width: 130px;
-    max-width: 240px;
+    max-width: 320px;
 }
 
 .btn-detail {
+    border: 1px solid rgba(56, 189, 248, 0.35);
     border-color: rgba(56, 189, 248, 0.35);
     background: rgba(56, 189, 248, 0.09);
     color: #7dd3fc;
 }
 
 .btn-edit {
+    border: 1px solid rgba(251, 191, 36, 0.34);
     border-color: rgba(251, 191, 36, 0.34);
     background: rgba(251, 191, 36, 0.1);
     color: #fbbf24;
 }
 
 .btn-approve {
+    border: 1px solid rgba(52, 211, 153, 0.34);
     border-color: rgba(52, 211, 153, 0.34);
     background: rgba(52, 211, 153, 0.1);
     color: #34d399;
 }
 
 .btn-promote {
+    border: 1px solid rgba(236, 72, 153, 0.34);
     border-color: rgba(236, 72, 153, 0.34);
     background: rgba(236, 72, 153, 0.1);
     color: #f472b6;
 }
 
 .btn-audit {
+    border: 1px solid rgba(167, 139, 250, 0.34);
     border-color: rgba(167, 139, 250, 0.34);
     background: rgba(167, 139, 250, 0.1);
     color: #c4b5fd;
@@ -2106,14 +2160,19 @@ body {
 
 .artifact-chip {
     border: 1px solid rgba(148, 163, 184, 0.28);
-    border-radius: 999px;
+    border-radius: 6px;
     background: rgba(148, 163, 184, 0.08);
     color: var(--text-primary);
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
-    padding: 4px 9px;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 2px 4px 2px 0;
+    min-height: 28px;
 }
 
 .ticket-chip { border-color: rgba(52, 211, 153, 0.34); color: #34d399; background: rgba(52, 211, 153, 0.08); }
@@ -2225,7 +2284,7 @@ body {
     margin-bottom: 16px;
     border: 1px solid rgba(69, 183, 209, 0.28);
     border-radius: 8px;
-    background: linear-gradient(135deg, rgba(69, 183, 209, 0.10), rgba(38, 194, 129, 0.06));
+    background: linear-gradient(135deg, rgba(148, 163, 184, 0.08), rgba(38, 194, 129, 0.045));
 }
 
 .demo-controls-heading {
@@ -2245,11 +2304,17 @@ body {
 
 .demo-controls-grid {
     display: grid;
-    grid-template-columns: max-content minmax(90px, 140px) max-content minmax(150px, 190px) minmax(140px, auto) auto;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    align-items: end;
 }
 
 .demo-controls-grid .setup-label {
     margin: 0;
+}
+
+.demo-controls-grid .inline-check,
+.demo-controls-grid .btn {
+    min-height: 34px;
 }
 
 .metric-value.compact {
@@ -2329,15 +2394,15 @@ body {
 }
 
 .intake-layout {
-    grid-template-columns: minmax(380px, 520px) minmax(480px, 1fr);
+    grid-template-columns: 1fr;
 }
 
 .platform-setup-layout {
-    grid-template-columns: minmax(340px, 430px) minmax(560px, 1fr);
+    grid-template-columns: 1fr;
 }
 
 .setup-panel {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.018));
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(148, 163, 184, 0.014));
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 14px 16px;
@@ -2345,7 +2410,7 @@ body {
 
 .deployment-shape-panel {
     display: grid;
-    grid-template-columns: 132px minmax(0, 1fr);
+    grid-template-columns: 150px minmax(260px, 1fr) 150px minmax(260px, 1fr);
     gap: 8px 12px;
     align-items: center;
 }
@@ -2380,11 +2445,42 @@ body {
 }
 
 .platform-setup-layout > .setup-panel.wide {
-    grid-column: auto;
+    grid-column: 1 / -1;
 }
 
 .intake-layout > .setup-panel.wide {
-    grid-column: auto;
+    grid-column: 1 / -1;
+}
+
+.intake-layout > .setup-panel {
+    grid-column: 1 / -1;
+}
+
+.intake-layout .setup-panel,
+.intake-preview,
+.raci-rule-item {
+    background: rgba(255, 255, 255, 0.022);
+}
+
+.intake-layout .source-badge.local {
+    border-color: rgba(52, 211, 153, 0.30);
+    background: rgba(52, 211, 153, 0.08);
+    color: #86efac;
+}
+
+.raci-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.raci-toolbar {
+    margin-bottom: 10px;
+}
+
+.raci-toolbar .filter-input {
+    width: 100%;
 }
 
 .setup-section-title {

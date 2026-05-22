@@ -32,6 +32,30 @@ Updated surfaces:
   from the demo-facing Sequence of Events and Agent Work cards. The raw data
   remains in backend task logs and audit trails.
 
+## Final Demo Polish Patch
+
+Late 2026-05-21 demo polish tightened the visual details that were easiest to
+notice in a live walkthrough:
+
+- Ticket title cells now clamp long names to two tidy lines instead of
+  stretching or wrapping the entire row awkwardly.
+- Intake now stacks Requester and Routing Preview full-width. The RACI preview
+  is searchable and expandable, and the intake palette is less blue-heavy.
+- Changes, Workflows, Postmortems, CI/CD, and Access action controls now render
+  as clear buttons rather than link-like text. ID/status columns avoid ugly
+  wrapping.
+- Setup now shows Deployment Shape full-width with Provider-Agnostic Modules
+  below it, also full-width.
+- Settings Demo Agent Controls use a responsive grid so reasoning, fast mode,
+  active-agent count, and apply controls do not overlap.
+- The browser tab uses the Agentic Ops operations-graph SVG favicon.
+
+The generated-animation path was also constrained to the preferred Remotion
+workflow: `animation-video` plus `remotion-best-practices`. The old Python
+text/shape helper scripts were removed from the shared skill, and the local
+`video-editing-studio` skill was removed from this workstation so generated
+motion requests do not fall back to the wrong renderer.
+
 ## Backend Changes
 
 - `GET /api/tickets` accepts:
@@ -75,6 +99,23 @@ Live validation should use the dashboard UI skill runbook:
 Live Playwright crawl evidence:
 
 - `docs/evidence/playwright-ui-overhaul-2026-05-21.json`
+- `docs/evidence/ui-polish-live-2026-05-21.json`
+- `docs/evidence/ui-polish-live.png`
+
+Final demo-polish validation:
+
+```powershell
+node --check frontend/js/dashboard.js
+python -m pytest tests\test_frontend_ui_regressions.py -q
+python -m pytest -q
+```
+
+Expected result:
+
+```text
+15 passed
+211 passed
+```
 
 Focused ticket-modal evidence from 2026-05-21:
 

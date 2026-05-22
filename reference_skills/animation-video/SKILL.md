@@ -9,10 +9,7 @@ description: Create, render, and validate code-driven animation videos such as m
 
 Use deterministic code-rendered animation when the user needs crisp text, exact layout, UI screens, diagrams, charts, or brand-safe motion. Prefer generative video models only for photorealistic footage or cinematic live-action scenes.
 
-1. Choose the renderer:
-   - **Remotion** for React-based motion graphics, composited scenes, charts, text animation, captions, and reusable video components.
-   - **HTML/CSS + Playwright capture** for single-file UI/chat/product mockups where exact typography and browser layout matter.
-   - **Pillow/Manim** for frame-by-frame drawing, math/technical explainers, or when Node/Remotion is unavailable.
+1. Use **Remotion** as the renderer for generated motion graphics, composited scenes, charts, text animation, captions, and reusable video components.
 2. Make a short storyboard: duration, resolution, fps, scene beats, key text, palette, and final deliverable.
 3. Render a still frame before the final video when layout risk is nontrivial.
 4. Render MP4 with H.264 and `yuv420p`-compatible output when possible.
@@ -40,10 +37,6 @@ npx remotion still src/index.ts MyComp out/frame-75.png --frame=75
 npx remotion render src/index.ts MyComp out/video.mp4 --codec=h264 --crf=18
 python C:/Users/cereal/.agents/skills/animation-video/scripts/verify_video.py out/video.mp4 --min-size 100000 --expect-duration 5
 ```
-
-## HTML Capture
-
-Use this path for a single HTML file that animates text, cards, chat bubbles, SVG lines, or dashboards. Keep viewport constants explicit and match `body` dimensions. Drive timing with JavaScript and `requestAnimationFrame`; capture via Playwright, then transcode to MP4 if FFmpeg is available.
 
 ## Validation
 
@@ -99,16 +92,5 @@ work immediately. If a temporary project cannot resolve packages, run the
 self-contained: no remote media fetches, no external images, no package choices
 outside the Remotion/React renderer stack unless the user explicitly asks.
 
-The older helper remains available only as a last-resort fallback when Node or
-Remotion is unavailable:
-
-```bash
-python /root/.agents/skills/animation-video/scripts/render_text_shapes_animation.py \
-  --output animation.mp4 \
-  --title "Agentic Operations" \
-  --subtitle "Validated animation artifact" \
-  --marker "demo-marker"
-```
-
 Do not fetch remote media assets for chat animation requests. Use local code,
-text, shapes, gradients, charts, and generated SVG/HTML/React primitives.
+text, shapes, gradients, charts, and generated React/Remotion primitives.

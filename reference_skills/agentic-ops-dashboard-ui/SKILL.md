@@ -126,6 +126,10 @@ Required assertions:
   and Agent Work should use checkpoint/result summaries and must not expose raw
   harness JSONL, `AGENT_MEMORY_SKILL_DIR`, `aggregated_output`, shell command
   fragments, or giant copied chat history in the demo-facing view.
+- Final demo polish must keep ticket titles clamped, intake and setup primary
+  panels full-width, RACI routing searchable/expandable, row action controls
+  styled as real buttons, table ID/status cells non-wrapping, Settings Demo
+  Agent Controls non-overlapping, and the Agentic Ops favicon present.
 - Ops Chat Element proof can log in through Keycloak, open the Agentic Ops Agent
   profile, send a direct message, and show a dashboard ticket or no-ticket
   answer according to the request.
