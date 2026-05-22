@@ -253,6 +253,16 @@ async function opsChatLoginAndProbe(page) {
   await page.locator('input[name="password"]').fill(opsChatPassword);
   await page.locator('button[type="submit"], input[type="submit"]').first().click();
   await page.waitForTimeout(10000);
+  const consentBody = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+  if (/Continue to your account|grant .* access to your account/i.test(consentBody)) {
+    const continued = await clickDialogButton(page, /^Continue$/i, "last")
+      || await clickElementRoleButtonByText(page, /^Continue$/i, "last")
+      || await clickVisibleElementText(page, /^Continue$/i, "last");
+    if (!continued) {
+      await page.getByRole("button", { name: /^Continue$/i }).last().click({ force: true }).catch(() => {});
+    }
+    await page.waitForTimeout(10000);
+  }
 
   const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
   if (/Can't connect to homeserver|Cannot reach homeserver|login provider is unavailable|missing_session|No session cookie/i.test(body)) {
@@ -715,16 +725,25 @@ async function verifyOutboundTicketChat(context, page, ticketId) {
   await page.getByText(new RegExp(`Ticket #${ticketId} needs your input`, "i")).first().waitFor({ state: "visible", timeout: 90000 });
   const reply = `The affected username is ${opsChatUser}. Marker ${chatMarker}.`;
   await sendComposerMessage(page, reply);
-  await page.getByText(/I added your update to ticket #/i).first().waitFor({ state: "visible", timeout: 90000 });
-  const contextResponse = await context.request.get(`${dashboardUrl.replace(/\/$/, "")}/api/tickets/${ticketId}/context`, { headers });
-  if (!contextResponse.ok()) {
-    throw new Error(`ticket context failed: HTTP ${contextResponse.status()} ${(await contextResponse.text()).slice(0, 400)}`);
+  await page.getByText(new RegExp(`(?:I added your update to ticket #${ticketId}|I updated ticket #${ticketId}|recorded your latest message|recorded your update)`, "i"))
+    .first()
+    .waitFor({ state: "visible", timeout: 90000 });
+  let hasResponse = false;
+  let lastContextStatus = "";
+  for (let attempt = 0; attempt < 12 && !hasResponse; attempt += 1) {
+    const contextResponse = await context.request.get(`${dashboardUrl.replace(/\/$/, "")}/api/tickets/${ticketId}/context`, { headers });
+    if (!contextResponse.ok()) {
+      lastContextStatus = `HTTP ${contextResponse.status()} ${(await contextResponse.text()).slice(0, 400)}`;
+    } else {
+      const ticketContext = await contextResponse.json();
+      const notes = ticketContext.notes || ticketContext.ticket_notes || ticketContext.recent_notes || [];
+      hasResponse = notes.some((note) => String(note.body || "").includes(reply));
+      lastContextStatus = `notes=${notes.length}`;
+    }
+    if (!hasResponse) await page.waitForTimeout(1000);
   }
-  const ticketContext = await contextResponse.json();
-  const notes = ticketContext.notes || [];
-  const hasResponse = notes.some((note) => String(note.body || "").includes(reply));
   if (!hasResponse) {
-    throw new Error("chat follow-up was not reflected as a ticket user-response note");
+    throw new Error(`chat follow-up was not reflected as a ticket user-response note (${lastContextStatus})`);
   }
   await maybeScreenshot(page, "ops-chat-outbound");
   return { ticketId, outboundQuestionDelivered: true, userResponseRecorded: true };

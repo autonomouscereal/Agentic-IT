@@ -1,6 +1,6 @@
 # Ops Chat Agentic UI Testing And Demo Readiness
 
-Last updated: 2026-05-21.
+Last updated: 2026-05-22.
 
 This document is the checkpoint for the current Ops Chat workstream: Element
 UI, Matrix/Synapse, Keycloak login, chat-to-agent routing, ticket sync,
@@ -103,6 +103,54 @@ Known live-demo caveat: the long-lived `demo_account_1` room may continue the
 existing queue-health ticket instead of opening a fresh one. That is acceptable
 for bridge/agent reliability proof. For a pristine story, use a fresh Matrix
 demo user/room or explicitly phrase the request as "open a new ticket".
+
+2026-05-22 severe Playwright regression pass:
+
+- Browser-level Element login and Matrix health passed against
+  `https://192.168.50.222:3303` using the same Keycloak/OIDC path used in the
+  live demo.
+- Focused fresh-ticket smoke marker `fresh-ticket-20260522005321` created
+  ticket `1513` / iTop `915`, delivered an outbound requester question back to
+  Matrix, recorded the chat reply as a `user-response` ticket note, and the
+  worker stopped at a real endpoint-management access barrier with child access
+  ticket `1514` / gate `364`.
+- Full long-room marathon marker `marathon-20260522005517` verified general
+  chat, follow-up memory, small ASCII output, current-info answer formatting,
+  working acknowledgements, multiple operational asks, cancellation, room ticket
+  summary, iTop sync, and real access gates. It also reproduced stale-room
+  over-continuation: an unrelated Figma install was attached to an older GIMP
+  ticket in a noisy long-lived room.
+- The chat-agent prompt was tightened at the agent decision boundary, not with a
+  hidden classifier. Continuation now explicitly means the same ticket id or the
+  same work object; different person, device, software title, mailbox, system,
+  site, repository, or purchase is new operational work.
+- Focused stale-room regression marker `reuse-regression-20260522010734` passed:
+  the agent created separate tickets `1525` / iTop `927` for LibreOffice/Avery
+  and `1526` / iTop `928` for Figma/Jeff, verified affected-user metadata, and
+  both synced to iTop.
+- Queue settled after the stress pass: `/api/agents/active` returned zero active
+  agents, `worker_count=5`, and `queued_depth=0`.
+- Health after the pass: dashboard HTTP/TLS `/health` returned `200`, Element
+  returned `200`, and Matrix client versions returned `200`.
+
+Updated testing notes:
+
+- `scripts/smoke_ops_chat_playwright.js` now tolerates current polished wording
+  for requester follow-up acknowledgements and retries the ticket-context note
+  check briefly so it does not race the write path.
+- `scripts/smoke_ops_chat_workspace_marathon.js` now has
+  `OPS_CHAT_MARATHON_MODE=ticket-reuse-regression` for a fast two-turn proof
+  that unrelated software requests become separate tickets in a noisy room.
+- When running Playwright inside the API container against the LAN HTTPS URLs,
+  set `PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true`. For direct Node `fetch()` checks
+  against the dashboard API, prefer `DASHBOARD_URL=http://127.0.0.1:8000` inside
+  the API container or set `NODE_TLS_REJECT_UNAUTHORIZED=0` only for the smoke
+  process.
+
+Current residual note: older stress attempts left duplicate software-install
+and access-request demo tickets between `1509` and `1524`. They are synced and
+safe behind access gates, but they are not the golden examples. Use the newer
+verified pair `1525` and `1526` when demonstrating stale-room correction.
 
 ## Architecture
 

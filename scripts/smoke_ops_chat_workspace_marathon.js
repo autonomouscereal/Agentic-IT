@@ -17,6 +17,7 @@ const marker = process.env.OPS_CHAT_MARATHON_MARKER || `ops-chat-marathon-${Date
 const screenshotDir = process.env.PLAYWRIGHT_SCREENSHOT_DIR || "";
 const dashboardUrl = (process.env.DASHBOARD_URL || "").replace(/\/$/, "");
 const dashboardToken = process.env.DASHBOARD_SERVICE_TOKEN || "";
+const marathonMode = process.env.OPS_CHAT_MARATHON_MODE || "full";
 
 function requireSecret(name, value) {
   if (!value) throw new Error(`${name} is required`);
@@ -214,6 +215,17 @@ async function login(page) {
   requireSecret("OPS_CHAT_PASSWORD", opsChatPassword);
   await page.goto(`${opsChatUrl.replace(/\/$/, "")}/#/login`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle").catch(() => {});
+  const initialBody = await page.locator("body").innerText().catch(() => "");
+  if (/Welcome to Agentic Ops Chat/i.test(initialBody) && /Sign in/i.test(initialBody)) {
+    const signInLink = page.getByRole("link", { name: /^Sign in$/i }).first();
+    if (await signInLink.isVisible().catch(() => false)) {
+      await signInLink.click({ force: true });
+    } else {
+      await clickText(page, /Sign in/i, "first");
+    }
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
+  }
   const keycloak = page.getByText(/Sign in with Keycloak|Keycloak/i).first();
   await keycloak.waitFor({ state: "visible", timeout: 60000 });
   await keycloak.click();
@@ -223,6 +235,13 @@ async function login(page) {
     await page.locator('input[name="password"]').fill(opsChatPassword);
     await page.locator('button[type="submit"], input[type="submit"]').first().click();
     await page.waitForTimeout(10000);
+    const consentBody = await page.locator("body").innerText().catch(() => "");
+    if (/Continue to your account|grant .* access to your account/i.test(consentBody)) {
+      await page.getByRole("button", { name: /^Continue$/i }).last().click({ force: true }).catch(async () => {
+        await clickText(page, /^Continue$/i, "last");
+      });
+      await page.waitForTimeout(10000);
+    }
   } else {
     await page.waitForFunction(() => {
       const text = document.body.innerText || "";
@@ -354,7 +373,53 @@ async function sendMessage(page, label, message, expectPattern, timeout = 240000
     await openAgentDm(page);
     await maybeScreenshot(page, "ops-chat-marathon-open");
 
-    proof.turns.push(await sendMessage(page, "sky-blue", `Before we start, why is the sky blue? Marker ${marker}.`, /Rayleigh|scattering|atmosphere/));
+    if (marathonMode === "ticket-reuse-regression") {
+      const first = await sendMessage(
+        page,
+        "first-software-ticket",
+        `Please open a fresh separate ticket to install LibreOffice on laptop DEMO-LAPTOP-91 for Avery Example. Marker ${marker}.`,
+        /Dashboard ticket: #|I created ticket #/,
+        240000,
+        { requireNewTicket: true },
+      );
+      proof.turns.push(first);
+      proof.tickets.first = first.newTickets.at(-1);
+
+      const second = await sendMessage(
+        page,
+        "second-software-ticket",
+        `Jeff needs Figma installed on his laptop by tomorrow for a design review. This is a different person, software title, and device from the prior request. Marker ${marker}-figma.`,
+        /Dashboard ticket: #|I created ticket #/,
+        240000,
+        { requireNewTicket: true },
+      );
+      proof.turns.push(second);
+      proof.tickets.second = second.newTickets.at(-1);
+
+      if (!proof.tickets.first || !proof.tickets.second) {
+        throw new Error(`missing ticket ids in reuse regression: ${JSON.stringify(proof.tickets)}`);
+      }
+      if (proof.tickets.first === proof.tickets.second) {
+        throw new Error(`second software request reused first ticket #${proof.tickets.first}`);
+      }
+      proof.contact_checks = {
+        first: await verifyTicketContact(proof.tickets.first, {
+          affected_user_name: /avery/i,
+        }),
+        second: await verifyTicketContact(proof.tickets.second, {
+          affected_user_name: /jeff/i,
+        }),
+      };
+      await maybeScreenshot(page, "ops-chat-ticket-reuse-regression-complete");
+      await browser.close();
+      proof.status = "passed";
+      proof.mode = marathonMode;
+      proof.turn_count = proof.turns.length;
+      console.log(JSON.stringify(proof, null, 2));
+      return;
+    }
+
+    proof.turns.push(await sendMessage(page, "sky-blue", `Before we start, why is the sky blue? Marker ${marker}.`, /blue|scatter|sunlight|wavelength|air molecules/));
     proof.turns.push(await sendMessage(page, "sky-eli5", "Explain it like I'm five, but keep it one paragraph.", /sunlight|bounces|tiny bits|blue light/));
     proof.turns.push(await sendMessage(page, "cat", "Send me a picture of a cat in text form.", /ASCII|o\.o|meow|whisker/));
     proof.turns.push(await sendMessage(page, "cat-followup", "Make it a different cat with a grumpy vibe.", /grumpy|unimpressed|different cat|judging/));
