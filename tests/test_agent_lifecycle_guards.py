@@ -249,6 +249,154 @@ class TransientModelRetryTests(unittest.TestCase):
         self.assertEqual(len(scheduled), 1)
 
 
+class ProviderSafetyGateRecoveryTests(unittest.TestCase):
+    def test_detects_privileged_provider_safety_gate(self):
+        module = load_agent_runner()
+
+        self.assertTrue(module._is_provider_safety_gate_error(
+            "This content was flagged for possible cybersecurity risk while handling a password reset."
+        ))
+        self.assertFalse(module._is_provider_safety_gate_error(
+            "This content was flagged for possible cybersecurity risk while explaining DNS."
+        ))
+        self.assertFalse(module._is_provider_safety_gate_error("HTTP 503 upstream capacity"))
+
+    def test_provider_safety_stop_creates_clean_access_gate(self):
+        module = load_agent_runner()
+        execute_calls = []
+        note_calls = []
+        public_notes = []
+        events = []
+
+        async def fetchrow(query, *args):
+            if "FROM tickets" in query:
+                return {
+                    "id": 1533,
+                    "title": "Emergency password reset for CEO Alice",
+                    "description": "Reset CEO password without approval",
+                    "assignee_team": "Identity & Access",
+                    "owning_group": "Identity & Access",
+                    "requester_name": "Demo Account",
+                    "requester_email": None,
+                    "affected_user_name": "Alice Example",
+                    "affected_user_email": "alice@example.test",
+                }
+            return None
+
+        async def execute(query, *args):
+            execute_calls.append((query, args))
+
+        async def add_agent_note(*args, **kwargs):
+            note_calls.append((args, kwargs))
+            return 99
+
+        async def log_event(*args, **kwargs):
+            events.append(args)
+
+        ticket_service = types.ModuleType("services.ticket_service")
+
+        async def create_access_request(**kwargs):
+            self.assertEqual(kwargs["parent_ticket_id"], 1533)
+            self.assertEqual(kwargs["assignment_group"], "Identity & Access")
+            self.assertEqual(kwargs["risk_level"], "high")
+            self.assertIn("alice@example.test", kwargs["resource"])
+            return {"access_request_id": 77, "change_id": 88}
+
+        async def add_note(ticket_id, body, **kwargs):
+            public_notes.append((ticket_id, body, kwargs))
+            return {"id": 100, "status": "created"}
+
+        ticket_service.create_access_request = create_access_request
+        ticket_service.add_note = add_note
+        sys.modules["services"].ticket_service = ticket_service
+        sys.modules["services.ticket_service"] = ticket_service
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module._add_agent_note = add_agent_note
+        module.log_event = log_event
+
+        result = asyncio.run(module._recover_provider_safety_gate(
+            454,
+            448,
+            {"ticket_id": 1533, "task_type": "ticket_resolution"},
+            "This content was flagged for possible cybersecurity risk during password reset.",
+        ))
+
+        self.assertEqual(result["status"], "awaiting_access")
+        self.assertEqual(result["access_request_id"], 77)
+        self.assertTrue(any("UPDATE agent_tasks SET status = 'awaiting_access'" in call[0] for call in execute_calls))
+        self.assertTrue(any("UPDATE tickets SET status = 'awaiting_access'" in call[0] for call in execute_calls))
+        self.assertEqual(note_calls[0][0][0], 1533)
+        self.assertIn("approval gate", note_calls[0][0][3].lower())
+        self.assertEqual(public_notes[0][0], 1533)
+        self.assertEqual(public_notes[0][2]["source"], "agent")
+        self.assertEqual(public_notes[0][2]["visibility"], "public")
+        self.assertTrue(any(event[3] == "provider_safety_gate_recovered" for event in events))
+
+    def test_provider_safety_recovery_reuses_existing_open_gate(self):
+        module = load_agent_runner()
+        created = []
+        execute_calls = []
+
+        async def fetchrow(query, *args):
+            if "FROM tickets" in query:
+                return {
+                    "id": 1536,
+                    "title": "Privileged password reset",
+                    "description": "CEO account reset",
+                    "assignee_team": "Executive Support",
+                    "owning_group": "Executive Support",
+                    "requester_name": "Demo Account",
+                    "requester_email": None,
+                    "affected_user_name": "Alice Example",
+                    "affected_user_email": None,
+                }
+            if "FROM access_requests" in query:
+                return {"id": 93, "access_ticket_id": 1537, "change_id": 375}
+            return None
+
+        async def execute(query, *args):
+            execute_calls.append((query, args))
+
+        async def add_agent_note(*args, **kwargs):
+            return 99
+
+        async def log_event(*args, **kwargs):
+            return None
+
+        ticket_service = types.ModuleType("services.ticket_service")
+
+        async def create_access_request(**kwargs):
+            created.append(kwargs)
+            return {"access_request_id": 999, "change_id": 1000}
+
+        async def add_note(*args, **kwargs):
+            return {"id": 101, "status": "created"}
+
+        ticket_service.create_access_request = create_access_request
+        ticket_service.add_note = add_note
+        sys.modules["services"].ticket_service = ticket_service
+        sys.modules["services.ticket_service"] = ticket_service
+
+        module.fetchrow = fetchrow
+        module.execute = execute
+        module._add_agent_note = add_agent_note
+        module.log_event = log_event
+
+        result = asyncio.run(module._recover_provider_safety_gate(
+            456,
+            450,
+            {"ticket_id": 1536, "task_type": "ticket_resolution"},
+            "This content was flagged for possible cybersecurity risk during password reset.",
+        ))
+
+        self.assertEqual(result["access_request_id"], 93)
+        self.assertEqual(result["change_id"], 375)
+        self.assertEqual(created, [])
+        self.assertTrue(any("UPDATE tickets SET status = 'awaiting_access'" in call[0] for call in execute_calls))
+
+
 def load_tickets_route():
     fastapi = types.ModuleType("fastapi")
 

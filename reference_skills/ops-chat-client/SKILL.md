@@ -105,6 +105,11 @@ Reference stack:
   authority. Approval, access, credential, and change gates must come from real
   downstream barriers: scoped vault leases, provider permissions, workflow
   policy, and platform approval gates when the ticket agent attempts work.
+- If a provider safety system stops a privileged identity/security ticket before
+  the worker can create the gate itself, the runner should convert that stop
+  into a clean manual access/approval gate. The expected demo state is
+  `awaiting_access` with an access request, a pending approval gate, and a
+  user-facing note that no credential was reset, disclosed, or returned.
 - For live demos, leave those gates manual. Test scripts may use explicit
   regression-only auto-approval flags, but Ops Chat should show the requester
   that the agent has reached a gate and is waiting for an authorized operator

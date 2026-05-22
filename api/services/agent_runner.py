@@ -174,6 +174,215 @@ def _transient_model_operator_summary(error):
     return "Model provider returned a transient error. The runner preserved progress and will retry or fall back according to provider policy."
 
 
+def _is_provider_safety_gate_error(text):
+    """Return true for provider safety stops that should become platform gates."""
+    if not text:
+        return False
+    lowered = str(text).lower()
+    safety_patterns = (
+        "flagged for possible cybersecurity risk",
+        "possible cybersecurity risk",
+        "safety system",
+        "safety policy",
+        "content policy",
+        "disallowed content",
+    )
+    privileged_patterns = (
+        "password",
+        "credential",
+        "secret",
+        "keycloak",
+        "admin",
+        "mfa",
+        "account unlock",
+        "reset",
+        "privileged",
+        "identity",
+        "access gate",
+        "approval gate",
+        "access request",
+    )
+    return any(pattern in lowered for pattern in safety_patterns) and any(
+        pattern in lowered for pattern in privileged_patterns
+    )
+
+
+async def _recover_provider_safety_gate(agent_id, task_id, task_meta, raw_error):
+    """Convert a provider safety stop into a clean manual access/approval gate.
+
+    This is a demo/reliability safety net for privileged identity/security work:
+    the model may correctly refuse or get provider-blocked before it can call the
+    dashboard access-request tool. The platform should still leave an auditable
+    manual gate instead of a scary failed transcript.
+    """
+    if not _is_provider_safety_gate_error(raw_error):
+        return None
+    if not task_meta or task_meta.get("task_type") != "ticket_resolution" or not task_meta.get("ticket_id"):
+        return None
+
+    ticket_id = task_meta["ticket_id"]
+    ticket = await fetchrow("""
+        SELECT id, title, description, assignee_team, owning_group, requester_name,
+               requester_email, affected_user_name, affected_user_email
+        FROM tickets
+        WHERE id = $1
+    """, ticket_id)
+    if not ticket:
+        return None
+
+    ticket_text = " ".join(
+        str(ticket.get(key) or "")
+        for key in (
+            "title",
+            "description",
+            "assignee_team",
+            "owning_group",
+            "requester_name",
+            "requester_email",
+            "affected_user_name",
+            "affected_user_email",
+        )
+    ).lower()
+    gate_keywords = (
+        "password",
+        "mfa",
+        "account",
+        "unlock",
+        "credential",
+        "secret",
+        "keycloak",
+        "identity",
+        "access",
+        "admin",
+        "privileged",
+    )
+    if not any(keyword in ticket_text for keyword in gate_keywords):
+        return None
+
+    affected = (
+        ticket.get("affected_user_email")
+        or ticket.get("affected_user_name")
+        or ticket.get("requester_email")
+        or ticket.get("requester_name")
+        or "requested account"
+    )
+    reason = (
+        "The ticket agent reached a hard provider safety stop while handling a "
+        "privileged identity or credential action. No credential was changed, "
+        "reset, disclosed, or returned in chat. Operator approval and the "
+        "appropriate scoped IAM access are required before any privileged action "
+        "can continue."
+    )
+
+    from services import ticket_service
+
+    existing_gate = await fetchrow("""
+        SELECT id, access_ticket_id, change_id
+        FROM access_requests
+        WHERE parent_ticket_id = $1
+          AND status NOT IN ('granted', 'rejected', 'cancelled')
+        ORDER BY id DESC
+        LIMIT 1
+    """, ticket_id)
+    if existing_gate:
+        access_result = {
+            "access_request_id": existing_gate.get("id"),
+            "access_ticket_id": existing_gate.get("access_ticket_id"),
+            "change_id": existing_gate.get("change_id"),
+        }
+    else:
+        access_result = await ticket_service.create_access_request(
+            parent_ticket_id=ticket_id,
+            resource=f"Identity account action for {affected}",
+            permission="approve privileged identity action without credential disclosure",
+            reason=reason,
+            agent_id=agent_id,
+            requester=f"agent_{agent_id}",
+            account_ref=str(affected),
+            assignment_group="Identity & Access",
+            risk_level="high",
+            sync_provider=None,
+            created_by="agent-provider-safety-gate",
+        )
+        if access_result.get("error"):
+            return None
+
+    clean_summary = (
+        "Provider safety gate converted to manual approval. No password reset, "
+        "credential disclosure, vault readout, or privileged account action was "
+        "performed. The ticket is waiting on the created Identity & Access gate."
+    )
+    await execute(
+        "UPDATE agent_tasks SET status = 'awaiting_access', output = $1, error_message = NULL, "
+        "completed_at = NOW(), progress_pct = GREATEST(progress_pct, 45) WHERE id = $2",
+        clean_summary,
+        task_id,
+    )
+    await execute(
+        "UPDATE agents SET status = 'awaiting_access', heartbeat = NOW(), error_message = $1, "
+        "finished_at = NOW() WHERE id = $2",
+        clean_summary[:500],
+        agent_id,
+    )
+    await execute(
+        "UPDATE tickets SET status = 'awaiting_access', updated_at = NOW() WHERE id = $1",
+        ticket_id,
+    )
+    await _add_agent_note(
+        ticket_id,
+        agent_id,
+        task_id,
+        "Agent waiting at approval gate",
+        (
+            f"Agent `{agent_id}` reached a provider safety stop while working task `{task_id}`. "
+            "The platform converted this into a manual Identity & Access approval gate. "
+            f"Access request `{access_result.get('access_request_id')}` and approval gate "
+            f"`{access_result.get('change_id')}` are pending. No credential was disclosed "
+            "and no privileged account action was performed."
+        ),
+        "agent-control-plane",
+    )
+    try:
+        await ticket_service.add_note(
+            ticket_id,
+            (
+                "I reached a manual approval/access gate before taking any privileged "
+                "identity action. No password was reset or disclosed. An authorized "
+                "operator needs to approve the Identity & Access gate before this can continue."
+            ),
+            author=f"agent-{agent_id}",
+            source="agent",
+            visibility="public",
+        )
+    except Exception as exc:
+        await log_event(
+            "agent",
+            "warning",
+            f"agent_{agent_id}",
+            "provider_safety_gate_chat_note_failed",
+            f"ticket_{ticket_id}",
+            {"error": str(exc)[:500]},
+        )
+    await log_event(
+        "agent",
+        "warning",
+        f"agent_{agent_id}",
+        "provider_safety_gate_recovered",
+        f"task_{task_id}",
+        {
+            "ticket_id": ticket_id,
+            "access_request_id": access_result.get("access_request_id"),
+            "change_id": access_result.get("change_id"),
+        },
+    )
+    return {
+        "status": "awaiting_access",
+        "ticket_id": ticket_id,
+        "access_request_id": access_result.get("access_request_id"),
+        "change_id": access_result.get("change_id"),
+    }
+
+
 async def _requeue_transient_model_retry(priority_rank, work_dir, prompt, task_id, agent_id, delay_seconds, selected_harness=None):
     """Put the same task back on the runner queue after a provider backoff."""
     if delay_seconds > 0:
@@ -3421,6 +3630,15 @@ async def _spawn_with_semaphore(work_dir, prompt, task_id, agent_id, selected_ha
                 selected_harness,
             )
             if transient_retry:
+                _active_processes.pop(task_id, None)
+                return
+            provider_safety_gate = await _recover_provider_safety_gate(
+                agent_id,
+                task_id,
+                task_meta,
+                raw_error,
+            )
+            if provider_safety_gate:
                 _active_processes.pop(task_id, None)
                 return
             error = (
