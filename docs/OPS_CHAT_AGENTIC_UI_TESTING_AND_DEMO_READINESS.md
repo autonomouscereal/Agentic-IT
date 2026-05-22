@@ -152,6 +152,43 @@ and access-request demo tickets between `1509` and `1524`. They are synced and
 safe behind access gates, but they are not the golden examples. Use the newer
 verified pair `1525` and `1526` when demonstrating stale-room correction.
 
+2026-05-22 second severe Playwright/UI pass:
+
+- No-ticket developer artifact stress marker `artifact-severe-20260522011414`
+  passed through Element. The chat agent returned validated Python, HTML,
+  Markdown, Bash, and combined Python-plus-Remotion animation artifacts with
+  `ticket_count_delta=0` for every case.
+- End-user conversational UX marker `ux-severe-20260522011940` passed. The
+  agent answered current-info follow-ups, created ticket `1528` / iTop `930`
+  for a watermelon purchase request, cancelled it after the requester update,
+  then created replacement pizza ticket `1529` / iTop `931`. Ticket `1529`
+  resolved cleanly and the queue returned to idle.
+- Mixed answer-plus-ticket marker `mixed-severe-20260522013712` passed. The
+  agent answered the current tea-price question in chat with a sourced summary,
+  then opened ticket `1530` / iTop `932` for the `tea-demo` static page. Codex
+  worker `451` validated a local preview, wrote a public requester-facing note,
+  and stopped behind manual change approval gate `371` before publishing.
+- Roundcube Report Phish UI marker `phish-ui-severe-20260522014228` passed.
+  Playwright logged into real Roundcube webmail, opened the seeded synthetic
+  message, clicked `Report Phish`, and backend verification found Mailcow
+  quarantine id `41d9921a195f1231cc0f1fd8c122414d` with scanner
+  `roundcube-report-phish`.
+- The Report Phish flow created dashboard ticket `1531` / iTop `933`, assigned
+  Hermes agent `452` through the phishing RACI rule, hit a transient provider
+  capacity retry, recovered cleanly, wrote triage/no-containment/resolution
+  evidence, completed gate `372` with `no_action_needed`, and resolved.
+- Final health after this pass: dashboard API/TLS `200`, Element `200`, Matrix
+  client versions `200`, Roundcube `200`, AI proxy `200`, active agents `0`,
+  queued depth `0`, worker count `5`.
+- Local regression suite:
+  `python -m pytest tests\test_ops_chat_ticket_lifecycle_regressions.py tests\test_frontend_ui_regressions.py tests\test_agent_lifecycle_guards.py -q`
+  returned `79 passed`.
+
+Demo note: ticket `1530` is a strong approval-gate example for mixed
+answer-plus-work. Ticket `1531` is a strong live email UI proof because it shows
+real Roundcube interaction, Mailcow quarantine evidence, iTop sync, Hermes
+retry recovery, and final resolution.
+
 ## Architecture
 
 Reference services:
