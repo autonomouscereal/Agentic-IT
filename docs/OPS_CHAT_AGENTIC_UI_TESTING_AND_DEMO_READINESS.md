@@ -686,6 +686,38 @@ For a demo-ready UI scenario:
   response.
 - No active smoke agents are left behind after the test.
 
+## 2026-05-22 Demo Blocker Regression
+
+Validated fixes:
+
+- Ops Chat ticket closure delivery: ticket-agent `agent-resolution` notes with
+  `visibility=user/public` on Ops Chat tickets are marked
+  `external_ref=ops-chat-closure` and delivered to Matrix as
+  `Agent completed this request...`. Backfill verified ticket `1497` note
+  `5187` was delivered into `ops_chat_messages` as outbound event `note:5187`.
+- Multi-artifact chat output: repeated `validate-artifact` calls now append
+  instead of overwriting. Real Element/Playwright run
+  `demo-fix-artifacts-20260521234612` passed Python, HTML, Markdown, Bash, and
+  combined Python + Remotion MP4 cases with zero ticket creation.
+- Roundcube Report Phish handoff: a fresh email reported through the real
+  Roundcube button created dashboard ticket `1500`, synced iTop ref `902`,
+  auto-assigned Codex agent `428`, recorded passive triage notes, and opened
+  manual approval gate `357` before mailbox/quarantine validation.
+
+Regression commands:
+
+```bash
+python -m py_compile api/routes/ops_chat.py api/services/ticket_service.py
+python -m py_compile reference_skills/keycloak-mailcow-bridge/scripts/deploy_mailcow_api.py
+node --check scripts/smoke_ops_chat_dev_artifacts.js
+python -m pytest tests/test_ops_chat_ticket_lifecycle_regressions.py tests/test_ticket_service_provider_sync.py -q
+```
+
+Real UI checks should be run from the API container where Playwright is already
+installed. Use Element on `https://host.docker.internal:3303` and Roundcube on
+`http://host.docker.internal:2581/webmail/`; never replace either with a shim
+for demo acceptance.
+
 ## Known Rough Edge
 
 Element first-login and first-contact prompts are stateful and can make browser

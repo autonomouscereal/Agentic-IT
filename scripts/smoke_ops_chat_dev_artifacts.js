@@ -177,6 +177,17 @@ async function login(page) {
   requireSecret("OPS_CHAT_PASSWORD", opsChatPassword);
   await page.goto(`${opsChatUrl.replace(/\/$/, "")}/#/login`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle").catch(() => {});
+  let initialBody = await page.locator("body").innerText().catch(() => "");
+  if (/Welcome to Agentic Ops Chat/i.test(initialBody) && /Sign in/i.test(initialBody)) {
+    const signInLink = page.getByRole("link", { name: /^Sign in$/i }).first();
+    if (await signInLink.isVisible().catch(() => false)) {
+      await signInLink.click({ force: true });
+    } else {
+      await clickText(page, /Sign in/i, "first");
+    }
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
+  }
   const keycloak = page.getByText(/Sign in with Keycloak|Keycloak/i).first();
   await keycloak.waitFor({ state: "visible", timeout: 60000 });
   await keycloak.click();
@@ -186,6 +197,13 @@ async function login(page) {
     await page.locator('input[name="password"]').fill(opsChatPassword);
     await page.locator('button[type="submit"], input[type="submit"]').first().click();
     await page.waitForTimeout(10000);
+    const consentBody = await page.locator("body").innerText().catch(() => "");
+    if (/Continue to your account|grant .* access to your account/i.test(consentBody)) {
+      await page.getByRole("button", { name: /^Continue$/i }).last().click({ force: true }).catch(async () => {
+        await clickText(page, /^Continue$/i, "last");
+      });
+      await page.waitForTimeout(10000);
+    }
   } else {
     await page.waitForFunction(() => {
       const text = document.body.innerText || "";
@@ -433,7 +451,7 @@ async function uploadFileForAgent(page) {
       proof.cases.push(await sendArtifactRequest(
         page,
         "animation",
-        `Create a short MP4 animation artifact named ${marker}_ops_motion.mp4 using the bundled animation-video helper. Include marker ${marker}-animation in the title, subtitle, or validation notes. Validate it as video and return it as a downloadable artifact. Do not create a ticket.`,
+        `Create a short Remotion MP4 animation artifact named ${marker}_ops_motion.mp4 using the animation-video and remotion-best-practices skills. Include marker ${marker}-animation in the title, subtitle, or validation notes. Validate it as video and return it as a downloadable artifact. Do not create a ticket.`,
         { marker: `${marker}-animation`, text: "binary video artifact", requireCodeBlock: false },
       ));
     }
@@ -441,7 +459,7 @@ async function uploadFileForAgent(page) {
       proof.cases.push(await sendArtifactRequest(
         page,
         "combined-animation-python",
-        `In one no-ticket response, create two validated artifacts: (1) a Python script named ${marker}_ascii_cost.py that prints an ASCII bar chart for demo tea prices over time and includes marker ${marker}-python-ascii in a comment; (2) a short MP4 animation named ${marker}_cost_motion.mp4 using the bundled animation-video helper and include marker ${marker}-animation-combined in the title, subtitle, or validation notes. Validate the Python script and the video, return the script as a code block, and return the video as a downloadable artifact. Do not create a ticket.`,
+        `In one no-ticket response, create two validated artifacts: (1) a Python script named ${marker}_ascii_cost.py that prints an ASCII bar chart for demo tea prices over time and includes marker ${marker}-python-ascii in a comment; (2) a short Remotion MP4 animation named ${marker}_cost_motion.mp4 using the animation-video and remotion-best-practices skills and include marker ${marker}-animation-combined in the title, subtitle, or validation notes. Validate the Python script and the video, return the script as a code block, and return the video as a downloadable artifact. Do not create a ticket.`,
         {
           marker: `${marker}-python-ascii`,
           extraMarkers: [`${marker}-animation-combined`],

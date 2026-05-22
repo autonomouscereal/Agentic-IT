@@ -103,6 +103,14 @@ container is parked with `SKIP_SOGO=y` in the current lab to avoid noisy
 bootstrap loops; SOGo hardening is separate from the working Roundcube webmail
 path.
 
+As of the 2026-05-22 demo hardening pass, `/demo-report` also guarantees the
+report starts active agent work. It submits the intake with RACI
+auto-assignment enabled, then falls back to `/api/tickets/{id}/assign-agent`
+with the runtime `DASHBOARD_SERVICE_TOKEN` if the intake response did not
+already return `assigned`. It does not approve its own gates; the agent still
+hits mailbox/quarantine approval barriers before privileged validation or
+remediation.
+
 Required request header:
 
 ```text
@@ -145,6 +153,19 @@ cd /home/cereal/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 ```
 
+For lab installs that are not rooted at `/opt/agentic-it`, pass the runtime
+paths explicitly:
+
+```bash
+MAILCOW_ENV_FILE=/home/cereal/Mailcow/deploy/.env \
+MAILCOW_DOCKERIZED_WEB=/home/cereal/mailcow-dockerized/data/web \
+MAILCOW_API_NGINX_CONF_DIR=/home/cereal/Mailcow/deploy/api-nginx \
+MAILCOW_ROUNDCUBE_DIR=/home/cereal/Mailcow/deploy/roundcube \
+DASHBOARD_ENV_FILE=/home/cereal/SOC_TESTING/soc-dashboard/.env \
+DASHBOARD_SERVICE_TOKEN=<from runtime secret source> \
+python3 scripts/deploy_mailcow_api.py
+```
+
 The deployer is idempotent:
 
 - verifies the Mailcow web root exists
@@ -184,8 +205,8 @@ The deployer is idempotent:
   quarantine-disabled warning banner
 - deploys `roundcube-mailcow-demo` on loopback port `2582`
 - installs a Roundcube `report_phish` plugin and hidden `mailcow_demo_report.php`
-  endpoint that write Mailcow quarantine evidence and create an Agentic
-  Operations intake ticket
+  endpoint that write Mailcow quarantine evidence, create an Agentic Operations
+  intake ticket, sync iTop, and ensure a real investigation agent is assigned
 - routes `/webmail` to Roundcube and redirects `/SOGo/*` to `/webmail/`
 - runs built-in endpoint tests and demo UI cache-asset checks before reporting
   success

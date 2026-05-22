@@ -98,7 +98,7 @@ def test_ops_chat_mixed_request_can_answer_and_create_ticket():
 
 def test_ops_chat_delivers_public_agent_notes_only():
     source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
-    assert 'OUTBOUND_CHAT_NOTE_SOURCES = {"user-info-request", "ticket-status", "agent"}' in source
+    assert '"agent-resolution"' in source
     assert "n.source = 'agent'" in source
     assert "COALESCE(n.visibility, 'internal') IN ('user', 'public')" in source
     assert "COALESCE(n.external_ref, '') LIKE 'ops-chat-%'" in source
@@ -111,6 +111,15 @@ def test_ops_chat_agent_notes_have_human_readable_matrix_prefixes():
     assert "Agent completed this request for ticket" in source
     assert "Agent update for ticket" in source
     assert 'row.get("external_ref")' in source
+    assert 'source in {"agent", "agent-resolution"}' in source
+
+
+def test_ops_chat_multi_artifact_results_append_instead_of_overwrite():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    assert "existing = read_existing_result()" in source
+    assert 'result["artifacts"] = [*previous_artifacts, result["artifact"]]' in source
+    assert 'tool_result["artifacts"] = persisted_artifacts' in source
+    assert "create and validate every requested artifact" in source
 
 
 def test_matrix_bridge_awaits_event_processing_before_ack():

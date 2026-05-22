@@ -1,13 +1,13 @@
 ---
 name: animation-video
-description: Create, render, and validate code-driven animation videos such as motion graphics, explainers, animated text, shape systems, UI mockups, data visualizations, and MP4/GIF/WebM outputs. Use when Codex needs to turn a written idea into a local video artifact using Remotion, HTML/CSS/Playwright capture, Pillow frame generation, or adjacent deterministic animation tools.
+description: Create, render, and validate code-driven animation videos such as motion graphics, explainers, animated text, shape systems, UI mockups, data visualizations, and MP4/GIF/WebM outputs. Use when Codex needs to turn a written idea into a local video artifact using Remotion plus remotion-best-practices.
 ---
 
 # Animation Video
 
 ## Workflow
 
-Use deterministic code-rendered animation when the user needs crisp text, exact layout, UI screens, diagrams, charts, or brand-safe motion. Prefer generative video models only for photorealistic footage or cinematic live-action scenes.
+Use deterministic Remotion animation when the user needs crisp text, exact layout, UI screens, diagrams, charts, or brand-safe motion. Prefer generative video models only for photorealistic footage or cinematic live-action scenes.
 
 1. Use **Remotion** as the renderer for generated motion graphics, composited scenes, charts, text animation, captions, and reusable video components.
 2. Make a short storyboard: duration, resolution, fps, scene beats, key text, palette, and final deliverable.
@@ -94,3 +94,7 @@ outside the Remotion/React renderer stack unless the user explicitly asks.
 
 Do not fetch remote media assets for chat animation requests. Use local code,
 text, shapes, gradients, charts, and generated React/Remotion primitives.
+
+Do not use legacy Pillow/frame-stitching or Python text-shape video helpers for
+Agentic Ops Chat demo artifacts. The supported demo path is Remotion rendered
+through `animation-video` with `remotion-best-practices`.

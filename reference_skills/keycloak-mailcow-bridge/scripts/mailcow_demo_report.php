@@ -8,6 +8,7 @@ require_once __DIR__ . '/inc/vars.inc.php';
 
 $dashboard_base = rtrim(getenv('DASHBOARD_API_BASE') ?: 'http://127.0.0.1:25480', '/');
 $expected_token = getenv('REPORT_PHISH_TOKEN') ?: '';
+$dashboard_service_token = getenv('DASHBOARD_SERVICE_TOKEN') ?: '';
 
 function respond_json($status, $payload) {
   http_response_code($status);
@@ -30,11 +31,16 @@ function pdo_connect_report() {
 }
 
 function post_json_report($url, $payload) {
+  global $dashboard_service_token;
+  $headers = array('Content-Type: application/json');
+  if ($dashboard_service_token !== '') {
+    $headers[] = 'X-Dashboard-Service-Token: ' . $dashboard_service_token;
+  }
   $ch = curl_init($url);
   curl_setopt_array($ch, array(
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST => true,
-    CURLOPT_HTTPHEADER => array('Content-Type: application/json'),
+    CURLOPT_HTTPHEADER => $headers,
     CURLOPT_POSTFIELDS => json_encode($payload),
     CURLOPT_TIMEOUT => 20,
   ));
@@ -130,12 +136,22 @@ try {
       ),
     )),
   ));
+  $ticket_id = $intake['data']['ticket']['id'] ?? null;
+  $auto_assignment_status = $intake['data']['auto_assignment']['status'] ?? null;
+  $agent_spawn = array('ok' => false, 'status' => 'not_attempted');
+  if ($ticket_id && $auto_assignment_status !== 'assigned') {
+    $agent_spawn = post_json_report($dashboard_base . '/api/tickets/' . rawurlencode((string)$ticket_id) . '/assign-agent', array(
+      'prompt' => "Roundcube Report Phish investigation request.\n\n"
+        . "Work ticket {$ticket_id} end to end: verify reported-message evidence, confirm Mailcow quarantine id {$qid}, preserve safe metadata, do not fetch suspicious URLs directly, sync findings to the provider ticket, request approval/access if a real remediation barrier is hit, and write a requester-facing closure note when complete.",
+    ));
+  }
 
   respond_json(200, array(
     'ok' => true,
     'quarantine_id' => $qid,
     'message_id' => $message_id,
     'intake' => $intake,
+    'agent_spawn' => $agent_spawn,
   ));
 } catch (Throwable $exc) {
   respond_json(500, array('ok' => false, 'error' => 'report_failed'));

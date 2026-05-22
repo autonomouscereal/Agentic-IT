@@ -55,6 +55,10 @@ Reference stack:
   follow-up is needed. The bridge delivers this agent-authored closure note back
   to Matrix, so do not rely on a generic ticket-status event as the final user
   response.
+- The dashboard also treats `source=agent-resolution` user/public notes on
+  Ops Chat tickets as closure notes and delivers them to Matrix with the same
+  "Agent completed this request..." framing. This covers ticket-agent closure
+  helpers that write `agent-resolution` notes instead of raw `agent` notes.
 - Agents may send requester-facing progress/result notes while working. On
   Ops Chat-originated tickets, agent-authored `visibility=user` or
   `visibility=public` notes are automatically marked
@@ -93,6 +97,10 @@ Reference stack:
   not paste untested code through `answer`. It must not run arbitrary curl,
   inline Python, external image generators, package installs, or suspicious URL
   fetches in this lightweight chat turn.
+- A single chat turn may validate multiple developer artifacts. Repeated
+  `validate-artifact` calls append to the same final result, so a request for a
+  Python script plus a Remotion video must return both artifacts instead of
+  overwriting the script response with the video response.
 - The chat agent may decide routing and assignment, but it is not an approval
   authority. Approval, access, credential, and change gates must come from real
   downstream barriers: scoped vault leases, provider permissions, workflow

@@ -25,6 +25,13 @@ the same platform evidence path:
 
 `Roundcube -> Report Phish plugin -> /demo-report -> Mailcow quarantine -> dashboard intake -> iTop sync -> agent`
 
+The hidden `/demo-report` endpoint must both create the dashboard/iTop ticket
+and ensure an investigation agent is started. It first lets the dashboard RACI
+auto-assignment path run; if that does not return `assigned`, it uses the
+runtime `DASHBOARD_SERVICE_TOKEN` to call `/api/tickets/{id}/assign-agent`.
+This prevents demo reports from stopping at "ticket created" without an actual
+agent investigation.
+
 ## Reference Deployment
 
 Live AI server defaults:
@@ -103,6 +110,8 @@ password, select a message, and click `Report Phish`. Then verify:
 - a dashboard ticket with provider `itop`
 - an iTop incident reference
 - an assigned or approval-gated agent
+- `/demo-report` JSON includes `agent_spawn` or an assigned
+  `intake.auto_assignment`
 
 Known 2026-05-18 proof:
 

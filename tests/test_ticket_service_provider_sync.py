@@ -237,6 +237,30 @@ class TicketServiceProviderSyncTests(unittest.TestCase):
         insert_calls = [call for call in calls if call[0] == "fetchval" and "INSERT INTO ticket_notes" in call[1]]
         self.assertEqual(insert_calls[-1][2][5], "ops-chat-agent-note")
 
+    def test_ops_chat_agent_resolution_note_gets_closure_marker(self):
+        calls = []
+        module = load_ticket_service(calls)
+        database = sys.modules["database"]
+        async def fetchrow(query, *args):
+            calls.append(("fetchrow", query, args))
+            if "SELECT id, access_scope FROM tickets WHERE id = $1" in query:
+                return {"id": args[0], "access_scope": {"source": "ops-chat"}}
+            if "SELECT id FROM tickets WHERE id = $1" in query:
+                return {"id": args[0]}
+            return None
+        database.fetchrow = fetchrow
+        module.fetchrow = fetchrow
+        result = asyncio.run(module.add_note(
+            42,
+            "Created the account and validated read-only dashboard access.",
+            author="agent-1",
+            source="agent-resolution",
+            visibility="user",
+        ))
+        self.assertEqual(result["status"], "created")
+        insert_calls = [call for call in calls if call[0] == "fetchval" and "INSERT INTO ticket_notes" in call[1]]
+        self.assertEqual(insert_calls[-1][2][5], "ops-chat-closure")
+
 
 if __name__ == "__main__":
     unittest.main()

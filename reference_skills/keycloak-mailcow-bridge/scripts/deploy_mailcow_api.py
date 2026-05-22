@@ -37,8 +37,8 @@ def read_env_file(path):
 
 # --- Configuration ------------------------------------------------------
 
-MAILCOW_DOCKERIZED_WEB = "/opt/agentic-it/mailcow-dockerized/data/web"
-NGINX_CONF_DIR = "/opt/agentic-it/Mailcow/deploy/api-nginx"
+MAILCOW_DOCKERIZED_WEB = os.environ.get("MAILCOW_DOCKERIZED_WEB", "/opt/agentic-it/mailcow-dockerized/data/web")
+NGINX_CONF_DIR = os.environ.get("MAILCOW_API_NGINX_CONF_DIR", "/opt/agentic-it/Mailcow/deploy/api-nginx")
 MAILCOW_ENV_FILE = os.environ.get("MAILCOW_ENV_FILE", "/opt/agentic-it/Mailcow/deploy/.env")
 API_PORT = 8081
 UI_DEMO_PORT = int(os.environ.get("MAILCOW_UI_DEMO_PORT", "2581"))
@@ -53,6 +53,25 @@ MAILCOW_API_KEY = None  # Will be generated if not found
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def dashboard_service_token():
+    token = os.environ.get("DASHBOARD_SERVICE_TOKEN", "").strip()
+    if token:
+        return token
+    candidates = [
+        os.environ.get("DASHBOARD_ENV_FILE", ""),
+        "/home/cereal/SOC_TESTING/soc-dashboard/.env",
+        "/opt/agentic-it/SOC_TESTING/soc-dashboard/.env",
+        "/opt/agentic-it/soc-dashboard/.env",
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        token = read_env_file(candidate).get("DASHBOARD_SERVICE_TOKEN", "").strip()
+        if token:
+            return token
+    return ""
+
+
 # --- Helpers ------------------------------------------------------------
 
 def run(cmd, check=True):
@@ -60,6 +79,7 @@ def run(cmd, check=True):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     if check and result.returncode != 0:
         safe_cmd = re.sub(r"(REPORT_PHISH_TOKEN=)([^ ]+)", r"\1<redacted>", cmd)
+        safe_cmd = re.sub(r"(DASHBOARD_SERVICE_TOKEN=)([^ ]+)", r"\1<redacted>", safe_cmd)
         safe_cmd = re.sub(r"(MYSQL_ROOT_PASSWORD=)([^ ]+)", r"\1<redacted>", safe_cmd)
         print(f"  [ERROR] Command failed: {safe_cmd}")
         print(f"  stdout: {result.stdout}")
@@ -701,6 +721,7 @@ exec php-fpm
         f"-e TZ=America/New_York "
         f"-e MAILCOW_PASS_SCHEME=BLF-CRYPT "
         f"-e DASHBOARD_API_BASE={shlex.quote(os.environ.get('DASHBOARD_API_BASE', 'http://127.0.0.1:25480'))} "
+        f"-e DASHBOARD_SERVICE_TOKEN={shlex.quote(dashboard_service_token())} "
         f"-e REPORT_PHISH_TOKEN={shlex.quote(report_token)} "
         f"-e DEMO_WEBMAIL_IMAP_HOST={shlex.quote(os.environ.get('DEMO_WEBMAIL_IMAP_HOST', '127.0.0.1'))} "
         f"-e DEMO_WEBMAIL_IMAP_PORT={shlex.quote(os.environ.get('DEMO_WEBMAIL_IMAP_PORT', '143'))} "

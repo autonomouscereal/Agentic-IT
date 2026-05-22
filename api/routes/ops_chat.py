@@ -31,7 +31,7 @@ OPS_CHAT_MAX_ATTACHMENT_BYTES = int(os.getenv("OPS_CHAT_MAX_ATTACHMENT_BYTES", s
 OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES = int(os.getenv("OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES", str(8 * 1024 * 1024)))
 
 INTAKE_TIMEOUT_SECONDS = int(os.getenv("OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS", "3600"))
-OUTBOUND_CHAT_NOTE_SOURCES = {"user-info-request", "ticket-status", "agent"}
+OUTBOUND_CHAT_NOTE_SOURCES = {"user-info-request", "ticket-status", "agent", "agent-resolution"}
 OUTBOUND_CHAT_MAX_BODY_CHARS = int(os.getenv("OPS_CHAT_OUTBOUND_MAX_BODY_CHARS", "1400"))
 INTAKE_ALLOWED_TICKET_CLASSES = {"UserRequest", "Incident", "NormalChange"}
 INTAKE_ALLOWED_PRIORITIES = {"P1", "P2", "P3", "P4"}
@@ -267,36 +267,52 @@ async def _link_chat_attachments_to_ticket(ticket_id, attachments):
 def _persist_agent_artifact(work_dir, session_id, tool_result):
     if not isinstance(tool_result, dict) or tool_result.get("mode") != "artifact":
         return tool_result
-    artifact = tool_result.get("artifact") or {}
-    path_value = artifact.get("local_path") or artifact.get("path")
-    if not path_value:
-        return tool_result
-    path = (Path(work_dir) / str(path_value)).resolve()
     root = Path(work_dir).resolve()
-    if root != path and root not in path.parents:
-        return tool_result
-    if not path.exists() or not path.is_file():
-        return tool_result
-    content = path.read_bytes()
-    digest = hashlib.sha256(content).hexdigest()
-    filename = _safe_filename(artifact.get("filename") or path.name, path.name)
-    dest_dir = OPS_CHAT_ARTIFACT_DIR / f"session-{int(session_id or 0)}"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{digest[:16]}_{filename}"
-    shutil.copyfile(path, dest)
-    content_type = artifact.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    attachment = {
-        "filename": filename,
-        "content_type": content_type,
-        "size_bytes": len(content),
-        "sha256": digest,
-        "storage_ref": f"ops-chat-artifact://session-{session_id or 0}/{dest.name}",
-        "local_path": str(dest),
-    }
-    if len(content) <= OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES:
-        attachment["data_base64"] = base64.b64encode(content).decode("ascii")
-    tool_result["artifact"] = {**artifact, **attachment}
-    tool_result["attachments"] = [attachment]
+    artifacts = tool_result.get("artifacts")
+    if not isinstance(artifacts, list) or not artifacts:
+        artifacts = [tool_result.get("artifact") or {}]
+    persisted_artifacts = []
+    attachments = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        path_value = artifact.get("local_path") or artifact.get("path")
+        if not path_value:
+            persisted_artifacts.append(artifact)
+            continue
+        path = (Path(work_dir) / str(path_value)).resolve()
+        if root != path and root not in path.parents:
+            persisted_artifacts.append(artifact)
+            continue
+        if not path.exists() or not path.is_file():
+            persisted_artifacts.append(artifact)
+            continue
+        content = path.read_bytes()
+        digest = hashlib.sha256(content).hexdigest()
+        filename = _safe_filename(artifact.get("filename") or path.name, path.name)
+        dest_dir = OPS_CHAT_ARTIFACT_DIR / f"session-{int(session_id or 0)}"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / f"{digest[:16]}_{filename}"
+        shutil.copyfile(path, dest)
+        content_type = artifact.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        attachment = {
+            "filename": filename,
+            "content_type": content_type,
+            "size_bytes": len(content),
+            "sha256": digest,
+            "storage_ref": f"ops-chat-artifact://session-{session_id or 0}/{dest.name}",
+            "local_path": str(dest),
+        }
+        if len(content) <= OPS_CHAT_MAX_ARTIFACT_INLINE_BYTES:
+            attachment["data_base64"] = base64.b64encode(content).decode("ascii")
+        persisted = {**artifact, **attachment}
+        persisted_artifacts.append(persisted)
+        attachments.append(attachment)
+    if persisted_artifacts:
+        tool_result["artifacts"] = persisted_artifacts
+        tool_result["artifact"] = persisted_artifacts[-1]
+    if attachments:
+        tool_result["attachments"] = attachments
     return tool_result
 
 
@@ -316,7 +332,9 @@ def _compact_chat_note_body(source, body, ticket_id, external_ref=None):
         text = f"Ticket #{ticket_id} needs your input:\n\n{question}"
     elif source == "ticket-status":
         text = f"Ticket #{ticket_id} status update:\n\n{text}"
-    elif source == "agent" and str(external_ref or "").startswith("ops-chat-closure"):
+    elif source in {"agent", "agent-resolution"} and (
+        source == "agent-resolution" or str(external_ref or "").startswith("ops-chat-closure")
+    ):
         text = f"Agent completed this request for ticket #{ticket_id}:\n\n{text}"
     elif source == "agent" and str(external_ref or "").startswith("ops-chat-agent-note"):
         text = f"Agent update for ticket #{ticket_id}:\n\n{text}"
@@ -1465,6 +1483,16 @@ def validate_artifact(args):
             "checks": checks,
         },
     }
+    existing = read_existing_result()
+    if existing.get("mode") == "artifact":
+        previous_artifacts = existing.get("artifacts")
+        if not isinstance(previous_artifacts, list):
+            previous_artifacts = [existing.get("artifact")] if isinstance(existing.get("artifact"), dict) else []
+        result["artifacts"] = [*previous_artifacts, result["artifact"]]
+        previous_reply = str(existing.get("reply") or "").strip()
+        result["reply"] = (previous_reply + "\n\n" + reply).strip() if previous_reply else reply
+    else:
+        result["artifacts"] = [result["artifact"]]
     write_result(result)
     print(reply)
 
@@ -2398,7 +2426,8 @@ async def _chat_agent_turn(message, session_id=None, requester_name=None, reques
         "- For answers with currency symbols, code, quotes, or multiple lines, write answer.md with the file tool and call --reply-file. Do not pass US$0.65 or similar dollar amounts through a shell argument because shells can expand $0.",
         "- For mixed operational plus current-info asks, use web-search as needed, then write mixed_reply.md. The reply should answer the harmless/current-info part and also explain that you opened the operational ticket. The Matrix bridge will append the dashboard ticket and agent ids.",
         "- For dev one-off code/artifact asks such as Python, HTML, Markdown, JavaScript, shell scripts, or JSON, write the artifact file, validate it with validate-artifact, and return that tool output. Do not paste untested code through answer.",
-        "- For animation or video artifact asks, use the animation-video skill with remotion-best-practices. Prefer a self-contained Remotion MP4: create a small local Remotion project in the work directory, write src/index.tsx with a ChatAnimation composition, render with npx remotion render, validate with validate-artifact --kind video, and return it as an artifact. Use the old Python text-shapes helper only if Node/Remotion is unavailable.",
+        "- For animation or video artifact asks, use the animation-video skill with remotion-best-practices. Prefer a self-contained Remotion MP4: create a small local Remotion project in the work directory, write src/index.tsx with a ChatAnimation composition, render with npx remotion render, validate with validate-artifact --kind video, and return it as an artifact. Do not use legacy Python/Pillow/text-shape video helpers for Ops Chat demo animations.",
+        "- If the same chat message asks for multiple developer artifacts, create and validate every requested artifact. Repeated validate-artifact calls append to the same final response, so return all requested code/file/video outputs in one chat turn.",
         "",
         "Decision guidance:",
         "- General chat: use the answer tool.",
