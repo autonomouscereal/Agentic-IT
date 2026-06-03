@@ -240,6 +240,20 @@ def provider_safe_title(title, fallback="Untitled request"):
     return text[:MAX_PROVIDER_TITLE_LENGTH - 3].rstrip() + "..."
 
 
+async def _sanitize_text_for_storage(text, source, actor="system", ticket_id=None, purpose="defensive redaction"):
+    try:
+        from services import sensitive_intake
+        return (await sensitive_intake.sanitize_and_store_text(
+            text,
+            source=source,
+            actor=actor,
+            ticket_id=ticket_id,
+            purpose=purpose,
+        ))["text"]
+    except Exception:
+        return str(text or "")
+
+
 def _can_outbound_create(provider, ticket_class):
     return provider != "local"
 
@@ -272,7 +286,18 @@ async def create_ticket(
     """
     from services import provider_registry
 
-    title = provider_safe_title(title)
+    title = provider_safe_title((await _sanitize_text_for_storage(
+        title,
+        source="ticket.title",
+        actor=created_by,
+        purpose="defensive ticket title redaction",
+    )))
+    description = await _sanitize_text_for_storage(
+        description,
+        source="ticket.description",
+        actor=created_by,
+        purpose="defensive ticket description redaction",
+    )
     ticket_class = normalize_ticket_class(ticket_class)
     provider_class = normalize_ticket_class(provider_class, ticket_class) if provider_class else ticket_class
     requested_provider = provider
@@ -429,9 +454,16 @@ async def push_to_provider(ticket_id, provider=None):
 
     target_provider = provider or ticket.get("provider") or "local"
     from services import provider_registry
+    safe_description = await _sanitize_text_for_storage(
+        ticket.get("description"),
+        source="ticket.provider_push.description",
+        actor="dashboard",
+        ticket_id=ticket_id,
+        purpose="defensive provider sync redaction",
+    )
     result = await provider_registry.create_ticket(target_provider, ticket_id, {
         "title": ticket.get("title"),
-        "description": enrich_description_with_contact_metadata(ticket.get("description"), ticket),
+        "description": enrich_description_with_contact_metadata(safe_description, ticket),
         "ticket_class": ticket.get("itop_class"),
         "provider_class": ticket.get("provider_class") or ticket.get("itop_class"),
         "priority": ticket.get("priority"),
@@ -497,6 +529,16 @@ async def add_note(ticket_id, body, author="dashboard", source="dashboard", visi
     ticket = await fetchrow("SELECT id, access_scope FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
+    try:
+        body = await _sanitize_text_for_storage(
+            body,
+            source=f"ticket.note.{source or 'dashboard'}",
+            actor=author,
+            ticket_id=ticket_id,
+            purpose="defensive ticket note redaction",
+        )
+    except Exception:
+        body = str(body or "")
     scope = _loads_json(ticket.get("access_scope")) or {}
     if (
         not external_ref
@@ -707,6 +749,11 @@ async def get_context(ticket_id):
         "SELECT id, name, description, category, prompt_template FROM agent_skills "
         "WHERE enabled = true AND assigned_to_all = true ORDER BY category, name"
     )
+    try:
+        from services import sensitive_intake
+        sensitive_requests = await sensitive_intake.list_requests(ticket_id=ticket_id, limit=25)
+    except Exception:
+        sensitive_requests = []
 
     return {
         "ticket": ticket,
@@ -714,6 +761,7 @@ async def get_context(ticket_id):
         "attachments": attachments,
         "change_requests": changes,
         "access_requests": access_requests,
+        "sensitive_intake_requests": sensitive_requests,
         "tasks": tasks,
         "steering_events": steering_events,
         "model_turn_events": model_turn_events,

@@ -53,6 +53,13 @@ from context. Build RBAC, approval gates, scoped credential leases, provider
 permission checks, audit, retries, and unsafe-action blockers as hard walls the
 agent must hit.
 
+Use the Sensitive Intake Broker for user-provided protected values. Do not
+place SSNs, DOBs, passwords, API keys, recovery codes, HR, financial, or
+similar data in ticket descriptions, notes, chat transcripts, provider text,
+logs, or memory. Agents request dynamic secure forms and receive references
+only; provider adapters resolve those references server-side after approval
+gates.
+
 ## Runtime Settings
 
 Agent runtime configuration lives in the dashboard `Settings` page and

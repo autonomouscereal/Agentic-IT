@@ -33,6 +33,19 @@ This lets agents:
 
 It does not intentionally grant arbitrary shell administration capability.
 
+## Sensitive User Inputs
+
+Sensitive values supplied by users are handled by the Sensitive Intake Broker,
+not by agent prompts or ticket text. Agents request labels, field types, and
+purpose through the secure form flow, then receive request/value references
+only. Submitted values are encrypted and can be consumed only by server-side
+provider actions after the relevant approval, access, or change gate is
+satisfied.
+
+Do not add a generic broker read endpoint for agents. Agents may use references
+and status, but raw values must stay out of chat, ticket descriptions, ticket
+notes, provider text payloads, event logs, audit views, and memory.
+
 ## Change Request API
 
 Create:

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Secure Intake</title>
+  <style>
+    :root {
+      --bg: #10110f;
+      --panel: #181916;
+      --panel-2: #202119;
+      --text: #f2eee5;
+      --muted: #b8b09f;
+      --line: #373426;
+      --accent: #d9b75f;
+      --good: #7ec28d;
+      --bad: #e28a7c;
+      --shadow: 0 24px 70px rgba(0, 0, 0, .38);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(217, 183, 95, .11), transparent 30rem),
+        linear-gradient(135deg, #0b0c0b, #171611 55%, #0d0f0d);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 32px;
+    }
+    main {
+      width: min(760px, 100%);
+      background: linear-gradient(180deg, var(--panel), #11130f);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    header {
+      padding: 24px 28px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .025);
+    }
+    h1 { margin: 0; font-size: 26px; letter-spacing: 0; }
+    .sub { color: var(--muted); margin-top: 8px; line-height: 1.45; }
+    form, .body { padding: 24px 28px 28px; }
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    label { font-weight: 750; }
+    .tag {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid #54492d;
+      color: #f2da94;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    input, textarea {
+      width: 100%;
+      border: 1px solid #46412f;
+      border-radius: 8px;
+      background: #0e100e;
+      color: var(--text);
+      padding: 12px 13px;
+      font: inherit;
+      outline: none;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(217, 183, 95, .14);
+    }
+    .help { color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 22px;
+    }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      background: var(--accent);
+      color: #18130a;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .55; cursor: wait; }
+    .status {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .ok { color: var(--good); }
+    .err { color: var(--bad); }
+    .summary {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 16px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    code { color: #f0d482; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Secure Intake</h1>
+      <div class="sub">
+        Submit protected values here instead of pasting them into chat, email, tickets, or agent notes.
+        Values are encrypted by the broker; agents receive references only.
+      </div>
+    </header>
+    <div id="app" class="body">Loading secure form...</div>
+  </main>
+  <script>
+    const token = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+    const app = document.getElementById('app');
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        ...options,
+        headers: {'Content-Type': 'application/json', ...(options.headers || {})},
+      });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!res.ok) throw data;
+      return data;
+    }
+
+    function renderForm(form) {
+      if (form.status !== 'pending') {
+        app.innerHTML = `
+          <h2>Form ${esc(form.status)}</h2>
+          <div class="summary">
+            Request <code>${esc(form.request_ref)}</code> is ${esc(form.status)}.
+            Raw values are not displayed here.
+          </div>`;
+        return;
+      }
+      const fields = form.fields || [];
+      app.innerHTML = `
+        <form id="secure-form">
+          <div class="summary">
+            <strong>Purpose:</strong> ${esc(form.purpose || 'Protected information request')}<br>
+            <strong>Request:</strong> <code>${esc(form.request_ref)}</code><br>
+            <strong>Expires:</strong> ${esc(form.expires_at || 'not set')}
+          </div>
+          ${fields.map(field => `
+            <div class="field">
+              <label for="${esc(field.key)}">${esc(field.label)} ${field.required ? '*' : ''}</label>
+              <span class="tag">${esc(field.type || 'sensitive')}</span>
+              ${field.type === 'freeform_sensitive'
+                ? `<textarea id="${esc(field.key)}" name="${esc(field.key)}" rows="3" ${field.required ? 'required' : ''}></textarea>`
+                : `<input id="${esc(field.key)}" name="${esc(field.key)}" type="${field.type === 'credential' || field.type === 'secret' || field.type === 'token' ? 'password' : 'text'}" autocomplete="off" ${field.required ? 'required' : ''} />`
+              }
+              ${field.help ? `<div class="help">${esc(field.help)}</div>` : ''}
+            </div>
+          `).join('')}
+          <div class="actions">
+            <button type="submit">Submit Securely</button>
+            <span class="status" id="status">Encrypted broker submission. Agents will see references only.</span>
+          </div>
+        </form>`;
+      document.getElementById('secure-form').addEventListener('submit', submitForm);
+    }
+
+    async function submitForm(event) {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button');
+      const status = document.getElementById('status');
+      const values = {};
+      new FormData(form).forEach((value, key) => values[key] = value);
+      button.disabled = true;
+      status.textContent = 'Submitting encrypted values...';
+      try {
+        const result = await api(`/api/sensitive-intake/submit/${encodeURIComponent(token)}`, {
+          method: 'POST',
+          body: JSON.stringify({values, submitted_by: 'secure-intake-form'}),
+        });
+        app.innerHTML = `
+          <h2 class="ok">Submitted</h2>
+          <div class="summary">
+            Request <code>${esc(result.request_ref)}</code> was submitted successfully.<br>
+            ${esc(result.fields_submitted?.length || 0)} protected field(s) were stored behind broker references.
+            Raw values are not displayed, logged, or returned to the agent.
+          </div>`;
+      } catch (err) {
+        button.disabled = false;
+        status.className = 'status err';
+        status.textContent = err?.detail?.error || err?.error || 'Submission failed.';
+      }
+    }
+
+    api(`/api/sensitive-intake/form/${encodeURIComponent(token)}`)
+      .then(renderForm)
+      .catch(() => {
+        app.innerHTML = `<h2 class="err">Form unavailable</h2><div class="summary">This secure form is invalid, expired, or already closed.</div>`;
+      });
+  </script>
+</body>
+</html>

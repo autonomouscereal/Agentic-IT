@@ -113,6 +113,15 @@ change gates are enforced later by platform policy, scoped vault leases,
 provider permissions, workflow rules, and real execution barriers when the
 ticket agent attempts the work.
 
+Sensitive values use the Sensitive Intake Broker instead of the normal chat
+transcript. If the agent needs SSN, DOB, temporary credentials, API keys,
+recovery codes, HR, financial, or similar protected fields, it must call
+`ops_chat_tool.py request-sensitive-fields` and send the user the generated
+secure form link. Agents receive only request/value references; the broker
+encrypts submitted values and records audit-safe request/submission events.
+Defensive redaction also protects accidental pastes before chat, ticket,
+provider-sync, event-log, or agent-prompt storage.
+
 The chat agent may ask one concise follow-up before opening a ticket when the
 answer would materially change routing, scope, urgency, or whether the request
 needs tracking at all. Once the agent has enough context and creates the

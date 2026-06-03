@@ -181,6 +181,8 @@ ROUTE_REQUIREMENTS = [
     ("DELETE", "/api/intake*", "intake:write"),
     ("GET", "/api/ops-chat*", "ops-chat:read"),
     ("POST", "/api/ops-chat*", "ops-chat:write"),
+    ("GET", "/api/sensitive-intake/requests*", "ops-chat:read"),
+    ("POST", "/api/sensitive-intake/request", "ops-chat:write"),
     ("GET", "/api/cicd*", "cicd:read"),
     ("POST", "/api/cicd*", "cicd:write"),
     ("GET", "/api/search*", "search:read"),
@@ -512,6 +514,10 @@ def required_permission(method, path):
     if upper_method == "OPTIONS":
         return None
     if path == "/login" or path.startswith("/login?"):
+        return None
+    if path.startswith("/secure-intake/"):
+        return None
+    if path.startswith("/api/sensitive-intake/form/") or path.startswith("/api/sensitive-intake/submit/"):
         return None
     if path in ("/api/auth/login", "/api/auth/logout"):
         return None

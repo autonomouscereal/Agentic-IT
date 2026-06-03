@@ -30,6 +30,26 @@ Live AI-server checks against `http://127.0.0.1:25480` and
 This checkpoint validates platform health, auth, HTTPS, search, and setup
 ticket fan-out without starting any harness tasks during the live-demo window.
 
+## Sensitive Intake Broker
+
+Local regression:
+
+```powershell
+python -m pytest tests\test_sensitive_intake_broker.py -q
+python -m py_compile api\services\sensitive_intake.py api\routes\sensitive_intake.py
+```
+
+Live smoke:
+
+1. Create a sensitive field request through `/api/sensitive-intake/request`.
+2. Open the returned `/secure-intake/<token>` form.
+3. Submit values.
+4. Verify `/api/sensitive-intake/requests/<request_ref>` returns field labels,
+   refs, hashes/length metadata, and events but never raw values.
+5. Send an Ops Chat message containing a synthetic SSN/password and verify
+   `ops_chat_messages`, ticket text, and event-log details contain
+   `<sensitive:type:siv_...>` references only.
+
 ## Agent Queue Recovery Checkpoint
 
 2026-05-21 live queue recovery validated the runner after Ops Chat spawned

@@ -46,6 +46,12 @@ Reference stack:
   sub-requests just because the message also contains operational work.
 - The chat agent may ask one concise pre-ticket clarification when the answer
   changes routing, scope, urgency, or whether a ticket is needed.
+- If the clarification requires protected values such as SSN, DOB, passwords,
+  API keys, recovery codes, government IDs, HR, financial, or health data, the
+  agent must use `ops_chat_tool.py request-sensitive-fields` instead of asking
+  the user to paste values into chat. The generated secure form encrypts values
+  behind broker references; agents see labels, request refs, and value refs
+  only.
 - Ticket workers that cannot complete procurement/service fulfillment because
   practical details are missing should ask through the ticket/requester-info
   path and stop at `waiting_for_user`. Do not finish the worker while leaving
@@ -176,6 +182,9 @@ Reference stack:
 - Never perform hidden work outside tickets. If the user asks for account,
   system, email, deployment, security, access, change, research, or repair work,
   create or continue a ticket.
+- Never attempt to decode, print, or request raw values behind
+  `<sensitive:type:siv_...>` references. Provider adapters resolve them
+  server-side after approval gates.
 
 ## Compose
 

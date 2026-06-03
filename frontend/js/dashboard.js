@@ -2288,17 +2288,19 @@ function normalizeList(value) {
     return [];
 }
 
-function renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, accessRequests }) {
+function renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, accessRequests, sensitiveRequests = [] }) {
     const completedTasks = tasks.filter(t => t.status === "completed").length;
     const completedChanges = changes.filter(c => c.status === "completed").length;
     const promotedPostmortems = postmortems.filter(p => ["promoted", "approved", "ready_for_review"].includes(p.status)).length;
     const accessCompleted = accessRequests.filter(a => ["approved", "completed", "resolved"].includes(a.status) || ["approved", "completed"].includes(a.change_status)).length;
+    const sensitiveSubmitted = sensitiveRequests.filter(r => r.status === "submitted").length;
     const tiles = [
         ["Notes", notes.length, "human-readable updates"],
         ["Audit", relevant.length, "events linked to ticket"],
         ["Agent Work", `${completedTasks}/${tasks.length}`, "tasks completed"],
         ["Approval Gates", `${completedChanges}/${changes.length}`, "gates completed"],
         ["Access", `${accessCompleted}/${accessRequests.length}`, "requests approved"],
+        ["Secure Intake", `${sensitiveSubmitted}/${sensitiveRequests.length}`, "forms submitted"],
         ["Learning", `${promotedPostmortems}/${postmortems.length}`, "postmortems ready+"],
     ];
     return `
@@ -2404,7 +2406,7 @@ function modelTurnSummary(turn) {
     };
 }
 
-function buildTicketTimeline({ ticket, notes, relevant, tasks, changes, postmortems, accessRequests, steeringEvents, modelTurns }) {
+function buildTicketTimeline({ ticket, notes, relevant, tasks, changes, postmortems, accessRequests, sensitiveRequests = [], steeringEvents, modelTurns }) {
     const events = [];
     const seen = new Set();
     if (ticket?.created_at) {
@@ -2479,6 +2481,26 @@ function buildTicketTimeline({ ticket, notes, relevant, tasks, changes, postmort
             badge: access.status || access.change_status || "access",
             key: eventKey(["access", access.id, access.access_ticket_id]),
         });
+    });
+    sensitiveRequests.forEach(req => {
+        pushTimelineEvent(events, seen, {
+            kind: "secure-intake",
+            at: req.created_at,
+            title: `Secure intake ${req.request_ref || ""} requested`.trim(),
+            body: `${req.purpose || "Protected fields requested"}. Raw values are encrypted by the broker and are not shown in tickets, chat, or audit logs.`,
+            badge: req.status || "secure-intake",
+            key: eventKey(["sensitive-request", req.request_ref]),
+        });
+        if (req.submitted_at) {
+            pushTimelineEvent(events, seen, {
+                kind: "secure-intake",
+                at: req.submitted_at,
+                title: `Secure intake ${req.request_ref || ""} submitted`.trim(),
+                body: `${req.submitted_field_count || 0} protected field(s) submitted. Agents receive references only.`,
+                badge: "submitted",
+                key: eventKey(["sensitive-submitted", req.request_ref]),
+            });
+        }
     });
     steeringEvents.forEach(steer => {
         pushTimelineEvent(events, seen, {
@@ -2603,6 +2625,33 @@ function renderAccessTrace(accessRequests) {
     `;
 }
 
+function renderSensitiveIntakeTrace(requests = []) {
+    if (!requests.length) return "";
+    return `
+        <div class="trace-subsection">Secure Intake</div>
+        ${requests.slice(0, 8).map(req => {
+            const fields = Array.isArray(req.fields) ? req.fields : normalizeList(req.fields);
+            const labels = fields.map(f => typeof f === "object" ? (f.label || f.key || f.type) : f).filter(Boolean);
+            return `
+                <div class="trace-card secure-intake-card">
+                    <div class="trace-card-head">
+                        <span>${escHtml(req.request_ref || "secure request")}</span>
+                        <span class="status-badge ${statusClass(req.status)}">${escHtml(req.status || "pending")}</span>
+                    </div>
+                    <div class="trace-card-meta">
+                        ${escHtml(req.purpose || "Protected information request")}
+                    </div>
+                    <div class="trace-card-body">
+                        Fields: ${escHtml(labels.join(", ") || "protected fields")}<br>
+                        Requested ${formatTime(req.created_at)}${req.submitted_at ? ` · submitted ${formatTime(req.submitted_at)}` : ""}<br>
+                        Raw values are encrypted by the broker and are not displayed here.
+                    </div>
+                </div>
+            `;
+        }).join("")}
+    `;
+}
+
 async function viewPostmortem(id) {
     const data = await apiGet(`/api/postmortems/${id}`);
     if (!data) return;
@@ -2710,6 +2759,7 @@ async function loadTicketActivity(ticketId) {
         const changes = contextData?.change_requests || [];
         const postmortems = contextData?.postmortems || [];
         const accessRequests = contextData?.access_requests || [];
+        const sensitiveRequests = contextData?.sensitive_intake_requests || [];
         const steeringEvents = contextData?.steering_events || [];
         const modelTurns = contextData?.model_turn_events || [];
         const sequence = buildTicketTimeline({
@@ -2720,6 +2770,7 @@ async function loadTicketActivity(ticketId) {
             changes,
             postmortems,
             accessRequests,
+            sensitiveRequests,
             steeringEvents,
             modelTurns,
         });
@@ -2741,7 +2792,7 @@ async function loadTicketActivity(ticketId) {
                 <div class="timeline-summary">
                     Chronological operator sequence across ticket notes, agent tasks, model turns, approvals, steering, postmortems, and audit.
                 </div>
-                ${renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, accessRequests })}
+                ${renderEvidenceTiles({ notes, relevant, tasks, changes, postmortems, accessRequests, sensitiveRequests })}
                 <div class="trace-subsection">Sequence of Events</div>
                 ${renderTicketTimeline(sequence)}
                 <div class="trace-subsection">Agent Work</div>
@@ -2749,6 +2800,7 @@ async function loadTicketActivity(ticketId) {
                 <div class="trace-subsection">Approval Gates</div>
                 ${changes.length ? changes.slice(0, 8).map(c => renderGateSummary(c)).join("") : '<div class="learning-meta">No approval gates recorded.</div>'}
                 ${renderAccessTrace(accessRequests)}
+                ${renderSensitiveIntakeTrace(sensitiveRequests)}
                 <div class="trace-subsection">Postmortems & Learning</div>
                 ${renderPostmortemTrace(postmortems)}
                 <div class="trace-subsection">Recent Notes & Audit Detail</div>

@@ -1948,6 +1948,15 @@ body {
     overflow-wrap: anywhere;
 }
 
+.secure-intake-card {
+    border-color: rgba(217, 183, 95, 0.42);
+    background: rgba(42, 34, 16, 0.28);
+}
+
+.secure-intake-card .trace-card-head {
+    color: #f0d98f;
+}
+
 .ticket-sequence {
     display: grid;
     gap: 8px;

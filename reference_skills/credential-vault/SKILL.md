@@ -61,3 +61,12 @@ Use stable, service-scoped keys:
 
 Never encode usernames, hostnames, or passwords directly into key names unless
 they describe the service role rather than a personal account.
+
+## Sensitive Intake
+
+User-provided protected values belong in the platform Sensitive Intake Broker,
+not in normal credential vault docs, chat transcripts, ticket notes, or agent
+prompts. Use the broker when an agent needs SSN, DOB, temporary passwords,
+tokens, recovery codes, HR, financial, or similar data from a user. The broker
+stores encrypted values and returns references only; agents must not receive a
+generic vault read capability.

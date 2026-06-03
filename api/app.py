@@ -28,6 +28,7 @@ from routes import (
     auth,
     search,
     ops_chat,
+    sensitive_intake,
 )
 from services import itop_sync, health_check, task_tracker, agent_auditor, agent_runner
 from services import access_control
@@ -170,6 +171,7 @@ app.include_router(wazuh.router)
 app.include_router(auth.router)
 app.include_router(search.router)
 app.include_router(ops_chat.router)
+app.include_router(sensitive_intake.router)
 
 frontend_dir = "/frontend"
 published_sites_dir = os.getenv("PUBLISHED_SITES_DIR", "/app/data/published_sites")
@@ -191,6 +193,14 @@ async def login_page():
     if os.path.exists(login_path):
         return FileResponse(login_path)
     return JSONResponse({"error": "Login page not found"}, status_code=404)
+
+
+@app.get("/secure-intake/{token}")
+async def secure_intake_page(token: str):
+    intake_path = os.path.join(frontend_dir, "secure_intake.html")
+    if os.path.exists(intake_path):
+        return FileResponse(intake_path)
+    return JSONResponse({"error": "Secure intake page not found"}, status_code=404)
 
 
 @app.get("/published/{site_path:path}")

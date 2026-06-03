@@ -59,6 +59,9 @@ where agents can operate across existing tools with bounded authority.
   modules, not permanent product boundaries.
 - Requires change approvals, access requests, and scoped credential leases for
   sensitive or environment-changing actions.
+- Uses a Sensitive Intake Broker for protected user-provided values. Agents can
+  request a dynamic secure form, users submit values into encrypted storage, and
+  tickets/chat/audit/provider sync receive references only.
 - Records notes, logs, checkpoints, tool activity, provider links, agent state,
   and postmortem evidence so operators can answer what happened and why.
 - Converts resolved work into reusable knowledge, workflows, skills, tests, and
