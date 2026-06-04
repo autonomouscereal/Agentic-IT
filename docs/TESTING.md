@@ -41,14 +41,33 @@ python -m py_compile api\services\sensitive_intake.py api\routes\sensitive_intak
 
 Live smoke:
 
-1. Create a sensitive field request through `/api/sensitive-intake/request`.
-2. Open the returned `/secure-intake/<token>` form.
-3. Submit values.
-4. Verify `/api/sensitive-intake/requests/<request_ref>` returns field labels,
-   refs, hashes/length metadata, and events but never raw values.
-5. Send an Ops Chat message containing a synthetic SSN/password and verify
-   `ops_chat_messages`, ticket text, and event-log details contain
-   `<sensitive:type:siv_...>` references only.
+```bash
+python3 scripts/smoke_sensitive_intake.py http://127.0.0.1:25480
+```
+
+The smoke creates a sensitive field request, verifies request metadata
+redaction, verifies public form metadata, blocks missing required fields before
+storage, submits multiple field types, blocks a second submit, checks
+requested/rejected/submitted events, and verifies API responses contain refs
+only.
+
+Additional live/UI checks used for the 2026-06-04 broker hardening:
+
+- Public form UI: native required fields block incomplete submit.
+- Public form UI: complete submit returns a submitted confirmation with no raw
+  values echoed.
+- Dashboard ticket detail UI: linked sensitive intake evidence appears in the
+  Evidence Trail and Secure Intake section with status/field labels only.
+- Ops Chat harness: a pre-ticket onboarding request that needs SSN/DOB/password
+  returns a secure form link instead of asking for values in chat.
+- Ops Chat form round trip: submitting the chat-created form records a
+  system/chat status row with broker references only.
+- Accidental paste path: ticket title/description/note text containing
+  synthetic SSN/password/token is stored and returned as
+  `<sensitive:type:siv_...>` references only.
+- Auth/expiry path: invalid token returns 404, expired forms cannot be
+  submitted, unauthenticated request listing is blocked, and authenticated
+  listing works.
 
 ## Agent Queue Recovery Checkpoint
 

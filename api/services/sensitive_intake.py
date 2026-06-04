@@ -58,6 +58,29 @@ def normalize_field_type(value):
     return FIELD_TYPE_ALIASES.get(raw, raw or "freeform_sensitive")
 
 
+def _redact_text_only(text):
+    value = str(text or "")
+    if not value:
+        return value
+    spans = detect_sensitive_spans(value)
+    if not spans:
+        return value
+    redacted = value
+    for span in reversed(spans):
+        redacted = redacted[:span["start"]] + f"<redacted:{span['field_type']}>" + redacted[span["end"]:]
+    return redacted
+
+
+def _redact_json_only(value):
+    if isinstance(value, str):
+        return _redact_text_only(value)
+    if isinstance(value, list):
+        return [_redact_json_only(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _redact_json_only(item) for key, item in value.items()}
+    return value
+
+
 def _secret_material():
     raw = (
         os.getenv("SENSITIVE_INTAKE_MASTER_KEY", "").strip()
@@ -133,14 +156,14 @@ def normalize_fields(fields):
         if key in seen:
             key = f"{key}_{index}"
         seen.add(key)
-        label = str(item.get("label") or item.get("name") or key.replace("_", " ").title()).strip()[:240]
+        label = _redact_text_only(item.get("label") or item.get("name") or key.replace("_", " ").title()).strip()[:240]
         field_type = normalize_field_type(item.get("type") or item.get("field_type"))
         normalized.append({
             "key": key[:120],
             "label": label or key,
             "type": field_type[:80],
             "required": bool(item.get("required", True)),
-            "help": str(item.get("help") or "").strip()[:500],
+            "help": _redact_text_only(item.get("help") or "").strip()[:500],
         })
     return normalized
 
@@ -173,6 +196,8 @@ async def create_request(
     normalized_fields = normalize_fields(fields)
     if not normalized_fields:
         return {"error": "at least one field is required"}
+    safe_purpose = _redact_text_only(purpose or "")
+    safe_metadata = _redact_json_only(metadata or {})
     request_ref = _new_ref("sir")
     token = secrets.token_urlsafe(32)
     expires = datetime.now(timezone.utc) + timedelta(hours=int(expires_hours or DEFAULT_EXPIRES_HOURS))
@@ -190,7 +215,7 @@ async def create_request(
         """,
         request_ref,
         hash_token(token),
-        purpose or "",
+        safe_purpose,
         ticket_id,
         session_id,
         requested_by or "agent",
@@ -198,7 +223,7 @@ async def create_request(
         requester_email,
         channel or "dashboard",
         json_dumps(normalized_fields),
-        json_dumps(metadata or {}),
+        json_dumps(safe_metadata),
         expires,
     )
     await _record_event(request_id, requested_by, "sensitive_form_requested", {
@@ -213,7 +238,7 @@ async def create_request(
         "id": request_id,
         "request_ref": request_ref,
         "status": "pending",
-        "purpose": purpose or "",
+        "purpose": safe_purpose,
         "fields": normalized_fields,
         "expires_at": expires.isoformat(),
         "form_url": public_form_url(token),
@@ -282,7 +307,7 @@ async def submit_request(token, values, submitted_by="secure-form"):
     row = await fetchrow("SELECT * FROM sensitive_intake_requests WHERE form_token_hash = $1", hash_token(token))
     if not row:
         return {"error": "invalid_or_expired_form"}
-    if row.get("status") not in ("pending", "submitted"):
+    if row.get("status") != "pending":
         return {"error": "form_not_accepting_submissions", "status": row.get("status")}
     expires = row.get("expires_at")
     if _is_expired(expires):
@@ -291,8 +316,8 @@ async def submit_request(token, values, submitted_by="secure-form"):
         return {"error": "form_expired"}
     fields = _json_value(row.get("fields"), [])
     values = values or {}
-    stored = []
     missing = []
+    cleaned_values = []
     for field in fields:
         key = field.get("key")
         value = str(values.get(key) or "").strip()
@@ -301,6 +326,16 @@ async def submit_request(token, values, submitted_by="secure-form"):
             continue
         if not value:
             continue
+        cleaned_values.append((field, key, value))
+    if missing:
+        await _record_event(row["id"], submitted_by, "sensitive_form_submit_rejected", {
+            "request_ref": row.get("request_ref"),
+            "missing_fields": missing,
+            "raw_values_logged": False,
+        })
+        return {"error": "missing_required_fields", "missing": missing}
+    stored = []
+    for field, key, value in cleaned_values:
         value_ref = _new_ref("siv")
         await fetchval(
             """
@@ -338,13 +373,6 @@ async def submit_request(token, values, submitted_by="secure-form"):
             "value_ref": value_ref,
             "value_len": len(value),
         })
-    if missing:
-        await _record_event(row["id"], submitted_by, "sensitive_form_submit_rejected", {
-            "request_ref": row.get("request_ref"),
-            "missing_fields": missing,
-            "raw_values_logged": False,
-        })
-        return {"error": "missing_required_fields", "missing": missing}
     await execute(
         """
         UPDATE sensitive_intake_requests

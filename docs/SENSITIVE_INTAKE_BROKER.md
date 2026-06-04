@@ -17,6 +17,10 @@ keys, recovery codes, HR data, financial data, or customer-protected values.
 - Ticket descriptions, ticket notes, Ops Chat messages, provider payloads, event
   logs, and audit views display only references/status.
 - Defensive redaction still runs if a user pastes a value into chat by mistake.
+- Required fields are validated before any value is stored. Incomplete
+  submissions record a rejected audit event but store no partial values.
+- Form tokens are one-submit. A correction or additional value set requires a
+  new secure intake request.
 - Provider adapters must resolve sensitive references server-side inside
   approval-gated actions. Do not expose a generic "read secret" endpoint to
   agents.
@@ -53,6 +57,9 @@ python ops_chat_tool.py request-sensitive-fields \
    timestamps.
 8. A downstream provider action may consume references after real authorization
    gates are satisfied.
+
+The browser form uses native `required` controls for immediate user feedback.
+The API still enforces the same checks server-side before storing anything.
 
 ## Defensive Redaction
 
@@ -117,9 +124,32 @@ Expected behavior:
 
 - The chat agent opens a secure form instead of asking for values in chat.
 - The form page says agents receive references only.
+- Incomplete submissions are blocked before any partial values are stored.
 - Dashboard ticket details show Secure Intake evidence if linked to a ticket.
 - Event/audit views show requested/submitted status, field types, and refs,
   never raw values.
+
+Evidence screenshots:
+
+- `docs/evidence/sensitive-intake-form-request.png`
+- `docs/evidence/sensitive-intake-form-submitted.png`
+- `docs/evidence/sensitive-intake-ui-missing-required.png`
+- `docs/evidence/sensitive-intake-ui-submitted.png`
+- `docs/evidence/sensitive-intake-dashboard-secure-section.png`
+
+## Regression Command
+
+Run the expanded smoke against a live dashboard:
+
+```bash
+export DASHBOARD_SERVICE_TOKEN="$(grep -E '^DASHBOARD_SERVICE_TOKEN=' .env | tail -n1 | cut -d= -f2-)"
+python3 scripts/smoke_sensitive_intake.py http://127.0.0.1:25480
+```
+
+The smoke verifies request metadata redaction, public form safety, missing
+required-field rejection, complete submission, one-submit token enforcement,
+requested/rejected/submitted audit events, and no raw submitted values in API
+responses.
 
 ## Current Limitations
 

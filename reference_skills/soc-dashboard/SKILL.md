@@ -60,6 +60,15 @@ logs, or memory. Agents request dynamic secure forms and receive references
 only; provider adapters resolve those references server-side after approval
 gates.
 
+Sensitive-intake regression expectations:
+
+- Required secure-form fields are validated before any value is stored.
+- Submitted form tokens are one-use; create a new secure form for corrections.
+- Ticket details should show Secure Intake evidence with request refs, status,
+  field labels, timestamps, and no raw values.
+- Run `python3 scripts/smoke_sensitive_intake.py http://127.0.0.1:25480`
+  after broker, ticket, Ops Chat, auth, or provider-sync changes.
+
 ## Runtime Settings
 
 Agent runtime configuration lives in the dashboard `Settings` page and

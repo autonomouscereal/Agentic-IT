@@ -142,6 +142,16 @@ Reference stack:
   test, the tool omits the model and passes the Settings-resolved runtime
   profile/harness to `/api/tickets/{id}/assign-agent`. This prevents stale
   `AGENT_DEFAULT_MODEL` values from breaking Codex OAuth workers.
+- When a chat turn needs protected values such as SSN, DOB, passwords, API
+  keys, recovery codes, HR, or financial data, the agent must use
+  `python ops_chat_tool.py request-sensitive-fields ...` and send the returned
+  secure form link. Do not ask the user to paste those values in Matrix, email,
+  ticket notes, or agent prompts.
+- Secure-intake forms are one-submit. If the user needs to correct protected
+  values, request a new form instead of reusing the old link.
+- After Ops Chat or bridge changes, test a sensitive-field ask end-to-end:
+  harness returns a `/secure-intake/` link, form submission records chat status
+  with `siv_...` refs, and no raw values appear in chat/ticket/audit text.
 - Side-effect recovery must not use "latest ticket in the room" for harmless
   chat. If a general/current-information message follows a ticket, answer the
   message unless the user clearly asks for ticket work or explicitly references

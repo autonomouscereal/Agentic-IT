@@ -70,3 +70,13 @@ prompts. Use the broker when an agent needs SSN, DOB, temporary passwords,
 tokens, recovery codes, HR, financial, or similar data from a user. The broker
 stores encrypted values and returns references only; agents must not receive a
 generic vault read capability.
+
+Broker handling differs from managed service credentials:
+
+- Credential vault keys are operator-managed service secrets.
+- Sensitive-intake values are user-submitted request data behind `siv_...`
+  references.
+- Do not copy user-submitted sensitive values into `credman.py`.
+- Do not expose a generic broker decrypt/read command to agents. Provider
+  adapters resolve refs server-side only inside scoped, approval-gated actions.
+- Secure forms validate required fields before storage and are one-submit.
