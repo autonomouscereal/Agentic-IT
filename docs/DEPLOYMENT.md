@@ -16,19 +16,18 @@ Last updated: 2026-05-21.
 
 Do not hardcode secrets in compose, docs, or source. Use environment variables or vault-backed deployment tooling.
 
-## Current Lab
+## Deployment Endpoints
 
 | Item | Value |
 | --- | --- |
-| Server | AI server |
-| Path | `/home/cereal/SOC_TESTING/soc-dashboard` |
-| URL | `https://192.168.50.222:25443` |
-| Local API | `http://127.0.0.1:25480` |
-| Proxy | `http://ai-proxy:4001` inside Docker; `http://192.168.50.222:4001` from the LAN |
+| Server | `<deployment-host>` |
+| Path | `<deployment-path>` |
+| Dashboard URL | `https://<dashboard-host>:25443` |
+| Internal API | `http://<dashboard-api-service>` |
+| Proxy | `http://ai-proxy:4001` inside Docker; `http://<model-proxy-host>:4001` from approved operator networks |
 | Default harness | Codex through the active Settings profile; Hermes Agent and Claude Code selectable |
-| Product default model | `gpt-5.5` in the lab Codex profile; `local/agent-default` in local-only deployments |
-| Lab external model | `deepseek/deepseek-v4-flash` |
-| Ops Chat | `https://192.168.50.222:3303` Element/Matrix client |
+| Product default model | `local/agent-default` for local-only deployments; approved external profiles are configured per environment |
+| Ops Chat | `https://<ops-chat-host>:3303` Element/Matrix client |
 
 ## Upload
 
@@ -38,7 +37,7 @@ tree. Package code with exclusions for `.env`, `.git`, `data`, `agent_work`,
 
 ```powershell
 tar --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' --exclude='data' --exclude='agent_work' --exclude='runtime' --exclude='.git' -czf soc-dashboard-deploy.tgz api frontend platform reference_skills scripts tests installer deploy docs agent_models.json docker-compose.yml README.md install.ps1 install.sh .env.example
-python C:\Users\cereal\.agents\skills\server-manager\ssh_client.py --server ai --upload .\soc-dashboard-deploy.tgz /tmp/soc-dashboard-deploy.tgz
+python <path-to-server-manager>/ssh_client.py --server <target-server> --upload .\soc-dashboard-deploy.tgz /tmp/soc-dashboard-deploy.tgz
 ```
 
 On the server, extract to a staging directory, replace only source-controlled
@@ -67,8 +66,8 @@ CODEX_APPROVAL_POLICY=never
 CODEX_REASONING_EFFORT=high
 CODEX_FAST_MODE=false
 CODEX_API_KEY=<optional vault/runtime secret>
-DASHBOARD_BIND=127.0.0.1
-DASHBOARD_HTTPS_BIND=0.0.0.0
+DASHBOARD_BIND=<loopback>
+DASHBOARD_HTTPS_BIND=<bind-all>
 DASHBOARD_HTTPS_PORT=25443
 DASHBOARD_PUBLIC_URL=https://<operator-routable-host>:25443
 DASHBOARD_TLS_DIR=./runtime/tls
@@ -114,7 +113,7 @@ mounted ChatGPT login in `CODEX_HOME`; proxy mode remains available through
 ## Managed Static Site Deployments
 
 Agents may create and test HTML/CSS/JS artifacts inside their isolated
-`agent_work` directory. A local dev server or `127.0.0.1` URL inside the API
+`agent_work` directory. A local dev server or `<loopback>` URL inside the API
 container is only a preview. It is not a customer-reachable deployment and must
 not be described as deployed.
 
@@ -157,29 +156,27 @@ installing `reference_skills/agent-memory/requirements.txt`. Set
 `AGENT_MEMORY_LOG_DIR` to a writable path such as `/tmp/agent-memory/logs` if
 running the CLI in a read-only mounted skill tree.
 
-Current lab route switch, for operators or agents using the `server-manager`
-skill:
+Route switch, for operators or agents using the `server-manager` skill:
 
 ```bash
-cd /home/cereal/SOC_TESTING/soc-dashboard
+cd <deployment-path>
 python3 scripts/switch_model_route.py --route external --restart
 python3 scripts/switch_model_route.py --route local --restart
 ```
 
-Verify the current live route from the AI server:
+Verify the current route from the deployment host:
 
 ```bash
-curl -sS http://127.0.0.1:4001/health
-curl -sS -X POST http://127.0.0.1:4001/api/route \
+curl -sS http://<loopback>:4001/health
+curl -sS -X POST http://<loopback>:4001/api/route \
   -H 'Content-Type: application/json' \
   -d '{"model":"deepseek/deepseek-v4-flash"}'
 ```
 
-In the current lab, the proxy host port is intentionally bound to
-`0.0.0.0:4001` so tools outside the dashboard harness can use the same managed
-proxy. Dashboard/API containers use `http://ai-proxy:4001`. There should be no
-separate standalone `ai-proxy` container and no host `4401` listener in this
-setup.
+Reference deployments bind the proxy host port only when operator-approved
+tools outside the dashboard harness need the same managed proxy. Dashboard/API
+containers use `http://ai-proxy:4001`. Avoid duplicate standalone proxy
+containers or conflicting host proxy ports.
 
 ## HTTPS Edge
 
@@ -270,7 +267,7 @@ curl -sk https://<host>:3303/config.json
 curl -sk https://<host>:3303/_matrix/client/versions
 curl -sk https://<host>:3302/_matrix/client/versions
 curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
-  http://127.0.0.1:25480/api/ops-chat/matrix/health
+  http://<loopback>:25480/api/ops-chat/matrix/health
 ```
 
 The chat intake turn is harness-driven. The Matrix bridge sends messages to
@@ -405,42 +402,38 @@ Security posture for regulated demos, verified 2026-05-18:
 - first-party `/login` uses vault-backed local dashboard users and signs a
   HttpOnly `dashboard_session` cookie for the UI/WebSocket flow
 - dashboard PostgreSQL, agent-memory PostgreSQL, and the AI proxy are bound to
-  localhost on the AI Server
-- run `python scripts/smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480`
+  the configured private bind address
+- run `python scripts/smoke_dashboard_auth_enforcement.py http://<operator-host>:25480`
   with `DASHBOARD_TRUSTED_AUTH_SECRET` and `DASHBOARD_SERVICE_TOKEN` sourced
   from the credential vault before regulated demos
-- run `python scripts/smoke_dashboard_login.py http://192.168.50.222:25480 --username demo_account_1 --password-file <temp-vault-password-file>`
+- run `python scripts/smoke_dashboard_login.py http://<operator-host>:25480 --username <dashboard-user> --password-file <temp-vault-password-file>`
   to prove login, bad-credential redirect, signed session cookie, and
   `/api/access/me`
-- run `python scripts/smoke_dashboard_https.py https://192.168.50.222:25443`
+- run `python scripts/smoke_dashboard_https.py https://<operator-host>:25443`
   to prove the TLS edge, secure redirect behavior, and security headers. After
   trusting `dashboard-ca.crt`, also verify a normal TLS client reaches
-  `https://192.168.50.222:25443/nginx-health` without `--insecure`.
-- run `python scripts/smoke_setup_agent.py http://192.168.50.222:25480 local/agent-default`
+  `https://<operator-host>:25443/nginx-health` without `--insecure`.
+- run `python scripts/smoke_setup_agent.py http://<operator-host>:25480 local/agent-default`
   to prove a real Hermes worker can use scoped agent-session auth against
-  protected dashboard endpoints. Latest live proof after the login deployment:
-  ticket `611`, agent `246`, task `243`, completed with the expected agent
-  note and checkpoint, then ticket `611` was resolved locally.
-- run `python scripts/smoke_permission_provider_matrix.py http://192.168.50.222:25480 --model deepseek/deepseek-v4-flash`
+  protected dashboard endpoints.
+- run `python scripts/smoke_permission_provider_matrix.py http://<operator-host>:25480 --model deepseek/deepseek-v4-flash`
   to prove RBAC, row-level separation, vault lease denial/grant, and access
   request gates
 
 ## Reference Module Login Validation
 
-The lab demo account is `demo_account_1`; its password lives only in the local
-server-manager vault key `demo_account_1`. Do not commit or print the value.
+For each deployed or integrated reference module, validate access with a
+vault-backed operator/test account. Do not commit or print the credential value.
 
-Latest live credential smoke on 2026-05-18:
-
-| Module | Check | Result |
-| --- | --- | --- |
-| Agentic Operations | First-party login page and signed session | PASS, `/` redirects to `/login`, bad credentials redirect to `/login?error=1`, `demo_account_1` lands in the dashboard as `platform-admin`, sidebar shows the account, logout returns to login |
-| iTop | REST POST to `webservices/rest.php` as `demo_account_1` | PASS, `code=0`, count `1` |
-| Wazuh Dashboard | Dashboard login endpoint | PASS, HTTP 200 |
-| Wazuh API | Native `/security/user/authenticate?raw=true` | PASS, token issued |
-| GitLab local login | Fresh CSRF/session form POST | PASS, HTTP 302 |
-| GitLab Keycloak OIDC | Full browser SSO as `demo_account_1` | PASS, lands in GitLab as SOC Demo Account |
-| Mailcow | demo UI, Roundcube webmail, mailbox auth, report phish | PASS, UI `http://192.168.50.222:2581` bare-root login reaches `/admin/dashboard`, including stale-session recovery; dashboard/system/mailbox/queue/quarantine pages show no invalid JSON or SQL-column warning banners; `/webmail` is Roundcube on real Mailcow IMAP/SMTP; `/SOGo/*` redirects to Roundcube; Report Phish proof created ticket `580`, iTop Incident `372`, agent `229`, access request `581`, and visible quarantine row `21a705b151642568d375c748a9ea1a6b` |
+| Module | Minimum Check |
+| --- | --- |
+| Agentic Operations | First-party login, bad-credential redirect, signed session, logout, API auth enforcement |
+| ITSM provider | API authentication, ticket create/update/read, provider reference sync |
+| SIEM/EDR provider | Dashboard login where applicable, API token issuance, alert/evidence read path |
+| IAM provider | Admin console login, OIDC/SAML issuer reachability, group/role sync |
+| Git provider | Local login or SSO, repository access, CI/CD runner artifact flow |
+| Mail provider | Admin UI, webmail login, SMTP/IMAP round trip, report-phish workflow |
+| Ops Chat | SSO login, direct agent room/message flow, dashboard ticket sync |
 
 GitLab OIDC deployment requirements:
 
@@ -449,10 +442,10 @@ GitLab OIDC deployment requirements:
   `/etc/gitlab/trusted-certs/keycloak-internal-ca.crt`, followed by
   `gitlab-ctl reconfigure`.
 - Keycloak should use a browser-routable full URL for the demo issuer/admin
-  surface, for example `KC_HOSTNAME=https://192.168.50.222:8443` and
-  `KC_HOSTNAME_ADMIN=https://192.168.50.222:8443`.
+  surface, for example `KC_HOSTNAME=https://<operator-host>:8443` and
+  `KC_HOSTNAME_ADMIN=https://<operator-host>:8443`.
 - GitLab OmniAuth should use the same browser-routable issuer,
-  `https://192.168.50.222:8443/realms/gitlab`. The `keycloak.internal`
+  `https://<operator-host>:8443/realms/gitlab`. The `keycloak.internal`
   host-gateway route can remain as an internal compatibility alias, but the
   browser demo path should not require workstation hosts-file changes.
 - Keycloak GitLab protocol mappers must be current. Run

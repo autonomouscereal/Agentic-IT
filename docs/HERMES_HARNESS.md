@@ -259,7 +259,7 @@ and the target URL is the dashboard API.
 
 2026-05-18 lab validation:
 
-- Enforced auth smoke passed against `http://192.168.50.222:25480`.
+- Enforced auth smoke passed against `http://<operator-host>:25480`.
 - Authenticated browser UI pass loaded `Agentic Operations`, rendered 14 Demo
   Proof rows, showed `demo_account_1 / header / platform-admin`, minted an
   HttpOnly `dashboard_session`, and produced no console or network failures.

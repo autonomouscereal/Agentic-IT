@@ -90,7 +90,7 @@ Live validation should use the dashboard UI skill runbook:
 1. Check active agents before rebuilding the API.
 2. Sync static frontend files.
 3. Rebuild/recreate only `api` for backend changes.
-4. Log in to `https://192.168.50.222:25443/`.
+4. Log in to `https://<operator-host>:25443/`.
 5. Crawl Overview, Tickets, Intake, Changes, Workflows, Postmortems, CI/CD,
    Learning, Skills, Tools, Setup, Access, Audit, and Settings.
 6. Confirm no console errors, no horizontal overflow, and visible filters on

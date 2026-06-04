@@ -73,7 +73,7 @@ Health checks:
 curl -sk https://<host>:3303/config.json
 curl -sk https://<host>:3303/_matrix/client/versions
 curl -sk https://<host>:3302/_matrix/client/versions
-curl -sS http://127.0.0.1:25480/api/ops-chat/matrix/health \
+curl -sS http://<loopback>:25480/api/ops-chat/matrix/health \
   -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN"
 ```
 
@@ -94,10 +94,10 @@ Matrix room-directory feature and is not the support-agent intake path.
 Run the Playwright proof from an operator workstation:
 
 ```powershell
-$env:DASHBOARD_URL="https://192.168.50.222:25443"
+$env:DASHBOARD_URL="https://<operator-host>:25443"
 $env:DASHBOARD_USER="demo_account_1"
 $env:DASHBOARD_PASSWORD="<from vault>"
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_account_1"
 $env:OPS_CHAT_PASSWORD="<from vault>"
 $env:OPS_CHAT_SEND_MESSAGE="true"
@@ -233,7 +233,7 @@ Latest UX proof:
 Run the full one-room UX marathon:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"

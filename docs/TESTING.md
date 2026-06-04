@@ -14,8 +14,8 @@ Local/source checks:
 - `python scripts\text_hygiene.py`: passed
 - `node --check scripts\smoke_ops_chat_playwright.js`: passed
 
-Live AI-server checks against `http://127.0.0.1:25480` and
-`https://127.0.0.1:25443`:
+Live AI-server checks against `http://<loopback>:25480` and
+`https://<loopback>:25443`:
 
 - `/health`: `ok`
 - `/api/agents/active`: `{"agents":[],"count":0}` before and after
@@ -42,7 +42,7 @@ python -m py_compile api\services\sensitive_intake.py api\routes\sensitive_intak
 Live smoke:
 
 ```bash
-python3 scripts/smoke_sensitive_intake.py http://127.0.0.1:25480
+python3 scripts/smoke_sensitive_intake.py http://<loopback>:25480
 ```
 
 The smoke creates a sensitive field request, verifies request metadata
@@ -292,7 +292,7 @@ Latest live proof on 2026-05-21:
 End-user UX proof through Element:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_chat_direct4"
 $env:OPS_CHAT_PASSWORD="<from vault>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
@@ -302,7 +302,7 @@ node scripts/smoke_ops_chat_user_experience.js
 One-room Element marathon proof:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
@@ -313,7 +313,7 @@ node scripts/smoke_ops_chat_workspace_marathon.js
 Developer artifact proof through Element:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
@@ -399,7 +399,7 @@ Expected:
 - `ps_path` present
 - no active processes after completed smoke tests
 
-`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, provider adapters, iTop UI reachability, Mailcow HTTP API domain/mailbox/alias counts, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence. For the Mailcow demo surface, also verify `http://192.168.50.222:2581` renders the login page, generated `/cache` CSS/JS assets return HTTP `200` with no-store cache headers and `?v=` URL versions, stale `MCSESSID` recovery sends `/user` back to the admin login, admin form login from the bare root URL reaches `/admin/dashboard` with visible dashboard text, admin/mailbox/quarantine UI table JSON does not raise DataTables dialogs, System/Mailbox/Queue/Quarantine pages show no SQL or invalid JSON alerts, and IMAP login for `demo_account_1@mailcow.local` returns `OK` using the vault password.
+`platform_doctor.py` is the preferred pre-demo check. It is non-destructive and verifies dashboard health, setup manifest hygiene, ticket sorting, provider adapters, iTop UI reachability, Mailcow HTTP API domain/mailbox/alias counts, scanner skills, AI proxy skill, SearXNG skill, and EDR/Sysmon bundle presence. For the Mailcow demo surface, also verify `http://<operator-host>:2581` renders the login page, generated `/cache` CSS/JS assets return HTTP `200` with no-store cache headers and `?v=` URL versions, stale `MCSESSID` recovery sends `/user` back to the admin login, admin form login from the bare root URL reaches `/admin/dashboard` with visible dashboard text, admin/mailbox/quarantine UI table JSON does not raise DataTables dialogs, System/Mailbox/Queue/Quarantine pages show no SQL or invalid JSON alerts, and IMAP login for `demo_account_1@mailcow.local` returns `OK` using the vault password.
 
 Latest verified result on 2026-05-13:
 
@@ -407,7 +407,7 @@ Latest verified result on 2026-05-13:
 platform_doctor.py: PASS 18, WARN 0, FAIL 0
 runner timeout_minutes: 0
 default_model: qwen/qwen3.6-27b
-effective_anthropic_base_url: http://192.168.50.222:4001
+effective_anthropic_base_url: http://<operator-host>:4001
 ```
 
 ## Operational Metrics Smoke
@@ -491,7 +491,7 @@ Important implementation notes:
 - iTop demo users must be real `UserLocal` objects with `Administrator` and `REST Services User`; raw partial rows can be counted by OQL but fail object reload and login.
 - GitLab local login requires a valid personal namespace on the GitLab user. Missing namespace causes the generic GitLab 422 page even when the password is correct.
 - GitLab OIDC requires the Keycloak CA in GitLab trusted certs. The live demo
-  uses `https://192.168.50.222:8443/realms/gitlab` as the browser-routable
+  uses `https://<operator-host>:8443/realms/gitlab` as the browser-routable
   issuer; `keycloak.internal:host-gateway` may remain in compose only as a
   container-side compatibility alias.
 - GitLab OIDC also depends on Keycloak protocol mapper shape. The setup script
@@ -895,7 +895,7 @@ Latest Element/Matrix UI proof on 2026-05-20:
 
 ```text
 Direct bot-profile UI path: PASS
-URL: https://192.168.50.222:3303/#/user/@agentic-ops:agentic-ops.local
+URL: https://<operator-host>:3303/#/user/@agentic-ops:agentic-ops.local
 Profile: Agentic Ops Agent
 Action: clicked Send message, sent a GitLab login request
 Marker: element-direct-agent-ui-1779283071
@@ -904,15 +904,15 @@ Agent: 308 / task 305
 
 smoke_ops_chat_playwright.js: PASS without HTTPS bypass
 Dashboard login: PASS as demo_account_1
-Element login: PASS as demo_chat_live11 at https://192.168.50.222:3303/#/home
-Same-origin Matrix probe: PASS at https://192.168.50.222:3303/_matrix/client/versions
+Element login: PASS as demo_chat_live11 at https://<operator-host>:3303/#/home
+Same-origin Matrix probe: PASS at https://<operator-host>:3303/_matrix/client/versions
 Matrix UI DM marker: ops-chat-same-origin-playwright-1779261056
 Dashboard ticket: 908
 Agent: 307 / task 304
 Final ticket state: awaiting_user_response
 Final active agents: 0
 
-Element login: PASS as demo_chat_alice at https://192.168.50.222:3303/#/home
+Element login: PASS as demo_chat_alice at https://<operator-host>:3303/#/home
 Matrix UI DM marker: matrix-ui-live-chat-1779258900
 Room: !ggxyGdDLBtBqDWoygC:agentic-ops.local
 Dashboard ticket: 907
@@ -1235,7 +1235,7 @@ AGENT_MODEL=qwen/qwen3.6-27b \
 CICD_DOCKER_NETWORK=host \
 python3 scripts/agentic_cicd_full_demo.py \
   --base http://localhost:25480 \
-  --host-ip 192.168.50.222 \
+  --host-ip <operator-host> \
   --timeout 2400
 ```
 
@@ -1806,15 +1806,15 @@ Passing suites:
 
 ```text
 python3 -m unittest discover -s tests -p 'test_*.py'  # 78 tests
-python3 scripts/platform_doctor.py --base http://127.0.0.1:25480  # 18/18
-python3 scripts/smoke_provider_adapters.py http://127.0.0.1:25480 --itop-create
-python3 scripts/smoke_permission_provider_matrix.py http://127.0.0.1:25480 --manage-auth --repo /home/cereal/SOC_TESTING/soc-dashboard --model qwen/qwen3.6-27b
-python3 scripts/smoke_access_request_control_plane.py http://127.0.0.1:25480
-python3 scripts/smoke_agent_auditor.py http://127.0.0.1:25480
-python3 scripts/smoke_operational_metrics.py http://127.0.0.1:25480
-python3 scripts/smoke_auto_assignment_policy.py http://127.0.0.1:25480
-python3 scripts/smoke_change_auto_completion.py http://127.0.0.1:25480
-python3 scripts/smoke_service_desk_intake.py http://127.0.0.1:25480
+python3 scripts/platform_doctor.py --base http://<loopback>:25480  # 18/18
+python3 scripts/smoke_provider_adapters.py http://<loopback>:25480 --itop-create
+python3 scripts/smoke_permission_provider_matrix.py http://<loopback>:25480 --manage-auth --repo /home/cereal/SOC_TESTING/soc-dashboard --model qwen/qwen3.6-27b
+python3 scripts/smoke_access_request_control_plane.py http://<loopback>:25480
+python3 scripts/smoke_agent_auditor.py http://<loopback>:25480
+python3 scripts/smoke_operational_metrics.py http://<loopback>:25480
+python3 scripts/smoke_auto_assignment_policy.py http://<loopback>:25480
+python3 scripts/smoke_change_auto_completion.py http://<loopback>:25480
+python3 scripts/smoke_service_desk_intake.py http://<loopback>:25480
 ```
 
 Key evidence:
@@ -1858,10 +1858,10 @@ which intentionally exits when its deployment `.env` is absent.
 Live dashboard checks:
 
 ```text
-python3 scripts/platform_doctor.py --base http://127.0.0.1:25480
-python3 scripts/smoke_operational_metrics.py http://127.0.0.1:25480
-python3 scripts/smoke_setup_platform.py http://127.0.0.1:25480
-python3 scripts/smoke_setup_agent.py http://127.0.0.1:25480
+python3 scripts/platform_doctor.py --base http://<loopback>:25480
+python3 scripts/smoke_operational_metrics.py http://<loopback>:25480
+python3 scripts/smoke_setup_platform.py http://<loopback>:25480
+python3 scripts/smoke_setup_agent.py http://<loopback>:25480
 ```
 
 Results:
@@ -1876,16 +1876,16 @@ Results:
 
 ## Keycloak Admin UI / GitLab OIDC Regression - 2026-05-18
 
-Live target: AI server `192.168.50.222`.
+Live target: AI server `<operator-host>`.
 
 Changes validated:
 
 - Keycloak Admin Console is accessible at
-  `https://192.168.50.222:8443/admin/master/console/`.
+  `https://<operator-host>:8443/admin/master/console/`.
 - Keycloak `KC_HOSTNAME` and `KC_HOSTNAME_ADMIN` use the browser-routable
-  full URL `https://192.168.50.222:8443`.
+  full URL `https://<operator-host>:8443`.
 - GitLab OmniAuth issuer now matches the browser-routable realm issuer:
-  `https://192.168.50.222:8443/realms/gitlab`.
+  `https://<operator-host>:8443/realms/gitlab`.
 - Historical hardcoded GitLab OIDC client secret was removed from source and
   the live Keycloak GitLab client secret was rotated.
 
@@ -1893,7 +1893,7 @@ Validation:
 
 ```text
 Playwright Keycloak Admin Console login: PASS
-  URL: https://192.168.50.222:8443/admin/master/console/
+  URL: https://<operator-host>:8443/admin/master/console/
   visible markers: Manage realms, Realm settings, Clients, Users, Sessions,
   Events, master
 
@@ -1911,7 +1911,7 @@ bash /home/cereal/gitlab-keycloak-integration/scripts/test_integration.sh
   Skipped: 0
 
 Playwright GitLab Keycloak full SSO check: PASS
-  Final URL: http://192.168.50.222/
+  Final URL: http://<operator-host>/
   visible markers: SOC Demo Account user's menu, Projects, Admin
 ```
 
@@ -1921,7 +1921,7 @@ Mailcow/Roundcube checks:
 cd /home/cereal/Mailcow/deploy
 python3 scripts/deploy_mailcow_api.py
 python3 scripts/test_mailcow_api_shim.py --mysql-parity
-curl -fsS http://127.0.0.1:2581/webmail/ | grep -q Roundcube
+curl -fsS http://<loopback>:2581/webmail/ | grep -q Roundcube
 docker exec roundcube-mailcow-demo sh -lc 'php -l /var/www/html/plugins/report_phish/report_phish.php && php -l /var/www/html/plugins/report_phish/localization/en_US.inc'
 docker exec php-fpm-mailcow-api sh -lc 'php -l /web/mailcow_demo_report.php'
 ```
@@ -1961,7 +1961,7 @@ Expected:
   and records `static_site_deployed`.
 - Auth policy maps the route to `deployments:write`; `/published/...` remains
   behind dashboard `ui:read`.
-- Agent prompts say `127.0.0.1` inside the API container is preview evidence,
+- Agent prompts say `<loopback>` inside the API container is preview evidence,
   not a durable deployment.
 
 Live AI server verification:
@@ -1978,7 +1978,7 @@ Result on 2026-05-21:
 - task `380`
 - change gate `312`
 - published URL:
-  `https://192.168.50.222:25443/published/static-site-deploy-smoke-1779382884/`
+  `https://<operator-host>:25443/published/static-site-deploy-smoke-1779382884/`
 - returned page rendered the smoke marker through the dashboard HTTPS edge.
 - `/api/agents/active` returned zero active agents after the smoke cleaned up
   its synthetic task/agent/ticket.

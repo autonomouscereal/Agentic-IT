@@ -253,7 +253,7 @@ intake route.
 One-room marathon proof:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
@@ -288,7 +288,7 @@ Ticket lifecycle guard:
 Developer artifact proof:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
@@ -467,7 +467,7 @@ Latest live proof on 2026-05-20:
 - Browser-level Playwright smoke passed through the complete current path:
   dashboard login as `demo_account_1`, Element login via Keycloak as
   `demo_chat_live11`, same-origin Matrix probe on
-  `https://192.168.50.222:3303/_matrix/client/versions`, and a real Matrix DM
+  `https://<operator-host>:3303/_matrix/client/versions`, and a real Matrix DM
   marker `ops-chat-same-origin-playwright-1779261056`.
 - That DM created ticket `908`, spawned Hermes agent `307` / task `304`, wrote
   model-turn audit events, asked the requester which account/system they meant,
@@ -477,7 +477,7 @@ Latest live proof on 2026-05-20:
   the **Send message** button opened a DM, the bot replied in-room, ticket
   `909` was created, and Hermes agent `308` / task `305` was spawned.
 - Playwright Element login passed through Keycloak as `demo_chat_alice` and
-  landed at `https://192.168.50.222:3303/#/home`.
+  landed at `https://<operator-host>:3303/#/home`.
 - The Matrix bridge now auto-joins direct-message invites for
   `@agentic-ops:agentic-ops.local`. A browser-created Element DM with marker
   `matrix-ui-live-chat-1779258900` created ticket `907`, spawned Hermes agent

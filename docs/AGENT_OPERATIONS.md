@@ -254,7 +254,7 @@ loops from normal progress notes.
 Operational proof:
 
 ```bash
-python scripts/agentic_note_steering_demo.py http://127.0.0.1:25480 qwen/qwen3.6-27b
+python scripts/agentic_note_steering_demo.py http://<loopback>:25480 qwen/qwen3.6-27b
 ```
 
 Expected evidence: the ticket shows `STEERING_READY_DASHBOARD`,

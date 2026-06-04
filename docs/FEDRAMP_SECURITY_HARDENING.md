@@ -147,11 +147,11 @@ model-provider, and approved reputation/sandbox endpoints.
 
 The reference compose now binds databases to localhost:
 
-- dashboard PostgreSQL: `127.0.0.1:${SOC_DB_PORT:-5433}`
-- agent memory PostgreSQL: `127.0.0.1:${AGENT_MEMORY_DB_PORT:-25490}`
-- AI proxy: `127.0.0.1:${AI_PROXY_PORT:-4001}`
-- direct FastAPI HTTP: `127.0.0.1:${DASHBOARD_PORT:-25480}` by default
-- operator HTTPS: `${DASHBOARD_HTTPS_BIND:-0.0.0.0}:${DASHBOARD_HTTPS_PORT:-25443}`
+- dashboard PostgreSQL: `<loopback>:${SOC_DB_PORT:-5433}`
+- agent memory PostgreSQL: `<loopback>:${AGENT_MEMORY_DB_PORT:-25490}`
+- AI proxy: `<loopback>:${AI_PROXY_PORT:-4001}`
+- direct FastAPI HTTP: `<loopback>:${DASHBOARD_PORT:-25480}` by default
+- operator HTTPS: `${DASHBOARD_HTTPS_BIND:-<bind-all>}:${DASHBOARD_HTTPS_PORT:-25443}`
 
 The live deployment verified LAN access to those ports is refused. Database
 passwords remain required through `SOC_DB_PASSWORD` and
@@ -165,8 +165,8 @@ Run:
 ```powershell
 $env:DASHBOARD_TRUSTED_AUTH_SECRET = python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get dashboard_trusted_auth_secret
 $env:DASHBOARD_SERVICE_TOKEN = python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get dashboard_service_token
-python scripts\smoke_dashboard_auth_enforcement.py http://192.168.50.222:25480
-python scripts\smoke_dashboard_https.py https://192.168.50.222:25443
+python scripts\smoke_dashboard_auth_enforcement.py http://<operator-host>:25480
+python scripts\smoke_dashboard_https.py https://<operator-host>:25443
 ```
 
 Also verify the first-party browser login:
@@ -174,7 +174,7 @@ Also verify the first-party browser login:
 ```powershell
 $tmp = New-TemporaryFile
 python "C:\Users\cereal\.agents\skills\server-manager\credman.py" get demo_account_1 | Set-Content $tmp
-python scripts\smoke_dashboard_login.py http://192.168.50.222:25480 --username demo_account_1 --password-file $tmp
+python scripts\smoke_dashboard_login.py http://<operator-host>:25480 --username demo_account_1 --password-file $tmp
 Remove-Item $tmp
 ```
 
@@ -205,7 +205,7 @@ Latest live proof on 2026-05-18:
   good credentials created `dashboard_session`, the sidebar showed
   `demo_account_1`, sign-out returned to `/login?logged_out=1`, and the
   post-login page had zero console errors, failed requests, or 4xx responses.
-- HTTPS edge pass: `https://192.168.50.222:25443/nginx-health` validates from
+- HTTPS edge pass: `https://<operator-host>:25443/nginx-health` validates from
   the Windows workstation without `--insecure` after installing
   `dashboard-ca.crt` into the CurrentUser trusted root store; Chrome reaches
   `/login?next=/` as a secure context with no certificate bypass.

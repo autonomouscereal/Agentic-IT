@@ -2,16 +2,21 @@
 
 Last updated: 2026-05-20.
 
-Base URL in the current lab:
+Base URL:
 
 ```text
-http://192.168.50.222:25480
+https://<dashboard-host>
 ```
 
-Agent workspaces inside the API container should use:
+Internal service URLs depend on the deployment profile. Use the public dashboard
+URL for browser/operator flows and the configured service URL for container or
+automation flows.
+
+Agent workspaces inside the API container may use the internal service URL
+configured for that deployment:
 
 ```text
-http://localhost:8000
+http://<dashboard-api-service>
 ```
 
 All request/response bodies are JSON unless noted. The API is the canonical
@@ -239,7 +244,7 @@ Example:
   "change_id": 42,
   "source_dir": "hello",
   "slug": "hello-demo",
-  "public_base_url": "https://192.168.50.222:25443"
+  "public_base_url": "https://<operator-host>:25443"
 }
 ```
 
@@ -251,7 +256,7 @@ Response:
   "change_id": 42,
   "deployment": {
     "relative_url": "/published/hello-demo/",
-    "public_url": "https://192.168.50.222:25443/published/hello-demo/"
+    "public_url": "https://<operator-host>:25443/published/hello-demo/"
   }
 }
 ```
@@ -259,7 +264,7 @@ Response:
 The adapter only accepts a static tree with `index.html`, blocks symlinks and
 path escapes, writes a ticket evidence note, completes the change gate, and
 records a `static_site_deployed` audit event. Container-local preview URLs such
-as `http://127.0.0.1:<port>/` are not deployments unless they are merely test
+as `http://<loopback>:<port>/` are not deployments unless they are merely test
 evidence before this adapter or another approved deployment target is used.
 
 `POST /api/tickets/{ticket_id}/postmortem`

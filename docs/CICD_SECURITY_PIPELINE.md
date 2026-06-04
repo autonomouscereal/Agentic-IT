@@ -196,7 +196,7 @@ The full GitLab-backed proof is:
 cd /home/cereal/SOC_TESTING/soc-dashboard
 python3 scripts/agentic_gitlab_cicd_demo.py \
   --dashboard http://localhost:25480 \
-  --runner-dashboard http://192.168.50.222:25480 \
+  --runner-dashboard http://<operator-host>:25480 \
   --gitlab http://localhost \
   --model qwen/qwen3.6-27b
 ```

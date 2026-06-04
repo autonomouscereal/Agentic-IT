@@ -20,7 +20,7 @@ with the `vault-backup` skill.
 
 ## AI Server Backup
 
-- Server: `ai` (`192.168.50.222`)
+- Server: `ai` (`<operator-host>`)
 - Backup path: `/home/cereal/backups/agentic-it-pre-restart-20260521-180219`
 - Backup size: `3.5G`
 - Database dump files: `18`

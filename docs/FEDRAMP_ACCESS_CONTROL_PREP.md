@@ -162,7 +162,7 @@ agents are active:
 
 ```bash
 python scripts/smoke_permission_vault_e2e.py --print-seed-sql
-python scripts/smoke_permission_vault_e2e.py http://127.0.0.1:25480
+python scripts/smoke_permission_vault_e2e.py http://<loopback>:25480
 ```
 
 The first command prints raw PostgreSQL seed SQL for demo users/scopes. The

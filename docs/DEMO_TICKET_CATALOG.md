@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-22.
 
-Use the dashboard at `https://192.168.50.222:25443`. On the Tickets page, choose
+Use the dashboard at `https://<operator-host>:25443`. On the Tickets page, choose
 the `Demo Proofs` filter to show the curated prepared examples in the order
 below. Open each ticket and use the `Evidence Trail` section for the human
 story. Start with `Sequence of Events`: it is chronological and shows notes,

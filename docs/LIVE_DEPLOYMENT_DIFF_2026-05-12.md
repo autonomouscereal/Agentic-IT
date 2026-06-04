@@ -29,7 +29,7 @@ Current priority notes call out:
 The AI server source directory is not a Git checkout. It is a copied source tree
 with no `.git` metadata, so live-vs-local must be compared by snapshots.
 
-The live API at `http://192.168.50.222:25480/health` reports version `1.3.0`.
+The live API at `http://<operator-host>:25480/health` reports version `1.3.0`.
 Before the 2026-05-12 deployment, the live source contained many dashboard
 features but was behind local Git for several routes and UI affordances.
 
@@ -154,8 +154,8 @@ Final live regression passed end to end:
 
 Final containers:
 
-- `soc-dashboard-api-1`: up on `0.0.0.0:25480->8000/tcp`
-- `soc-dashboard-db-1`: up and healthy on `0.0.0.0:5433->5432/tcp`
+- `soc-dashboard-api-1`: up on `<bind-all>:25480->8000/tcp`
+- `soc-dashboard-db-1`: up and healthy on `<bind-all>:5433->5432/tcp`
 
 ## Next Safe Steps
 

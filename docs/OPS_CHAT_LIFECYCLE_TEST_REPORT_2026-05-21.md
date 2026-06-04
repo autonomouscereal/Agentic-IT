@@ -28,10 +28,10 @@ control-plane perspective:
 
 Reference deployment:
 
-- Dashboard: `https://192.168.50.222:25443`
-- Ops Chat / Element: `https://192.168.50.222:3303`
-- Dashboard internal API: `http://127.0.0.1:25480`
-- AI proxy: `http://127.0.0.1:4001`
+- Dashboard: `https://<operator-host>:25443`
+- Ops Chat / Element: `https://<operator-host>:3303`
+- Dashboard internal API: `http://<loopback>:25480`
+- AI proxy: `http://<loopback>:4001`
 - Active chat harness: Hermes
 - Active chat model during the proof: `deepseek/deepseek-v4-flash`
 - Ticket provider: iTop
@@ -100,7 +100,7 @@ or conflicting group.
 Command shape:
 
 ```bash
-python3 scripts/smoke_ops_chat_enterprise_matrix.py http://127.0.0.1:25480 \
+python3 scripts/smoke_ops_chat_enterprise_matrix.py http://<loopback>:25480 \
   --strict-routing --require-provider-sync --cleanup
 ```
 
@@ -135,7 +135,7 @@ All five synthetic tickets were cancelled during cleanup.
 Command shape:
 
 ```bash
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --cleanup
+python3 scripts/smoke_ops_chat_scenarios.py http://<loopback>:25480 --cleanup
 ```
 
 Failed marker before fix: `ops-chat-scenarios-1779336299`
@@ -243,24 +243,24 @@ room reset step before running `scripts/smoke_ops_chat_workspace_marathon.js`.
 Set the dashboard service token from the live `.env` on the server, then run:
 
 ```bash
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --cleanup
-python3 scripts/smoke_ops_chat_enterprise_matrix.py http://127.0.0.1:25480 \
+python3 scripts/smoke_ops_chat_scenarios.py http://<loopback>:25480 --cleanup
+python3 scripts/smoke_ops_chat_enterprise_matrix.py http://<loopback>:25480 \
   --strict-routing --require-provider-sync --cleanup
 ```
 
 For real-agent proofs, use one or more bounded cases:
 
 ```bash
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 \
+python3 scripts/smoke_ops_chat_scenarios.py http://<loopback>:25480 \
   --agent-only --spawn-agent --agent-case account-lockout --agent-timeout 600 --cleanup
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 \
+python3 scripts/smoke_ops_chat_scenarios.py http://<loopback>:25480 \
   --agent-only --spawn-agent --agent-case delivery-gate --agent-timeout 600 --cleanup
 ```
 
 For Element UI artifact rendering:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="<demo chat user>"
 $env:OPS_CHAT_PASSWORD="<from vault>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"

@@ -3,7 +3,7 @@
 ## Scope
 
 This deployment fixed the authenticated Agentic Operations dashboard at
-`https://192.168.50.222:25443/` without tearing down the environment:
+`https://<operator-host>:25443/` without tearing down the environment:
 
 - Tickets page now incrementally loads all tickets with `limit` / `offset`.
 - Setup page has searchable/filterable provider-agnostic module controls.
@@ -13,12 +13,12 @@ This deployment fixed the authenticated Agentic Operations dashboard at
 
 ## Credentials And Entry Points
 
-- Browser/Playwright target: `https://192.168.50.222:25443/`
+- Browser/Playwright target: `https://<operator-host>:25443/`
 - Login: `/login`
 - Dashboard user: `demo_account_1`
 - Password source: server-manager vault key `demo_account_1`
-- Internal service API: `http://127.0.0.1:25480` on the AI server only. Auth-enforced endpoints can return `403` by design.
-- Public edge health: `https://127.0.0.1:25443/nginx-health` from the AI server, with `curl -k`.
+- Internal service API: `http://<loopback>:25480` on the AI server only. Auth-enforced endpoints can return `403` by design.
+- Public edge health: `https://<loopback>:25443/nginx-health` from the AI server, with `curl -k`.
 
 Do not paste vault secrets into docs, source, shell transcripts, or chat.
 
@@ -82,13 +82,13 @@ Final observed results:
 Server-side checks:
 
 - `docker compose ps api dashboard-tls-proxy` showed both services up.
-- `curl -k -fsS https://127.0.0.1:25443/nginx-health` returned OK.
+- `curl -k -fsS https://<loopback>:25443/nginx-health` returned OK.
 - `/app/agent_models.json` exists and is writable inside the API container.
 - Runner health reports Hermes as the default harness and model API reachable.
 
 ## Gotchas
 
-- `/health` on `127.0.0.1:25480` can return `403` when auth enforcement is on.
+- `/health` on `<loopback>:25480` can return `403` when auth enforcement is on.
   Use the HTTPS proxy health route or an authenticated/service-token API call.
 - Static frontend changes take effect without a container restart because
   `frontend/` is bind-mounted.
@@ -127,7 +127,7 @@ Validation evidence:
 
 - Local regression suite: `python -m pytest tests/test_frontend_ui_regressions.py`
   returned `12 passed`.
-- Authenticated Playwright crawl used `https://192.168.50.222:25443/` with
+- Authenticated Playwright crawl used `https://<operator-host>:25443/` with
   `demo_account_1` from the vault.
 - Screenshots and metrics:
   `C:\Users\cereal\Documents\Codex\2026-05-20\without-rebuilding-the-environment-i-want\playwright-ui-fix-focused-final`
@@ -180,7 +180,7 @@ Validation evidence:
 
 - Local regression suite: `python -m pytest tests/test_frontend_ui_regressions.py`
   returned `12 passed`.
-- Authenticated Playwright crawl used `https://192.168.50.222:25443/` with
+- Authenticated Playwright crawl used `https://<operator-host>:25443/` with
   `demo_account_1` from the vault.
 - Screenshots and metrics:
   `C:\Users\cereal\Documents\Codex\2026-05-20\without-rebuilding-the-environment-i-want\playwright-workflows-buttons`
@@ -211,7 +211,7 @@ Validation evidence:
 
 - Local regression suite: `python -m pytest tests/test_frontend_ui_regressions.py`
   returned `13 passed`.
-- Authenticated Playwright crawl used `https://192.168.50.222:25443/` with
+- Authenticated Playwright crawl used `https://<operator-host>:25443/` with
   `demo_account_1` from the vault.
 - Screenshots and metrics:
   `C:\Users\cereal\Documents\Codex\2026-05-20\without-rebuilding-the-environment-i-want\playwright-learning-tabs`

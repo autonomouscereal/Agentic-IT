@@ -107,7 +107,7 @@ demo user/room or explicitly phrase the request as "open a new ticket".
 2026-05-22 severe Playwright regression pass:
 
 - Browser-level Element login and Matrix health passed against
-  `https://192.168.50.222:3303` using the same Keycloak/OIDC path used in the
+  `https://<operator-host>:3303` using the same Keycloak/OIDC path used in the
   live demo.
 - Focused fresh-ticket smoke marker `fresh-ticket-20260522005321` created
   ticket `1513` / iTop `915`, delivered an outbound requester question back to
@@ -143,7 +143,7 @@ Updated testing notes:
   that unrelated software requests become separate tickets in a noisy room.
 - When running Playwright inside the API container against the LAN HTTPS URLs,
   set `PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true`. For direct Node `fetch()` checks
-  against the dashboard API, prefer `DASHBOARD_URL=http://127.0.0.1:8000` inside
+  against the dashboard API, prefer `DASHBOARD_URL=http://<loopback>:8000` inside
   the API container or set `NODE_TLS_REJECT_UNAUTHORIZED=0` only for the smoke
   process.
 
@@ -323,15 +323,15 @@ Reference services:
 
 Important URL contract:
 
-- Dashboard UI: `https://192.168.50.222:25443`
-- Element/Ops Chat UI: `https://192.168.50.222:3303`
-- Same-origin Matrix client API through Element: `https://192.168.50.222:3303/_matrix/client/versions`
-- Optional direct Synapse diagnostics: `https://192.168.50.222:3302`
-- Dashboard internal API on AI server: `http://127.0.0.1:25480`
-- AI proxy on AI server/LAN: `http://127.0.0.1:4001` and `http://192.168.50.222:4001`
+- Dashboard UI: `https://<operator-host>:25443`
+- Element/Ops Chat UI: `https://<operator-host>:3303`
+- Same-origin Matrix client API through Element: `https://<operator-host>:3303/_matrix/client/versions`
+- Optional direct Synapse diagnostics: `https://<operator-host>:3302`
+- Dashboard internal API on AI server: `http://<loopback>:25480`
+- AI proxy on AI server/LAN: `http://<loopback>:4001` and `http://<operator-host>:4001`
 
-Do not use `http://192.168.50.222:3301` for the demo except as a redirect
-compatibility check. The real browser path is `https://192.168.50.222:3303`.
+Do not use `http://<operator-host>:3301` for the demo except as a redirect
+compatibility check. The real browser path is `https://<operator-host>:3303`.
 
 ## Decision Contract
 
@@ -540,7 +540,7 @@ assignment and evidence note are always authoritative.
 
 Fast path:
 
-1. Open `https://192.168.50.222:3303/#/user/@agentic-ops:agentic-ops.local`.
+1. Open `https://<operator-host>:3303/#/user/@agentic-ops:agentic-ops.local`.
 2. Sign in with Keycloak.
 3. Dismiss Element first-login prompts if they appear:
    - service worker warning
@@ -586,7 +586,7 @@ Latest validated state on 2026-05-20:
 | Lifecycle regression | marker `ops-chat-scenarios-1779336984`, tickets `1378`-`1382`, general chat, web/current info, cat memory, account, software, VPN, phishing follow-up, and delivery gate all passed with cleanup |
 | Developer artifact UI proof | marker `ops-chat-dev-artifact-1779337398804`, user `demo_account_1`, Python/HTML/Markdown/Bash rendered as Element code blocks, validation passed, and zero tickets were created |
 | Multi-ticket lifecycle | marker `ops-chat-multiticket-1779338352`, one chat session created watermelon ticket `1384`, cancelled it, created distinct pizza ticket `1385`, created urgent account ticket `1386`, updated `1386`, summarized room tickets, then cleaned all three |
-| Mixed answer plus ticket | ticket `1418`, session `716`, Codex agent `385` / task `382`; one chat message asked for a static otter web page deployment and the price of tea in China. The chat reply answered the tea-price portion, created and assigned the Platform Operations ticket, opened approval gate `314`, published `https://192.168.50.222:25443/published/otters-1418/`, and finished with zero active agents. |
+| Mixed answer plus ticket | ticket `1418`, session `716`, Codex agent `385` / task `382`; one chat message asked for a static otter web page deployment and the price of tea in China. The chat reply answered the tea-price portion, created and assigned the Platform Operations ticket, opened approval gate `314`, published `https://<operator-host>:25443/published/otters-1418/`, and finished with zero active agents. |
 
 Smoke-owned agents `327` and `328` were stopped after collecting evidence so
 the demo queue was left clean. Final active-agent and process checks were
@@ -710,36 +710,36 @@ Live health:
 ```bash
 cd /home/cereal/SOC_TESTING/soc-dashboard
 TOKEN=$(grep -E '^DASHBOARD_SERVICE_TOKEN=' .env | tail -n1 | cut -d= -f2- | sed 's/^"//; s/"$//')
-curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://127.0.0.1:25480/health
-curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://127.0.0.1:25480/api/ops-chat/matrix/health
-curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://127.0.0.1:25480/api/tools/status
-curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://127.0.0.1:25480/api/agents/active
-curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://127.0.0.1:25480/api/agents/processes
+curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://<loopback>:25480/health
+curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://<loopback>:25480/api/ops-chat/matrix/health
+curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://<loopback>:25480/api/tools/status
+curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://<loopback>:25480/api/agents/active
+curl -sS -H "X-Dashboard-Service-Token: $TOKEN" http://<loopback>:25480/api/agents/processes
 ```
 
 Live API-level chat matrix:
 
 ```bash
 export DASHBOARD_SERVICE_TOKEN=<runtime secret>
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --cleanup
-python3 scripts/smoke_ops_chat_enterprise_matrix.py http://127.0.0.1:25480 --strict-routing --require-provider-sync --cleanup
+python3 scripts/smoke_ops_chat_scenarios.py http://<loopback>:25480 --cleanup
+python3 scripts/smoke_ops_chat_enterprise_matrix.py http://<loopback>:25480 --strict-routing --require-provider-sync --cleanup
 ```
 
 Real agent cases:
 
 ```bash
 export DASHBOARD_SERVICE_TOKEN=<runtime secret>
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --agent-only --spawn-agent --agent-case account-lockout --agent-timeout 600 --cleanup
-python3 scripts/smoke_ops_chat_scenarios.py http://127.0.0.1:25480 --agent-only --spawn-agent --agent-case delivery-gate --agent-timeout 600 --cleanup
+python3 scripts/smoke_ops_chat_scenarios.py http://<loopback>:25480 --agent-only --spawn-agent --agent-case account-lockout --agent-timeout 600 --cleanup
+python3 scripts/smoke_ops_chat_scenarios.py http://<loopback>:25480 --agent-only --spawn-agent --agent-case delivery-gate --agent-timeout 600 --cleanup
 ```
 
 Browser proof from a host/container with Playwright:
 
 ```bash
-DASHBOARD_URL=https://192.168.50.222:25443 \
+DASHBOARD_URL=https://<operator-host>:25443 \
 DASHBOARD_USER=demo_account_1 \
 DASHBOARD_PASSWORD=<from vault> \
-OPS_CHAT_URL=https://192.168.50.222:3303 \
+OPS_CHAT_URL=https://<operator-host>:3303 \
 OPS_CHAT_USER=demo_chat_alice \
 OPS_CHAT_PASSWORD=<from vault> \
 OPS_CHAT_SEND_MESSAGE=true \
@@ -751,7 +751,7 @@ node scripts/smoke_ops_chat_playwright.js
 One-room user-experience marathon:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
@@ -767,7 +767,7 @@ and leave no active smoke agents after cleanup.
 Developer artifact UI proof:
 
 ```powershell
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_chat_marathon5"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_chat_marathon5>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"

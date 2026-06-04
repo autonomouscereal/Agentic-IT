@@ -34,15 +34,15 @@ Mailcow is the reference implementation. Exchange, Gmail, Proofpoint, Mimecast, 
 
 ```mermaid
 flowchart LR
-  Operator["Operator / dashboard / tests"] --> Nginx["nginx-mailcow-api\n127.0.0.1:8081\nhost:2581 demo UI"]
+  Operator["Operator / dashboard / tests"] --> Nginx["nginx-mailcow-api\n<loopback>:8081\nhost:2581 demo UI"]
   Nginx --> Compat["/web/mailcow_compat_api.php"]
   Nginx --> Stock["/web/json_api.php\nfallback for non-compat routes"]
-  Compat --> PHP["php-fpm-mailcow-api\n127.0.0.1:9002"]
+  Compat --> PHP["php-fpm-mailcow-api\n<loopback>:9002"]
   Stock --> PHP
   PHP --> DB["mysql-mailcow\nmailcow database"]
   PHP --> Redis["redis-mailcow\nsessions"]
   Nginx --> Webmail["/webmail + /SOGo/*\nRoundcube webmail"]
-  Webmail --> Roundcube["roundcube-mailcow-demo\n127.0.0.1:2582"]
+  Webmail --> Roundcube["roundcube-mailcow-demo\n<loopback>:2582"]
   Roundcube --> Report["/demo-report\nReport Phish endpoint"]
   Bridge["Keycloak-Mailcow bridge"] --> DB
 ```
@@ -72,13 +72,13 @@ Bundled reference skill paths:
 Base URL in the reference lab:
 
 ```text
-http://127.0.0.1:8081
+http://<loopback>:8081
 ```
 
 Demo UI URL in the reference lab:
 
 ```text
-http://192.168.50.222:2581
+http://<operator-host>:2581
 ```
 
 The UI port is for lab/demo access to the Mailcow admin surface. Keep the API
@@ -92,7 +92,7 @@ demo operators should not need to know or type `/admin/`.
 Demo webmail URL:
 
 ```text
-http://192.168.50.222:2581/webmail
+http://<operator-host>:2581/webmail
 ```
 
 The Mailcow top-nav `/SOGo/*` path redirects to Roundcube in the reference lab.
@@ -515,7 +515,7 @@ Repair with the deployer. It creates `logs`, repairs `tfa`, adds
 
 Latest live verification on 2026-05-18:
 
-- `http://192.168.50.222:2581/` returns the Mailcow login page.
+- `http://<operator-host>:2581/` returns the Mailcow login page.
 - Admin form login from the bare root URL for `demo_account_1` reaches
   `/admin/dashboard`.
 - `/admin/dashboard` renders through FastCGI and does not expose PHP source.

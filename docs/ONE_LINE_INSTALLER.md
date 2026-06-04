@@ -75,7 +75,7 @@ curl -fsSL https://YOUR_RELEASE_HOST/agentic-ops/install.sh | bash -s -- --profi
 - `--harness auto|hermes|claude-code|codex`: selected agent harness. `auto` prefers Hermes when a host Hermes install is available, then Codex or Claude Code when configured.
 - `--proxy-mode deploy|external`: deploy the built-in proxy or point the dashboard at an existing proxy.
 - `--proxy-port PORT`: host port for the built-in proxy, default `4001`.
-  Hardened installs bind the proxy to `127.0.0.1`; the installer checks
+  Hardened installs bind the proxy to `<loopback>`; the installer checks
   `http://localhost:<port>` from the deployment host even when the dashboard
   HTTPS URL is LAN-facing.
 - `--model-route local|external`: deployment posture for the generated proxy
@@ -161,7 +161,7 @@ python3 scripts/switch_model_route.py --route local --restart
 
 Agents should execute the same commands through the `server-manager` skill
 against server `ai`. After switching, verify from the AI server with
-`curl http://127.0.0.1:4001/health` and `POST /api/route`; the live lab maps
+`curl http://<loopback>:4001/health` and `POST /api/route`; the live lab maps
 the Compose-managed proxy to host/LAN port `4001`, and containers use
 `http://ai-proxy:4001`.
 
@@ -318,7 +318,7 @@ AGENT_MODEL=qwen/qwen3.6-27b \
 CICD_DOCKER_NETWORK=host \
 python3 scripts/agentic_cicd_full_demo.py \
   --base "$BASE" \
-  --host-ip 192.168.50.222 \
+  --host-ip <operator-host> \
   --timeout 2400
 ```
 

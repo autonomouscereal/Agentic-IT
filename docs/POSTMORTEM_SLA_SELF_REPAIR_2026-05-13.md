@@ -45,7 +45,7 @@ Live deployed checks on the AI server:
 python3 -m py_compile api/routes/dashboard.py
 python3 -m unittest tests.test_ops_metrics_postmortem_sla tests.test_task_tracker_provider_close
 node --check frontend/js/dashboard.js
-python3 scripts/smoke_operational_metrics.py http://127.0.0.1:25480
+python3 scripts/smoke_operational_metrics.py http://<loopback>:25480
 ```
 
 The live smoke returned `postmortem_sla.required=79`,

@@ -145,7 +145,7 @@ Run the expanded smoke against a live dashboard:
 
 ```bash
 export DASHBOARD_SERVICE_TOKEN="$(grep -E '^DASHBOARD_SERVICE_TOKEN=' .env | tail -n1 | cut -d= -f2-)"
-python3 scripts/smoke_sensitive_intake.py http://127.0.0.1:25480
+python3 scripts/smoke_sensitive_intake.py http://<loopback>:25480
 ```
 
 The smoke verifies request metadata redaction, public form safety, missing

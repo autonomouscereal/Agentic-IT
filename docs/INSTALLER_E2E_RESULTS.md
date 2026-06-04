@@ -5,7 +5,7 @@ Last verified: 2026-05-19
 ## HTTPS/Hermes One-Line Regression - 2026-05-19
 
 Current proxy correction after the regression: the live lab now uses one
-Compose-managed proxy on host/LAN port `4001` (`0.0.0.0:4001->4001/tcp`) and
+Compose-managed proxy on host/LAN port `4001` (`<bind-all>:4001->4001/tcp`) and
 containers use `http://ai-proxy:4001`. The old standalone `ai-proxy` container
 was removed and host `4401` is no longer listening. Clean installs default to
 `--proxy-port 4001`; the `4401` references below are historical artifacts from
@@ -23,12 +23,12 @@ Setup fan-out source regression on 2026-05-19:
 - Local source validation passed with `147 passed`, JS syntax checks, and text
   hygiene. `scripts/smoke_setup_platform.py` now asserts disabled modules,
   blocked dependencies, and child module ticket creation.
-- Live hardened API smoke passed against `http://127.0.0.1:25480` with service
+- Live hardened API smoke passed against `http://<loopback>:25480` with service
   token auth after deployment: setup parent ticket `624` was created with `7`
   scoped module tickets, disabled module scope, and blocked dependency
   validation.
 - Authenticated HTTPS Chrome check passed against
-  `https://192.168.50.222:25443`: `demo_account_1` opened Setup, the per-module
+  `https://<operator-host>:25443`: `demo_account_1` opened Setup, the per-module
   action selector rendered `Deploy reference`, `Integrate existing`, and
   `Off / not in scope`, and no console/page/http errors were observed.
 - Post-rebuild live checks passed after the agent runner safety patch:
@@ -137,7 +137,7 @@ Issues found and fixed:
 - Same-host reinstall needed a configurable agent-memory host port because
   the AI server already has another memory service on `25490`. Added
   `--memory-db-port`.
-- The hardened built-in proxy binds to `127.0.0.1`, but the installer checked
+- The hardened built-in proxy binds to `<loopback>`, but the installer checked
   the LAN IP. Installer now uses `proxy_health_url=http://localhost:<port>` for
   built-in proxy health and model checks.
 - The initial spawned setup-agent prompt was too broad for installer E2E and
@@ -167,7 +167,7 @@ Related real-agent regression proofs on the restored live stack:
   exposed unsafe direct suspicious URL retrieval behavior, so it has been
   demoted from lead demo proof and converted into a URL-safety regression case.
 - Authenticated Chrome validation passed against
-  `https://192.168.50.222:25443`: `demo_account_1` logged in, the curated
+  `https://<operator-host>:25443`: `demo_account_1` logged in, the curated
   `Demo Proofs` filter rendered with iTop/Demo badges, the ticket modal loaded
   the evidence trail, and no console/page/http errors remained.
 - Authenticated Chrome tab sweep passed across Overview, Tickets, Intake,
@@ -219,7 +219,7 @@ Result:
 
 - Both commands returned `status=dry_run`.
 - Linux/AI-server source dry-run also returned `status=dry_run` with
-  `proxy_url=http://192.168.50.222:4001`.
+  `proxy_url=http://<operator-host>:4001`.
 - The installer reported a generated `runtime/proxy_config.json`.
 - The full IT dry-run selected `harness=hermes`, `proxy_mode=deploy`, provider
   `nous`, and model `deepseek/deepseek-v4-flash`.
@@ -251,7 +251,7 @@ Fresh install target:
 - Compose project: `soc-dashboard-e2e-20260512`
 - Dashboard/API: `http://localhost:25482`
 - PostgreSQL host port: `5435`
-- AI proxy: `http://192.168.50.222:4001`
+- AI proxy: `http://<operator-host>:4001`
 - Agent model: `qwen/qwen3.6-27b`
 - iTop sync: disabled for provider-agnostic/local-only installer testing
 
@@ -266,7 +266,7 @@ cd /home/cereal/SOC_TESTING/soc-dashboard
   --dashboard-port 25482 \
   --db-port 5435 \
   --project-name soc-dashboard-e2e-20260512 \
-  --ai-base-url http://192.168.50.222:4001 \
+  --ai-base-url http://<operator-host>:4001 \
   --model qwen/qwen3.6-27b \
   --itop-sync-enabled false \
   --non-interactive
@@ -318,7 +318,7 @@ AGENT_MODEL=qwen/qwen3.6-27b \
 CICD_DOCKER_NETWORK=host \
 python3 scripts/agentic_cicd_full_demo.py \
   --base http://localhost:25482 \
-  --host-ip 192.168.50.222 \
+  --host-ip <operator-host> \
   --timeout 2400
 ```
 
@@ -364,7 +364,7 @@ python3 installer/bootstrap.py \
   --dashboard-port 25481 \
   --db-port 5434 \
   --project-name soc-dashboard-e2e \
-  --ai-base-url http://192.168.50.222:4001 \
+  --ai-base-url http://<operator-host>:4001 \
   --itop-sync-enabled false
 ```
 
@@ -374,7 +374,7 @@ Result:
 - API: `http://localhost:25481`.
 - PostgreSQL: host port `5434`.
 - Health returned version `1.3.0`.
-- Runner health reached the model proxy at `http://192.168.50.222:4001`.
+- Runner health reached the model proxy at `http://<operator-host>:4001`.
 - `install_state/last-plan.json` recorded profile `soc` with 25 modules.
 - `docker compose ps` showed project-scoped containers, no fixed-name collision.
 

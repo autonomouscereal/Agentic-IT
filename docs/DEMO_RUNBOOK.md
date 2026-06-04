@@ -147,7 +147,7 @@ Use `qwen/qwen3.6-27b` for speed.
 1. Open dashboard:
 
 ```text
-http://192.168.50.222:25480
+http://<operator-host>:25480
 ```
 
 2. Show runner health on Agents page:
@@ -257,7 +257,7 @@ python3 scripts/agentic_gitlab_cicd_demo.py \
 The runner must be able to reach the dashboard and GitLab from inside job
 containers. In the reference deployment the runner uses `network_mode =
 "gitlab-net"`, mounts `/tmp/zap-wrk:/zap/wrk`, and passes
-`SOC_DASHBOARD_URL=http://192.168.50.222:25480` to jobs.
+`SOC_DASHBOARD_URL=http://<operator-host>:25480` to jobs.
 
 For unattended regression only, append `--auto-approve-gates`. Do not use that
 flag when showing manual governance.
@@ -285,17 +285,17 @@ Latest verified on 2026-05-20:
 
 | System | URL | Login Status | Demo Notes |
 | --- | --- | --- | --- |
-| Agentic Operations | `https://192.168.50.222:25443` | Verified | HTTPS is served by the dashboard TLS proxy with a runtime local-CA certificate; the CA is trusted in the demo workstation CurrentUser root store. Browser requests redirect to `/login`; use `demo_account_1` with the vault password. Bad credentials return to the login page with an error, successful login lands in the dashboard with a signed HttpOnly session, the sidebar shows the signed-in account, and Sign Out returns to `/login?logged_out=1`. API/static/health requests without credentials still fail closed. |
-| iTop | `http://192.168.50.222:25432` | Verified | REST POST returns `code=0`; user has `Administrator` and `REST Services User`. |
-| Wazuh Dashboard | `https://192.168.50.222:26443` | Verified | Browser login works and the native Wazuh API issues a token for the same demo user. |
-| Keycloak | `https://192.168.50.222:8443/admin/master/console/` | Verified | Admin Console loads and logs in with the Keycloak admin vault credential; issuer and admin UI now use the browser-routable demo URL. |
-| GitLab | `http://192.168.50.222` | Verified | Local login works; the Keycloak button completes full SSO as `demo_account_1` and lands in GitLab as SOC Demo Account. |
-| Mailcow | `http://192.168.50.222:2581` | Verified | Bare root URL is routed to the admin UI and stale user-session cookies are recovered; login reaches `/admin/dashboard`; dashboard, system, mailbox, queue, and quarantine pages show no invalid JSON, SQL-column warning, or blank-page errors. `/webmail` renders Roundcube backed by real Mailcow IMAP/SMTP, and `/SOGo/so` redirects there for compatibility. Use `demo_account_1@mailcow.local` and the shared vault password. Report Phish proof: legacy demo ticket `578`/iTop `370`/quarantine `28cd6d435f7c88cd9a7b46983c62a1cb`; Roundcube proof ticket `580`/iTop `372`/quarantine `21a705b151642568d375c748a9ea1a6b` with agent `229` and access request `581`. |
-| Ops Chat / Element | `https://192.168.50.222:3303/#/user/@agentic-ops:agentic-ops.local` | Verified | Use this direct bot-profile URL for demos. `http://192.168.50.222:3301` redirects to the Element UI, but the direct profile link avoids the generic Matrix room directory. Sign in with Keycloak as `demo_chat_alice`, `demo_chat_jeff`, or `demo_chat_exec`, confirm the profile says `Agentic Ops Agent`, click **Send message**, and type the request. Latest direct proof marker `element-direct-agent-ui-1779283071` created ticket `909`, agent `308`, task `305`; previous no-bypass browser proof marker `ops-chat-same-origin-playwright-1779261056` created ticket `908`, agent `307`, task `304`, final state `awaiting_user_response`. |
+| Agentic Operations | `https://<operator-host>:25443` | Verified | HTTPS is served by the dashboard TLS proxy with a runtime local-CA certificate; the CA is trusted in the demo workstation CurrentUser root store. Browser requests redirect to `/login`; use `demo_account_1` with the vault password. Bad credentials return to the login page with an error, successful login lands in the dashboard with a signed HttpOnly session, the sidebar shows the signed-in account, and Sign Out returns to `/login?logged_out=1`. API/static/health requests without credentials still fail closed. |
+| iTop | `http://<operator-host>:25432` | Verified | REST POST returns `code=0`; user has `Administrator` and `REST Services User`. |
+| Wazuh Dashboard | `https://<operator-host>:26443` | Verified | Browser login works and the native Wazuh API issues a token for the same demo user. |
+| Keycloak | `https://<operator-host>:8443/admin/master/console/` | Verified | Admin Console loads and logs in with the Keycloak admin vault credential; issuer and admin UI now use the browser-routable demo URL. |
+| GitLab | `http://<operator-host>` | Verified | Local login works; the Keycloak button completes full SSO as `demo_account_1` and lands in GitLab as SOC Demo Account. |
+| Mailcow | `http://<operator-host>:2581` | Verified | Bare root URL is routed to the admin UI and stale user-session cookies are recovered; login reaches `/admin/dashboard`; dashboard, system, mailbox, queue, and quarantine pages show no invalid JSON, SQL-column warning, or blank-page errors. `/webmail` renders Roundcube backed by real Mailcow IMAP/SMTP, and `/SOGo/so` redirects there for compatibility. Use `demo_account_1@mailcow.local` and the shared vault password. Report Phish proof: legacy demo ticket `578`/iTop `370`/quarantine `28cd6d435f7c88cd9a7b46983c62a1cb`; Roundcube proof ticket `580`/iTop `372`/quarantine `21a705b151642568d375c748a9ea1a6b` with agent `229` and access request `581`. |
+| Ops Chat / Element | `https://<operator-host>:3303/#/user/@agentic-ops:agentic-ops.local` | Verified | Use this direct bot-profile URL for demos. `http://<operator-host>:3301` redirects to the Element UI, but the direct profile link avoids the generic Matrix room directory. Sign in with Keycloak as `demo_chat_alice`, `demo_chat_jeff`, or `demo_chat_exec`, confirm the profile says `Agentic Ops Agent`, click **Send message**, and type the request. Latest direct proof marker `element-direct-agent-ui-1779283071` created ticket `909`, agent `308`, task `305`; previous no-bypass browser proof marker `ops-chat-same-origin-playwright-1779261056` created ticket `908`, agent `307`, task `304`, final state `awaiting_user_response`. |
 
 Keycloak and GitLab OIDC no longer require a workstation hosts-file entry for
 the demo path. The live Keycloak issuer and Admin Console URL are
-`https://192.168.50.222:8443`; the older `keycloak.internal` alias is retained
+`https://<operator-host>:8443`; the older `keycloak.internal` alias is retained
 only as a container-side compatibility route for internal service access.
 
 ## Prepared Ticket Catalog
@@ -325,7 +325,7 @@ Demo-readiness checkpoint from 2026-05-21:
 Latest verified GitLab runner artifacts:
 
 - GitLab project `root/agentic-cicd-demo-1778538475`, project id `15`
-- Project URL `http://192.168.50.222/root/agentic-cicd-demo-1778538475`
+- Project URL `http://<operator-host>/root/agentic-cicd-demo-1778538475`
 - Ticket `83`
 - Initial GitLab pipeline `9`: failed as intended after all scanner jobs ran
 - Initial dashboard CI/CD run `11`: failed with seven findings
@@ -342,7 +342,7 @@ Latest verified GitLab runner artifacts:
 
 Live verification:
 
-- MR URL `http://192.168.50.222/root/agentic-cicd-demo-1778538475/-/merge_requests/1`
+- MR URL `http://<operator-host>/root/agentic-cicd-demo-1778538475/-/merge_requests/1`
 - Pipeline `9` on `main`: failed by design; unit tests and all scanner jobs
   succeeded, dashboard gate failed because findings existed
 - Pipeline `10` on `agent/remediate-security-gate`: success; unit tests,

@@ -132,10 +132,10 @@ Live:
 
 ```bash
 curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
-  http://127.0.0.1:25480/api/agents/config
+  http://<loopback>:25480/api/agents/config
 
 curl -sS -H "X-Dashboard-Service-Token: $DASHBOARD_SERVICE_TOKEN" \
-  http://127.0.0.1:25480/api/ops-chat/matrix/health
+  http://<loopback>:25480/api/ops-chat/matrix/health
 ```
 
 Expected live demo posture:

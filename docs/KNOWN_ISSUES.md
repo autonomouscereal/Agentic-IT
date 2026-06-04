@@ -1,4 +1,4 @@
-﻿# Known Issues And Fix Log
+# Known Issues And Fix Log
 
 Last updated: 2026-05-21.
 
@@ -237,10 +237,10 @@ after the demo so future agents do not copy stale examples.
 Status: expected but easy to misread.
 
 The bridge health endpoint is reachable inside the container at
-`http://127.0.0.1:29318/health`; host `curl 127.0.0.1:29318` can fail because
+`http://<loopback>:29318/health`; host `curl <loopback>:29318` can fail because
 the bridge port is not published. Use Docker/container health checks or
 `docker compose exec ops-chat-bridge` for diagnostics. The user-facing demo URL
-is Element on `https://192.168.50.222:3303`, not the bridge internals.
+is Element on `https://<operator-host>:3303`, not the bridge internals.
 
 ## Found During 2026-05-21 Pre-Demo Doctrine Lock
 
@@ -1134,18 +1134,18 @@ Status: fixed on 2026-05-19. Host `4001` is again the single canonical proxy
 port, and host `4401` is gone.
 
 During route-profile work, the live Compose-managed proxy was temporarily moved
-to host `127.0.0.1:4401` while an older standalone `ai-proxy` container owned
-host `0.0.0.0:4001`. That created two different proxy surfaces:
+to host `<loopback>:4401` while an older standalone `ai-proxy` container owned
+host `<bind-all>:4001`. That created two different proxy surfaces:
 
 - Agents used `AGENT_LLM_BASE_URL=http://ai-proxy:4001` inside Docker, which
   reached the Compose-managed proxy.
-- External tools using `http://192.168.50.222:4001` reached the older
+- External tools using `http://<operator-host>:4001` reached the older
   standalone proxy, which had a minimal `/health` response and no `/api/route`.
 
 Fix:
 
 - Removed the standalone `ai-proxy` container.
-- Set the live Compose deployment to `AI_PROXY_BIND=0.0.0.0` and
+- Set the live Compose deployment to `AI_PROXY_BIND=<bind-all>` and
   `AI_PROXY_PORT=4001`.
 - Kept `AGENT_LLM_BASE_URL=http://ai-proxy:4001` for API/agent containers.
 - Kept source defaults local-first while leaving this lab environment on
@@ -1154,11 +1154,11 @@ Fix:
 
 Verification:
 
-- `ss -ltnp` showed only `0.0.0.0:4001`; no listener remained on `4401`.
+- `ss -ltnp` showed only `<bind-all>:4001`; no listener remained on `4401`.
 - `docker ps` showed only `soc-dashboard-ai-proxy-1` mapped
-  `0.0.0.0:4001->4001/tcp`.
-- Host `http://127.0.0.1:4001/health`, LAN
-  `http://192.168.50.222:4001/api/route`, and API-container
+  `<bind-all>:4001->4001/tcp`.
+- Host `http://<loopback>:4001/health`, LAN
+  `http://<operator-host>:4001/api/route`, and API-container
   `http://ai-proxy:4001/api/route` all returned the managed proxy routing
   profile.
 - `POST /api/route` for `deepseek/deepseek-v4-flash` returned
@@ -1701,11 +1701,11 @@ Follow-up fixes on 2026-05-18:
 - Keycloak Admin Console was failing from normal demo browsers with
   `Timeout when waiting for 3rd party check iframe message` because the realm
   advertised `keycloak.internal` while the browser opened
-  `192.168.50.222`.
+  `<operator-host>`.
 - The live Keycloak hostname was moved to the browser-routable full URL
-  `https://192.168.50.222:8443`, with the Admin Console using the same URL.
+  `https://<operator-host>:8443`, with the Admin Console using the same URL.
 - GitLab OmniAuth was updated to the matching issuer
-  `https://192.168.50.222:8443/realms/gitlab`, and the exposed historical OIDC
+  `https://<operator-host>:8443/realms/gitlab`, and the exposed historical OIDC
   client secret was rotated.
 - Browser-based GitLab SSO and the Keycloak Admin Console no longer require a
   workstation hosts-file entry. The `keycloak.internal` route is retained only
@@ -1736,11 +1736,11 @@ Symptoms:
 
 Fix:
 
-- Exposed the demo UI on `http://192.168.50.222:2581` while keeping the
+- Exposed the demo UI on `http://<operator-host>:2581` while keeping the
   read-only compatibility API on `8081`.
 - Mounted the web root writable for the php-fpm sidecar so Twig cache can be
   generated.
-- Added the `dockerapi:127.0.0.1` sidecar host mapping and kept raw dockerapi
+- Added the `dockerapi:<loopback>` sidecar host mapping and kept raw dockerapi
   access blocked from non-loopback traffic with the host firewall rule.
 - Created the missing `logs` table, repaired `tfa`, added
   `mailbox.authsource`, and patched Mailcow UI queries to use `mailbox.kind`.
@@ -1751,7 +1751,7 @@ Fix:
 
 Verification:
 
-- `http://192.168.50.222:2581/` returns the Mailcow login page.
+- `http://<operator-host>:2581/` returns the Mailcow login page.
 - Admin form login for `demo_account_1` returns HTTP `302` to
   `/admin/dashboard`.
 - `/admin/dashboard` renders through FastCGI and does not expose PHP source.
@@ -1797,7 +1797,7 @@ Fix:
 Verification:
 
 - Deployer passes API regression and demo UI cache-asset smoke.
-- Browser login reaches `http://192.168.50.222:2581/admin/dashboard`.
+- Browser login reaches `http://<operator-host>:2581/admin/dashboard`.
 - Headless browser check reports visible dashboard text, `0` login inputs,
   `0` failed network requests, and `0` console errors.
 
@@ -1860,7 +1860,7 @@ Root cause:
 - The bare `/` URL hit Mailcow's root user-login flow in this custom sidecar
   deployment. That path returned a tiny blank response after form submit, while
   the verified admin flow at `/admin/` worked correctly.
-- Demo operators naturally open `http://192.168.50.222:2581/`, so the blank
+- Demo operators naturally open `http://<operator-host>:2581/`, so the blank
   root flow looked like the whole Mailcow UI was still broken.
 - A stale Mailcow user-session cookie (`MCSESSID`) made `/` and `/admin/`
   redirect back to `/user`; nginx logged those user-flow responses as HTTP 200
@@ -1883,8 +1883,8 @@ Fix:
 Verification:
 
 - Re-running `python3 scripts/deploy_mailcow_api.py` succeeds.
-- Browser login from `http://192.168.50.222:2581/` redirects to
-  `http://192.168.50.222:2581/admin/dashboard`.
+- Browser login from `http://<operator-host>:2581/` redirects to
+  `http://<operator-host>:2581/admin/dashboard`.
 - Headless browser evidence shows visible dashboard text, versioned CSS/JS
   loaded from `/cache`, zero failed requests, and zero console errors.
 - The deployer now checks stale-session recovery: root with an existing
@@ -1896,7 +1896,7 @@ Verification:
 ### Live AI server has standalone proxy owning port 4001
 
 Status: resolved on 2026-05-19; the Compose-managed proxy now owns host
-`0.0.0.0:4001`.
+`<bind-all>:4001`.
 
 During the documentation refresh deploy, `docker compose up -d --build api`
 attempted to create the Compose-managed `soc-dashboard-ai-proxy-1`, but host
@@ -1910,10 +1910,10 @@ proxy.
 Resolution:
 
 - Stopped and removed the standalone `ai-proxy` container.
-- Set the live deployment to `AI_PROXY_BIND=0.0.0.0` and
+- Set the live deployment to `AI_PROXY_BIND=<bind-all>` and
   `AI_PROXY_PORT=4001`.
 - Restarted the Compose-managed `soc-dashboard-ai-proxy-1` and verified only
-  `0.0.0.0:4001` was listening; host `4401` was not listening.
+  `<bind-all>:4001` was listening; host `4401` was not listening.
 - Verified `/health`, `/api/route`, and runner-health through the managed
   proxy.
 
@@ -2273,7 +2273,7 @@ workflow while still recording promotion evidence and canonical knowledge.
 Verification:
 
 - Live `scripts/smoke_workflow_canonicalization.py` passed against
-  `http://127.0.0.1:25480`: workflow `86` reactivated and superseded `87`;
+  `http://<loopback>:25480`: workflow `86` reactivated and superseded `87`;
   phishing postmortems `92`/`93` reused workflow `4` and knowledge article
   `55`; ticket context returned workflow `4`.
 
@@ -2305,7 +2305,7 @@ Verification:
   worker. After the API rebuild ended the process, cleanup note `1250` and
   status note `1251` closed ticket `547` as non-customer smoke work.
 - Live `scripts/smoke_workflow_canonicalization.py` passed against
-  `http://127.0.0.1:25480`: workflow `91` reactivated and superseded `92`;
+  `http://<loopback>:25480`: workflow `91` reactivated and superseded `92`;
   phishing postmortems `98`/`99` reused workflow `4` and knowledge article
   `55`; `/api/agents/active` remained empty afterward.
 
@@ -2366,7 +2366,7 @@ operational guidance.
 Verification:
 
 - Live `scripts/smoke_postmortem_promotion.py` passed against
-  `http://127.0.0.1:25480`: ticket `552`, postmortem `97`, knowledge article
+  `http://<loopback>:25480`: ticket `552`, postmortem `97`, knowledge article
   `73`, draft workflow `90`, and skills `96`/`97`.
 
 ### Active agent can stall after approvals by chasing oversized persisted context output
@@ -2484,7 +2484,7 @@ Current diagnosis:
 
 - The access request did not include a structured `lease_request`, so the
   access gate had no lease to mint on completion.
-- The Wazuh API is reachable on the host at `https://127.0.0.1:26500`, but the
+- The Wazuh API is reachable on the host at `https://<loopback>:26500`, but the
   dashboard runner container cannot resolve `host.docker.internal` or the Wazuh
   compose service name.
 - The Wazuh container exposes API credentials through runtime environment, but
@@ -2524,7 +2524,7 @@ Residual note:
 
 The proof corrected its ticket history with note `1164`: Wazuh manager status
 was retrieved successfully, but Wazuh returned no rule metadata for id `11` and
-the indexer search for rule `11` / source `192.168.50.115` returned zero
+the indexer search for rule `11` / source `<endpoint-host>` returned zero
 matching alerts. The access-control and provider-read path is fixed; the
 original alert content still depends on the upstream SIEM ticket payload and
 available Wazuh/indexer data.
@@ -3776,7 +3776,7 @@ Verification:
 
 - Local compile, JS syntax, targeted unit tests, and full unit discovery passed.
 - Live AI server compile, JS syntax, targeted unit tests, and
-  `scripts/smoke_operational_metrics.py http://127.0.0.1:25480` passed after
+  `scripts/smoke_operational_metrics.py http://<loopback>:25480` passed after
   deployment.
 - Real local-model self-repair proof completed through dashboard ticket `440`,
   agent `157`, task `154`, and approval gate `126`.
@@ -3898,7 +3898,7 @@ Verification:
 - Unit tests: `python -m unittest discover -s tests -p "test_*.py"`:
   43 tests PASS.
 - Live smoke: `python scripts\smoke_operational_metrics.py
-  http://192.168.50.222:25480`: PASS, created CI/CD run `26`,
+  http://<operator-host>:25480`: PASS, created CI/CD run `26`,
   verified `zap_status=completed_with_findings`, four scanner summary groups,
   `setup_modules=38`, and no negative agent timing fields.
 
@@ -4363,7 +4363,7 @@ Problem:
 
 Fix:
 
-- `AGENT_LLM_BASE_URL` uses routable LAN proxy URL, currently `http://192.168.50.222:4001`.
+- `AGENT_LLM_BASE_URL` uses routable LAN proxy URL, currently `http://<operator-host>:4001`.
 
 ### Fresh DB init missing new approval columns
 
@@ -4690,7 +4690,7 @@ Fix:
   containers can resolve and reach the GitLab container.
 - The reference runner config mounts `/tmp/zap-wrk:/zap/wrk`.
 - The demo script supports a separate runner-facing dashboard URL and defaults
-  `SOC_DASHBOARD_URL` to `http://192.168.50.222:25480` for the lab.
+  `SOC_DASHBOARD_URL` to `http://<operator-host>:25480` for the lab.
 - ZAP writes to `/zap/wrk/zap.json` and then copies that artifact into the
   project workspace.
 
@@ -6286,7 +6286,7 @@ Fix:
 Verification:
 
 - Local suite passed: `163 passed`.
-- Live smoke passed on `http://127.0.0.1:25480` with service-token auth:
+- Live smoke passed on `http://<loopback>:25480` with service-token auth:
   CI/CD run `41`, ticket `711`, change `187`, Semgrep dashboard report with one
   stored finding.
 - Operational metrics smoke passed with CI/CD run `42` and verified Semgrep
@@ -6394,7 +6394,7 @@ Status: fixed in source and live-verified on 2026-05-21.
 Problem:
 
 - Ticket `1409` validated a demo-safe hello web page inside the agent/API
-  container and wrote a `http://127.0.0.1:8144/` style URL in the resolution
+  container and wrote a `http://<loopback>:8144/` style URL in the resolution
   evidence.
 - That URL was container-local/transient preview evidence. It was not reachable
   from the operator workstation and did not represent host/server deployment.
@@ -6423,7 +6423,7 @@ Verification:
   `python -m pytest -q tests/test_static_site_deployment_adapter.py tests/test_access_control_policy.py tests/test_deployment_boundary_prompts.py`.
 - Live smoke passed on the AI server with ticket `1415`, agent `383`, task
   `380`, change gate `312`, and published URL
-  `https://192.168.50.222:25443/published/static-site-deploy-smoke-1779382884/`.
+  `https://<operator-host>:25443/published/static-site-deploy-smoke-1779382884/`.
   The smoke verified the returned URL rendered the marker, the gate advanced to
   `completed`, and no active smoke agent was left behind.
 
@@ -6462,7 +6462,7 @@ Verification:
 - Live spawn proof created ticket `1418`, spawned Codex agent `385` / task
   `382`, answered the tea-price portion in the same chat reply, opened approval
   gate `314`, published the static page at
-  `https://192.168.50.222:25443/published/otters-1418/`, and left zero active
+  `https://<operator-host>:25443/published/otters-1418/`, and left zero active
   agents after completion.
 - Cleanup resolved demo tickets `1416` and `1418` and cancelled no-spawn smoke
   ticket `1417`.

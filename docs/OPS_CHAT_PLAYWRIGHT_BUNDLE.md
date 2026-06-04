@@ -36,10 +36,10 @@ The script is intentionally self-contained. It includes:
 For the current lab demo account:
 
 ```powershell
-$env:DASHBOARD_URL="https://192.168.50.222:25443"
+$env:DASHBOARD_URL="https://<operator-host>:25443"
 $env:DASHBOARD_USER="demo_account_1"
 $env:DASHBOARD_PASSWORD="<from vault: demo_account_1>"
-$env:OPS_CHAT_URL="https://192.168.50.222:3303"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
 $env:OPS_CHAT_USER="demo_account_1"
 $env:OPS_CHAT_PASSWORD="<from vault: demo_account_1>"
 $env:OPS_CHAT_ROOM_ID="!zSTElAvfSUDmAKZSWm:agentic-ops.local"
@@ -64,8 +64,8 @@ The script should print JSON like:
 ```json
 {
   "status": "passed",
-  "dashboard": {"url": "https://192.168.50.222:25443/", "user": "demo_account_1"},
-  "ops_chat": {"url": "https://192.168.50.222:3303/#/home", "user": "demo_account_1"},
+  "dashboard": {"url": "https://<operator-host>:25443/", "user": "demo_account_1"},
+  "ops_chat": {"url": "https://<operator-host>:3303/#/home", "user": "demo_account_1"},
   "message": {"marker": "demo-reliability-...", "ticketId": 1444},
   "outbound": null
 }
