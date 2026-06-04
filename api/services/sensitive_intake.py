@@ -31,21 +31,35 @@ FIELD_TYPE_ALIASES = {
     "dob": "dob",
     "date_of_birth": "dob",
     "government_id": "government_id",
+    "passport": "government_id",
+    "passport_number": "government_id",
     "drivers_license": "government_id",
+    "driver_license": "government_id",
+    "recovery_code": "recovery_code",
+    "mfa_recovery_code": "recovery_code",
     "credit_card": "financial",
     "bank_account": "financial",
 }
 
 SENSITIVE_PATTERNS = [
-    ("ssn", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
+    ("ssn", re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")),
     ("credential", re.compile(
-        r"(?i)\b(password|passwd|passcode|temporary password|temp password|initial password)\b\s*[:=]\s*([^\s,;]{6,})"
+        r"(?i)(?<![A-Za-z0-9])(password|passwd|passcode|temporary password|temp password|initial password)\b\s*[:=]\s*([^\s,;]{6,})"
+    )),
+    ("credential", re.compile(
+        r"(?i)(?<![A-Za-z0-9])(password|passwd|passcode|temporary password|temp password|initial password)[ _-]+([^\s,;._]{6,})"
     )),
     ("token", re.compile(
         r"(?i)\b(api[_ -]?key|token|secret|bearer)\b\s*[:=]\s*([A-Za-z0-9._~+/=$:-]{12,})"
     )),
     ("token", re.compile(r"\b(sk-[A-Za-z0-9_-]{16,}|sk-or-v1-[A-Za-z0-9]+|ghp_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,})\b")),
     ("token", re.compile(r"\b(AKIA[0-9A-Z]{16})\b")),
+    ("recovery_code", re.compile(
+        r"(?i)\b(recovery code|mfa recovery code|backup code)\b\s*[:=]\s*([A-Za-z0-9][A-Za-z0-9-]{5,})"
+    )),
+    ("government_id", re.compile(
+        r"(?i)\b(passport|passport number|driver'?s license|driver license|government id|national id)\b\s*[:=]\s*([A-Za-z0-9][A-Za-z0-9-]{5,})"
+    )),
     ("dob", re.compile(
         r"(?i)\b(dob|date of birth|birth date)\b\s*[:=]\s*([0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})"
     )),
@@ -79,6 +93,14 @@ def _redact_json_only(value):
     if isinstance(value, dict):
         return {key: _redact_json_only(item) for key, item in value.items()}
     return value
+
+
+def redact_text_for_metadata(text):
+    return _redact_text_only(text)
+
+
+def redact_json_for_metadata(value):
+    return _redact_json_only(value)
 
 
 def _secret_material():
@@ -533,7 +555,7 @@ def detect_sensitive_spans(text):
         for match in pattern.finditer(scan):
             start, end = match.span()
             secret_value = match.group(match.lastindex or 0) if match.lastindex else match.group(0)
-            if field_type in ("credential", "token", "dob") and match.lastindex and match.lastindex >= 2:
+            if field_type in ("credential", "token", "dob", "recovery_code", "government_id") and match.lastindex and match.lastindex >= 2:
                 value_start = match.start(match.lastindex)
                 value_end = match.end(match.lastindex)
                 secret_value = match.group(match.lastindex)

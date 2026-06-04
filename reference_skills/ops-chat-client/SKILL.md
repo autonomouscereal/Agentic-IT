@@ -152,6 +152,9 @@ Reference stack:
 - After Ops Chat or bridge changes, test a sensitive-field ask end-to-end:
   harness returns a `/secure-intake/` link, form submission records chat status
   with `siv_...` refs, and no raw values appear in chat/ticket/audit text.
+- Uploaded file metadata is also a sensitive-data boundary. Filenames, storage
+  refs, Matrix URLs, and metadata must be redacted before chat manifests,
+  ticket attachment rows, model prompts, or audit logs include them.
 - Side-effect recovery must not use "latest ticket in the room" for harmless
   chat. If a general/current-information message follows a ticket, answer the
   message unless the user clearly asks for ticket work or explicitly references

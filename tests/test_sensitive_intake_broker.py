@@ -23,6 +23,35 @@ def test_detects_common_sensitive_values():
     assert {item["field_type"] for item in spans} >= {"ssn", "credential", "token"}
 
 
+def test_detects_recovery_codes_and_government_ids():
+    module = load_module()
+    text = "MFA recovery code: AB12-CD34-EF56 passport number: X1234567 dob: 01/02/1990"
+    spans = module.detect_sensitive_spans(text)
+    detected = {item["field_type"] for item in spans}
+    assert detected >= {"recovery_code", "government_id", "dob"}
+    assert any(item["value"] == "AB12-CD34-EF56" for item in spans)
+    assert any(item["value"] == "X1234567" for item in spans)
+
+
+def test_metadata_redaction_handles_nested_attachment_like_json():
+    module = load_module()
+    raw = {
+        "filename": "alice_ssn_123-45-6789_password_SecretValue123.txt",
+        "storage_ref": "ops-chat-upload://session-1/passport number: X1234567.pdf",
+        "labels": ["token: sk-or-v1-abc123456789abc123"],
+    }
+    safe = module.redact_json_for_metadata(raw)
+    combined = str(safe)
+    assert "123-45-6789" not in combined
+    assert "SecretValue123" not in combined
+    assert "X1234567" not in combined
+    assert "sk-or-v1-abc123456789abc123" not in combined
+    assert "<redacted:ssn>" in combined
+    assert "<redacted:credential>" in combined
+    assert "<redacted:government_id>" in combined
+    assert "<redacted:token>" in combined
+
+
 def test_secure_request_submit_returns_references_not_values(monkeypatch):
     module = load_module()
     state = {"requests": {}, "values": [], "events": [], "next_id": 1}

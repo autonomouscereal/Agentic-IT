@@ -254,6 +254,18 @@ async def _sanitize_text_for_storage(text, source, actor="system", ticket_id=Non
         return str(text or "")
 
 
+def _redact_metadata_value(value):
+    try:
+        from services import sensitive_intake
+        if isinstance(value, str):
+            return sensitive_intake.redact_text_for_metadata(value)
+        if isinstance(value, (dict, list)):
+            return sensitive_intake.redact_json_for_metadata(value)
+    except Exception:
+        pass
+    return value
+
+
 def _can_outbound_create(provider, ticket_class):
     return provider != "local"
 
@@ -589,6 +601,9 @@ async def add_attachment_metadata(
 ):
     if not await fetchrow("SELECT id FROM tickets WHERE id = $1", ticket_id):
         return {"error": "Ticket not found"}
+    filename = _redact_metadata_value(filename or "attachment.bin")
+    storage_ref = _redact_metadata_value(storage_ref) if storage_ref else storage_ref
+    metadata = _redact_metadata_value(metadata or {})
     attachment_id = await fetchval("""
         INSERT INTO ticket_attachments (
             ticket_id, note_id, filename, content_type, storage_ref,

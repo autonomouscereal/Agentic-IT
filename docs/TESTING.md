@@ -48,8 +48,8 @@ python3 scripts/smoke_sensitive_intake.py http://127.0.0.1:25480
 The smoke creates a sensitive field request, verifies request metadata
 redaction, verifies public form metadata, blocks missing required fields before
 storage, submits multiple field types, blocks a second submit, checks
-requested/rejected/submitted events, and verifies API responses contain refs
-only.
+requested/rejected/submitted events, checks attachment metadata redaction, and
+verifies API responses contain refs only.
 
 Additional live/UI checks used for the 2026-06-04 broker hardening:
 
@@ -65,9 +65,34 @@ Additional live/UI checks used for the 2026-06-04 broker hardening:
 - Accidental paste path: ticket title/description/note text containing
   synthetic SSN/password/token is stored and returned as
   `<sensitive:type:siv_...>` references only.
+- Attachment metadata path: filenames, storage refs, Matrix URLs, and metadata
+  containing synthetic SSN/password/token/recovery-code/government-ID values are
+  redacted before ticket linkage and audit.
 - Auth/expiry path: invalid token returns 404, expired forms cannot be
   submitted, unauthenticated request listing is blocked, and authenticated
   listing works.
+
+2026-06-04 full local regression after sensitive metadata hardening:
+
+- `python -m pytest -q`: `229 passed`
+- `python -m py_compile api\services\sensitive_intake.py api\routes\ops_chat.py api\services\ticket_service.py scripts\smoke_sensitive_intake.py`: passed
+- `node --check frontend\js\dashboard.js`: passed
+- `python scripts\text_hygiene.py`: passed
+- `docker compose config --quiet`: passed with dummy runtime secrets
+
+2026-06-04 live AI-server E2E smoke bundle with enforced auth:
+
+- `/health`: ok
+- `scripts/smoke_dashboard_auth_enforcement.py`: passed
+- `scripts/smoke_dashboard_https.py`: passed
+- `scripts/smoke_global_search.py`: passed
+- `scripts/smoke_setup_platform.py --no-spawn-agent`: passed
+- `scripts/smoke_ops_chat.py` with `OPS_CHAT_SMOKE_SPAWN_AGENT=false`: passed
+- `scripts/smoke_service_desk_intake.py`: passed
+- `scripts/smoke_access_request_control_plane.py`: passed
+- `scripts/smoke_provider_adapters.py`: passed
+- `scripts/smoke_sensitive_intake.py`: passed
+- `/api/agents/active`: `count=0`, `worker_count=5`, `queued_depth=0`
 
 ## Agent Queue Recovery Checkpoint
 

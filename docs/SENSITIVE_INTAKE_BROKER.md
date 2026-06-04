@@ -21,6 +21,8 @@ keys, recovery codes, HR data, financial data, or customer-protected values.
   submissions record a rejected audit event but store no partial values.
 - Form tokens are one-submit. A correction or additional value set requires a
   new secure intake request.
+- Attachment metadata such as filenames, storage refs, Matrix URLs, and custom
+  metadata is redacted before it is persisted or linked to tickets.
 - Provider adapters must resolve sensitive references server-side inside
   approval-gated actions. Do not expose a generic "read secret" endpoint to
   agents.
@@ -148,8 +150,12 @@ python3 scripts/smoke_sensitive_intake.py http://127.0.0.1:25480
 
 The smoke verifies request metadata redaction, public form safety, missing
 required-field rejection, complete submission, one-submit token enforcement,
-requested/rejected/submitted audit events, and no raw submitted values in API
-responses.
+requested/rejected/submitted audit events, attachment metadata redaction, and no
+raw submitted values in API responses.
+
+The current detector covers common demo canaries for SSN, DOB, password-like
+credentials, API tokens, recovery codes, government IDs, and payment-card-like
+values. It is a defensive guard, not a substitute for the secure form path.
 
 ## Current Limitations
 

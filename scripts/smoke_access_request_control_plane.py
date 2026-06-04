@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Smoke test account access request tickets and approval gates."""
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -8,11 +9,15 @@ import urllib.request
 
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:25480").rstrip("/")
+SERVICE_TOKEN = os.getenv("DASHBOARD_SERVICE_TOKEN", "")
 
 
 def request(method, path, body=None, timeout=60):
     data = json.dumps(body).encode("utf-8") if body is not None else None
     headers = {"Content-Type": "application/json"} if body is not None else {}
+    if SERVICE_TOKEN:
+        headers["X-Dashboard-Service-Token"] = SERVICE_TOKEN
+        headers["X-Dashboard-Service-User"] = "access-request-smoke"
     req = urllib.request.Request(BASE + path, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

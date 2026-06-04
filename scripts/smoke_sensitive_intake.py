@@ -42,7 +42,16 @@ def main():
     synthetic_password = "SyntheticSecret123"
     synthetic_token = "sk-or-v1-abc123456789abc123"
     synthetic_card = "4111 1111 1111 1111"
-    leak_values = [synthetic_ssn, synthetic_password, synthetic_token, synthetic_card]
+    synthetic_recovery = "AB12-CD34-EF56"
+    synthetic_government_id = "X1234567"
+    leak_values = [
+        synthetic_ssn,
+        synthetic_password,
+        synthetic_token,
+        synthetic_card,
+        synthetic_recovery,
+        synthetic_government_id,
+    ]
 
     created = request(args.base_url, "POST", "/api/sensitive-intake/request", {
         "purpose": f"{marker} secure onboarding fields; never store {synthetic_ssn}",
@@ -56,6 +65,8 @@ def main():
             {"key": "initial_password", "type": "credential", "label": "Initial password", "required": True},
             {"key": "api_token", "type": "token", "label": "API token", "required": False},
             {"key": "payment_card", "type": "financial", "label": "Payment card", "required": False},
+            {"key": "recovery_code", "type": "recovery_code", "label": "MFA recovery code", "required": False},
+            {"key": "government_id", "type": "government_id", "label": "Government ID", "required": False},
         ],
         "metadata": {"marker": marker, "raw_values_logged": False, "redaction_probe": f"token: {synthetic_token}"},
     }, token=args.token)
@@ -92,6 +103,8 @@ def main():
             "initial_password": synthetic_password,
             "api_token": synthetic_token,
             "payment_card": synthetic_card,
+            "recovery_code": synthetic_recovery,
+            "government_id": synthetic_government_id,
         },
     })
     second_submit = request(args.base_url, "POST", f"/api/sensitive-intake/submit/{token}", {
@@ -118,6 +131,38 @@ def main():
         if expected not in events:
             raise SystemExit(f"missing audit event {expected}: {events}")
 
+    ticket = request(args.base_url, "POST", "/api/tickets", {
+        "title": f"{marker} attachment metadata redaction",
+        "description": "Sensitive intake smoke attachment metadata ticket.",
+        "ticket_class": "UserRequest",
+        "priority": "P4",
+        "status": "new",
+        "created_by": "smoke-sensitive-intake",
+        "sync_provider": False,
+        "security_classification": "confidential",
+    }, token=args.token)
+    attachment = request(args.base_url, "POST", f"/api/tickets/{ticket['id']}/attachments", {
+        "filename": f"alice_ssn_{synthetic_ssn}_password_{synthetic_password}.txt",
+        "content_type": "text/plain",
+        "storage_ref": f"ops-chat-upload://session-1/passport number: {synthetic_government_id}.txt",
+        "sha256": "0" * 64,
+        "size_bytes": 12,
+        "metadata": {
+            "source": "smoke",
+            "recovery": f"recovery code: {synthetic_recovery}",
+            "token": f"token: {synthetic_token}",
+        },
+    }, token=args.token)
+    if attachment.get("error"):
+        raise SystemExit(f"attachment metadata create failed: {attachment}")
+    context = request(args.base_url, "GET", f"/api/tickets/{ticket['id']}/context", token=args.token)
+    attachment_text = json.dumps(context.get("attachments", []), default=str)
+    for value in leak_values:
+        if value in attachment_text:
+            raise SystemExit("raw sensitive value leaked into attachment metadata")
+    if "<redacted:" not in attachment_text:
+        raise SystemExit("attachment metadata did not include redaction markers")
+
     print(json.dumps({
         "status": "passed",
         "marker": marker,
@@ -126,6 +171,8 @@ def main():
         "submitted_refs": [item.get("value_ref") for item in submitted.get("fields_submitted", [])],
         "events": events,
         "second_submit_blocked": True,
+        "attachment_metadata_redacted": True,
+        "attachment_ticket_id": ticket.get("id"),
         "raw_values_returned": False,
     }, indent=2))
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Smoke test provider adapter registration and outbound behavior."""
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -8,6 +9,7 @@ import urllib.request
 
 BASE = "http://localhost:25480"
 ITOP_CREATE = False
+SERVICE_TOKEN = os.getenv("DASHBOARD_SERVICE_TOKEN", "")
 
 for arg in sys.argv[1:]:
     if arg == "--itop-create":
@@ -22,6 +24,9 @@ def request(method, path, body=None):
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
+    if SERVICE_TOKEN:
+        headers["X-Dashboard-Service-Token"] = SERVICE_TOKEN
+        headers["X-Dashboard-Service-User"] = "provider-adapter-smoke"
     req = urllib.request.Request(f"{BASE}{path}", data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=30) as response:

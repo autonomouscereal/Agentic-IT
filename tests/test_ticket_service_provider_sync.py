@@ -9,6 +9,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_ticket_attachment_metadata_is_redacted_before_storage():
+    source = (ROOT / "api" / "services" / "ticket_service.py").read_text(encoding="utf-8")
+    attachment_body = source.split("async def add_attachment_metadata", 1)[1].split("\n\nasync def get_context", 1)[0]
+    assert "def _redact_metadata_value" in source
+    assert "filename = _redact_metadata_value(filename or \"attachment.bin\")" in attachment_body
+    assert "storage_ref = _redact_metadata_value(storage_ref) if storage_ref else storage_ref" in attachment_body
+    assert "metadata = _redact_metadata_value(metadata or {})" in attachment_body
+
+
 def load_ticket_service(calls):
     database = types.ModuleType("database")
     stored = {}

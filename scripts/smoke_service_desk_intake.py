@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Smoke test service desk intake, RACI CRUD, auto-classification, provider sync, and approval gate."""
 import json
+import os
 import sys
 import urllib.request
 
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:25480").rstrip("/")
+SERVICE_TOKEN = os.getenv("DASHBOARD_SERVICE_TOKEN", "")
 
 
 def request(method, path, body=None):
@@ -14,7 +16,10 @@ def request(method, path, body=None):
         BASE + path,
         data=data,
         method=method,
-        headers={"Content-Type": "application/json"} if body is not None else {},
+        headers={
+            **({"Content-Type": "application/json"} if body is not None else {}),
+            **({"X-Dashboard-Service-Token": SERVICE_TOKEN, "X-Dashboard-Service-User": "service-desk-intake-smoke"} if SERVICE_TOKEN else {}),
+        },
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8"))

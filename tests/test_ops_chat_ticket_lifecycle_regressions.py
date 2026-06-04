@@ -188,3 +188,12 @@ def test_ops_chat_local_agent_timeouts_default_to_one_hour_and_cleanup_cancelled
     assert "OPS_CHAT_GENERAL_AGENT_TIMEOUT_SECONDS=3600" in env_example
     assert "OPS_CHAT_INTAKE_AGENT_TIMEOUT_SECONDS=3600" in env_example
     assert "OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS: ${OPS_CHAT_DASHBOARD_TIMEOUT_SECONDS:-3600}" in compose
+
+
+def test_ops_chat_redacts_sensitive_attachment_metadata():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    safe_filename_body = source.split("def _safe_filename", 1)[1].split("\ndef _attachment_summary", 1)[0]
+    persist_body = source.split("async def _persist_chat_attachments", 1)[1].split("\n\nasync def _link_chat_attachments_to_ticket", 1)[0]
+    assert "sensitive_intake.redact_text_for_metadata(name)" in safe_filename_body
+    assert "sensitive_intake.redact_text_for_metadata(storage_ref)" in persist_body
+    assert "sensitive_intake.redact_text_for_metadata(matrix_url)" in persist_body

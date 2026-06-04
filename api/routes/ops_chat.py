@@ -184,6 +184,10 @@ async def _record_message(session_id, role, body, metadata=None, ticket_id=None)
 
 def _safe_filename(value, fallback="attachment.bin"):
     name = os.path.basename(str(value or "").strip()) or fallback
+    try:
+        name = sensitive_intake.redact_text_for_metadata(name)
+    except Exception:
+        pass
     name = re.sub(r"[^A-Za-z0-9._ -]", "_", name).strip(" .")
     return name[:180] or fallback
 
@@ -238,6 +242,17 @@ async def _persist_chat_attachments(session_id, attachments):
         digest = hashlib.sha256(payload or f"{session_id}:{idx}:{filename}".encode("utf-8")).hexdigest()
         local_path = ""
         storage_ref = item.get("storage_ref") or ""
+        if storage_ref:
+            try:
+                storage_ref = sensitive_intake.redact_text_for_metadata(storage_ref)
+            except Exception:
+                pass
+        matrix_url = item.get("matrix_url") or item.get("url")
+        if matrix_url:
+            try:
+                matrix_url = sensitive_intake.redact_text_for_metadata(matrix_url)
+            except Exception:
+                pass
         if payload:
             local_path = str(dest_dir / f"{digest[:16]}_{filename}")
             Path(local_path).write_bytes(payload)
@@ -250,7 +265,7 @@ async def _persist_chat_attachments(session_id, attachments):
             "sha256": digest,
             "storage_ref": storage_ref,
             "local_path": local_path,
-            "matrix_url": item.get("matrix_url") or item.get("url"),
+            "matrix_url": matrix_url,
             "metadata": {
                 "source": "ops-chat",
                 "matrix_event_id": item.get("matrix_event_id"),
