@@ -158,6 +158,11 @@ Reference stack:
   account setup, HR, vendor payment, tax, banking, and credential collection
   should trigger the secure form on the agent's judgment. Harmless chat and
   normal non-sensitive tickets should not trigger the form.
+- End-to-end account tests should prove the form is not just decorative. For a
+  local dashboard login with an initial password, the user should submit the
+  password through secure intake, the ticket worker should call
+  `POST /api/access/users/secure-local-account`, and Playwright should verify
+  the created user can log in and cannot perform admin-only mutations.
 - Also test the ticket-worker fallback path through Element: if an agent calls
   `/api/tickets/{id}/request-info` for account setup, SSN, DOB, credentials,
   recovery codes, tokens, government IDs, HR, or financial fields, the platform
@@ -402,7 +407,7 @@ $env:OPS_CHAT_PASSWORD="<from vault>"
 $env:OPS_CHAT_ROOM_ID="<optional known bot room id>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
 $env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
-$env:OPS_CHAT_SENSITIVE_SCENARIO="fallback"  # fallback, direct, redaction, judgment, all
+$env:OPS_CHAT_SENSITIVE_SCENARIO="fallback"  # fallback, direct, redaction, judgment, account-e2e, all
 $env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
 $env:NODE_PATH="$(npm root -g)"  # only needed when Playwright is installed globally
 node scripts/smoke_ops_chat_sensitive_intake_ui.js
@@ -420,6 +425,13 @@ or Element changes. It covers ticket-requester fallback, direct chat-harness
 judgment, and negative controls for harmless/non-sensitive asks. Use alphabetic
 markers when testing against older deployments that may still over-redact long
 numeric timestamp markers as financial data.
+
+Run `OPS_CHAT_SENSITIVE_SCENARIO=account-e2e` after brokered action adapter,
+dashboard access, ticket-worker prompt, or login changes. Expected proof:
+Element secure form first, ticket worker completion, iTop sync, local dashboard
+account created with `auditor`, dashboard UI login succeeds, auditor mutation
+attempt returns HTTP 403, `/api/access/users` omits password hashes, and active
+agents return to zero.
 
 If Element is blank in Playwright but `/`, `/config.json`, and bundle `HEAD`
 requests look healthy, test a full bundle download. A known failure mode is

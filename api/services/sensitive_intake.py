@@ -795,6 +795,63 @@ async def get_request_by_ref(request_ref):
     return public
 
 
+async def get_submitted_values_for_adapter(request_ref):
+    """Return decrypted values for trusted server-side provider adapters only.
+
+    This is intentionally not exposed as a public/raw-value API. Adapters should
+    consume the values in-process and return only refs, status, and evidence.
+    """
+    row = await fetchrow(
+        """
+        SELECT id, request_ref, status, purpose, ticket_id, session_id,
+               requested_by, requester_name, requester_email, channel,
+               fields, metadata, submitted_at, created_at
+        FROM sensitive_intake_requests
+        WHERE request_ref = $1
+        """,
+        request_ref,
+    )
+    if not row:
+        return {"error": "request_not_found", "request_ref": request_ref}
+    if row.get("status") != "submitted":
+        return {
+            "error": "request_not_submitted",
+            "request_ref": row.get("request_ref"),
+            "status": row.get("status"),
+        }
+    value_rows = await fetchall(
+        """
+        SELECT value_ref, field_key, field_label, field_type, encrypted_value,
+               value_len, status, submitted_by, created_at
+        FROM sensitive_intake_values
+        WHERE request_id = $1
+        ORDER BY id ASC
+        """,
+        row["id"],
+    )
+    values = []
+    for item in value_rows or []:
+        values.append({
+            "value_ref": item.get("value_ref"),
+            "field_key": item.get("field_key"),
+            "field_label": item.get("field_label"),
+            "field_type": item.get("field_type"),
+            "value": decrypt_value(item.get("encrypted_value")),
+            "value_len": item.get("value_len"),
+            "status": item.get("status"),
+            "submitted_by": item.get("submitted_by"),
+        })
+    return {
+        "request_ref": row.get("request_ref"),
+        "status": row.get("status"),
+        "purpose": row.get("purpose"),
+        "ticket_id": row.get("ticket_id"),
+        "session_id": row.get("session_id"),
+        "values": values,
+        "raw_values_for_adapter_only": True,
+    }
+
+
 def detect_sensitive_spans(text):
     value = str(text or "")
     if not value:

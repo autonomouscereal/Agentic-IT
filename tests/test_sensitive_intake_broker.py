@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "api"))
 
 
 def load_module():
+    sys.modules.pop("database", None)
     spec = importlib.util.spec_from_file_location("sensitive_intake_under_test", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

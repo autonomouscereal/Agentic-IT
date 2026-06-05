@@ -201,6 +201,49 @@ Example:
 }
 ```
 
+## Access Management
+
+`GET /api/access/users`
+
+Lists dashboard users, roles, and safe account metadata. The response must not
+include `password_hash`, raw credentials, or submitted secure-intake values.
+
+`POST /api/access/users/secure-local-account`
+
+Creates or updates a local dashboard login using a submitted secure-intake
+request. This is the brokered adapter for account provisioning when an initial
+password was collected through `/secure-intake/`.
+
+Example:
+
+```json
+{
+  "request_ref": "sir_...",
+  "username": "secure_e2e_example",
+  "display_name": "Secure E2E Example",
+  "email": "optional@example.invalid",
+  "role": "auditor",
+  "enabled": true
+}
+```
+
+The adapter resolves the credential value server-side, hashes it, assigns the
+requested dashboard role, writes audit evidence, and returns no raw values:
+
+```json
+{
+  "status": "created",
+  "username": "secure_e2e_example",
+  "role": "auditor",
+  "password_set": true,
+  "raw_values_returned": false
+}
+```
+
+Agents should use this adapter after approval/policy permits account
+provisioning. Do not ask the user to paste the password into chat, ticket
+notes, or provider fields.
+
 Use `close_provider: false` when the dashboard status should change but the
 external ITSM record should remain open for human review.
 

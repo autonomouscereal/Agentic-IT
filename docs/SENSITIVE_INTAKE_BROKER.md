@@ -63,6 +63,44 @@ python ops_chat_tool.py request-sensitive-fields \
 The browser form uses native `required` controls for immediate user feedback.
 The API still enforces the same checks server-side before storing anything.
 
+## Brokered Action Adapter
+
+The broker is not only a form. It is a handoff boundary for server-side
+provider adapters.
+
+Current implemented adapter:
+
+`POST /api/access/users/secure-local-account`
+
+Purpose: create or update a local Agentic Operations dashboard login from a
+submitted secure-intake request.
+
+Input:
+
+```json
+{
+  "request_ref": "sir_...",
+  "username": "secure_e2e_example",
+  "display_name": "Secure E2E Example",
+  "email": "optional@example.invalid",
+  "role": "auditor",
+  "enabled": true
+}
+```
+
+Behavior:
+
+- Resolves the submitted credential value inside the API process only.
+- Hashes the password with the dashboard password hasher.
+- Creates or updates the dashboard user and role.
+- Logs only refs/status/evidence.
+- Returns `raw_values_returned: false`; agents never receive the password.
+- Requires the same access-admin boundary as the normal `/api/access/users`
+  management endpoints.
+
+Normal `/api/access/users` output intentionally omits `password_hash` and any
+raw credential material.
+
 ## Defensive Redaction
 
 The broker also protects accidental pastes. The following paths call the
@@ -182,7 +220,11 @@ node scripts/smoke_ops_chat_sensitive_intake_ui.js
 - `judgment`: natural no-hint prompts prove the chat agent chooses secure
   intake for protected onboarding and financial packets, while harmless chat
   and normal software requests avoid unnecessary secure forms.
-- `all`: runs fallback, direct, redaction, and judgment in one browser session.
+- `account-e2e`: natural dashboard account request triggers secure intake,
+  submits a brokered password, creates a real local read-only dashboard login
+  through a ticket worker, verifies UI login, and verifies read-only denial.
+- `all`: runs fallback, direct, redaction, judgment, and account-e2e in one
+  browser session.
 
 This browser test logs into Element, creates a Matrix-linked ticket, forces the
 ticket requester-info path to request account-sensitive fields, waits for a
@@ -280,6 +322,28 @@ Fresh no-hint rerun after docs/test hardening, 2026-06-05:
 - Non-sensitive 7-Zip request created ticket `1682` without a secure form;
   synthetic agent `501` was stopped and ticket `1682` was cancelled.
 - Harmless Wyoming-capital question created no ticket and no secure form.
+
+End-to-end brokered account proof, 2026-06-05:
+
+- Marker `opsacctfinalB`, scenario `account-e2e`.
+- User asked naturally in Element for a local read-only dashboard account and
+  said they had an initial temporary password and identity verification details
+  to provide. The chat agent selected secure intake before ticket creation.
+- Secure request `sir_QmLqRpPngf6pQqIjzstWorO` collected two protected fields:
+  initial temporary password and identity verification details.
+- After form submission, the agent created and worked ticket `1684`; iTop sync
+  reference `1083`; final status `resolved`; agent `503`.
+- The worker used the brokered account adapter to create local dashboard user
+  `secure_e2e_acctfinalb` with role `auditor`.
+- Playwright verified the new user could log in through the dashboard UI with
+  the submitted password, then verified read-only enforcement by attempting
+  `POST /api/access/users` as that user and receiving HTTP `403`.
+- Final live checks: `/api/access/users` returned no `password_hash` keys and
+  no PBKDF2 hash strings; ticket context did not contain the generated
+  password; active agents and runner processes returned to zero.
+- Screenshots:
+  `docs/evidence/opsacctfinalB/secure-intake-form-requested.png` and
+  `docs/evidence/opsacctfinalB/secure-intake-form-submitted.png`.
 
 ## Current Limitations
 

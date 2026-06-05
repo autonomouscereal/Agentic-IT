@@ -11,8 +11,10 @@
  *     storage/model prompts.
  *   - judgment: natural no-hint prompts prove the agent chooses secure intake
  *     only when protected values are involved.
+ *   - account-e2e: natural account request -> secure form -> ticket worker
+ *     creates a real read-only dashboard login -> UI login verifies it.
  *
- * Set OPS_CHAT_SENSITIVE_SCENARIO=fallback|direct|redaction|judgment|all.
+ * Set OPS_CHAT_SENSITIVE_SCENARIO=fallback|direct|redaction|judgment|account-e2e|all.
  *
  * Fallback path:
  *   1. login to dashboard and Element through Keycloak;
@@ -26,6 +28,7 @@
  * printed and screenshots are taken before fill / after submit only.
  */
 
+const crypto = require("crypto");
 const { chromium } = require("playwright");
 
 const dashboardUrl = (process.env.DASHBOARD_URL || "https://127.0.0.1:25443").replace(/\/$/, "");
@@ -336,7 +339,7 @@ async function getFormPayload(context, formUrl) {
   return await response.json();
 }
 
-function generatedFormValues(fields) {
+function generatedFormValues(fields, overrides = {}) {
   const suffix = marker.replace(/[^a-zA-Z0-9]/g, "").slice(-10);
   const values = {};
   const generated = [];
@@ -345,7 +348,8 @@ function generatedFormValues(fields) {
     const type = String(field.type || "").toLowerCase();
     const label = String(field.label || key).toLowerCase();
     let value = `Demo ${field.label || key} ${suffix}`;
-    if (type === "ssn" || label.includes("ssn") || label.includes("social security")) value = `321-54-${String(Date.now()).slice(-4)}`;
+    if (Object.prototype.hasOwnProperty.call(overrides, key)) value = overrides[key];
+    else if (type === "ssn" || label.includes("ssn") || label.includes("social security")) value = `321-54-${String(Date.now()).slice(-4)}`;
     else if (type === "dob" || label.includes("birth")) value = "1991-02-03";
     else if (type === "credential" || label.includes("password")) value = `Tmp${suffix}!DemoPass42`;
     else if (type === "email" || label.includes("email")) value = `bob.${suffix.toLowerCase()}@example.invalid`;
@@ -532,6 +536,91 @@ async function verifySessionNoLeak(context, markerValue, forbiddenValues, option
     sensitive_ref_count: refCount,
     contains_sensitive_refs: /<sensitive:[^>]+:siv_[A-Za-z0-9]+>/.test(text) || /siv_[A-Za-z0-9]+/.test(text),
   };
+}
+
+async function getTicketContext(context, ticketId) {
+  const response = await context.request.get(`${dashboardUrl}/api/tickets/${ticketId}/context`);
+  if (!response.ok()) {
+    throw new Error(`ticket context failed for ${ticketId}: HTTP ${response.status()} ${(await response.text()).slice(0, 600)}`);
+  }
+  return await response.json();
+}
+
+async function waitForTicketTerminal(context, ticketId, timeout = 900000) {
+  const deadline = Date.now() + timeout;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await getTicketContext(context, ticketId);
+    const ticket = last.ticket || {};
+    const status = String(ticket.status || "").toLowerCase();
+    if (["resolved", "closed", "implemented", "cancelled"].includes(status)) return last;
+    if (["failed", "blocked", "awaiting_access", "pending_approval"].includes(status)) {
+      return last;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+  const status = last && last.ticket ? last.ticket.status : "unknown";
+  throw new Error(`ticket ${ticketId} did not reach terminal/wait state before timeout; last status=${status}`);
+}
+
+async function waitForChatClosure(page, ticketId, username, timeout = 180000) {
+  await page.waitForFunction(
+    ({ ticketId, username }) => {
+      const text = document.body.innerText || "";
+      const token = `ticket #${ticketId}`;
+      const idx = text.toLowerCase().lastIndexOf(token);
+      if (idx < 0) return false;
+      const segment = text.slice(idx);
+      return /Agent completed this request|status update|changed to resolved|Ticket status changed/i.test(segment)
+        && segment.includes(username);
+    },
+    { ticketId, username },
+    { timeout },
+  );
+}
+
+async function verifyDashboardLoginUi(baseContext, username, password) {
+  const browser = baseContext.browser();
+  const loginContext = await browser.newContext({
+    ignoreHTTPSErrors: ignoreHttpsErrors,
+    viewport: { width: 1280, height: 900 },
+  });
+  const page = await loginContext.newPage();
+  try {
+    await page.goto(`${dashboardUrl}/login`, { waitUntil: "domcontentloaded" });
+    await page.locator('input[name="username"], input#username').first().fill(username);
+    await page.locator('input[name="password"], input#password').first().fill(password);
+    await page.locator('button[type="submit"], input[type="submit"]').first().click();
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.getByText(/Agentic Operations|Overview|Tickets|Agents/i).first().waitFor({ state: "visible", timeout: 60000 });
+    const me = await loginContext.request.get(`${dashboardUrl}/api/access/me`);
+    if (!me.ok()) throw new Error(`new account /api/access/me failed: HTTP ${me.status()}`);
+    const mePayload = await me.json();
+    const roles = mePayload.roles || [];
+    if (!roles.includes("auditor")) {
+      throw new Error(`new account did not have auditor role: ${JSON.stringify(roles)}`);
+    }
+    const denied = await loginContext.request.post(`${dashboardUrl}/api/access/users`, {
+      data: {
+        username: `should_not_create_${Date.now()}`,
+        display_name: "Should Not Create",
+        provider: "local",
+        enabled: true,
+      },
+    });
+    if (denied.status() !== 403) {
+      throw new Error(`read-only account mutation was not denied; HTTP ${denied.status()} ${(await denied.text()).slice(0, 300)}`);
+    }
+    return {
+      status: "passed",
+      username,
+      roles,
+      read_only_mutation_status: denied.status(),
+      password_printed: false,
+    };
+  } finally {
+    await loginContext.close();
+  }
 }
 
 async function runFallbackScenario(context, chatPage, formPage) {
@@ -791,6 +880,88 @@ async function runJudgmentScenario(context, chatPage, formPage) {
   };
 }
 
+async function runAccountE2EScenario(context, chatPage, formPage) {
+  const accountMarker = `${marker}-account-e2e`;
+  const userSuffix = marker.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(-10) || String(Date.now()).slice(-6);
+  const username = `secure_e2e_${userSuffix}`;
+  const password = `Tmp-${crypto.randomBytes(12).toString("base64url")}-ReadOnly42`;
+  const firstText = await sendMessage(
+    chatPage,
+    [
+      `Dashboard account provisioning test marker ${accountMarker}.`,
+      `Please create a local Agentic Operations dashboard account named ${username}.`,
+      "It should be read-only/auditor access.",
+      "I have an initial temporary password and identity verification details to provide before you create it.",
+      "Collect what you need from me and then complete the account setup.",
+    ].join(" "),
+    /\/secure-intake\/|protected information|protected values|intake/i,
+    900000,
+    accountMarker,
+  );
+  const firstSegment = firstText.slice(firstText.lastIndexOf(accountMarker));
+  if (/Dashboard ticket: #|I created ticket #/i.test(firstSegment)) {
+    throw new Error("account E2E created a ticket before brokering protected values");
+  }
+  const formUrl = await waitForSecureLinkAfter(chatPage, accountMarker, 240000);
+  const form = await getFormPayload(context, formUrl);
+  const fields = form.fields || [];
+  const labels = fields.map((field) => String(field.label || field.key || "").toLowerCase()).join(" | ");
+  if (!/password|credential|passcode/.test(labels)) {
+    throw new Error(`account E2E form did not request a credential/password field: ${labels}`);
+  }
+  const overrides = {};
+  for (const field of fields) {
+    const type = String(field.type || "").toLowerCase();
+    const label = String(field.label || field.key || "").toLowerCase();
+    if (type === "credential" || label.includes("password") || label.includes("credential") || label.includes("passcode")) {
+      overrides[field.key] = password;
+    } else if (type === "username" || label.includes("username")) {
+      overrides[field.key] = username;
+    }
+  }
+  const { values, generated } = generatedFormValues(fields, overrides);
+  const requestRef = await submitSecureForm(formPage, formUrl, values);
+  await verifyRequestNoLeak(context, requestRef || form.request_ref, generated);
+
+  const finishMarker = `${accountMarker}-finish`;
+  const finishText = await sendMessage(
+    chatPage,
+    [
+      `I submitted the secure form for marker ${finishMarker}.`,
+      `Please finish creating a fresh new local dashboard account ${username} with auditor/read-only access.`,
+      "Use the submitted secure intake request from this chat for the initial password.",
+    ].join(" "),
+    /Dashboard ticket: #|I created ticket #|Ticket #/,
+    900000,
+    finishMarker,
+  );
+  const ticketId = latestTicketAfter(finishText, finishMarker);
+  if (!ticketId) throw new Error("account E2E finish request did not create a ticket");
+  const finalContext = await waitForTicketTerminal(context, ticketId, 900000);
+  const ticketStatus = String(finalContext.ticket?.status || "").toLowerCase();
+  if (!["resolved", "closed", "implemented"].includes(ticketStatus)) {
+    throw new Error(`account E2E ticket did not complete; status=${finalContext.ticket?.status}`);
+  }
+  await waitForChatClosure(chatPage, ticketId, username, 240000);
+  const loginProof = await verifyDashboardLoginUi(context, username, password);
+  const contextProof = await getTicketContext(context, ticketId);
+  const contextText = JSON.stringify(contextProof);
+  if (contextText.includes(password)) {
+    throw new Error("account E2E ticket context leaked the generated password");
+  }
+  return {
+    status: "passed",
+    scenario: "account-e2e",
+    username,
+    ticket_id: ticketId,
+    ticket_status: finalContext.ticket?.status,
+    secure_request_ref: requestRef || form.request_ref,
+    field_count: fields.length,
+    login: loginProof,
+    raw_password_printed: false,
+  };
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -812,6 +983,7 @@ async function runJudgmentScenario(context, chatPage, formPage) {
       else if (item === "direct") results.push(await runDirectScenario(context, chatPage, formPage));
       else if (item === "redaction") results.push(await runRedactionScenario(context, chatPage));
       else if (item === "judgment") results.push(await runJudgmentScenario(context, chatPage, formPage));
+      else if (item === "account-e2e") results.push(await runAccountE2EScenario(context, chatPage, formPage));
       else throw new Error(`unknown OPS_CHAT_SENSITIVE_SCENARIO=${scenario}`);
     }
 

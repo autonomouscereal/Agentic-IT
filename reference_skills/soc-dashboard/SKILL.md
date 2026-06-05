@@ -69,6 +69,12 @@ Sensitive-intake regression expectations:
 - Secure request detail may show `siv_...` value refs with
   `raw_values_returned=false`; normal ticket/chat/audit surfaces must not show
   raw submitted values.
+- Brokered provider/action adapters may resolve encrypted values server-side.
+  Current dashboard account adapter: `POST
+  /api/access/users/secure-local-account` consumes a submitted credential ref,
+  hashes the password, creates/updates a local dashboard user, assigns the
+  requested role, and returns `raw_values_returned=false`.
+- `/api/access/users` must never return `password_hash` or hash strings.
 - `/api/tickets/{id}/request-info` must infer account/protected-field asks and
   create a secure intake request instead of writing a plain Matrix/ticket note.
   This is a safety fallback for ticket agents that ask for sensitive requester
@@ -84,6 +90,10 @@ Sensitive-intake regression expectations:
   ticket-requester fallback, direct chat-harness secure form,
   accidental-paste redaction, no-hint account/finance judgment, and negative
   controls for harmless/non-sensitive asks.
+- Use `OPS_CHAT_SENSITIVE_SCENARIO=account-e2e` when validating the complete
+  account path: Element secure form, ticket worker, iTop sync, created auditor
+  account, dashboard UI login, auditor mutation denial, no hash leakage, and
+  active agents returning to zero.
 - Use `docs/SENSITIVE_DATA_HARDENING_PLAN.md` when reviewing remaining leak
   paths such as uploaded file contents, generated artifacts, memory, search, and
   model-provider routing.

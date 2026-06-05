@@ -74,6 +74,21 @@ Unified CLI for managing users across all 5 platforms:
 - `list` - List users across platforms
 - `set-password` - Set password across platforms
 
+## Dashboard Brokered Account Creation
+
+For Agentic Operations dashboard local-login accounts created from Ops Chat,
+do not pass initial passwords through chat, notes, or agent prompts. Use the
+Sensitive Intake Broker and then the access adapter:
+
+```text
+POST /api/access/users/secure-local-account
+```
+
+The adapter consumes the submitted `sir_...` request ref server-side, hashes the
+credential value, creates/updates the local dashboard user, assigns the role
+such as `auditor`, and returns only refs/status with
+`raw_values_returned=false`. `/api/access/users` must omit `password_hash`.
+
 ### Platform Backends
 - **KeycloakBackend** - Admin REST API via `keycloak_admin.py`
 - **iTopBackend** - Direct MariaDB SQL (bcrypt password hashing)

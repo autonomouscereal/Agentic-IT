@@ -63,6 +63,13 @@ SENSITIVE_REQUESTER_INPUT_RULE = """Sensitive requester-input rule:
   checkpoint.json to waiting_for_user below 100%, and stop.
 - The form is one-submit. Raw submitted values stay encrypted in the broker;
   agents receive refs through ticket context after submission.
+- For local Agentic Operations dashboard account creation that needs an initial
+  password, do not ask for or print the password. After the form is submitted,
+  create or update the account through
+  POST /api/access/users/secure-local-account with `request_ref`, `username`,
+  optional `display_name` / `email`, and `role` such as `auditor`. That adapter
+  resolves the credential server-side, hashes it, returns
+  `raw_values_returned: false`, and never gives the password to the agent.
 - If you mistakenly use POST /api/tickets/{ticket_id}/request-info for a
   protected/account-sensitive ask, the platform will convert it into a secure
   form, but you should still prefer the broker endpoint when you know the
