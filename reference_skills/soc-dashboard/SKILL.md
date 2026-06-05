@@ -66,10 +66,17 @@ Sensitive-intake regression expectations:
 - Submitted form tokens are one-use; create a new secure form for corrections.
 - Ticket details should show Secure Intake evidence with request refs, status,
   field labels, timestamps, and no raw values.
+- `/api/tickets/{id}/request-info` must infer account/protected-field asks and
+  create a secure intake request instead of writing a plain Matrix/ticket note.
+  This is a safety fallback for ticket agents that ask for sensitive requester
+  input through the normal requester-info path.
 - Attachment filenames, storage refs, Matrix URLs, and metadata must be
   redacted before they are stored, linked to tickets, indexed, or logged.
 - Run `python3 scripts/smoke_sensitive_intake.py http://127.0.0.1:25480`
   after broker, ticket, Ops Chat, auth, or provider-sync changes.
+- Run `node scripts/smoke_ops_chat_sensitive_intake_ui.js` from an operator
+  workstation after chat/requester-info changes to prove the real Element UI
+  receives a `/secure-intake/` link and ticket context contains refs only.
 - Use `docs/SENSITIVE_DATA_HARDENING_PLAN.md` when reviewing remaining leak
   paths such as uploaded file contents, generated artifacts, memory, search, and
   model-provider routing.

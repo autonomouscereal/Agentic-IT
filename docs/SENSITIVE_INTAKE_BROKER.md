@@ -130,6 +130,9 @@ Expected behavior:
 - Dashboard ticket details show Secure Intake evidence if linked to a ticket.
 - Event/audit views show requested/submitted status, field types, and refs,
   never raw values.
+- If a ticket worker mistakenly uses the normal ticket requester-info endpoint
+  for account setup or protected fields, the platform converts that outbound
+  ask into a secure form before it is delivered to Matrix/Element.
 
 Evidence screenshots:
 
@@ -148,6 +151,28 @@ export DASHBOARD_SERVICE_TOKEN="$(grep -E '^DASHBOARD_SERVICE_TOKEN=' .env | tai
 python3 scripts/smoke_sensitive_intake.py http://<loopback>:25480
 ```
 
+Run the real Matrix/Element intake proof from an operator workstation:
+
+```powershell
+$env:DASHBOARD_URL="https://<operator-host>:25443"
+$env:DASHBOARD_USER="demo_account_1"
+$env:DASHBOARD_PASSWORD="<from vault>"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
+$env:OPS_CHAT_USER="demo_account_1"
+$env:OPS_CHAT_PASSWORD="<from vault>"
+$env:OPS_CHAT_ROOM_ID="<optional known bot room id>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
+$env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
+node scripts/smoke_ops_chat_sensitive_intake_ui.js
+```
+
+This browser test logs into Element, creates a Matrix-linked ticket, forces the
+ticket requester-info path to request account-sensitive fields, waits for a
+`/secure-intake/` link in the actual chat room, submits the secure form through
+the browser, verifies ticket context contains `sir_...` and `siv_...` refs, and
+checks that the generated submitted values do not appear in ticket context.
+
 The smoke verifies request metadata redaction, public form safety, missing
 required-field rejection, complete submission, one-submit token enforcement,
 requested/rejected/submitted audit events, attachment metadata redaction, and no
@@ -156,6 +181,23 @@ raw submitted values in API responses.
 The current detector covers common demo canaries for SSN, DOB, password-like
 credentials, API tokens, recovery codes, government IDs, and payment-card-like
 values. It is a defensive guard, not a substitute for the secure form path.
+
+Latest live Element proof, 2026-06-05:
+
+- Marker: `ops-chat-sensitive-20260605121228`
+- Ticket: `1671` was created through the real Matrix/Element DM, used for the
+  proof, then cancelled as synthetic smoke evidence.
+- Secure request: `sir_MgSO2aue1inAhrp40SRebQi`
+- Field labels were clean and generic: full legal name, SSN, date of birth,
+  desired username, work email address, role, manager or sponsor, start date,
+  and initial password.
+- The browser submitted the form; dashboard context showed submitted refs only
+  and no raw generated values.
+- The script stopped its synthetic worker and left active agents at zero.
+- Screenshots:
+  `docs/evidence/ops-chat-sensitive-20260605121228/secure-intake-form-requested.png`,
+  and
+  `docs/evidence/ops-chat-sensitive-20260605121228/secure-intake-form-submitted.png`.
 
 ## Current Limitations
 

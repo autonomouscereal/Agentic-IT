@@ -106,6 +106,23 @@ $env:OPS_CHAT_ROOM_ID="!zSTElAvfSUDmAKZSWm:agentic-ops.local"
 node scripts/smoke_ops_chat_playwright.js
 ```
 
+Run the sensitive-information intake proof when changing chat, ticket
+requester-info, bridge outbound delivery, or the sensitive broker:
+
+```powershell
+$env:DASHBOARD_URL="https://<operator-host>:25443"
+$env:DASHBOARD_USER="demo_account_1"
+$env:DASHBOARD_PASSWORD="<from vault>"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
+$env:OPS_CHAT_USER="demo_account_1"
+$env:OPS_CHAT_PASSWORD="<from vault>"
+$env:OPS_CHAT_ROOM_ID="<optional known bot room id>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
+$env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
+node scripts/smoke_ops_chat_sensitive_intake_ui.js
+```
+
 For demo smoke tests, cancel or skip Element verification/encryption prompts.
 Matrix E2EE is not part of the Ops Chat demo proof; the important path is
 Keycloak login, Matrix reachability, bridge handoff, dashboard ticket linkage,
@@ -129,6 +146,11 @@ Expected:
   The bridge polls `/api/ops-chat/outbound/pending`, sends each user-facing
   update, and acks it through `/api/ops-chat/outbound/ack` so restarts do not
   duplicate messages.
+- ticket requester-info asks that include account setup, SSN, DOB, credentials,
+  recovery codes, tokens, government IDs, HR, or financial values are converted
+  to a `/secure-intake/` broker form before the user sees them in Element. The
+  submitted values remain encrypted; Matrix, tickets, provider sync, and audit
+  views receive refs/status only.
 - the bridge sets Matrix typing state and sends a short working acknowledgement
   for long harness turns (`OPS_CHAT_WORKING_ACK_ENABLED=true`,
   `OPS_CHAT_WORKING_ACK_DELAY_SECONDS=2.5` by default) so users do not have to

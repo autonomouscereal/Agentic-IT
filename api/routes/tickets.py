@@ -8,6 +8,23 @@ from datetime import datetime
 from database import fetchall, fetchrow, execute, fetchval, json_dumps
 from services import provider_registry, ticket_service
 try:
+    from services import sensitive_intake
+except ImportError:  # unit-test stubs may load this route without broker service
+    class _SensitiveIntakeFallback:
+        @staticmethod
+        def infer_request_info_fields(*args, **kwargs):
+            return []
+
+        @staticmethod
+        def redact_text_for_metadata(value):
+            return str(value or "")
+
+        @staticmethod
+        async def create_request(*args, **kwargs):
+            return {"error": "sensitive_intake_unavailable"}
+
+    sensitive_intake = _SensitiveIntakeFallback()
+try:
     from services import access_control
 except ImportError:  # unit-test stubs load this route without service package contents
     class _AccessControlFallback:
@@ -995,26 +1012,71 @@ async def request_user_information(
     context: str = Body(""),
 ):
     """Put a ticket into awaiting-user-response and record the outbound ask."""
-    ticket = await fetchrow("SELECT id, status FROM tickets WHERE id = $1", ticket_id)
+    ticket = await fetchrow("SELECT * FROM tickets WHERE id = $1", ticket_id)
     if not ticket:
         return {"error": "Ticket not found"}
-    note = "\n".join([
-        "Awaiting user response",
-        f"Requested by: {requested_by}",
-        f"Contact method: {contact_method}",
-        f"Recipient: {recipient or 'not recorded'}",
-        "",
-        question,
-        "",
-        context,
-    ]).strip()
+    secure_fields = sensitive_intake.infer_request_info_fields(question, context=context, ticket=ticket)
+    secure_request = None
+    safe_question = sensitive_intake.redact_text_for_metadata(question)
+    safe_context = sensitive_intake.redact_text_for_metadata(context)
+    if secure_fields:
+        secure_request = await sensitive_intake.create_request(
+            secure_fields,
+            purpose=f"secure requester information for ticket {ticket_id}",
+            ticket_id=ticket_id,
+            requested_by=requested_by,
+            requester_name=ticket.get("requester_name"),
+            requester_email=ticket.get("requester_email"),
+            channel=contact_method or "dashboard",
+            metadata={
+                "origin": "ticket_request_info",
+                "requested_by": requested_by,
+                "contact_method": contact_method,
+                "recipient": recipient,
+                "raw_values_logged": False,
+            },
+        )
+        if secure_request.get("error"):
+            raise HTTPException(status_code=400, detail=secure_request["error"])
+        field_labels = ", ".join(item.get("label") or item.get("key") for item in secure_fields)
+        note = "\n".join([
+            "Awaiting secure user response",
+            f"Requested by: {requested_by}",
+            f"Contact method: {contact_method}",
+            f"Recipient: {recipient or 'not recorded'}",
+            f"Secure intake request: {secure_request.get('request_ref')}",
+            "",
+            "I need protected or account-sensitive information to continue, so I opened a secure intake form instead of asking you to paste values into chat or ticket notes.",
+            f"Secure form: {secure_request.get('form_url')}",
+            f"Fields requested: {field_labels}",
+            "",
+            "Original request, redacted if needed:",
+            safe_question,
+            "",
+            safe_context,
+            "",
+            "Submit the form once. Raw values are encrypted by the broker; agents and ticket notes receive references only.",
+        ]).strip()
+        external_ref = f"awaiting_user_response:{ticket_id}:secure-intake:{secure_request.get('request_ref')}"
+    else:
+        note = "\n".join([
+            "Awaiting user response",
+            f"Requested by: {requested_by}",
+            f"Contact method: {contact_method}",
+            f"Recipient: {recipient or 'not recorded'}",
+            "",
+            safe_question,
+            "",
+            safe_context,
+        ]).strip()
+        external_ref = f"awaiting_user_response:{ticket_id}"
     result = await ticket_service.add_note(
         ticket_id,
         note,
         author=requested_by,
         source="user-info-request",
         visibility="user",
-        external_ref=f"awaiting_user_response:{ticket_id}",
+        external_ref=external_ref,
     )
     await execute("""
         UPDATE tickets
@@ -1028,8 +1090,18 @@ async def request_user_information(
                         "note_id": result.get("id"),
                         "contact_method": contact_method,
                         "recipient": recipient,
+                        "secure_intake_request_ref": (secure_request or {}).get("request_ref"),
+                        "raw_values_logged": False,
                     })
-    return {"status": "awaiting_user_response", "ticket_id": ticket_id, "note_id": result.get("id")}
+    response = {"status": "awaiting_user_response", "ticket_id": ticket_id, "note_id": result.get("id")}
+    if secure_request:
+        response["secure_intake"] = {
+            "request_ref": secure_request.get("request_ref"),
+            "form_url": secure_request.get("form_url"),
+            "fields": secure_request.get("fields") or secure_fields,
+            "raw_values_returned": False,
+        }
+    return response
 
 
 @router.post("/{ticket_id}/user-response")

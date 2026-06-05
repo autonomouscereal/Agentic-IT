@@ -155,6 +155,16 @@ def test_ticket_route_suppresses_duplicate_ops_chat_create():
     assert 'existing["_idempotent_replay"] = True' in source
 
 
+def test_ticket_request_info_converts_sensitive_asks_to_secure_intake():
+    source = (ROOT / "api" / "routes" / "tickets.py").read_text(encoding="utf-8")
+    assert "infer_request_info_fields(question, context=context, ticket=ticket)" in source
+    assert "sensitive_intake.create_request" in source
+    assert "Awaiting secure user response" in source
+    assert "Secure form:" in source
+    assert "raw_values_logged" in source
+    assert '"secure_intake"' in source
+
+
 def test_ops_chat_bridge_accepts_harness_override_without_redesigning_for_codex():
     source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
     bridge = (ROOT / "deploy" / "ops-chat" / "bridge" / "bridge.py").read_text(encoding="utf-8")

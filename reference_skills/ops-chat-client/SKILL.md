@@ -152,6 +152,10 @@ Reference stack:
 - After Ops Chat or bridge changes, test a sensitive-field ask end-to-end:
   harness returns a `/secure-intake/` link, form submission records chat status
   with `siv_...` refs, and no raw values appear in chat/ticket/audit text.
+- Also test the ticket-worker fallback path through Element: if an agent calls
+  `/api/tickets/{id}/request-info` for account setup, SSN, DOB, credentials,
+  recovery codes, tokens, government IDs, HR, or financial fields, the platform
+  must convert that outbound ask into a secure form before Matrix delivery.
 - Uploaded file metadata is also a sensitive-data boundary. Filenames, storage
   refs, Matrix URLs, and metadata must be redacted before chat manifests,
   ticket attachment rows, model prompts, or audit logs include them.
@@ -380,6 +384,26 @@ OPS_CHAT_ALLOW_IDENTITY_RESET=false \
 node scripts/smoke_ops_chat_playwright.js
 ```
 
+Sensitive-intake browser proof:
+
+```powershell
+$env:DASHBOARD_URL="https://<host>:25443"
+$env:DASHBOARD_USER="demo_account_1"
+$env:DASHBOARD_PASSWORD="<from vault>"
+$env:OPS_CHAT_URL="https://<host>:3303"
+$env:OPS_CHAT_USER="demo_account_1"
+$env:OPS_CHAT_PASSWORD="<from vault>"
+$env:OPS_CHAT_ROOM_ID="<optional known bot room id>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
+$env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
+node scripts/smoke_ops_chat_sensitive_intake_ui.js
+```
+
+Expected: Element shows a `/secure-intake/` link, the browser form submits,
+ticket context shows `sir_...` / `siv_...` refs only, raw generated values are
+absent from visible context, and the synthetic ticket/agent are cleaned up.
+
 For the shared `demo_account_1` room, set
 `OPS_CHAT_ROOM_ID=!zSTElAvfSUDmAKZSWm:agentic-ops.local` so Playwright opens
 the known bot DM directly instead of walking Element's profile/invite screens.
@@ -403,6 +427,13 @@ used room `!zSTElAvfSUDmAKZSWm:agentic-ops.local`, sent marker
 `1444`. The agent reused the active queue-health ticket instead of opening a
 fresh one; that is acceptable for bridge/reliability smoke and remains a
 separate agent-decision tuning caveat for clean demo storytelling.
+
+Latest sensitive-intake Element proof, 2026-06-05: marker
+`ops-chat-sensitive-20260605121228` created ticket `1671` through the real
+Matrix DM, delivered secure request `sir_MgSO2aue1inAhrp40SRebQi`, submitted
+the secure form through the browser with 9 fields, verified refs-only ticket
+context, stopped synthetic agent `491`, cancelled the synthetic ticket, and
+left active agents at `0`.
 
 Follow-up same-day proof: marker `demo-bulletproof-1779402310` went through
 Element, the Matrix bridge, dashboard Ops Chat, and real Codex worker agent

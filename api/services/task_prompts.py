@@ -49,6 +49,26 @@ URL_DETONATION_SAFETY_RULE = """Suspicious URL handling rule:
 - Approval to block/quarantine/contain a URL is not approval to fetch it.
 """
 
+SENSITIVE_REQUESTER_INPUT_RULE = """Sensitive requester-input rule:
+- Never ask a requester to paste SSNs, DOBs, initial passwords, recovery codes,
+  API keys, government IDs, HR/financial data, or similar protected values into
+  Matrix/Element, email, normal ticket notes, logs, or model prompts.
+- For account creation/onboarding/access requests, prefer a brokered secure
+  form when the missing values include protected personal, identity, credential,
+  or account-sensitive details.
+- Create the secure form with POST /api/sensitive-intake/request. Include
+  ticket_id, requested_by, requester_name/email when known, channel, purpose,
+  and a fields array of labels/types/required flags. Then write a
+  user-visible requester-info note with the returned form_url, update
+  checkpoint.json to waiting_for_user below 100%, and stop.
+- The form is one-submit. Raw submitted values stay encrypted in the broker;
+  agents receive refs through ticket context after submission.
+- If you mistakenly use POST /api/tickets/{ticket_id}/request-info for a
+  protected/account-sensitive ask, the platform will convert it into a secure
+  form, but you should still prefer the broker endpoint when you know the
+  requested fields.
+"""
+
 STATIC_DEPLOYMENT_BOUNDARY_RULE = """Deployment boundary rule:
 - Creating files or running a temporary server inside `/app/agent_work/<agent_id>`
   is a safe local artifact preview, not a real deployment. Do not tell the
@@ -241,6 +261,7 @@ def build_ticket_resolution_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
         URL_DETONATION_SAFETY_RULE,
+        SENSITIVE_REQUESTER_INPUT_RULE,
         STATIC_DEPLOYMENT_BOUNDARY_RULE,
         FAST_TICKET_PROMPT,
         TICKET_CLOSURE_RULE,
@@ -256,6 +277,7 @@ def build_auto_assignment_prompt(ticket, extra_prompt=None):
     title = ticket.get("title") or f"ticket #{ticket.get('id')}"
     body = [
         URL_DETONATION_SAFETY_RULE,
+        SENSITIVE_REQUESTER_INPUT_RULE,
         STATIC_DEPLOYMENT_BOUNDARY_RULE,
         AUTO_ASSIGNMENT_PROMPT,
         TICKET_CLOSURE_RULE,

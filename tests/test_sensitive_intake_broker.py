@@ -52,6 +52,44 @@ def test_metadata_redaction_handles_nested_attachment_like_json():
     assert "<redacted:token>" in combined
 
 
+def test_request_info_account_details_are_inferred_as_secure_form_fields():
+    module = load_module()
+    fields = module.infer_request_info_fields(
+        "Please confirm the account details for Bob: target systems, desired username, email address, display name, required roles/access level, manager/sponsor, start date.",
+        ticket={"title": "Create account for Bob", "description": "Ops Chat account setup request"},
+    )
+
+    labels = [item["label"].lower() for item in fields]
+    assert "target systems" in " ".join(labels)
+    assert "desired username" in " ".join(labels)
+    assert "email address" in " ".join(labels)
+    assert "display name" in " ".join(labels)
+    assert fields
+
+
+def test_request_info_protected_values_are_inferred_as_exact_secure_fields():
+    module = load_module()
+    fields = module.infer_request_info_fields(
+        "I need SSN, date of birth, and initial password before account setup can continue.",
+        ticket={"title": "New user onboarding"},
+    )
+
+    field_types = {item["type"] for item in fields}
+    assert {"ssn", "dob", "credential"} <= field_types
+
+
+def test_request_info_marker_text_is_not_promoted_to_secure_field_label():
+    module = load_module()
+    fields = module.infer_request_info_fields(
+        "Please collect these details securely for Bob: full legal name, SSN, date of birth, desired username, work email address, required role, manager or sponsor, start date, and initial password. Marker ops-chat-sensitive-20260605120018.",
+        context="Element UI regression for secure requester information.",
+    )
+
+    labels = [item["label"] for item in fields]
+    assert all("Marker" not in label for label in labels)
+    assert sum(1 for item in fields if item["type"] == "credential") == 1
+
+
 def test_secure_request_submit_returns_references_not_values(monkeypatch):
     module = load_module()
     state = {"requests": {}, "values": [], "events": [], "next_id": 1}

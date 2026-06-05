@@ -1267,6 +1267,18 @@ class AgentLifecycleGuardTests(unittest.TestCase):
             self.assertIn("budget/payment approval", value)
             self.assertIn("waiting_for_user", value)
 
+    def test_ticket_prompts_require_secure_forms_for_sensitive_requester_input(self):
+        module = load_task_prompts()
+        ticket = {"id": 1666, "title": "Create account for Bob"}
+        prompt = module.build_ticket_resolution_prompt(ticket)
+        auto_prompt = module.build_auto_assignment_prompt(ticket)
+
+        for value in (prompt, auto_prompt):
+            self.assertIn("Sensitive requester-input rule", value)
+            self.assertIn("POST /api/sensitive-intake/request", value)
+            self.assertIn("form_url", value)
+            self.assertIn("Raw submitted values stay encrypted in the broker", value)
+
     def test_postmortem_list_fields_accept_scalar_agent_payloads(self):
         module = load_postmortems_route()
 

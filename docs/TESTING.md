@@ -321,6 +321,22 @@ $env:OPS_CHAT_DEV_ARTIFACT_MARKER="ops-chat-dev-artifact-<unique>"
 node scripts/smoke_ops_chat_dev_artifacts.js
 ```
 
+Sensitive account/protected-field proof through Element:
+
+```powershell
+$env:DASHBOARD_URL="https://<operator-host>:25443"
+$env:DASHBOARD_USER="demo_account_1"
+$env:DASHBOARD_PASSWORD="<from vault>"
+$env:OPS_CHAT_URL="https://<operator-host>:3303"
+$env:OPS_CHAT_USER="demo_account_1"
+$env:OPS_CHAT_PASSWORD="<from vault>"
+$env:OPS_CHAT_ROOM_ID="<optional known bot room id>"
+$env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
+$env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
+$env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
+node scripts/smoke_ops_chat_sensitive_intake_ui.js
+```
+
 Expected:
 
 - harmless/general chat returns an answer without a ticket;
@@ -349,6 +365,19 @@ Expected:
   status should be visible after each operational ticket.
 - dev one-off artifact asks can return tested Python, HTML, Markdown, and Bash
   artifacts as rendered Element code blocks without creating tickets.
+- sensitive account setup or protected-field asks return a secure broker form
+  link in Element. Browser form submission records `sir_...` / `siv_...`
+  evidence in ticket context and no raw submitted values in chat/tickets/audit.
+
+Latest sensitive-intake Element proof, 2026-06-05:
+
+- `scripts/smoke_ops_chat_sensitive_intake_ui.js`: PASS
+- Marker `ops-chat-sensitive-20260605121228`
+- Ticket `1671` created through Matrix/Element and cancelled after synthetic
+  proof cleanup
+- Secure request `sir_MgSO2aue1inAhrp40SRebQi` submitted through the browser
+- Field count `9`, raw values printed/stored in visible context `false`
+- Active agents after cleanup: `0`
 
 Latest verified result on 2026-05-20:
 
