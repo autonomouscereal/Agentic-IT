@@ -11,7 +11,7 @@
  *     storage/model prompts.
  *   - judgment: natural no-hint prompts prove the agent chooses secure intake
  *     only when protected values are involved.
- *   - account-e2e: natural account request -> secure form -> ticket worker
+ *   - account-e2e: no-hint account request -> secure form -> ticket worker
  *     creates a real read-only dashboard login -> UI login verifies it.
  *
  * Set OPS_CHAT_SENSITIVE_SCENARIO=fallback|direct|redaction|judgment|account-e2e|all.
@@ -69,6 +69,91 @@ async function clickText(page, pattern, which = "first") {
   }, { source: pattern.source, which }).catch(() => false);
 }
 
+async function clickExactText(page, text, which = "last") {
+  const loc = page.getByText(text, { exact: true });
+  const count = await loc.count().catch(() => 0);
+  const indexes = which === "first"
+    ? Array.from({ length: count }, (_, index) => index)
+    : Array.from({ length: count }, (_, index) => count - 1 - index);
+  for (const index of indexes) {
+    const target = loc.nth(index);
+    if (await target.isVisible().catch(() => false)) {
+      await target.click({ force: true }).catch(() => {});
+      return true;
+    }
+  }
+  return false;
+}
+
+async function clickLeafText(page, patternSource, which = "last") {
+  return await page.evaluate(({ patternSource, which }) => {
+    const regex = new RegExp(patternSource, "i");
+    const candidates = Array.from(document.querySelectorAll("button,a,[role='button'],span,div,p"));
+    const visible = candidates
+      .map((el) => {
+        const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        const childText = Array.from(el.children || [])
+          .map((child) => (child.innerText || child.textContent || "").replace(/\s+/g, " ").trim())
+          .join(" ");
+        return { el, text, rect, style, childText };
+      })
+      .filter((item) => (
+        regex.test(item.text) &&
+        !/Remove this device|Reset all|Sign out/i.test(item.text) &&
+        item.rect.width > 0 &&
+        item.rect.height > 0 &&
+        item.style.display !== "none" &&
+        item.style.visibility !== "hidden"
+      ))
+      .sort((a, b) => {
+        const aOwn = a.childText && a.childText !== a.text ? 1 : 0;
+        const bOwn = b.childText && b.childText !== b.text ? 1 : 0;
+        if (aOwn !== bOwn) return bOwn - aOwn;
+        return a.text.length - b.text.length;
+      });
+    const target = which === "first" ? visible[0] : visible[visible.length - 1] || visible[0];
+    if (!target) return false;
+    const x = target.rect.left + target.rect.width / 2;
+    const y = target.rect.top + target.rect.height / 2;
+    const clickable = document.elementFromPoint(x, y) || target.el;
+    clickable.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: x, clientY: y }));
+    clickable.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: x, clientY: y }));
+    clickable.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+    return true;
+  }, { patternSource, which }).catch(() => false);
+}
+
+async function clickDialogUntitledClose(page) {
+  const closeButtons = [
+    "#mx_Dialog_Container button[aria-label*='Close']",
+    "#mx_Dialog_Container [role='button'][aria-label*='Close']",
+    "button[aria-label*='Close']",
+    "[role='button'][aria-label*='Close']",
+    ".mx_Dialog_cancelButton",
+    ".mx_AccessibleButton[aria-label*='Close']",
+  ];
+  for (const selector of closeButtons) {
+    const button = page.locator(selector).first();
+    if (await button.isVisible().catch(() => false)) {
+      await button.click({ force: true }).catch(() => {});
+      return true;
+    }
+  }
+  const emptyButtons = page.locator("button,[role='button']");
+  const count = await emptyButtons.count().catch(() => 0);
+  for (let index = 0; index < Math.min(count, 8); index += 1) {
+    const button = emptyButtons.nth(index);
+    if (!(await button.isVisible().catch(() => false))) continue;
+    const text = ((await button.innerText().catch(() => "")) || (await button.textContent().catch(() => "")) || "").trim();
+    if (text) continue;
+    await button.click({ force: true }).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
 async function dismissNoise(page) {
   for (const pattern of [/Dismiss/i, /Not now/i, /Maybe later/i, /^Later$/i, /^OK$/i, /^Cancel$/i, /^Done$/i]) {
     await clickText(page, pattern, "first");
@@ -80,6 +165,17 @@ async function clearDialogs(page) {
   for (let i = 0; i < 8; i += 1) {
     const dialogText = await page.locator("#mx_Dialog_Container").innerText().catch(() => "");
     const dialogVisible = await page.locator("#mx_Dialog_Container .mx_Dialog_background, #mx_Dialog_Container [role='dialog']").first().isVisible().catch(() => false);
+    const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+    if (/Are you sure you want to reset your digital identity/i.test(body)) {
+      await clickExactText(page, "Cancel", "last") || await clickText(page, /^Cancel$/i, "last");
+      await page.waitForTimeout(1200);
+      continue;
+    }
+    if (/Device verified|new device is now verified/i.test(body)) {
+      await clickExactText(page, "Done", "last") || await clickText(page, /^Done$/i, "last");
+      await page.waitForTimeout(1200);
+      continue;
+    }
     if (!dialogText.trim() && !dialogVisible) return;
     if (/Use Single Sign On to continue|Single Sign On/i.test(dialogText)) {
       await clickText(page, /^Single Sign On$/i, "last");
@@ -109,12 +205,87 @@ async function clearDialogs(page) {
   }
 }
 
+async function skipIdentityVerification(page) {
+  let acted = false;
+  for (let i = 0; i < 10; i += 1) {
+    const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+    if (/Are you sure you want to reset your digital identity/i.test(body)) {
+      await clickExactText(page, "Cancel", "last") || await clickText(page, /^Cancel$/i, "last");
+      await page.waitForTimeout(1500);
+      acted = true;
+      continue;
+    }
+    if (/Device verified|new device is now verified/i.test(body)) {
+      await clickExactText(page, "Done", "last") || await clickText(page, /^Done$/i, "last");
+      await page.waitForTimeout(1500);
+      acted = true;
+      continue;
+    }
+    if (!/Confirm your digital identity|reset your digital identity|Verify this device|Confirm encryption setup|secure messaging|Without verifying|I'll verify later/i.test(body)) {
+      return acted;
+    }
+    if (await clickDialogUntitledClose(page)) {
+      await page.waitForTimeout(1500);
+      acted = true;
+      continue;
+    }
+    let clicked = false;
+    const patterns = [
+      /^Can't confirm\??$/i,
+      /^Can.t confirm\??$/i,
+      /Skip verification/i,
+      /Verify later/i,
+      /I'll verify later/i,
+      /Not now/i,
+      /^Skip$/i,
+      /^Cancel$/i,
+      /^Done$/i,
+      /^Close$/i,
+    ];
+    for (const exact of ["Can't confirm?", "Skip verification", "Verify later", "I'll verify later", "Not now", "Skip", "Cancel", "Done", "Close"]) {
+      if (await clickExactText(page, exact, "last") || await clickLeafText(page, `^${exact.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "last")) {
+        clicked = true;
+        acted = true;
+        await page.waitForTimeout(2000);
+        break;
+      }
+    }
+    if (!clicked && await clickLeafText(page, "^Can.?t confirm\\??$", "last")) {
+      clicked = true;
+      acted = true;
+      await page.waitForTimeout(2000);
+    }
+    if (clicked) continue;
+    for (const pattern of patterns) {
+      const targets = page.locator("button,[role='button'],a,span,div").filter({ hasText: pattern });
+      const count = await targets.count().catch(() => 0);
+      for (let index = count - 1; index >= 0; index -= 1) {
+        const target = targets.nth(index);
+        const text = (await target.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+        if (/Remove this device|Reset all|Sign out/i.test(text)) continue;
+        if (await target.isVisible().catch(() => false)) {
+          await target.click({ force: true }).catch(() => {});
+          clicked = true;
+          acted = true;
+          await page.waitForTimeout(2000);
+          break;
+        }
+      }
+      if (clicked) break;
+    }
+    if (!clicked) {
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+  }
+  return acted;
+}
+
 async function settleElement(page) {
   for (let i = 0; i < 10; i += 1) {
     const body = await page.locator("body").innerText().catch(() => "");
-    if (/Confirm your digital identity|reset your digital identity|Verify this device|Confirm encryption setup/i.test(body)) {
-      await page.keyboard.press("Escape").catch(() => {});
-      await clickText(page, /Can't confirm\?|Can.t confirm\?|Skip|Later|Cancel|Done/i, "last");
+    if (/Confirm your digital identity|reset your digital identity|Verify this device|Confirm encryption setup|Without verifying|I'll verify later/i.test(body)) {
+      await skipIdentityVerification(page);
       await page.waitForTimeout(1500);
       continue;
     }
@@ -891,7 +1062,6 @@ async function runAccountE2EScenario(context, chatPage, formPage) {
       `Dashboard account provisioning test marker ${accountMarker}.`,
       `Please create a local Agentic Operations dashboard account named ${username}.`,
       "It should be read-only/auditor access.",
-      "I have an initial temporary password and identity verification details to provide before you create it.",
       "Collect what you need from me and then complete the account setup.",
     ].join(" "),
     /\/secure-intake\/|protected information|protected values|intake/i,
@@ -928,8 +1098,7 @@ async function runAccountE2EScenario(context, chatPage, formPage) {
     chatPage,
     [
       `I submitted the secure form for marker ${finishMarker}.`,
-      `Please finish creating a fresh new local dashboard account ${username} with auditor/read-only access.`,
-      "Use the submitted secure intake request from this chat for the initial password.",
+      "Please finish the account setup now.",
     ].join(" "),
     /Dashboard ticket: #|I created ticket #|Ticket #/,
     900000,
@@ -976,7 +1145,7 @@ async function runAccountE2EScenario(context, chatPage, formPage) {
     await elementLogin(chatPage);
     await openAgentDm(chatPage);
 
-    const scenarios = scenario === "all" ? ["fallback", "direct", "redaction", "judgment"] : [scenario];
+    const scenarios = scenario === "all" ? ["fallback", "direct", "redaction", "judgment", "account-e2e"] : [scenario];
     const results = [];
     for (const item of scenarios) {
       if (item === "fallback") results.push(await runFallbackScenario(context, chatPage, formPage));

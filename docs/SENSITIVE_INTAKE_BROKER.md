@@ -220,7 +220,7 @@ node scripts/smoke_ops_chat_sensitive_intake_ui.js
 - `judgment`: natural no-hint prompts prove the chat agent chooses secure
   intake for protected onboarding and financial packets, while harmless chat
   and normal software requests avoid unnecessary secure forms.
-- `account-e2e`: natural dashboard account request triggers secure intake,
+- `account-e2e`: no-hint dashboard account request triggers secure intake,
   submits a brokered password, creates a real local read-only dashboard login
   through a ticket worker, verifies UI login, and verifies read-only denial.
 - `all`: runs fallback, direct, redaction, judgment, and account-e2e in one
@@ -323,12 +323,38 @@ Fresh no-hint rerun after docs/test hardening, 2026-06-05:
   synthetic agent `501` was stopped and ticket `1682` was cancelled.
 - Harmless Wyoming-capital question created no ticket and no secure form.
 
-End-to-end brokered account proof, 2026-06-05:
+No-hint end-to-end brokered account proof, 2026-06-05:
+
+- Marker `opsacctnohintI`, scenario `account-e2e`.
+- User asked in Element for a local read-only Agentic Operations dashboard
+  account named `secure_e2e_cctnohinti`. The prompt did not mention passwords,
+  protected fields, secure intake, forms, or brokered credentials.
+- The chat agent inferred that account provisioning required protected input
+  and opened secure request `sir_w38HLNlY5t5g7Uj3PXldG` before ticket creation.
+- The secure form collected two protected fields: initial temporary password
+  and identity verification details.
+- After form submission, the agent created and worked ticket `1685`; iTop sync
+  reference `1084`; final status `resolved`.
+- The worker used the brokered account adapter to create local dashboard user
+  `secure_e2e_cctnohinti` with role `auditor`.
+- Playwright verified the new user could log in through the dashboard UI with
+  the submitted brokered password, then verified read-only enforcement by
+  attempting `POST /api/access/users` as that user and receiving HTTP `403`.
+- Final live checks: Codex selected, max active agents `5`, queue depth `0`,
+  active agents `0`, active harness processes `0`, `/api/access/users`
+  returned no `password_hash` keys and no PBKDF2 hash strings, and ticket
+  `1685` contained the secure request ref without password hash leakage.
+- Screenshots:
+  `docs/evidence/opsacctnohintI/secure-intake-form-requested.png` and
+  `docs/evidence/opsacctnohintI/secure-intake-form-submitted.png`.
+
+Earlier brokered account plumbing proof, 2026-06-05:
 
 - Marker `opsacctfinalB`, scenario `account-e2e`.
 - User asked naturally in Element for a local read-only dashboard account and
   said they had an initial temporary password and identity verification details
-  to provide. The chat agent selected secure intake before ticket creation.
+  to provide. This proved the adapter plumbing, but the stricter no-hint
+  standard is now `opsacctnohintI`.
 - Secure request `sir_QmLqRpPngf6pQqIjzstWorO` collected two protected fields:
   initial temporary password and identity verification details.
 - After form submission, the agent created and worked ticket `1684`; iTop sync

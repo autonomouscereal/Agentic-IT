@@ -91,9 +91,12 @@ Sensitive-intake regression expectations:
   accidental-paste redaction, no-hint account/finance judgment, and negative
   controls for harmless/non-sensitive asks.
 - Use `OPS_CHAT_SENSITIVE_SCENARIO=account-e2e` when validating the complete
-  account path: Element secure form, ticket worker, iTop sync, created auditor
-  account, dashboard UI login, auditor mutation denial, no hash leakage, and
-  active agents returning to zero.
+  account path. This must be a no-hint Element request: the user asks naturally
+  for a read-only dashboard account without mentioning passwords, secure
+  intake, forms, or brokered credentials. Expected proof: Element secure form,
+  ticket worker, iTop sync, created auditor account, dashboard UI login,
+  auditor mutation denial, no hash leakage, and active agents returning to
+  zero.
 - Use `docs/SENSITIVE_DATA_HARDENING_PLAN.md` when reviewing remaining leak
   paths such as uploaded file contents, generated artifacts, memory, search, and
   model-provider routing.

@@ -425,19 +425,19 @@ non-sensitive software: ticket 1682 created without secure form, agent 501 stopp
 harmless chat: no ticket and no secure form
 ```
 
-Brokered account creation E2E on 2026-06-05:
+No-hint brokered account creation E2E on 2026-06-05:
 
 ```text
-marker opsacctfinalB, scenario account-e2e
-Element user request: create local Agentic Operations dashboard read-only account with an initial temporary password to provide
-secure form: request sir_QmLqRpPngf6pQqIjzstWorO, 2 fields, no pre-broker ticket
-ticket: 1684, iTop ref 1083, status resolved, agent 503
-account: secure_e2e_acctfinalb, provider local, role auditor
-UI verification: Playwright logged into the dashboard as secure_e2e_acctfinalb using the submitted brokered password
+marker opsacctnohintI, scenario account-e2e
+Element user request: create local Agentic Operations dashboard read-only account named secure_e2e_cctnohinti; no mention of password, secure intake, forms, or brokered credentials
+secure form: request sir_w38HLNlY5t5g7Uj3PXldG, 2 fields, no pre-broker ticket
+ticket: 1685, iTop ref 1084, status resolved
+account: secure_e2e_cctnohinti, provider local, role auditor
+UI verification: Playwright logged into the dashboard as secure_e2e_cctnohinti using the submitted brokered password
 authorization verification: auditor POST /api/access/users returned 403
 leak checks: ticket context did not contain the generated password; /api/access/users returned no password_hash key and no pbkdf2 hash values
 final runner state: active agents 0, queued depth 0, active harness processes 0
-screenshots: docs/evidence/opsacctfinalB/secure-intake-form-requested.png and secure-intake-form-submitted.png
+screenshots: docs/evidence/opsacctnohintI/secure-intake-form-requested.png and secure-intake-form-submitted.png
 ```
 
 The secure-intake smoke verifies ticket context exposes submitted `sir_...`
