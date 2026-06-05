@@ -95,6 +95,25 @@ def _redact_json_only(value):
     return value
 
 
+def _passes_luhn(value):
+    digits = re.sub(r"\D", "", str(value or ""))
+    if len(digits) < 13 or len(digits) > 19:
+        return False
+    total = 0
+    double = False
+    for char in reversed(digits):
+        n = ord(char) - 48
+        if n < 0 or n > 9:
+            return False
+        if double:
+            n *= 2
+            if n > 9:
+                n -= 9
+        total += n
+        double = not double
+    return total % 10 == 0
+
+
 def redact_text_for_metadata(text):
     return _redact_text_only(text)
 
@@ -793,7 +812,7 @@ def detect_sensitive_spans(text):
                 start, end = value_start, value_end
             if field_type == "financial":
                 digits = re.sub(r"\D", "", match.group(0))
-                if len(digits) < 13:
+                if not _passes_luhn(digits):
                     continue
             spans.append({
                 "start": start,

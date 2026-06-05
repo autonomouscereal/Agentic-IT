@@ -77,6 +77,9 @@ Sensitive-intake regression expectations:
 - Run `node scripts/smoke_ops_chat_sensitive_intake_ui.js` from an operator
   workstation after chat/requester-info changes to prove the real Element UI
   receives a `/secure-intake/` link and ticket context contains refs only.
+  Set `OPS_CHAT_SENSITIVE_SCENARIO=all` for the full hardening pass:
+  ticket-requester fallback, direct chat-harness secure form, and
+  accidental-paste redaction.
 - Use `docs/SENSITIVE_DATA_HARDENING_PLAN.md` when reviewing remaining leak
   paths such as uploaded file contents, generated artifacts, memory, search, and
   model-provider routing.

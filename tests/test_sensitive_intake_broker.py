@@ -23,6 +23,15 @@ def test_detects_common_sensitive_values():
     assert {item["field_type"] for item in spans} >= {"ssn", "credential", "token"}
 
 
+def test_financial_detector_ignores_timestamp_markers_but_catches_cards():
+    module = load_module()
+    marker = "ops-chat-sensitive-direct-20260605123651"
+    assert module.detect_sensitive_spans(marker) == []
+
+    spans = module.detect_sensitive_spans("card: 4111 1111 1111 1111")
+    assert any(item["field_type"] == "financial" for item in spans)
+
+
 def test_detects_recovery_codes_and_government_ids():
     module = load_module()
     text = "MFA recovery code: AB12-CD34-EF56 passport number: X1234567 dob: 01/02/1990"

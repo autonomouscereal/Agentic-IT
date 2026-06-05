@@ -58,12 +58,16 @@ if [ -f /etc/nginx/tls/ops-chat.crt ] && [ -f /etc/nginx/tls/ops-chat.key ]; the
 server {
     listen 80;
     server_name _;
+    sendfile off;
+    keepalive_timeout 0;
     return 301 ${public_url}\$request_uri;
 }
 
 server {
     listen 443 ssl;
     server_name _;
+    sendfile off;
+    keepalive_timeout 0;
     root /usr/share/nginx/html;
     index index.html;
 

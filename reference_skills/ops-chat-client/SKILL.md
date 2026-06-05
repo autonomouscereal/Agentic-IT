@@ -396,6 +396,7 @@ $env:OPS_CHAT_PASSWORD="<from vault>"
 $env:OPS_CHAT_ROOM_ID="<optional known bot room id>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
 $env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
+$env:OPS_CHAT_SENSITIVE_SCENARIO="fallback"  # fallback, direct, redaction, all
 $env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
 node scripts/smoke_ops_chat_sensitive_intake_ui.js
 ```
@@ -403,6 +404,18 @@ node scripts/smoke_ops_chat_sensitive_intake_ui.js
 Expected: Element shows a `/secure-intake/` link, the browser form submits,
 ticket context shows `sir_...` / `siv_...` refs only, raw generated values are
 absent from visible context, and the synthetic ticket/agent are cleaned up.
+
+Run `OPS_CHAT_SENSITIVE_SCENARIO=all` after sensitive-intake, Ops Chat, bridge,
+or Element changes. It covers ticket-requester fallback, direct chat-harness
+`request-sensitive-fields`, and accidental-paste redaction. Use alphabetic
+markers when testing against older deployments that may still over-redact long
+numeric timestamp markers as financial data.
+
+If Element is blank in Playwright but `/`, `/config.json`, and bundle `HEAD`
+requests look healthy, test a full bundle download. A known failure mode is
+HTTP/1.1 bundle `GET` hanging while range/HTTP/1.0/`Connection: close` requests
+work. The generated Element nginx config should include `sendfile off;` and
+`keepalive_timeout 0;`; rebuild `ops-chat` before trusting Matrix UI tests.
 
 For the shared `demo_account_1` room, set
 `OPS_CHAT_ROOM_ID=!zSTElAvfSUDmAKZSWm:agentic-ops.local` so Playwright opens

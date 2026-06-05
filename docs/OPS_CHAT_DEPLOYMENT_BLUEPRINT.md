@@ -27,6 +27,11 @@ The browser path should use `3303`. Element nginx proxies `/_matrix/` and
 port. That avoids browser-side homeserver certificate/cross-origin failures and
 prevents Synapse OIDC canonical redirect loops.
 
+The generated Element nginx config disables `sendfile` and keepalive for the
+demo TLS server. This avoids a static-asset failure where bundle `HEAD`, range,
+or HTTP/1.0 requests succeed but full browser HTTP/1.1 `GET` requests hang and
+Element renders as a blank shell.
+
 ## TLS And OIDC
 
 Element and Synapse reuse the dashboard runtime certificate by default:

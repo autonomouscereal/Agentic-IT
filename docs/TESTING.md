@@ -379,6 +379,26 @@ Latest sensitive-intake Element proof, 2026-06-05:
 - Field count `9`, raw values printed/stored in visible context `false`
 - Active agents after cleanup: `0`
 
+Additional sensitive-intake hardening proof, 2026-06-05:
+
+```text
+Element fallback rerun: marker ops-chat-sensitive-rerun-20260605123004, ticket 1673, secure request sir_K4eNSmMkfx0WFpJXVHOws, 9 fields, refs-only context, agent 492 stopped, ticket cancelled
+Dashboard-route direct harness: marker opschatdirectalphatest, session 791, secure request sir_8amUhbm97Te3eqd2HC8AffB, 8 fields, no ticket, raw values absent from request/session payloads
+Dashboard-route accidental paste: marker opschatredactionalphatest, session 792, no ticket, siv refs present, raw generated canaries absent from dashboard Ops Chat payloads
+Focused source tests: tests/test_sensitive_intake_broker.py 12 passed; ticket requester-info secure-form regression passed
+```
+
+Live Element browser caveat from the same pass: the current deployed Element
+nginx served `HEAD`/range/HTTP/1.0 bundle requests, but full HTTP/1.1 `GET`
+for bundle assets could hang, leaving Playwright at a blank Element shell.
+Source now disables `sendfile` and keepalive in the generated Element config.
+After deploying that patch, rerun:
+
+```powershell
+$env:OPS_CHAT_SENSITIVE_SCENARIO="all"
+node scripts/smoke_ops_chat_sensitive_intake_ui.js
+```
+
 Latest verified result on 2026-05-20:
 
 ```text

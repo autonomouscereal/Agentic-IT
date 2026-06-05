@@ -163,9 +163,22 @@ $env:OPS_CHAT_PASSWORD="<from vault>"
 $env:OPS_CHAT_ROOM_ID="<optional known bot room id>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
 $env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
+$env:OPS_CHAT_SENSITIVE_SCENARIO="fallback"
 $env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
 node scripts/smoke_ops_chat_sensitive_intake_ui.js
 ```
+
+`OPS_CHAT_SENSITIVE_SCENARIO` supports:
+
+- `fallback`: Element creates a ticket, a ticket worker/request-info ask is
+  converted to a secure form, and ticket context is verified refs-only.
+- `direct`: the chat harness itself uses `ops_chat_tool.py
+  request-sensitive-fields`, returns a `/secure-intake/` link, and does not
+  create a ticket before protected values are brokered.
+- `redaction`: a synthetic accidental paste is stored in dashboard Ops Chat
+  messages as `siv_...` references, with raw generated canaries absent from
+  dashboard/model-visible state.
+- `all`: runs the three scenarios in one browser session.
 
 This browser test logs into Element, creates a Matrix-linked ticket, forces the
 ticket requester-info path to request account-sensitive fields, waits for a
@@ -199,9 +212,35 @@ Latest live Element proof, 2026-06-05:
   and
   `docs/evidence/ops-chat-sensitive-20260605121228/secure-intake-form-submitted.png`.
 
+Additional hardening proof, 2026-06-05:
+
+- Element fallback rerun passed with marker
+  `ops-chat-sensitive-rerun-20260605123004`, ticket `1673`, secure request
+  `sir_K4eNSmMkfx0WFpJXVHOws`, 9 fields, refs-only ticket context, synthetic
+  agent `492` stopped, and ticket cancelled.
+- Authenticated dashboard-route direct harness proof passed with marker
+  `opschatdirectalphatest`, session `791`, secure request
+  `sir_8amUhbm97Te3eqd2HC8AffB`, 8 fields, no ticket, and no raw generated
+  values in request/session payloads.
+- Authenticated dashboard-route accidental-paste proof passed with marker
+  `opschatredactionalphatest`, session `792`, no ticket, `siv_...` refs in
+  dashboard Ops Chat messages, and no raw generated canaries in dashboard
+  payloads.
+- A live Element static-asset issue blocked additional Matrix UI passes:
+  full HTTP/1.1 `GET` requests for Element bundle assets could hang while
+  range requests, HTTP/1.0 requests, and `Connection: close` requests returned
+  immediately. Source now disables nginx `sendfile` and keepalive in the
+  generated Element config; deploy the patch and rebuild `ops-chat` before
+  relying on Element browser tests again.
+
 ## Current Limitations
 
 - Provider adapters consume references only after adapter-specific actions are
   added. The broker intentionally does not expose raw values to agents.
 - The universal form is deliberately generic. Native Teams/Slack cards can wrap
   the same request/submit endpoints later without changing the broker contract.
+- If a user manually pastes protected values into Matrix/Element, the Matrix
+  homeserver will still receive the original event. The platform bridge
+  redacts before dashboard storage, ticketing, model prompts, audit/event
+  details, and memory-visible text. The secure form path is the required
+  no-plaintext intake path.

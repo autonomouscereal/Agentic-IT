@@ -6618,3 +6618,45 @@ Fix:
 - The outbound compactor now receives `external_ref`.
 - `ops-chat-closure` notes render as `Agent completed this request...`.
 - `ops-chat-agent-note` notes render as `Agent update...`.
+
+### Element bundle assets can hang on full HTTP/1.1 GET
+
+Status: source fixed on 2026-06-05; live deploy pending because server-manager
+SSH auth timed out.
+
+Problem:
+
+- During sensitive-intake Matrix UI retesting, Playwright reached the Element
+  shell but stayed blank at `document.readyState=loading`.
+- `curl -k -I https://<host>:3303/bundles/.../bundle.css` returned `200`, but
+  full HTTP/1.1 `GET` for the CSS/JS bundle body could hang.
+- Range requests, HTTP/1.0 requests, and requests with `Connection: close`
+  returned immediately, so the failure is static asset delivery/connection
+  handling rather than a missing Element file.
+
+Fix:
+
+- `deploy/ops-chat/element/render_config.sh` now writes `sendfile off;` and
+  `keepalive_timeout 0;` into both generated Element nginx server blocks.
+- Rebuild `ops-chat` after deployment:
+
+```bash
+docker compose up -d --build ops-chat
+```
+
+Verification:
+
+- Before trusting Element UI Playwright tests, confirm a full asset body
+  download works without HTTP/1.0 or `Connection: close`:
+
+```bash
+curl -k https://<host>:3303/bundles/<hash>/bundle.css -o /dev/null
+curl -k https://<host>:3303/bundles/<hash>/bundle.js -o /dev/null
+```
+
+Then rerun:
+
+```powershell
+$env:OPS_CHAT_SENSITIVE_SCENARIO="all"
+node scripts\smoke_ops_chat_sensitive_intake_ui.js
+```
