@@ -9,8 +9,10 @@
  *   - direct: the chat agent itself uses request-sensitive-fields;
  *   - redaction: accidental protected-value paste is redacted before dashboard
  *     storage/model prompts.
+ *   - judgment: natural no-hint prompts prove the agent chooses secure intake
+ *     only when protected values are involved.
  *
- * Set OPS_CHAT_SENSITIVE_SCENARIO=fallback|direct|redaction|all.
+ * Set OPS_CHAT_SENSITIVE_SCENARIO=fallback|direct|redaction|judgment|all.
  *
  * Fallback path:
  *   1. login to dashboard and Element through Keycloak;
@@ -392,11 +394,25 @@ async function verifyNoLeak(context, ticketId, forbiddenValues) {
       throw new Error(`submitted secure form value leaked into ticket context for ticket ${ticketId}`);
     }
   }
-  if (!/sir_[A-Za-z0-9]+/.test(text) || !/siv_[A-Za-z0-9]+/.test(text)) {
-    throw new Error(`ticket context did not expose secure request/value refs for ticket ${ticketId}`);
+  const requests = payload.sensitive_intake_requests || [];
+  const submitted = requests.filter((request) => request.status === "submitted" && request.request_ref);
+  if (!submitted.length) {
+    throw new Error(`ticket context did not expose submitted secure request refs for ticket ${ticketId}`);
+  }
+  const requestDetails = [];
+  let valueRefCount = 0;
+  for (const request of submitted) {
+    const detail = await verifyRequestNoLeak(context, request.request_ref, forbiddenValues);
+    requestDetails.push(detail);
+    valueRefCount += Number(detail.submitted_field_count || 0);
+  }
+  if (valueRefCount <= 0) {
+    throw new Error(`secure request details did not expose submitted value refs for ticket ${ticketId}`);
   }
   return {
-    sensitive_requests: payload.sensitive_intake_requests || [],
+    sensitive_requests: requests,
+    request_details: requestDetails,
+    value_ref_count: valueRefCount,
     note_count: (payload.notes || []).length,
   };
 }
@@ -417,13 +433,20 @@ async function verifyRequestNoLeak(context, requestRef, forbiddenValues) {
   if (!/siv_[A-Za-z0-9]+/.test(text)) {
     throw new Error(`secure request detail did not expose value refs for ${requestRef}`);
   }
+  const valueRefs = Array.isArray(payload.values)
+    ? payload.values.filter((value) => value && value.value_ref && value.raw_value_returned === false)
+    : [];
+  if (!valueRefs.length) {
+    throw new Error(`secure request detail did not include raw-safe value refs for ${requestRef}`);
+  }
   if (payload.raw_values_returned !== false) {
     throw new Error(`secure request detail did not explicitly report raw_values_returned=false for ${requestRef}`);
   }
   return {
     request_ref: payload.request_ref,
     status: payload.status,
-    submitted_field_count: payload.submitted_field_count,
+    submitted_field_count: payload.submitted_field_count || valueRefs.length,
+    value_ref_count: valueRefs.length,
     raw_values_returned: payload.raw_values_returned,
   };
 }
@@ -480,13 +503,24 @@ async function findSessionMessagesByMarker(context, markerValue) {
   throw new Error(`could not find ops-chat session messages for marker ${markerValue}`);
 }
 
-async function verifySessionNoLeak(context, markerValue, forbiddenValues) {
+async function verifySessionNoLeak(context, markerValue, forbiddenValues, options = {}) {
   const payload = await findSessionMessagesByMarker(context, markerValue);
-  const text = JSON.stringify(payload);
+  const messages = payload.messages || [];
+  const relevant = messages.filter((message) => JSON.stringify(message).includes(markerValue));
+  const scoped = {
+    session_id: payload.session_id,
+    total: payload.total,
+    messages: relevant.length ? relevant : messages,
+  };
+  const text = JSON.stringify(scoped);
   for (const value of forbiddenValues) {
     if (value && text.includes(value)) {
       throw new Error(`raw protected value leaked into ops-chat dashboard messages for marker ${markerValue}`);
     }
+  }
+  const refCount = (text.match(/siv_[A-Za-z0-9]+/g) || []).length;
+  if (options.minRefs && refCount < options.minRefs) {
+    throw new Error(`expected at least ${options.minRefs} sensitive refs for marker ${markerValue}; found ${refCount}`);
   }
   if (!text.includes(markerValue)) {
     throw new Error(`session messages missing marker ${markerValue}`);
@@ -494,6 +528,8 @@ async function verifySessionNoLeak(context, markerValue, forbiddenValues) {
   return {
     session_id: payload.session_id,
     message_count: payload.total,
+    matched_message_count: relevant.length,
+    sensitive_ref_count: refCount,
     contains_sensitive_refs: /<sensitive:[^>]+:siv_[A-Za-z0-9]+>/.test(text) || /siv_[A-Za-z0-9]+/.test(text),
   };
 }
@@ -587,7 +623,7 @@ async function runRedactionScenario(context, chatPage) {
     900000,
     pasteMarker,
   );
-  const sessionProof = await verifySessionNoLeak(context, pasteMarker, [fakeSsn, fakePassword, fakeToken]);
+  const sessionProof = await verifySessionNoLeak(context, pasteMarker, [fakeSsn, fakePassword, fakeToken], { minRefs: 3 });
   if (!sessionProof.contains_sensitive_refs) {
     throw new Error("redaction scenario did not leave sensitive refs in dashboard chat messages");
   }
@@ -596,6 +632,162 @@ async function runRedactionScenario(context, chatPage) {
     scenario: "redaction",
     ops_chat_session: sessionProof,
     raw_values_printed: false,
+  };
+}
+
+async function runJudgmentScenario(context, chatPage, formPage) {
+  const results = [];
+
+  const naturalMarker = `${marker}-natural`;
+  const naturalText = await sendMessage(
+    chatPage,
+    [
+      `Onboarding packet test marker ${naturalMarker}.`,
+      "I need to give the system the details for Bob's account setup:",
+      "full legal name, SSN, date of birth, desired username, work email, manager, start date, and an initial temporary password.",
+      "Collect what you need from me before the account work starts.",
+    ].join(" "),
+    /\/secure-intake\/|protected information|protected values|intake/i,
+    900000,
+    naturalMarker,
+  );
+  const naturalSegment = naturalText.slice(naturalText.lastIndexOf(naturalMarker));
+  if (/Dashboard ticket: #|I created ticket #/i.test(naturalSegment)) {
+    throw new Error("natural protected-field collection created a ticket before brokering protected values");
+  }
+  const naturalFormUrl = await waitForSecureLinkAfter(chatPage, naturalMarker, 240000);
+  const naturalForm = await getFormPayload(context, naturalFormUrl);
+  const naturalFields = naturalForm.fields || [];
+  const naturalLabels = naturalFields.map((field) => String(field.label || field.key || "").toLowerCase()).join(" | ");
+  for (const required of ["ssn", "date of birth", "password"]) {
+    if (!naturalLabels.includes(required)) throw new Error(`natural secure form missing ${required}: ${naturalLabels}`);
+  }
+  const naturalValues = generatedFormValues(naturalFields);
+  const naturalRef = await submitSecureForm(formPage, naturalFormUrl, naturalValues.values);
+  results.push({
+    scenario: "natural-protected-collection",
+    secure_request: await verifyRequestNoLeak(context, naturalRef || naturalForm.request_ref, naturalValues.generated),
+    session: await verifySessionNoLeak(context, naturalMarker, naturalValues.generated),
+    field_count: naturalFields.length,
+  });
+
+  const financeMarker = `${marker}-finance`;
+  const financeText = await sendMessage(
+    chatPage,
+    [
+      `Vendor reimbursement intake marker ${financeMarker}.`,
+      "I need to give you the payment setup details for a new vendor:",
+      "bank account number, routing number, tax ID, remittance email, legal address, and payment contact.",
+      "Collect the packet from me so procurement can use it later.",
+    ].join(" "),
+    /\/secure-intake\/|protected information|protected values|intake/i,
+    900000,
+    financeMarker,
+  );
+  const financeSegment = financeText.slice(financeText.lastIndexOf(financeMarker));
+  if (/Dashboard ticket: #|I created ticket #/i.test(financeSegment)) {
+    throw new Error("financial collection created a ticket before brokering protected values");
+  }
+  const financeFormUrl = await waitForSecureLinkAfter(chatPage, financeMarker, 240000);
+  const financeForm = await getFormPayload(context, financeFormUrl);
+  const financeFields = financeForm.fields || [];
+  const financeLabels = financeFields.map((field) => String(field.label || field.key || "").toLowerCase()).join(" | ");
+  for (const required of ["account", "routing", "tax"]) {
+    if (!financeLabels.includes(required)) throw new Error(`financial secure form missing ${required}: ${financeLabels}`);
+  }
+  const financeValues = generatedFormValues(financeFields);
+  const financeRef = await submitSecureForm(formPage, financeFormUrl, financeValues.values);
+  results.push({
+    scenario: "natural-financial-collection",
+    secure_request: await verifyRequestNoLeak(context, financeRef || financeForm.request_ref, financeValues.generated),
+    session: await verifySessionNoLeak(context, financeMarker, financeValues.generated),
+    field_count: financeFields.length,
+  });
+
+  const pasteMarker = `${marker}-pasted-values`;
+  const suffix = marker.replace(/[^0-9]/g, "").slice(-4) || "9092";
+  const fakeSsn = `321-54-${suffix.padStart(4, "0").slice(-4)}`;
+  const fakePassword = `Tmp${marker.replace(/[^a-zA-Z0-9]/g, "").slice(-8)}!Pasted42`;
+  const fakeToken = `sk-test-${marker.replace(/[^a-zA-Z0-9]/g, "").slice(-14)}pasted`;
+  const pasteText = await sendMessage(
+    chatPage,
+    [
+      `New account setup marker ${pasteMarker}.`,
+      "Set up Bob's dashboard account.",
+      `Legal name Bob Example, SSN ${fakeSsn}, date of birth 1991-02-03, initial password: ${fakePassword}, API token: ${fakeToken}.`,
+      "Proceed with whatever ticket or access path is appropriate.",
+    ].join(" "),
+    /Dashboard ticket: #|I created ticket #|Ticket #|protected|intake|updated|recorded/i,
+    900000,
+    pasteMarker,
+  );
+  const pasteSession = await verifySessionNoLeak(context, pasteMarker, [fakeSsn, fakePassword, fakeToken], { minRefs: 3 });
+  const pasteTicketId = latestTicketAfter(pasteText, pasteMarker);
+  let pasteTicket = null;
+  let pasteAgentCleanup = null;
+  let pasteCleanup = null;
+  if (pasteTicketId) {
+    pasteTicket = await verifyNoLeak(context, pasteTicketId, [fakeSsn, fakePassword, fakeToken]);
+    pasteAgentCleanup = await cleanupAgent(context, pasteTicketId);
+    pasteCleanup = await cleanupTicket(context, pasteTicketId);
+  }
+  results.push({
+    scenario: "pasted-protected-values",
+    ticket_id: pasteTicketId,
+    ops_chat_session: pasteSession,
+    ticket_context: pasteTicket,
+    agent_cleanup: pasteAgentCleanup,
+    cleanup: pasteCleanup,
+  });
+
+  const softwareMarker = `${marker}-software`;
+  const softwareText = await sendMessage(
+    chatPage,
+    `Please open a request for Casey to get 7-Zip installed on her laptop next week. Marker ${softwareMarker}`,
+    /Dashboard ticket: #|I created ticket #|Ticket #/,
+    900000,
+    softwareMarker,
+  );
+  const softwareSegment = softwareText.slice(softwareText.lastIndexOf(softwareMarker));
+  if (/\/secure-intake\//i.test(softwareSegment)) {
+    throw new Error("non-sensitive software request incorrectly produced a secure intake form");
+  }
+  const softwareTicketId = latestTicketAfter(softwareText, softwareMarker);
+  if (!softwareTicketId) throw new Error("non-sensitive software request did not create a ticket");
+  const softwareAgentCleanup = await cleanupAgent(context, softwareTicketId);
+  const softwareCleanup = await cleanupTicket(context, softwareTicketId);
+  results.push({
+    scenario: "non-sensitive-ticket",
+    ticket_id: softwareTicketId,
+    agent_cleanup: softwareAgentCleanup,
+    cleanup: softwareCleanup,
+  });
+
+  const harmlessMarker = `${marker}-harmless`;
+  const harmlessText = await sendMessage(
+    chatPage,
+    `Quick check marker ${harmlessMarker}: what is the capital of Wyoming?`,
+    /Cheyenne|Wyoming/i,
+    900000,
+    harmlessMarker,
+  );
+  const harmlessSegment = harmlessText.slice(harmlessText.lastIndexOf(harmlessMarker));
+  if (/\/secure-intake\//i.test(harmlessSegment)) {
+    throw new Error("harmless general question incorrectly produced a secure intake form");
+  }
+  if (/Dashboard ticket: #|I created ticket #/i.test(harmlessSegment)) {
+    throw new Error("harmless general question incorrectly created a ticket");
+  }
+  results.push({
+    scenario: "harmless-no-ticket",
+    ticket_id: null,
+    secure_form: false,
+  });
+
+  return {
+    status: "passed",
+    scenario: "judgment",
+    cases: results,
   };
 }
 
@@ -613,12 +805,13 @@ async function runRedactionScenario(context, chatPage) {
     await elementLogin(chatPage);
     await openAgentDm(chatPage);
 
-    const scenarios = scenario === "all" ? ["fallback", "direct", "redaction"] : [scenario];
+    const scenarios = scenario === "all" ? ["fallback", "direct", "redaction", "judgment"] : [scenario];
     const results = [];
     for (const item of scenarios) {
       if (item === "fallback") results.push(await runFallbackScenario(context, chatPage, formPage));
       else if (item === "direct") results.push(await runDirectScenario(context, chatPage, formPage));
       else if (item === "redaction") results.push(await runRedactionScenario(context, chatPage));
+      else if (item === "judgment") results.push(await runJudgmentScenario(context, chatPage, formPage));
       else throw new Error(`unknown OPS_CHAT_SENSITIVE_SCENARIO=${scenario}`);
     }
 

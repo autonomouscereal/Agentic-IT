@@ -150,8 +150,14 @@ Reference stack:
 - Secure-intake forms are one-submit. If the user needs to correct protected
   values, request a new form instead of reusing the old link.
 - After Ops Chat or bridge changes, test a sensitive-field ask end-to-end:
-  harness returns a `/secure-intake/` link, form submission records chat status
-  with `siv_...` refs, and no raw values appear in chat/ticket/audit text.
+  harness returns a `/secure-intake/` link, form submission records ticket/chat
+  request status with `sir_...` refs, secure request detail exposes `siv_...`
+  value refs with `raw_values_returned=false`, and no raw values appear in
+  chat/ticket/audit text.
+- Test without telling the agent to use secure intake. Natural onboarding,
+  account setup, HR, vendor payment, tax, banking, and credential collection
+  should trigger the secure form on the agent's judgment. Harmless chat and
+  normal non-sensitive tickets should not trigger the form.
 - Also test the ticket-worker fallback path through Element: if an agent calls
   `/api/tickets/{id}/request-info` for account setup, SSN, DOB, credentials,
   recovery codes, tokens, government IDs, HR, or financial fields, the platform
@@ -396,18 +402,22 @@ $env:OPS_CHAT_PASSWORD="<from vault>"
 $env:OPS_CHAT_ROOM_ID="<optional known bot room id>"
 $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
 $env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
-$env:OPS_CHAT_SENSITIVE_SCENARIO="fallback"  # fallback, direct, redaction, all
+$env:OPS_CHAT_SENSITIVE_SCENARIO="fallback"  # fallback, direct, redaction, judgment, all
 $env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
+$env:NODE_PATH="$(npm root -g)"  # only needed when Playwright is installed globally
 node scripts/smoke_ops_chat_sensitive_intake_ui.js
 ```
 
 Expected: Element shows a `/secure-intake/` link, the browser form submits,
-ticket context shows `sir_...` / `siv_...` refs only, raw generated values are
-absent from visible context, and the synthetic ticket/agent are cleaned up.
+ticket context shows submitted `sir_...` request refs, secure request detail
+shows `siv_...` value refs with `raw_values_returned=false`, raw generated
+values are absent from visible context, and the synthetic ticket/agent are
+cleaned up.
 
 Run `OPS_CHAT_SENSITIVE_SCENARIO=all` after sensitive-intake, Ops Chat, bridge,
 or Element changes. It covers ticket-requester fallback, direct chat-harness
-`request-sensitive-fields`, and accidental-paste redaction. Use alphabetic
+`request-sensitive-fields`, accidental-paste redaction, no-hint account/finance
+judgment, and negative controls for harmless/non-sensitive asks. Use alphabetic
 markers when testing against older deployments that may still over-redact long
 numeric timestamp markers as financial data.
 

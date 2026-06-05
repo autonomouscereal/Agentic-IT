@@ -366,8 +366,9 @@ Expected:
 - dev one-off artifact asks can return tested Python, HTML, Markdown, and Bash
   artifacts as rendered Element code blocks without creating tickets.
 - sensitive account setup or protected-field asks return a secure broker form
-  link in Element. Browser form submission records `sir_...` / `siv_...`
-  evidence in ticket context and no raw submitted values in chat/tickets/audit.
+  link in Element. Browser form submission records `sir_...` request evidence
+  in ticket context, `siv_...` value evidence in secure request detail, and no
+  raw submitted values in chat/tickets/audit.
 
 Latest sensitive-intake Element proof, 2026-06-05:
 
@@ -399,6 +400,36 @@ Deployed/live verified on 2026-06-05:
 Element asset GET after ops-chat rebuild: bundle.css 200 / 87879 bytes, bundle.js 200 / 27038 bytes
 Full Element hardening pass: marker opschatsensitiveallX, fallback ticket 1674, fallback request sir_mrcbO24VFtlV5Nl9lTsJnwWS, direct request sir_4ls3JDdYqm98OhqDlSSBWqY, redaction refs only, agent 493 stopped, ticket cancelled
 ```
+
+No-hint/extreme Element verification on 2026-06-05:
+
+```text
+Full Element hardening pass: marker opschatallhardZ
+fallback: ticket 1679, request sir_AXfRYiOUETnAtGlJ9ZFpI2f, 9 submitted fields, value refs only, agent 498 stopped, ticket cancelled
+direct: request sir_06CzdL2ImmSrmxfRja0AkhXu, 8 submitted fields, no pre-broker ticket
+redaction: fake SSN/password/token paste stored marker-local siv refs only; raw generated canaries absent
+judgment/account: natural onboarding packet produced request sir_I6CYgQc1JaZuNpDedcQISfu, 8 fields, no prompt hint
+judgment/financial: natural vendor payment packet produced request sir_M2186yptysQ8Ui5VnZ6bqTI, 6 fields, no prompt hint
+negative controls: normal 7-Zip software request created a ticket without secure form; harmless Wyoming-capital question created no ticket and no secure form
+screenshots: docs/evidence/opschatallhardZ/secure-intake-form-requested.png and secure-intake-form-submitted.png
+```
+
+Fresh no-hint Element rerun after docs/test hardening:
+
+```text
+marker opschatjudgeliveQ, scenario judgment, Matrix session 790
+natural onboarding: request sir_TfUhp3EpkaPE6Jjajfw2oLp, 8 fields, 8 value refs, raw_values_returned=false
+natural vendor payment: request sir_j3Wmzm3ybc0EpuNz6uABig3P, 6 fields, 6 value refs, raw_values_returned=false
+accidental paste: ticket 1680 reused, session had marker-local siv refs, request detail value refs only, ticket cancelled
+non-sensitive software: ticket 1682 created without secure form, agent 501 stopped, ticket cancelled
+harmless chat: no ticket and no secure form
+```
+
+The secure-intake smoke verifies ticket context exposes submitted `sir_...`
+request refs, then verifies `/api/sensitive-intake/requests/{ref}` exposes
+`siv_...` value refs with `raw_values_returned=false`. The generated protected
+values must not appear in chat messages, ticket context, request detail, or
+audit-visible payloads.
 
 Latest verified result on 2026-05-20:
 

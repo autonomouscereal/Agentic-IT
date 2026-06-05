@@ -165,6 +165,7 @@ $env:PLAYWRIGHT_IGNORE_HTTPS_ERRORS="true"
 $env:OPS_CHAT_SENSITIVE_MARKER="ops-chat-sensitive-<unique>"
 $env:OPS_CHAT_SENSITIVE_SCENARIO="fallback"
 $env:PLAYWRIGHT_SCREENSHOT_DIR="docs/evidence/$env:OPS_CHAT_SENSITIVE_MARKER"
+$env:NODE_PATH="$(npm root -g)"  # only needed when Playwright is installed globally
 node scripts/smoke_ops_chat_sensitive_intake_ui.js
 ```
 
@@ -178,13 +179,18 @@ node scripts/smoke_ops_chat_sensitive_intake_ui.js
 - `redaction`: a synthetic accidental paste is stored in dashboard Ops Chat
   messages as `siv_...` references, with raw generated canaries absent from
   dashboard/model-visible state.
-- `all`: runs the three scenarios in one browser session.
+- `judgment`: natural no-hint prompts prove the chat agent chooses secure
+  intake for protected onboarding and financial packets, while harmless chat
+  and normal software requests avoid unnecessary secure forms.
+- `all`: runs fallback, direct, redaction, and judgment in one browser session.
 
 This browser test logs into Element, creates a Matrix-linked ticket, forces the
 ticket requester-info path to request account-sensitive fields, waits for a
 `/secure-intake/` link in the actual chat room, submits the secure form through
-the browser, verifies ticket context contains `sir_...` and `siv_...` refs, and
-checks that the generated submitted values do not appear in ticket context.
+the browser, verifies ticket context contains submitted `sir_...` request refs,
+then verifies the secure request detail contains `siv_...` value refs with
+`raw_values_returned=false`. Generated submitted values must not appear in chat,
+ticket context, request detail, or audit-visible payloads.
 
 The smoke verifies request metadata redaction, public form safety, missing
 required-field rejection, complete submission, one-submit token enforcement,
@@ -235,6 +241,45 @@ Additional hardening proof, 2026-06-05:
   `sir_4ls3JDdYqm98OhqDlSSBWqY`; redaction scenario stored refs only; raw
   generated canaries absent; synthetic agent `493` stopped and ticket
   cancelled.
+
+No-hint extreme Element proof, 2026-06-05:
+
+- Full Matrix/Element hardening pass: marker `opschatallhardZ`.
+- `fallback`: ticket `1679`, secure request
+  `sir_AXfRYiOUETnAtGlJ9ZFpI2f`, 9 submitted fields, request detail returned
+  value refs only, synthetic agent `498` stopped, ticket cancelled.
+- `direct`: secure request `sir_06CzdL2ImmSrmxfRja0AkhXu`, 8 submitted fields,
+  no ticket created before protected values were brokered.
+- `redaction`: accidental fake SSN/password/token paste stored marker-local
+  `siv_...` refs only; raw canaries absent from dashboard Ops Chat payloads.
+- `judgment`: the agent inferred secure intake without being told for natural
+  account-onboarding and vendor payment packet asks. Requests
+  `sir_I6CYgQc1JaZuNpDedcQISfu` and
+  `sir_M2186yptysQ8Ui5VnZ6bqTI` submitted 8 and 6 fields respectively with
+  value refs only.
+- Negative controls passed: a normal 7-Zip software request created a ticket
+  without a secure form, and a harmless Wyoming-capital question created no
+  ticket and no secure form.
+- Screenshots:
+  `docs/evidence/opschatallhardZ/secure-intake-form-requested.png` and
+  `docs/evidence/opschatallhardZ/secure-intake-form-submitted.png`.
+
+Fresh no-hint rerun after docs/test hardening, 2026-06-05:
+
+- Marker `opschatjudgeliveQ`, scenario `judgment`, Matrix session `790`.
+- Natural onboarding secure request
+  `sir_TfUhp3EpkaPE6Jjajfw2oLp`: 8 submitted fields, 8 value refs,
+  `raw_values_returned=false`.
+- Natural vendor payment secure request
+  `sir_j3Wmzm3ybc0EpuNz6uABig3P`: 6 submitted fields, 6 value refs,
+  `raw_values_returned=false`.
+- Accidental paste path reused ticket `1680`; dashboard session text contained
+  marker-local `siv_...` refs, ticket context showed secure request refs, and
+  secure request detail showed value refs only. Ticket was cancelled after
+  synthetic proof cleanup.
+- Non-sensitive 7-Zip request created ticket `1682` without a secure form;
+  synthetic agent `501` was stopped and ticket `1682` was cancelled.
+- Harmless Wyoming-capital question created no ticket and no secure form.
 
 ## Current Limitations
 
