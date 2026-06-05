@@ -226,12 +226,15 @@ Additional hardening proof, 2026-06-05:
   `opschatredactionalphatest`, session `792`, no ticket, `siv_...` refs in
   dashboard Ops Chat messages, and no raw generated canaries in dashboard
   payloads.
-- A live Element static-asset issue blocked additional Matrix UI passes:
-  full HTTP/1.1 `GET` requests for Element bundle assets could hang while
-  range requests, HTTP/1.0 requests, and `Connection: close` requests returned
-  immediately. Source now disables nginx `sendfile` and keepalive in the
-  generated Element config; deploy the patch and rebuild `ops-chat` before
-  relying on Element browser tests again.
+- The Element static-asset issue was fixed live after source added nginx
+  `sendfile off;` and `keepalive_timeout 0;`. Full normal HTTPS bundle body
+  downloads now return immediately.
+- Full Matrix/Element hardening pass after deploy: marker
+  `opschatsensitiveallX`; fallback ticket `1674`; fallback secure request
+  `sir_mrcbO24VFtlV5Nl9lTsJnwWS`; direct secure request
+  `sir_4ls3JDdYqm98OhqDlSSBWqY`; redaction scenario stored refs only; raw
+  generated canaries absent; synthetic agent `493` stopped and ticket
+  cancelled.
 
 ## Current Limitations
 

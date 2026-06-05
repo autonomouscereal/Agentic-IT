@@ -6621,8 +6621,7 @@ Fix:
 
 ### Element bundle assets can hang on full HTTP/1.1 GET
 
-Status: source fixed on 2026-06-05; live deploy pending because server-manager
-SSH auth timed out.
+Status: fixed in source and live-verified on 2026-06-05.
 
 Problem:
 
@@ -6646,17 +6645,21 @@ docker compose up -d --build ops-chat
 
 Verification:
 
-- Before trusting Element UI Playwright tests, confirm a full asset body
-  download works without HTTP/1.0 or `Connection: close`:
+- Full asset body downloads now work without HTTP/1.0 or `Connection: close`:
 
 ```bash
 curl -k https://<host>:3303/bundles/<hash>/bundle.css -o /dev/null
 curl -k https://<host>:3303/bundles/<hash>/bundle.js -o /dev/null
 ```
 
-Then rerun:
+Live proof:
 
-```powershell
-$env:OPS_CHAT_SENSITIVE_SCENARIO="all"
-node scripts\smoke_ops_chat_sensitive_intake_ui.js
+```text
+bundle.css: 200 / 87879 bytes
+bundle.js: 200 / 27038 bytes
+OPS_CHAT_SENSITIVE_SCENARIO=all: marker opschatsensitiveallX passed
+fallback ticket: 1674
+fallback request: sir_mrcbO24VFtlV5Nl9lTsJnwWS
+direct request: sir_4ls3JDdYqm98OhqDlSSBWqY
+redaction: refs only, no raw generated canaries
 ```

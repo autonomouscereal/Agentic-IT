@@ -388,15 +388,16 @@ Dashboard-route accidental paste: marker opschatredactionalphatest, session 792,
 Focused source tests: tests/test_sensitive_intake_broker.py 12 passed; ticket requester-info secure-form regression passed
 ```
 
-Live Element browser caveat from the same pass: the current deployed Element
-nginx served `HEAD`/range/HTTP/1.0 bundle requests, but full HTTP/1.1 `GET`
-for bundle assets could hang, leaving Playwright at a blank Element shell.
-Source now disables `sendfile` and keepalive in the generated Element config.
-After deploying that patch, rerun:
+Live Element browser caveat from the same pass: the deployed Element nginx
+served `HEAD`/range/HTTP/1.0 bundle requests, but full HTTP/1.1 `GET` for
+bundle assets could hang, leaving Playwright at a blank Element shell. Source
+now disables `sendfile` and keepalive in the generated Element config.
 
-```powershell
-$env:OPS_CHAT_SENSITIVE_SCENARIO="all"
-node scripts/smoke_ops_chat_sensitive_intake_ui.js
+Deployed/live verified on 2026-06-05:
+
+```text
+Element asset GET after ops-chat rebuild: bundle.css 200 / 87879 bytes, bundle.js 200 / 27038 bytes
+Full Element hardening pass: marker opschatsensitiveallX, fallback ticket 1674, fallback request sir_mrcbO24VFtlV5Nl9lTsJnwWS, direct request sir_4ls3JDdYqm98OhqDlSSBWqY, redaction refs only, agent 493 stopped, ticket cancelled
 ```
 
 Latest verified result on 2026-05-20:
