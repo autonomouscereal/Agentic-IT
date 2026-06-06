@@ -43,6 +43,182 @@ async function clickText(page, pattern, which = "first") {
   }, { source: pattern.source, which }).catch(() => false);
 }
 
+async function clickExactText(page, exact, which = "last") {
+  return await page.evaluate(({ exact, which }) => {
+    const candidates = Array.from(document.querySelectorAll("button,a,[role='button'],span,div,p"));
+    const visible = candidates
+      .map((el) => {
+        const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return { el, text, rect, style };
+      })
+      .filter((item) => (
+        item.text === exact &&
+        !/Remove this device|Reset all|Sign out/i.test(item.text) &&
+        item.rect.width > 0 &&
+        item.rect.height > 0 &&
+        item.style.display !== "none" &&
+        item.style.visibility !== "hidden"
+      ));
+    const target = which === "first" ? visible[0] : visible[visible.length - 1] || visible[0];
+    if (!target) return false;
+    target.el.click();
+    return true;
+  }, { exact, which }).catch(() => false);
+}
+
+async function clickLeafText(page, patternSource, which = "last") {
+  return await page.evaluate(({ patternSource, which }) => {
+    const regex = new RegExp(patternSource, "i");
+    const candidates = Array.from(document.querySelectorAll("button,a,[role='button'],span,div,p"));
+    const visible = candidates
+      .map((el) => {
+        const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        const childText = Array.from(el.children || [])
+          .map((child) => (child.innerText || child.textContent || "").replace(/\s+/g, " ").trim())
+          .join(" ");
+        return { el, text, rect, style, childText };
+      })
+      .filter((item) => (
+        regex.test(item.text) &&
+        !/Remove this device|Reset all|Sign out/i.test(item.text) &&
+        item.rect.width > 0 &&
+        item.rect.height > 0 &&
+        item.style.display !== "none" &&
+        item.style.visibility !== "hidden"
+      ))
+      .sort((a, b) => {
+        const aOwn = a.childText && a.childText !== a.text ? 1 : 0;
+        const bOwn = b.childText && b.childText !== b.text ? 1 : 0;
+        if (aOwn !== bOwn) return bOwn - aOwn;
+        return a.text.length - b.text.length;
+      });
+    const target = which === "first" ? visible[0] : visible[visible.length - 1] || visible[0];
+    if (!target) return false;
+    const x = target.rect.left + target.rect.width / 2;
+    const y = target.rect.top + target.rect.height / 2;
+    const clickable = document.elementFromPoint(x, y) || target.el;
+    clickable.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: x, clientY: y }));
+    clickable.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: x, clientY: y }));
+    clickable.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+    return true;
+  }, { patternSource, which }).catch(() => false);
+}
+
+async function clickTextRange(page, patternSource, allowDeviceRemoval = false) {
+  return await page.evaluate(({ patternSource, allowDeviceRemoval }) => {
+    const regex = new RegExp(patternSource, "i");
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const ranges = [];
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const text = (node.nodeValue || "").replace(/\s+/g, " ").trim();
+      if (!regex.test(text)) continue;
+      const parent = node.parentElement;
+      if (!parent) continue;
+      const style = window.getComputedStyle(parent);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rect = range.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      ranges.push({ rect, parent, text });
+    }
+    const target = ranges
+      .filter((item) => allowDeviceRemoval || !/Remove this device|Reset all|Sign out/i.test(item.text))
+      .sort((a, b) => a.text.length - b.text.length)[0];
+    if (!target) return false;
+    const x = target.rect.left + target.rect.width / 2;
+    const y = target.rect.top + target.rect.height / 2;
+    const clickable = document.elementFromPoint(x, y) || target.parent;
+    clickable.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: x, clientY: y }));
+    clickable.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: x, clientY: y }));
+    clickable.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+    return true;
+  }, { patternSource, allowDeviceRemoval }).catch(() => false);
+}
+
+async function clickDialogUntitledClose(page) {
+  for (const selector of [
+    "#mx_Dialog_Container button[aria-label*='Close']",
+    "#mx_Dialog_Container [role='button'][aria-label*='Close']",
+    "button[aria-label*='Close']",
+    "[role='button'][aria-label*='Close']",
+    ".mx_Dialog_cancelButton",
+    ".mx_AccessibleButton[aria-label*='Close']",
+  ]) {
+    const button = page.locator(selector).first();
+    if (await button.isVisible().catch(() => false)) {
+      await button.click({ force: true }).catch(() => {});
+      return true;
+    }
+  }
+  return false;
+}
+
+async function skipIdentityVerification(page) {
+  let acted = false;
+  for (let i = 0; i < 10; i += 1) {
+    const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+    if (/Are you sure you want to reset your digital identity/i.test(body)) {
+      await clickExactText(page, "Cancel", "last") || await clickText(page, /^Cancel$/i, "last");
+      await page.waitForTimeout(1500);
+      acted = true;
+      continue;
+    }
+    if (/Device verified|new device is now verified/i.test(body)) {
+      await clickExactText(page, "Done", "last") || await clickText(page, /^Done$/i, "last");
+      await page.waitForTimeout(1500);
+      acted = true;
+      continue;
+    }
+    if (!/Confirm your digital identity|reset your digital identity|Verify this device|Confirm encryption setup|secure messaging|Without verifying|I'll verify later/i.test(body)) {
+      return acted;
+    }
+    if (await clickDialogUntitledClose(page)) {
+      await page.waitForTimeout(1500);
+      acted = true;
+      continue;
+    }
+    let clicked = false;
+    for (const exact of ["Can't confirm?", "Skip verification", "Verify later", "I'll verify later", "Not now", "Skip", "Cancel", "Done", "Close"]) {
+      if (await clickExactText(page, exact, "last") || await clickLeafText(page, `^${exact.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "last")) {
+        clicked = true;
+        acted = true;
+        await page.waitForTimeout(2000);
+        break;
+      }
+    }
+    if (!clicked && await clickLeafText(page, "^Can.?t confirm\\??$", "last")) {
+      clicked = true;
+      acted = true;
+      await page.waitForTimeout(2000);
+    }
+    if (!clicked && await clickTextRange(page, "Can.?t confirm\\??")) {
+      clicked = true;
+      acted = true;
+      await page.waitForTimeout(2000);
+    }
+    if (!clicked && await clickTextRange(page, "I.?ll verify later|Verify later|Skip verification|Not now|Cancel|Close")) {
+      clicked = true;
+      acted = true;
+      await page.waitForTimeout(2000);
+    }
+    if (!clicked && i >= 4 && await clickTextRange(page, "Remove this device", true)) {
+      clicked = true;
+      acted = true;
+      await page.waitForTimeout(3000);
+    }
+    if (clicked) continue;
+    await page.keyboard.press("Escape").catch(() => {});
+    await page.waitForTimeout(1000);
+  }
+  return acted;
+}
+
 async function dismissNoise(page) {
   for (const pattern of [/Dismiss/i, /Not now/i, /Maybe later/i, /^Later$/i, /^OK$/i, /^Cancel$/i, /^Done$/i]) {
     await clickText(page, pattern, "first");
@@ -61,10 +237,10 @@ async function clearDialogs(page) {
       continue;
     }
     if (/Confirm encryption setup/i.test(dialogText)) {
-      await page.getByRole("button", { name: /^Confirm$/i }).last().click({ force: true }).catch(async () => {
-        await clickText(page, /^Confirm$/i, "last");
+      await page.getByRole("button", { name: /^(Cancel|Skip|Dismiss)$/i }).last().click({ force: true }).catch(async () => {
+        await page.keyboard.press("Escape").catch(() => {});
       });
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(1500);
       continue;
     }
     if (/Use Single Sign On to continue|Single Sign On/i.test(dialogText)) {
@@ -98,9 +274,48 @@ async function clearDialogs(page) {
 }
 
 async function settleElement(page) {
-  for (let i = 0; i < 8; i += 1) {
+  for (let i = 0; i < 18; i += 1) {
     const body = await page.locator("body").innerText().catch(() => "");
+    if (/Device verified/i.test(body)) {
+      await clickText(page, /^Done$/i, "last");
+      await page.waitForTimeout(2000);
+      continue;
+    }
+    if (/Back up your chats|Key storage|Get recovery key/i.test(body)) {
+      const dismiss = page.locator("button, [role='button']").filter({ hasText: /^Dismiss$/i }).first();
+      if (await dismiss.isVisible().catch(() => false)) await dismiss.click({ force: true }).catch(() => {});
+      else await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(1500);
+      continue;
+    }
+    if (/Are you sure\? Without verifying|I'll verify later/i.test(body)) {
+      await page.getByText(/I'll verify later/i).first().click({ force: true }).catch(async () => {
+        await clickText(page, /verify later/i, "first");
+      });
+      await page.waitForTimeout(2500);
+      continue;
+    }
+    if (/Notifications Enable desktop notifications/i.test(body)) {
+      await page.getByRole("button", { name: /^Dismiss$/i }).first().click({ force: true }).catch(async () => {
+        await clickText(page, /^Dismiss$/i, "first");
+      });
+      await page.waitForTimeout(1000);
+      continue;
+    }
+    if (/Are you sure you want to reset your digital identity/i.test(body)) {
+      const cancel = page.locator("#mx_Dialog_Container button, #mx_Dialog_Container [role='button']").filter({ hasText: /^Cancel$/i }).last();
+      if (await cancel.isVisible().catch(() => false)) await cancel.click({ force: true }).catch(() => {});
+      else await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(2000);
+      continue;
+    }
     if (/Confirm your digital identity|reset your digital identity/i.test(body)) {
+      const skip = page.locator(".mx_CompleteSecurity_skip").first();
+      if (await skip.isVisible().catch(() => false)) {
+        await skip.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(2500);
+        continue;
+      }
       await page.keyboard.press("Escape").catch(() => {});
       if (/Can't confirm\?|Can.t confirm\?/i.test(body)) {
         await page.getByText(/Can't confirm\?|Can.t confirm\?/i).first().click({ force: true }).catch(async () => {
@@ -109,66 +324,38 @@ async function settleElement(page) {
         await page.waitForTimeout(1500);
       }
       if (/Are you sure you want to reset your digital identity/i.test(await page.locator("body").innerText().catch(() => ""))) {
-        await page.getByRole("button", { name: /^Continue$/i }).first().click({ force: true }).catch(async () => {
-          await clickText(page, /^Continue$/i, "first");
-        });
-        await page.waitForTimeout(5000);
+        const cancel = page.locator("#mx_Dialog_Container button, #mx_Dialog_Container [role='button']").filter({ hasText: /^Cancel$/i }).last();
+        if (await cancel.isVisible().catch(() => false)) await cancel.click({ force: true }).catch(() => {});
+        else await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(2000);
         continue;
       }
       if (/Remove this device/i.test(await page.locator("body").innerText().catch(() => ""))) {
-        await page.getByText(/Remove this device/i).first().click({ force: true }).catch(async () => {
-          await clickText(page, /Remove this device/i, "first");
-        });
+        await clickText(page, /Remove this device/i, "first");
         await page.waitForTimeout(2500);
-      }
-      await clickText(page, /^(Cancel|Skip|Later|Continue|Done)$/i, "last");
-      await page.waitForTimeout(2500);
-      continue;
-    }
-    if (/Are you sure you want to reset your digital identity/i.test(body)) {
-      await clickText(page, /^Continue$/i, "first");
-      await page.waitForTimeout(5000);
-      continue;
-    }
-    if (/Enter your account password|Confirm reset/i.test(body)) {
-      if (await page.locator('input[type="password"]').isVisible().catch(() => false)) {
-        await page.locator('input[type="password"]').fill(opsChatPassword);
-        await clickText(page, /^(Continue|Reset|Confirm)$/i, "first");
-        await page.waitForTimeout(8000);
         continue;
       }
-    }
-    if (/Save your Security Key|Security Key|Recovery Key|Download|Copy/i.test(body)) {
-      await clickText(page, /^(Continue|Done|Skip)$/i, "last");
-      await page.waitForTimeout(3000);
-      continue;
-    }
-    if (/Device verified/i.test(body)) {
-      await clickText(page, /^Done$/i, "last");
+      await clickText(page, /^(Cancel|Skip|Later|Continue|Done)$/i, "last");
       await page.waitForTimeout(2000);
       continue;
     }
-    if (/Confirm encryption setup/i.test(body)) {
-      await page.getByRole("button", { name: /^Confirm$/i }).last().click({ force: true }).catch(async () => {
-        await clickText(page, /^Confirm$/i, "last");
-      });
-      await page.waitForTimeout(4000);
+    if (/Save your Security Key|Recovery Key|Download|Copy/i.test(body)) {
+      await clickText(page, /^(Continue|Done|Skip)$/i, "last");
+      await page.waitForTimeout(2500);
       continue;
     }
     if (/Use Single Sign On to continue|Single Sign On/i.test(body)) {
-      if (await clickText(page, /^Single Sign On$/i, "first")) {
-        await page.waitForTimeout(4000);
-        if (await page.locator('input[name="username"]').isVisible().catch(() => false)) {
-          await page.locator('input[name="username"]').fill(opsChatUser);
-          await page.locator('input[name="password"]').fill(opsChatPassword);
-          await page.locator('button[type="submit"], input[type="submit"]').first().click();
-          await page.waitForTimeout(10000);
-        }
-        continue;
+      await clickText(page, /^Single Sign On$/i, "first");
+      await page.waitForTimeout(3000);
+      if (await page.locator('input[name="username"]').isVisible().catch(() => false)) {
+        await page.locator('input[name="username"]').fill(opsChatUser);
+        await page.locator('input[name="password"]').fill(opsChatPassword);
+        await page.locator('button[type="submit"], input[type="submit"]').first().click();
+        await page.waitForTimeout(8000);
       }
+      continue;
     }
     await dismissNoise(page);
-    await clearDialogs(page);
     return;
   }
 }
@@ -176,28 +363,53 @@ async function settleElement(page) {
 async function login(page) {
   requireSecret("OPS_CHAT_USER", opsChatUser);
   requireSecret("OPS_CHAT_PASSWORD", opsChatPassword);
-  await page.goto(opsChatUrl, { waitUntil: "domcontentloaded" });
+  await page.goto(`${opsChatUrl.replace(/\/$/, "")}/#/login`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle").catch(() => {});
-  if (!page.url().includes("#/login")) {
-    const signIn = page.getByRole("link", { name: /^Sign in$/i }).first();
-    if (await signIn.isVisible().catch(() => false)) {
-      await signIn.click();
-      await page.waitForLoadState("networkidle").catch(() => {});
+  const initialBody = await page.locator("body").innerText().catch(() => "");
+  if (/Welcome to Agentic Ops Chat/i.test(initialBody) && /Sign in/i.test(initialBody)) {
+    const signInLink = page.getByRole("link", { name: /^Sign in$/i }).first();
+    if (await signInLink.isVisible().catch(() => false)) {
+      await signInLink.click({ force: true });
+    } else {
+      await clickText(page, /Sign in/i, "first");
     }
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
   }
   const keycloak = page.getByText(/Sign in with Keycloak|Keycloak/i).first();
   await keycloak.waitFor({ state: "visible", timeout: 60000 });
   await keycloak.click();
-  await page.locator('input[name="username"]').waitFor({ state: "visible", timeout: 60000 });
-  await page.locator('input[name="username"]').fill(opsChatUser);
-  await page.locator('input[name="password"]').fill(opsChatPassword);
-  await page.locator('button[type="submit"], input[type="submit"]').first().click();
-  await page.waitForTimeout(12000);
+  await page.locator('input[name="username"]').waitFor({ state: "visible", timeout: 30000 }).catch(() => {});
+  if (await page.locator('input[name="username"]').isVisible().catch(() => false)) {
+    await page.locator('input[name="username"]').fill(opsChatUser);
+    await page.locator('input[name="password"]').fill(opsChatPassword);
+    await page.locator('button[type="submit"], input[type="submit"]').first().click();
+    await page.waitForTimeout(10000);
+    const consentBody = await page.locator("body").innerText().catch(() => "");
+    if (/Continue to your account|grant .* access to your account/i.test(consentBody)) {
+      await page.getByRole("button", { name: /^Continue$/i }).last().click({ force: true }).catch(async () => {
+        await clickText(page, /^Continue$/i, "last");
+      });
+      await page.waitForTimeout(10000);
+    }
+  } else {
+    await page.waitForFunction(() => {
+      const text = document.body.innerText || "";
+      return /Confirm your digital identity|Agentic Ops Agent|Rooms|People|Home/i.test(text);
+    }, null, { timeout: 60000 }).catch(() => {});
+  }
   const body = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
-  if (/Can't connect to homeserver|Cannot reach homeserver|login provider is unavailable|missing_session|No session cookie/i.test(body)) {
-    throw new Error(`Element login failed: ${body.slice(0, 600)}`);
+  if (/Cannot reach homeserver|login provider is unavailable|missing_session|No session cookie/i.test(body)) {
+    throw new Error(`Ops Chat login error: ${body.slice(0, 500)}`);
+  }
+  if (/No chats yet|Home|People|Rooms/i.test(body) && !/Back up your chats|Welcome to Agentic Ops Chat/i.test(body)) {
+    return;
   }
   await settleElement(page);
+  const after = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ");
+  if (/Welcome to Agentic Ops Chat/i.test(after) && /Sign in/i.test(after)) {
+    throw new Error(`Element login returned to welcome page: ${after.slice(0, 300)}`);
+  }
 }
 
 async function openAgentDm(page) {
@@ -205,13 +417,27 @@ async function openAgentDm(page) {
   await page.waitForTimeout(5000);
   await settleElement(page);
   await clearDialogs(page);
-  const sendMessage = page.getByRole("button", { name: /Send message|Message/i }).first();
-  if (await sendMessage.isVisible().catch(() => false)) {
-    await sendMessage.click({ force: true });
+  let body = await page.locator("body").innerText().catch(() => "");
+  if (/Welcome to Agentic Ops Chat|Sign in/i.test(body) && !/Agentic Ops Agent|Send message/i.test(body)) {
+    await login(page);
+    await page.goto(`${opsChatUrl.replace(/\/$/, "")}/#/user/@agentic-ops:agentic-ops.local`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(5000);
+    await settleElement(page);
+    await clearDialogs(page);
+  }
+  const sendButton = page.getByRole("button", { name: /^Send message$/i }).last();
+  if (await sendButton.isVisible().catch(() => false)) {
+    await sendButton.click({ force: true });
     await page.waitForTimeout(5000);
   }
-  if (!(await page.locator('textarea[placeholder*="Message"], [aria-label*="Message"], [contenteditable="true"], [role="textbox"], div[aria-label*="Send a message"]').last().isVisible().catch(() => false))) {
-    await clickText(page, /Send message/i, "last");
+  if (await page.getByText(/Start a conversation with someone/i).first().isVisible().catch(() => false)) {
+    await page.getByRole("button", { name: /^Close$/i }).last().click({ force: true }).catch(async () => {
+      await page.keyboard.press("Escape").catch(() => {});
+    });
+    await page.waitForTimeout(1000);
+    await page.getByRole("button", { name: /^Send message$/i }).last().click({ force: true }).catch(async () => {
+      await clickText(page, /^Send message$/i, "last");
+    });
     await page.waitForTimeout(5000);
   }
   if (await page.getByText(/Start a chat with this new contact/i).first().isVisible().catch(() => false)) {
@@ -221,7 +447,6 @@ async function openAgentDm(page) {
     await page.waitForTimeout(5000);
   }
   await settleElement(page);
-  await clearDialogs(page);
   await composer(page);
 }
 

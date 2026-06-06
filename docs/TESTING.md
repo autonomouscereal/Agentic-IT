@@ -2112,3 +2112,66 @@ Cleanup evidence:
   stale agents were reconciled to terminal states.
 - No evidence was deleted; historical work remains in tickets, notes, audit,
   provider references, and the test reports.
+
+## Ops Chat Stress Pass - 2026-06-06
+
+Purpose: prove the post-restart live stack can tolerate real UI intake,
+secure forms, artifacts, broad routing, provider sync, and real-agent queue
+work before demo use.
+
+Live baseline:
+
+- Dashboard `/health`: `ok`, version `1.3.0`.
+- AI proxy on `4001`: healthy; active route `external`; providers include
+  local LM Studio, Nous, and OpenRouter.
+- Runner health: Codex OAuth logged in, selected harness `codex`, active
+  profile `codex-primary`, max concurrent agents `5`, worker count `5`, queue
+  depth `0`.
+- Ops Chat health: Matrix Synapse + Element, Keycloak OIDC, agent model
+  `gpt-5.5`.
+
+Real UI evidence:
+
+- Sensitive judgment pass: marker `stress-sensitive-judgment-1780763052`.
+  Natural protected onboarding and financial asks opened secure-intake forms
+  without being told to do so; harmless chat and normal software requests did
+  not. Raw generated values were absent from chat/session payloads.
+- No-hint account E2E: marker `stress-account-e2e-1780764640`, ticket `1997`,
+  secure request `sir_8QvDyDUWgKdM0JfLOtcP6HU`. The worker created local
+  dashboard user `secure_e2e_1780764640` as `auditor`; Playwright verified UI
+  login and a `403` denial for an admin mutation.
+- Developer artifact/UI pass: marker `stress-dev-artifact-1780765534`.
+  Element returned validated Python, HTML, Markdown, Bash, Remotion MP4,
+  combined Python-plus-video, and uploaded-Markdown summary artifacts with zero
+  accidental ticket creation.
+- Same-room UX pass: marker `stress-ux-general1-1780768616`. Watermelon
+  purchase created ticket `2056`, cancellation updated/cancelled that ticket,
+  and replacement pizza request created distinct ticket `2057` rather than
+  reusing the cancelled ticket.
+
+API and real-agent evidence:
+
+- Broad enterprise matrix created 50 synthetic tickets across executive, IAM,
+  email, phishing/EDR, network, endpoint, procurement, onboarding/offboarding,
+  infrastructure, cloud, database, UI, CI/CD, compliance, and platform repair.
+  Tickets `1998`-`2047` all synced to iTop and were cancelled by cleanup.
+- Real-agent handoff pass marker `ops-chat-scenarios-1780767046` spawned five
+  Codex workers for account lockout, delivery gate, phishing/EDR, software
+  request, and VPN outage; all made visible progress and were stopped/cancelled
+  as synthetic cleanup.
+- Phishing/EDR routing regression fixed and revalidated: ticket `2055` routed
+  parent incident to `Security Operations`, synced to iTop ref `1454`, and the
+  agent recorded passive-evidence/no-suspicious-URL-fetch progress.
+- Ticket cancellation stop regression: marker `cancel-stop-regression-1780769512`,
+  ticket `2058`, agent `522`, task `516`. Cancelling the ticket returned
+  `agent_stop_result.status=stopped`; active agents and processes returned to
+  zero.
+
+Local regression suite:
+
+```text
+python -m py_compile api\routes\ops_chat.py api\routes\tickets.py scripts\smoke_ops_chat_enterprise_matrix.py
+python -m pytest tests -q
+```
+
+Result: `237 passed`.

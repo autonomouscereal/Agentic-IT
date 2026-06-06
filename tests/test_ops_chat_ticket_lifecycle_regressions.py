@@ -26,6 +26,17 @@ def test_ops_chat_tool_rejects_followup_create_ticket_when_room_has_tickets():
     assert "The create-ticket tool will reject obvious follow-up" in source
 
 
+def test_ops_chat_dashboard_account_requires_fresh_secure_intake():
+    source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
+    assert "def _looks_like_dashboard_account_provisioning" in source
+    assert "def _has_submitted_secure_request_for_account" in source
+    assert "dashboard_account_requires_fresh_secure_intake" in source
+    assert "Do not reuse old secure refs or old submitted secure-intake requests from room history" in source
+    assert "Include the requested username in the purpose" in source
+    assert '"secure_intake": {' in source
+    assert '"raw_values_returned": False' in source
+
+
 def test_ops_chat_lets_agent_decide_old_ticket_relevance():
     source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
     assert "Review each listed ticket's title, status, group, provider sync, and recency" in source
@@ -74,6 +85,14 @@ def test_ops_chat_enterprise_domain_guardrails_cover_matrix_misses():
     source = (ROOT / "api" / "routes" / "ops_chat.py").read_text(encoding="utf-8")
     assert '"new hire"' in source
     assert "New-hire onboarding that mentions laptop, mailbox, and app accounts still routes to Identity & Access" in source
+    assert '"oidc client"' in source
+    assert '"client redirect uri"' in source
+    assert "For Ops Chat/Keycloak client work, Identity & Access owns the route" in source
+    assert '"security dashboard", "alert index"' in source
+    assert "Wazuh/SIEM/EDR role or data-access requests -> Identity & Access" in source
+    assert "Wazuh/SIEM/EDR alerts, phishing" in source
+    assert "Security incident terms win for the parent ticket" in source
+    assert '"wazuh-style edr alert"' in source
     assert '"offboard", "off-boarding", "revoke access"' in source
     assert '"restore a deleted", "restore deleted", "restore file"' in source
     assert '"policy exception", "risk acceptance", "sla report"' in source
@@ -153,6 +172,14 @@ def test_ticket_route_suppresses_duplicate_ops_chat_create():
     assert "access_scope->>'message_hash'" in source
     assert "ops_chat_duplicate_create_suppressed" in source
     assert 'existing["_idempotent_replay"] = True' in source
+
+
+def test_ticket_cancel_reject_stops_active_worker():
+    source = (ROOT / "api" / "routes" / "tickets.py").read_text(encoding="utf-8")
+    assert 'normalized in {"cancelled", "canceled", "rejected"}' in source
+    assert "stop_agent_task" in source
+    assert "ticket_terminal_status_stopped_agent" in source
+    assert "stopping only the active worker for this ticket" in source
 
 
 def test_ticket_request_info_converts_sensitive_asks_to_secure_intake():

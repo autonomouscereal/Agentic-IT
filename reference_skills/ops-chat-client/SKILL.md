@@ -129,6 +129,10 @@ Reference stack:
   is harmless chat, a new ticket, or a `user-response` note on a specific
   existing ticket. Cancellation-like updates mark the ticket cancelled and stop
   that ticket's active test/worker agent when present.
+- The dashboard ticket status API also stops the ticket's active worker when a
+  ticket is moved to `cancelled`, `canceled`, or `rejected`. This is a hard
+  reliability boundary for user/operator cancellation; it stops only the active
+  worker tied to that ticket.
 - Explicit fresh/new/separate ticket language keeps `create-ticket` available
   even when the same message also says "keep me updated" or similar. Do not add
   app-side terminal-ticket blockers; let the agent inspect stale room history
@@ -176,6 +180,13 @@ Reference stack:
   chat. If a general/current-information message follows a ticket, answer the
   message unless the user clearly asks for ticket work or explicitly references
   an existing ticket.
+- Security incident terms win for the parent ticket. A phishing, suspicious
+  email/URL, Wazuh/EDR alert, malware, endpoint-isolation, or false-positive
+  incident routes to `Security Operations` even if the user says "request
+  access if needed." The ticket worker should open a separate access request
+  only when it hits the real Wazuh/SIEM/mailbox/EDR evidence barrier. Direct
+  Wazuh/SIEM role, analyst, permission, or data-access asks route to
+  `Identity & Access`.
 - The `create-ticket` tool rejects obvious follow-up/update/cancel/reassign
   messages when the chat session already has linked ticket ids. Use
   `continue-ticket` for those messages so a user confirmation does not open a
@@ -471,6 +482,31 @@ Matrix DM, delivered secure request `sir_MgSO2aue1inAhrp40SRebQi`, submitted
 the secure form through the browser with 9 fields, verified refs-only ticket
 context, stopped synthetic agent `491`, cancelled the synthetic ticket, and
 left active agents at `0`.
+
+Latest stress pass, 2026-06-06:
+
+- `stress-sensitive-judgment-1780763052`: natural protected onboarding and
+  financial asks opened secure forms without hints; harmless chat and normal
+  software work avoided unnecessary secure forms.
+- `stress-account-e2e-1780764640`: Element no-hint account request created
+  ticket `1997`, secure request `sir_8QvDyDUWgKdM0JfLOtcP6HU`, auditor user
+  `secure_e2e_1780764640`, dashboard UI login proof, and admin mutation denial
+  HTTP `403`.
+- `stress-dev-artifact-1780765534`: Python, HTML, Markdown, Bash, Remotion
+  MP4, combined Python-plus-video, and uploaded Markdown summary returned as
+  validated Element artifacts with zero ticket creation.
+- Broad matrix tickets `1998`-`2047`: all 50 synced to iTop and were cancelled
+  by cleanup.
+- `ops-chat-scenarios-1780767046`: five real Codex workers made visible
+  progress across account lockout, delivery gate, phishing/EDR, software
+  request, and VPN outage.
+- `ops-chat-scenarios-1780767676`: repaired phishing/EDR parent incident
+  routed to `Security Operations`, synced to iTop ref `1454`, and recorded
+  passive evidence/no suspicious URL fetch.
+- `stress-ux-general1-1780768616`: same-room watermelon/cancel/pizza proof
+  produced exactly two tickets: `2056` cancelled, `2057` replacement.
+- `cancel-stop-regression-1780769512`: cancelling ticket `2058` stopped active
+  agent `522` / task `516`; active agents and processes returned to zero.
 
 Follow-up same-day proof: marker `demo-bulletproof-1779402310` went through
 Element, the Matrix bridge, dashboard Ops Chat, and real Codex worker agent

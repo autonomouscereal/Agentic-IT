@@ -920,6 +920,49 @@ installed. Use Element on `https://host.docker.internal:3303` and Roundcube on
 `http://host.docker.internal:2581/webmail/`; never replace either with a shim
 for demo acceptance.
 
+## 2026-06-06 Stress Pass
+
+Live Element/UI proofs:
+
+- `stress-account-e2e-1780764640`: no-hint account request used the secure
+  intake broker, created ticket `1997`, created auditor user
+  `secure_e2e_1780764640`, verified dashboard login, and verified admin
+  mutation denial with HTTP `403`.
+- `stress-dev-artifact-1780765534`: Python, HTML, Markdown, Bash, Remotion
+  MP4, combined Python-plus-video, and uploaded Markdown summary all returned
+  through Element as validated artifacts with no ticket noise.
+- `stress-ux-general1-1780768616`: same Matrix room handled current-info
+  follow-up, watermelon purchase ticket `2056`, cancellation of that ticket,
+  and separate pizza replacement ticket `2057`.
+
+API/agent proofs:
+
+- Broad enterprise matrix created tickets `1998`-`2047`; every ticket synced
+  to iTop and cleanup cancelled all 50.
+- Real-agent handoff marker `ops-chat-scenarios-1780767046` spawned five Codex
+  workers for account lockout, delivery gate, phishing/EDR, software request,
+  and VPN outage. Each produced visible progress and cleanup stopped only its
+  synthetic worker.
+- Phishing/EDR routing precedence was fixed after this pass exposed a parent
+  incident routed to IAM when the user also said "request access if needed."
+  The parent incident now routes to `Security Operations`; Wazuh/SIEM role or
+  data-access requests still route to `Identity & Access`.
+- Ticket `2055` proved the repaired real-agent phishing/EDR path: parent
+  `Security Operations`, iTop ref `1454`, no suspicious URL fetch, and passive
+  evidence progress.
+- Cancellation stop regression marker `cancel-stop-regression-1780769512`
+  proved ticket `2058` cancellation stopped active agent `522` / task `516`
+  and returned the queue to zero.
+
+Test harness note:
+
+- `scripts/smoke_ops_chat_user_experience.js` now uses the same proven
+  Element login/DM flow as the artifact smoke. If Element presents digital
+  identity or encryption prompts, the smoke skips or dismisses them for the
+  unencrypted demo DM instead of requiring Matrix E2EE setup.
+- For local Windows Playwright runs, set `NODE_PATH` to include the skills
+  `node_modules` path when the project itself has no local Playwright install.
+
 ## 2026-05-22 Final Demo Curation
 
 After the severe chat, artifact, Roundcube, and guardrail tests, the live

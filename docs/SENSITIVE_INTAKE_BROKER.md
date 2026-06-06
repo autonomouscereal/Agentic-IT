@@ -348,6 +348,35 @@ No-hint end-to-end brokered account proof, 2026-06-05:
   `docs/evidence/opsacctnohintI/secure-intake-form-requested.png` and
   `docs/evidence/opsacctnohintI/secure-intake-form-submitted.png`.
 
+Latest stress rerun, 2026-06-06:
+
+- No-hint account E2E marker `stress-account-e2e-1780764640` used Element as
+  `demo_chat_general1`.
+- The user asked naturally for read-only dashboard account
+  `secure_e2e_1780764640` without mentioning secure forms, passwords, brokered
+  credentials, or protected fields.
+- The chat agent opened secure request `sir_8QvDyDUWgKdM0JfLOtcP6HU` before
+  ticket creation, collected two protected fields, and returned refs only.
+- The worker created ticket `1997`, synced to iTop, created local dashboard
+  user `secure_e2e_1780764640` with role `auditor`, and resolved the ticket.
+- Playwright verified dashboard UI login with the submitted brokered password,
+  then verified read-only enforcement by attempting an admin mutation and
+  receiving HTTP `403`.
+- Raw password values and password hashes were absent from ticket context,
+  chat/session payloads, `/api/access/users`, and script output.
+- Screenshots are under
+  `docs/evidence/stress-account-e2e-1780764640/`.
+
+Latest no-hint judgment stress, 2026-06-06:
+
+- Marker `stress-sensitive-judgment-1780763052`.
+- Natural protected onboarding and financial packet prompts opened secure
+  forms without being told to use secure intake.
+- Accidental pasted protected values were redacted into `siv_...` references in
+  dashboard-visible session state.
+- Non-sensitive software work created a normal ticket, and harmless chat
+  created no ticket and no secure form.
+
 Earlier brokered account plumbing proof, 2026-06-05:
 
 - Marker `opsacctfinalB`, scenario `account-e2e`.

@@ -138,6 +138,31 @@ Last verified on 2026-05-22 after final pre-demo curation:
 - Changes: zero pending/approved gates.
 - Tools: `19` healthy, `0` degraded, `0` down, `0` unknown.
 
+Latest stress verification on 2026-06-06:
+
+- Dashboard `/health`: `ok`, version `1.3.0`.
+- Proxy `4001`: healthy; external route active for the lab with local, Nous,
+  and OpenRouter providers available.
+- Runner: Codex OAuth logged in, selected harness `codex`, active profile
+  `codex-primary`, max concurrent agents `5`, worker count `5`, queue depth
+  `0`.
+- Real Element secure-account E2E passed with marker
+  `stress-account-e2e-1780764640`, ticket `1997`, and secure request
+  `sir_8QvDyDUWgKdM0JfLOtcP6HU`.
+- Real Element artifact/upload pass `stress-dev-artifact-1780765534` returned
+  validated code/video/upload artifacts with zero ticket noise.
+- Broad enterprise matrix created tickets `1998`-`2047`; every ticket synced to
+  iTop and was cancelled by cleanup.
+- Real-agent scenario marker `ops-chat-scenarios-1780767046` spawned five Codex
+  workers and each made visible progress.
+- Phishing/EDR routing regression was fixed: parent incident routes to
+  `Security Operations`; Wazuh/SIEM access requests still route to
+  `Identity & Access`.
+- Cancelling/rejecting a ticket now stops only that ticket's active worker;
+  proof marker `cancel-stop-regression-1780769512`, ticket `2058`, agent `522`,
+  task `516`.
+- Final local suite: `python -m pytest tests -q` returned `237 passed`.
+
 Cleanup was non-destructive: 86 stale nonterminal synthetic tickets were
 resolved with `demo-curation` notes, 41 stale gates and 29 stale access requests
 were rejected, and 39 stale tasks plus 39 stale agents were made terminal.

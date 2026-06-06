@@ -24,7 +24,7 @@ CASES = [
     ("standard-lockout", "I cannot log into my account and MFA is not working.", "Identity & Access"),
     ("password-reset", "I forgot my password and need to regain access.", "Identity & Access"),
     ("gitlab-access", "I need GitLab repository access for project phoenix.", "Identity & Access"),
-    ("wazuh-access", "Please grant Wazuh analyst access for an investigation.", "Security Operations"),
+    ("wazuh-access", "Please grant Wazuh analyst access for an investigation.", "Identity & Access"),
     ("mailbox-access", "Add Alice to the finance shared mailbox as a reviewer.", "Email Operations"),
     ("distribution-list", "Add Jeff to the customer-updates distribution list.", "Email Operations"),
     ("mail-forwarding", "Set temporary mail forwarding for a departing employee.", "Email Operations"),
@@ -71,6 +71,14 @@ CASES = [
     ("gitlab-runner", "GitLab Runner is stuck and the pipeline will not start.", "DevSecOps"),
     ("executive-laptop", "An executive laptop cannot connect to the hotel Wi-Fi before a customer meeting.", "Executive Support"),
 ]
+
+PROTECTED_PRETICKET_OK = {
+    "offboarding": "Offboarding may request protected employee identifiers through the sensitive-intake broker before ticket creation.",
+}
+
+CLARIFICATION_PRETICKET_OK = {
+    "offboarding": "Offboarding may ask for the affected employee and timezone before ticket creation when the request omits the work object.",
+}
 
 
 def request(base, method, path, payload=None, timeout=240):
@@ -139,6 +147,23 @@ def main():
             "spawn_agent": False,
         }, timeout=args.case_timeout)
         classification = result.get("classification") or {}
+        reply = str(result.get("reply") or "")
+        secure_intake = result.get("secure_intake") if isinstance(result.get("secure_intake"), dict) else {}
+        sensitive_form = (
+            slug in PROTECTED_PRETICKET_OK
+            and not result.get("created_ticket")
+            and bool(secure_intake.get("request_ref"))
+            and secure_intake.get("raw_values_returned") is False
+            and result.get("ticket_id") is None
+        )
+        clarification = (
+            slug in CLARIFICATION_PRETICKET_OK
+            and not result.get("created_ticket")
+            and result.get("ticket_id") is None
+            and "departing employee" in reply.lower()
+            and "do not paste" in reply.lower()
+            and "created ticket" not in reply.lower()
+        )
         actual_group = classification.get("assignment_group")
         ticketed = bool(result.get("created_ticket"))
         ticket_id = result.get("ticket_id")
@@ -146,6 +171,9 @@ def main():
         routed = bool(actual_group)
         matches_hint = actual_group == expected_group
         provider_sync_ok = (
+            sensitive_form
+            or clarification
+            or
             not args.require_provider_sync
             or (
                 ticket.get("provider")
@@ -154,10 +182,17 @@ def main():
                 and ticket.get("provider_sync_status") == "synced"
             )
         )
-        ok = ticketed and routed and provider_sync_ok and (matches_hint or not args.strict_routing)
+        ok = (
+            (ticketed and routed and provider_sync_ok and (matches_hint or not args.strict_routing))
+            or sensitive_form
+            or clarification
+        )
         record = {
             "case": slug,
             "ticket_id": ticket_id,
+            "pre_ticket_secure_form": sensitive_form,
+            "pre_ticket_clarification": clarification,
+            "secure_request_ref": secure_intake.get("request_ref") if sensitive_form else None,
             "intent": classification.get("intent"),
             "expected_group": expected_group,
             "actual_group": actual_group,
@@ -166,6 +201,11 @@ def main():
             "provider_ref": ticket.get("provider_ref"),
             "provider_sync_status": ticket.get("provider_sync_status"),
             "provider_sync_ok": provider_sync_ok,
+            "note": (
+                PROTECTED_PRETICKET_OK.get(slug) if sensitive_form
+                else CLARIFICATION_PRETICKET_OK.get(slug) if clarification
+                else None
+            ),
             "ok": ok,
         }
         results.append(record)

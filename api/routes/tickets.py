@@ -770,11 +770,33 @@ async def _update_ticket_status(
                         "close_provider": close_provider,
                         "provider_result": provider_result,
                     })
+    agent_stop_result = None
+    if normalized in {"cancelled", "canceled", "rejected"}:
+        active_agent = await fetchrow("""
+            SELECT id FROM agents
+            WHERE ticket_id = $1
+              AND status IN ('spawned', 'running', 'working')
+            ORDER BY started_at DESC
+            LIMIT 1
+        """, ticket_id)
+        if active_agent:
+            from services import agent_runner
+            agent_stop_result = await agent_runner.stop_agent_task(
+                active_agent["id"],
+                reason=f"Ticket {ticket_id} moved to {normalized} by {actor}; stopping only the active worker for this ticket.",
+            )
+            await log_event("agent", "info", actor, "ticket_terminal_status_stopped_agent",
+                            f"agent_{active_agent['id']}", {
+                                "ticket_id": ticket_id,
+                                "status": normalized,
+                                "stop_result": agent_stop_result,
+                            })
     return {
         "status": normalized,
         "ticket_id": ticket_id,
         "note_id": note.get("id"),
         "provider_result": provider_result,
+        "agent_stop_result": agent_stop_result,
     }
 
 
